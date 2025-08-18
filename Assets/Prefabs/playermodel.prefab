@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 7878838091092684649}
   - component: {fileID: 5555422391060663598}
   - component: {fileID: 4893137240045964119}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: CameraRoot
   m_TagString: MainCamera
   m_Icon: {fileID: 0}
@@ -155,9 +155,9 @@ GameObject:
   - component: {fileID: 1950175109902404849}
   - component: {fileID: 2986661850691434819}
   - component: {fileID: 2123849330509129994}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: playermodel
-  m_TagString: Untagged
+  m_TagString: Player
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -351,7 +351,7 @@ MonoBehaviour:
   mouseSensitivity: 5
   minPitch: -80
   maxPitch: 80
-  cameraRoot: {fileID: 0}
+  cameraRoot: {fileID: 4351029141827459660}
 --- !u!114 &1950175109902404849
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -368,10 +368,13 @@ MonoBehaviour:
   interactRange: 3
   interactMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 64
   pickupMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 8
+  placementMask:
+    serializedVersion: 2
+    m_Bits: 383
 --- !u!143 &2986661850691434819
 CharacterController:
   m_ObjectHideFlags: 0
@@ -422,7 +425,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 3084238086416788414}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Hand
   m_TagString: Untagged
   m_Icon: {fileID: 0}
