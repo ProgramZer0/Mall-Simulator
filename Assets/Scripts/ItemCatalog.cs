@@ -34,11 +34,9 @@ public class ItemDef
         if (generatedGhostPrefab != null) return generatedGhostPrefab;
         if (worldNetworkPrefab == null) return null;
 
-        // Clone world prefab
         generatedGhostPrefab = GameObject.Instantiate(worldNetworkPrefab.gameObject);
         generatedGhostPrefab.name = worldNetworkPrefab.name + "_Ghost";
 
-        // Strip off scripts + colliders
         foreach (var c in generatedGhostPrefab.GetComponentsInChildren<Collider>())
             GameObject.Destroy(c);
 
@@ -48,7 +46,6 @@ public class ItemDef
         var no = generatedGhostPrefab.GetComponent<NetworkObject>();
         if (no != null) GameObject.Destroy(no);
 
-        // Apply ghost material/shader
         foreach (var r in generatedGhostPrefab.GetComponentsInChildren<Renderer>())
         {
             foreach (var mat in r.materials)
@@ -68,7 +65,6 @@ public class ItemDef
             }
         }
 
-        // Hide until instantiated at runtime
         generatedGhostPrefab.SetActive(false);
 
         return generatedGhostPrefab;

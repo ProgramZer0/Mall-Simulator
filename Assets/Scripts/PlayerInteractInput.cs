@@ -120,6 +120,7 @@ public class PlayerInteractInput : NetworkBehaviour
 
         Vector3 targetPos;
         Quaternion targetRot;
+
         if (Physics.Raycast(cam.transform.position + cam.transform.forward * 0.5f, cam.transform.forward, out RaycastHit hit, 5f))
         {
             targetPos = hit.point;
@@ -137,26 +138,6 @@ public class PlayerInteractInput : NetworkBehaviour
         UpdateGhostColor(ghostPreview);
     }
 
-    private void MakeGhost(GameObject obj)
-    {
-        foreach (var r in obj.GetComponentsInChildren<Renderer>())
-        {
-            foreach (var mat in r.materials)
-            {
-                mat.shader = Shader.Find("Standard");
-                Color c = mat.color;
-                c.a = 0.5f;
-                mat.color = c;
-                mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                mat.SetInt("_ZWrite", 0);
-                mat.DisableKeyword("_ALPHATEST_ON");
-                mat.EnableKeyword("_ALPHABLEND_ON");
-                mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-                mat.renderQueue = 3000;
-            }
-        }
-    }
     private void UpdateGhostColor(GameObject ghost)
     {
         bool valid = IsPlacementValid(ghost);
