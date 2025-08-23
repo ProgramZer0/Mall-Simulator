@@ -118,24 +118,55 @@ public class PlayerInteractInput : NetworkBehaviour
 
         if (ghostPreview == null) return;
 
+        if (ghostPreview.TryGetComponent<Collider>(out Collider col))
+            col.enabled = false;
+
         Vector3 targetPos;
         Quaternion targetRot;
+        bool valid = false;
 
-        if (Physics.Raycast(cam.transform.position + cam.transform.forward * 0.5f, cam.transform.forward, out RaycastHit hit, 5f))
+        Vector3 fwdStart = cam.transform.position + cam.transform.forward * 0.5f;
+        if (Physics.Raycast(fwdStart, cam.transform.forward, out RaycastHit hit, 5f, placementMask, QueryTriggerInteraction.Ignore))
         {
             targetPos = hit.point;
-            targetRot = Quaternion.Euler(0f, placeRotationY, 0f) * Quaternion.FromToRotation(Vector3.up, hit.normal);
+
+            if (hit.collider.gameObject.layer == LayerMask.NameToLayer("Ground"))
+                targetRot = Quaternion.Euler(0f, placeRotationY, 0f);
+            else
+                targetRot = Quaternion.Euler(0f, placeRotationY, 0f) * Quaternion.FromToRotation(Vector3.up, hit.normal);
         }
         else
         {
-            targetPos = cam.transform.position + cam.transform.forward * 2f;
-            targetRot = Quaternion.Euler(0f, placeRotationY, 0f);
+            Vector3 downStart = cam.transform.position + cam.transform.forward * 2f + Vector3.up * 2f;
+            if (Physics.Raycast(downStart, Vector3.down, out RaycastHit groundHit, 5f, LayerMask.GetMask("Ground")))
+            {
+                targetPos = groundHit.point;
+                targetRot = Quaternion.Euler(0f, placeRotationY, 0f);
+            }
+            else
+            {
+                targetPos = cam.transform.position + cam.transform.forward * 2f;
+                targetRot = Quaternion.Euler(0f, placeRotationY, 0f);
+            }
         }
 
         ghostPreview.transform.position = targetPos;
         ghostPreview.transform.rotation = targetRot;
 
-        UpdateGhostColor(ghostPreview);
+        valid = IsPlacementValid(ghostPreview);
+        UpdateGhostColor(ghostPreview, valid);
+    }
+
+    private void UpdateGhostColor(GameObject ghost, bool valid)
+    {
+        foreach (var r in ghost.GetComponentsInChildren<Renderer>())
+        {
+            foreach (var mat in r.materials)
+            {
+                Color baseColor = valid ? Color.green : Color.red;
+                mat.color = new Color(baseColor.r, baseColor.g, baseColor.b, 0.4f);
+            }
+        }
     }
 
     private void UpdateGhostColor(GameObject ghost)
@@ -156,14 +187,17 @@ public class PlayerInteractInput : NetworkBehaviour
         if (ghost == null) return false;
 
         Collider ghostCollider = ghost.GetComponentInChildren<Collider>();
-        if (ghostCollider == null) return true; 
+        if (ghostCollider == null) return true;
 
         Vector3 pos = ghost.transform.position;
         Quaternion rot = ghost.transform.rotation;
-        Vector3 size = ghostCollider.bounds.size * 0.9f; 
+        Vector3 size = ghostCollider.bounds.size * 0.9f;
 
-        LayerMask mask = ~LayerMask.GetMask("Ground"); 
+        LayerMask mask = ~LayerMask.GetMask("Ground");
         Collider[] hits = Physics.OverlapBox(pos, size / 2f, rot, mask);
+
+        if (!Physics.Raycast(pos + Vector3.up * 0.1f, Vector3.down, out RaycastHit groundHit, 2f, LayerMask.GetMask("Ground")))
+            return false;
 
         return hits.Length == 0;
     }
