@@ -8,7 +8,6 @@ public class PlayerInteractInput : NetworkBehaviour
     [SerializeField] private LayerMask pickupMask;
     [SerializeField] private LayerMask placementMask; 
 
-
     private Camera cam;
     private PlayerInventoryNet inventory;
 

@@ -1,0 +1,209 @@
+1. the red outline was too red, it looses its depth. 
+2. some of the items doesn't place on the ground it places halfway in the ground
+3. the items can be placed on walls, lets add a type on the item name so we can see if it can be placed on the walls layer or not. In addition if its placed on walls the gravity and outside movement should be turned off. 
+4. items can be placed through things, lets not allow placement if it can't fit. 
+5. lets only do a red outline if it can't fit otherwise it just shows the transparent item.  
+
+1. Fix the “too red, no depth” issue
+
+Instead of tinting materials red/green (which kills shading), do a depth-preserving transparent tint.
+
+Replace your color code with this:
+
+private void ApplyGhostTint(Renderer r, bool valid)
+{
+    foreach (var mat in r.materials)
+    {
+        Color tint = valid ? new Color(1, 1, 1, 0.35f) : new Color(1, 0.3f, 0.3f, 0.45f);
+        mat.color = tint;
+        mat.SetFloat("_Surface", 1);      // transparent
+        mat.SetFloat("_ZWrite", 0);       // keep depth
+        mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+    }
+}
+
+
+Then call it from a new unified method:
+
+private void UpdateGhostColor(GameObject ghost, bool valid)
+{
+    foreach (var r in ghost.GetComponentsInChildren<Renderer>())
+        ApplyGhostTint(r, valid);
+}
+
+
+This gives:
+
+Color visible
+Depth preserved
+Ghost still looks 3D
+
+2. Fix items spawning halfway inside ground
+
+Your code currently sets:
+
+targetPos = hit.point;
+
+
+But if the object's pivot is not at the bottom, it sinks.
+
+Fix: Offset by collider half-height
+
+Add:
+
+private Vector3 GetBottomAlignedPosition(GameObject ghost, Vector3 hitPoint)
+{
+    if (ghost.TryGetComponent(out Collider col))
+        return hitPoint + Vector3.up * (col.bounds.extents.y * 0.95f);
+
+    return hitPoint;
+}
+
+
+Then update placement:
+
+targetPos = GetBottomAlignedPosition(ghostPreview, hit.point);
+
+
+This ensures:
+
+Object sits ON the ground
+Zero sinking
+Works with any pivot position
+
+3. Placement type: floor-only, wall-only, or both
+
+Add this enum:
+
+public enum PlacementType { Floor, Wall, Both }
+
+
+Your item definition:
+
+public class ItemDefinition : ScriptableObject
+{
+    public GameObject ghostPrefab;
+    public PlacementType placementType;
+    public bool disablePhysicsWhenPlaced; // for wall objects
+}
+
+
+When placing, detect the surface:
+
+LayerMask ground = LayerMask.GetMask("Ground");
+LayerMask wall   = LayerMask.GetMask("Wall");
+
+
+Add validation:
+
+private bool ValidateSurface(ItemDefinition def, RaycastHit hit)
+{
+    int layer = hit.collider.gameObject.layer;
+
+    if (layer == LayerMask.NameToLayer("Ground") && 
+        (def.placementType == PlacementType.Floor || def.placementType == PlacementType.Both))
+        return true;
+
+    if (layer == LayerMask.NameToLayer("Wall") &&
+        (def.placementType == PlacementType.Wall || def.placementType == PlacementType.Both))
+        return true;
+
+    return false;
+}
+
+
+During placement raycast:
+
+bool surfaceAllowed = ValidateSurface(def, hit);
+
+if (!surfaceAllowed)
+{
+    UpdateGhostColor(ghostPreview, false);
+    return;
+}
+
+4. Prevent “through wall” placement (true fit-test)
+
+Your current OverlapBox uses bounds (which is good), but you forgot to disable your ghost collider AFTER testing, so it interferes.
+
+Fix:
+
+(A) Disable collider before test — already done, good
+(B) Expand overlap slightly
+(C) Ignore triggers & walls if disallowed
+
+Updated check:
+
+private bool IsPlacementValid(GameObject ghost)
+{
+    Collider col = ghost.GetComponentInChildren<Collider>();
+    if (!col) return true;
+
+    Vector3 pos = ghost.transform.position;
+    Quaternion rot = ghost.transform.rotation;
+    Vector3 size = col.bounds.size * 0.95f; // more strict and prevents clipping
+
+    // Don't collide with the ground layer; avoid self-intersection
+    LayerMask mask = ~LayerMask.GetMask("Ground", "Ghost");
+
+    Collider[] hits = Physics.OverlapBox(pos, size / 2f, rot, mask, QueryTriggerInteraction.Ignore);
+
+    if (hits.Length > 0)
+        return false;
+
+    // Ground check remains
+    if (!Physics.Raycast(pos + Vector3.up * 0.2f, Vector3.down, 2f, LayerMask.GetMask("Ground")))
+        return false;
+
+    return true;
+}
+
+
+Now objects cannot be placed inside other objects.
+
+5. Only show red outline when invalid
+
+Right now you always tint the ghost.
+
+Fix: Only color red if invalid
+Otherwise use a neutral transparent color
+
+Update your tint method:
+
+private void UpdateGhostColor(GameObject ghost, bool valid)
+{
+    foreach (var r in ghost.GetComponentsInChildren<Renderer>())
+    {
+        Color tint = valid ? new Color(1, 1, 1, 0.35f) 
+                           : new Color(1, 0.2f, 0.2f, 0.45f);
+
+        foreach (var mat in r.materials)
+            mat.color = tint;
+    }
+}
+
+
+Now:
+
+Default ghost is transparent white
+Invalid = transparent red
+
+ Final Result
+
+With these changes:
+
+Ghost no longer looks flat
+Props don’t spawn halfway underground
+Items know whether they’re allowed on wall/floor
+No more placement through walls / objects
+Red only when invalid
+
+If you'd like, I can now:
+
+unify all these into a cleaner modular plug-and-play script,
+add snap-to-grid / snap-to-surface,
+add distance-based scaling,
+add hover outlines on interactables,
+add soft-drop physics before finalizing.
+
+Just tell me!

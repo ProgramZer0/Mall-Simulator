@@ -33,7 +33,7 @@ public class PlayerController3D : NetworkBehaviour
         }
 
         if (cameraRoot != null)
-        {
+        { 
             playerCamera = cameraRoot.GetComponentInChildren<Camera>(true);
         }
     }
