@@ -6,13 +6,16 @@ public class PlayerInteractInput : NetworkBehaviour
     [SerializeField] private float interactRange = 3f;
     [SerializeField] private LayerMask interactMask;
     [SerializeField] private LayerMask pickupMask;
-    [SerializeField] private LayerMask placementMask; 
+    [SerializeField] private LayerMask placementMask;
+    [SerializeField] private LayerMask placementBlockingMask;
 
     private Camera cam;
     private PlayerInventoryNet inventory;
 
-    private float placeRotationY = 0f;
+    private float placeRotationY;
     private GameObject ghostPreview;
+
+    private static readonly int ColorId = Shader.PropertyToID("_Color");
 
     private void Awake()
     {
@@ -21,182 +24,187 @@ public class PlayerInteractInput : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        base.OnNetworkSpawn();
         if (IsOwner)
-        {
             cam = GetComponentInChildren<Camera>(true);
-        }
     }
 
     private void Update()
     {
         if (!IsOwner || cam == null) return;
 
-        if (Input.GetKeyDown(KeyCode.F))
+        HandleInteract();
+        HandleRotation();
+        HandlePlacement();
+    }
+
+    /* ========================= INTERACT ========================= */
+
+    private void HandleInteract()
+    {
+        if (!Input.GetKeyDown(KeyCode.F)) return;
+
+        if (inventory.HeldItemId.Value == 0)
         {
-            if (inventory != null && inventory.HeldItemId.Value == 0)
+            if (Physics.Raycast(cam.transform.position, cam.transform.forward,
+                out RaycastHit hit, interactRange, pickupMask))
             {
-                if (Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit, interactRange, pickupMask))
-                {
-                    var no = hit.collider.GetComponentInParent<NetworkObject>();
-                    var pickup = hit.collider.GetComponentInParent<ItemPickupNet>();
-                    if (no != null && pickup != null)
-                        inventory.RequestPickupServerRpc(no);
-                }
-            }
-            else
-            {
-                if (Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit, interactRange, interactMask))
-                {
-                    var no = hit.collider.GetComponentInParent<NetworkObject>();
-                    var interactable = hit.collider.GetComponentInParent<InteractableNet>();
-                    if (no != null && interactable != null)
-                        inventory.RequestUseOnServerRpc(no);
-                }
-            }
-        }
+                var no = hit.collider.GetComponentInParent<NetworkObject>();
+                var pickup = hit.collider.GetComponentInParent<ItemPickupNet>();
 
-        if (Input.GetKeyDown(KeyCode.R))
-        {
-            placeRotationY += 90f;
-            if (placeRotationY >= 360f) placeRotationY = 0f;
-        }
-
-        if (inventory != null && inventory.HeldItemId.Value != 0)
-        {
-            if (Input.GetMouseButton(1))
-            {
-                UpdateGhostPreview();
-            }
-            else
-            {
-                if (ghostPreview != null)
-                {
-                    Vector3 placePos;
-                    Quaternion placeRot;
-
-                    Vector3 rayStart = cam.transform.position + cam.transform.forward * 0.3f;
-                    if (Physics.Raycast(rayStart, cam.transform.forward, out RaycastHit hit, 5f, placementMask, QueryTriggerInteraction.Ignore))
-                    {
-                        placePos = hit.point;
-                        placeRot = Quaternion.Euler(0f, placeRotationY, 0f) * Quaternion.FromToRotation(Vector3.up, hit.normal);
-                    }
-                    else
-                    {
-                        placePos = cam.transform.position + cam.transform.forward * 2f;
-                        placeRot = Quaternion.Euler(0f, placeRotationY, 0f);
-                    }
-
-                    inventory.RequestPlaceServerRpc(placePos, placeRot);
-
-                    Destroy(ghostPreview);
-                }
+                if (no && pickup)
+                    inventory.RequestPickupServerRpc(no);
             }
         }
         else
         {
-            if (ghostPreview != null)
-                Destroy(ghostPreview);
+            if (Physics.Raycast(cam.transform.position, cam.transform.forward,
+                out RaycastHit hit, interactRange, interactMask))
+            {
+                var no = hit.collider.GetComponentInParent<NetworkObject>();
+                var interactable = hit.collider.GetComponentInParent<InteractableNet>();
+
+                if (no && interactable)
+                    inventory.RequestUseOnServerRpc(no);
+            }
         }
     }
+
+    /* ========================= ROTATION ========================= */
+
+    private void HandleRotation()
+    {
+        if (!Input.GetKeyDown(KeyCode.R)) return;
+
+        placeRotationY = (placeRotationY + 90f) % 360f;
+    }
+
+    /* ========================= PLACEMENT ========================= */
+
+    private void HandlePlacement()
+    {
+        if (inventory.HeldItemId.Value == 0)
+        {
+            DestroyGhost();
+            return;
+        }
+
+        bool previewing = Input.GetMouseButton(1);
+        bool confirmPlace = Input.GetMouseButtonDown(0);
+
+        if (previewing)
+            UpdateGhostPreview();
+        else
+            DestroyGhost();
+
+        if (confirmPlace && ghostPreview != null)
+        {
+            if (!IsPlacementValid(ghostPreview)) return;
+
+            if (TryGetPlacementPose(out Vector3 pos, out Quaternion rot))
+            {
+                inventory.RequestPlaceServerRpc(pos, rot);
+                DestroyGhost();
+            }
+        }
+    }
+
+    /* ========================= GHOST ========================= */
 
     private void UpdateGhostPreview()
     {
         if (ghostPreview == null)
-        {
-            if (ItemCatalog.Instance.TryGet(inventory.HeldItemId.Value, out var def))
-            {
-                var ghostBase = def.GetGhostPrefab();
-                if (ghostBase != null)
-                {
-                    ghostPreview = GameObject.Instantiate(ghostBase);
-                    ghostPreview.SetActive(true);
-                }
-            }
-        }
+            CreateGhost();
 
         if (ghostPreview == null) return;
 
-        if (ghostPreview.TryGetComponent<Collider>(out Collider col))
-            col.enabled = false;
-
-        Vector3 targetPos;
-        Quaternion targetRot;
-        bool valid = false;
-
-        Vector3 fwdStart = cam.transform.position + cam.transform.forward * 0.5f;
-        if (Physics.Raycast(fwdStart, cam.transform.forward, out RaycastHit hit, 5f, placementMask, QueryTriggerInteraction.Ignore))
+        if (TryGetPlacementPose(out Vector3 pos, out Quaternion rot))
         {
-            targetPos = hit.point;
-
-            if (hit.collider.gameObject.layer == LayerMask.NameToLayer("Ground"))
-                targetRot = Quaternion.Euler(0f, placeRotationY, 0f);
-            else
-                targetRot = Quaternion.Euler(0f, placeRotationY, 0f) * Quaternion.FromToRotation(Vector3.up, hit.normal);
-        }
-        else
-        {
-            Vector3 downStart = cam.transform.position + cam.transform.forward * 2f + Vector3.up * 2f;
-            if (Physics.Raycast(downStart, Vector3.down, out RaycastHit groundHit, 5f, LayerMask.GetMask("Ground")))
-            {
-                targetPos = groundHit.point;
-                targetRot = Quaternion.Euler(0f, placeRotationY, 0f);
-            }
-            else
-            {
-                targetPos = cam.transform.position + cam.transform.forward * 2f;
-                targetRot = Quaternion.Euler(0f, placeRotationY, 0f);
-            }
+            ghostPreview.transform.SetPositionAndRotation(pos, rot);
         }
 
-        ghostPreview.transform.position = targetPos;
-        ghostPreview.transform.rotation = targetRot;
-
-        valid = IsPlacementValid(ghostPreview);
-        UpdateGhostColor(ghostPreview, valid);
+        UpdateGhostColor(ghostPreview);
     }
 
-    private void UpdateGhostColor(GameObject ghost, bool valid)
+    private void CreateGhost()
     {
-        foreach (var r in ghost.GetComponentsInChildren<Renderer>())
-        {
-            foreach (var mat in r.materials)
-            {
-                Color baseColor = valid ? Color.green : Color.red;
-                mat.color = new Color(baseColor.r, baseColor.g, baseColor.b, 0.4f);
-            }
-        }
+        if (!ItemCatalog.Instance.TryGet(inventory.HeldItemId.Value, out var def))
+            return;
+
+        var prefab = def.GetGhostPrefab();
+        if (prefab == null) return;
+
+        ghostPreview = Instantiate(prefab);
+        ghostPreview.SetActive(true);
+
+        foreach (var col in ghostPreview.GetComponentsInChildren<Collider>())
+            col.enabled = false;
+    }
+
+    private void DestroyGhost()
+    {
+        if (ghostPreview != null)
+            Destroy(ghostPreview);
     }
 
     private void UpdateGhostColor(GameObject ghost)
     {
         bool valid = IsPlacementValid(ghost);
+        Color c = valid ? Color.green : Color.red;
+        c.a = 0.4f;
+
+        var block = new MaterialPropertyBlock();
+        block.SetColor(ColorId, c);
 
         foreach (var r in ghost.GetComponentsInChildren<Renderer>())
-        {
-            foreach (var mat in r.materials)
-            {
-                Color baseColor = valid ? Color.green : Color.red;
-                mat.color = new Color(baseColor.r, baseColor.g, baseColor.b, 0.4f);
-            }
-        }
+            r.SetPropertyBlock(block);
     }
+
+    /* ========================= PLACEMENT LOGIC ========================= */
+
+    private bool TryGetPlacementPose(out Vector3 pos, out Quaternion rot)
+    {
+        Vector3 rayStart = cam.transform.position + cam.transform.forward * 0.5f;
+
+        if (Physics.Raycast(rayStart, cam.transform.forward,
+            out RaycastHit hit, 5f, placementMask, QueryTriggerInteraction.Ignore))
+        {
+            pos = hit.point;
+
+            if (hit.collider.gameObject.layer == LayerMask.NameToLayer("Ground"))
+                rot = Quaternion.Euler(0f, placeRotationY, 0f);
+            else
+                rot = Quaternion.Euler(0f, placeRotationY, 0f) *
+                      Quaternion.FromToRotation(Vector3.up, hit.normal);
+
+            return true;
+        }
+
+        pos = cam.transform.position + cam.transform.forward * 2f;
+        rot = Quaternion.Euler(0f, placeRotationY, 0f);
+        return true;
+    }
+
     private bool IsPlacementValid(GameObject ghost)
     {
         if (ghost == null) return false;
 
-        Collider ghostCollider = ghost.GetComponentInChildren<Collider>();
-        if (ghostCollider == null) return true;
+        var col = ghost.GetComponentInChildren<Collider>();
+        if (col == null) return true;
 
-        Vector3 pos = ghost.transform.position;
-        Quaternion rot = ghost.transform.rotation;
-        Vector3 size = ghostCollider.bounds.size * 0.9f;
+        Vector3 center = col.bounds.center;
+        Vector3 halfExtents = col.bounds.extents * 0.9f;
 
-        LayerMask mask = ~LayerMask.GetMask("Ground");
-        Collider[] hits = Physics.OverlapBox(pos, size / 2f, rot, mask);
-
-        if (!Physics.Raycast(pos + Vector3.up * 0.1f, Vector3.down, out RaycastHit groundHit, 2f, LayerMask.GetMask("Ground")))
+        if (!Physics.Raycast(center + Vector3.up * 0.1f,
+            Vector3.down, 2f, LayerMask.GetMask("Ground")))
             return false;
+
+        var hits = Physics.OverlapBox(
+            center,
+            halfExtents,
+            ghost.transform.rotation,
+            placementBlockingMask,
+            QueryTriggerInteraction.Ignore
+        );
 
         return hits.Length == 0;
     }
