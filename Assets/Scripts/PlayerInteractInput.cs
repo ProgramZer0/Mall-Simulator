@@ -132,8 +132,8 @@ public class PlayerInteractInput : NetworkBehaviour
                 placeRotationY = Mathf.Repeat(placeRotationY + dir * fineRotateSpeed * Time.deltaTime, 360f);
         }
 
-        // Tap R: jump to the next exact 90° step. After fine-tuning to e.g. 17°,
-        // a tap lands on 90°, so you can always get back to a clean right angle.
+        // Tap R: jump to the next exact 90  step. After fine-tuning to e.g. 17 ,
+        // a tap lands on 90 , so you can always get back to a clean right angle.
         if (Input.GetKeyDown(KeyCode.R))
         {
             float nextStep = (Mathf.Floor(placeRotationY / 90f + 0.001f) + 1f) * 90f;
@@ -374,6 +374,11 @@ public class PlayerInteractInput : NetworkBehaviour
     private bool IsPlacementValid(GameObject ghost)
     {
         if (ghost == null) return false;
+
+        // Same store rule the server applies, so the ghost goes red before you even click.
+        if (!MallManager.CanPickupOrPlace(OwnerClientId, transform.position, ghost.transform.position))
+            return false;
+
         return FitsAt(inventory.HeldItemId.Value, ghost.transform.position, ghost.transform.rotation);
     }
 
