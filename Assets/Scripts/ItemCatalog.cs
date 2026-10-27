@@ -7,6 +7,13 @@ public class ItemCatalog : MonoBehaviour
     public static ItemCatalog Instance { get; private set; }
     [SerializeField] private List<ItemDef> items = new();
 
+    [Header("Placement Ghost")]
+    [Tooltip("Opacity of the placement preview (0 = invisible, 1 = solid).")]
+    [Range(0.05f, 1f)]
+    [SerializeField] private float ghostAlpha = 0.45f;
+
+    public float GhostAlpha => ghostAlpha;
+
     private Dictionary<int, ItemDef> map;
 
     private void Awake()
@@ -27,46 +34,36 @@ public class ItemDef
     public string displayName;
     public GameObject handVisualPrefab;
     public NetworkObject worldNetworkPrefab;
-    private GameObject generatedGhostPrefab;
 
+    [System.NonSerialized] private GameObject ghostTemplate;
+    [System.NonSerialized] private bool localBoundsComputed;
+    [System.NonSerialized] private Bounds localBounds;
+
+    /// <summary>Physical size of the world prefab in its own local space (cached).</summary>
+    public Bounds LocalBounds
+    {
+        get
+        {
+            if (!localBoundsComputed && worldNetworkPrefab != null)
+            {
+                localBounds = PlacementCheck.ComputeLocalBounds(worldNetworkPrefab.gameObject);
+                localBoundsComputed = true;
+            }
+            return localBounds;
+        }
+    }
+
+    /// <summary>
+    /// Inactive, transparent, component-stripped copy of the world prefab.
+    /// Built once per item and reused; Instantiate it to show a preview.
+    /// </summary>
     public GameObject GetGhostPrefab()
     {
-        if (generatedGhostPrefab != null) return generatedGhostPrefab;
+        if (ghostTemplate != null) return ghostTemplate;
         if (worldNetworkPrefab == null) return null;
 
-        generatedGhostPrefab = GameObject.Instantiate(worldNetworkPrefab.gameObject);
-        generatedGhostPrefab.name = worldNetworkPrefab.name + "_Ghost";
-
-        foreach (var c in generatedGhostPrefab.GetComponentsInChildren<Collider>())
-            GameObject.Destroy(c);
-
-        foreach (var nb in generatedGhostPrefab.GetComponentsInChildren<NetworkBehaviour>())
-            GameObject.Destroy(nb);
-
-        var no = generatedGhostPrefab.GetComponent<NetworkObject>();
-        if (no != null) GameObject.Destroy(no);
-
-        foreach (var r in generatedGhostPrefab.GetComponentsInChildren<Renderer>())
-        {
-            foreach (var mat in r.materials)
-            {
-                mat.shader = Shader.Find("Standard");
-                Color c = mat.color;
-                c.a = 0.4f;
-                mat.color = c;
-
-                mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                mat.SetInt("_ZWrite", 0);
-                mat.DisableKeyword("_ALPHATEST_ON");
-                mat.EnableKeyword("_ALPHABLEND_ON");
-                mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-                mat.renderQueue = 3000;
-            }
-        }
-
-        generatedGhostPrefab.SetActive(false);
-
-        return generatedGhostPrefab;
+        float alpha = ItemCatalog.Instance != null ? ItemCatalog.Instance.GhostAlpha : 0.45f;
+        ghostTemplate = GhostBuilder.BuildTemplate(worldNetworkPrefab.gameObject, alpha);
+        return ghostTemplate;
     }
 }

@@ -8,6 +8,29 @@ public class PlayerInventoryNet : NetworkBehaviour
     public NetworkVariable<int> HeldItemId = new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     private GameObject currentHandVisual;
+    private bool handVisualHidden;
+    private PlayerInteractInput interact;
+
+    private void Awake()
+    {
+        interact = GetComponent<PlayerInteractInput>();
+    }
+
+    /// <summary>
+    /// Local-only: hides the held item's hand visual on this client (e.g. while
+    /// previewing a placement). Other players still see the item in hand.
+    /// </summary>
+    public void SetHandVisualHidden(bool hidden)
+    {
+        if (handVisualHidden == hidden) return;
+        handVisualHidden = hidden;
+        ApplyHandVisibility();
+    }
+
+    private void ApplyHandVisibility()
+    {
+        if (currentHandVisual) currentHandVisual.SetActive(!handVisualHidden);
+    }
 
     private void OnEnable()
     {
@@ -27,6 +50,10 @@ public class PlayerInventoryNet : NetworkBehaviour
     private void OnHeldItemChanged(int prev, int next)
     {
         if (currentHandVisual) Destroy(currentHandVisual);
+
+        // A new held item always starts visible; an active preview re-hides it next frame.
+        handVisualHidden = false;
+
         if (next == 0) return;
         if (ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(next, out var def) && def.handVisualPrefab != null)
         {
@@ -64,6 +91,10 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (Vector3.Distance(actor.transform.position, position) > 5.0f) return;
 
         if (!ItemCatalog.Instance.TryGet(id, out var def) || def.worldNetworkPrefab == null) return;
+
+        // Server re-runs the same fit test the client used, so a client can't place into
+        // walls/other items, and two players can't drop things into the same spot at once.
+        if (interact == null || !interact.FitsAt(id, position, rotation)) return;
 
         var spawned = Instantiate(def.worldNetworkPrefab, position, rotation);
         spawned.Spawn(true);
