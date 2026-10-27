@@ -155,6 +155,7 @@ GameObject:
   - component: {fileID: 1950175109902404849}
   - component: {fileID: 2986661850691434819}
   - component: {fileID: 2123849330509129994}
+  - component: {fileID: 1450381561150076667}
   m_Layer: 7
   m_Name: playermodel
   m_TagString: Player
@@ -275,7 +276,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 3197465306
+  GlobalObjectIdHash: 2510073993
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -382,6 +383,7 @@ MonoBehaviour:
   placementBlockingMask:
     serializedVersion: 2
     m_Bits: 456
+  fineRotateSpeed: 45
   placeResponseTimeout: 0.5
   invalidTintStrength: 0.35
   invalidColor: {r: 1, g: 0.25, b: 0.25, a: 1}
@@ -429,6 +431,39 @@ MonoBehaviour:
   handAnchor: {fileID: 3084238086416788414}
   HeldItemId:
     m_InternalValue: 0
+--- !u!114 &1450381561150076667
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4772898928607901605}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b13d097aed43e6142929072b503ae318, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ProgramZer0.SoundSystem.MovementAudio
+  mode: 0
+  minSpeed: 0.4
+  speedSmoothing: 10
+  maxPlausibleSpeed: 20
+  stepClips:
+  - {fileID: 8300000, guid: 71fd095ca4a3fde4c992fae21b31e136, type: 3}
+  - {fileID: 8300000, guid: 1abe1d7d8ec926341a7017e0e422663d, type: 3}
+  - {fileID: 8300000, guid: 8632bce0faeabfc42a84ff3197b47d2d, type: 3}
+  stepDistance: 1.8
+  stepVolume: 0.6
+  stepPitchVariance: 0.08
+  groundMask:
+    serializedVersion: 2
+    m_Bits: 0
+  groundRayLength: 1.3
+  loopClip: {fileID: 0}
+  speedForFullVolume: 3
+  loopMaxVolume: 0.6
+  loopMinPitch: 0.85
+  loopMaxPitch: 1.15
+  loopFadeSpeed: 6
 --- !u!1 &5427521708554327154
 GameObject:
   m_ObjectHideFlags: 0

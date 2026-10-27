@@ -1,4 +1,5 @@
-﻿using Unity.Netcode;
+﻿using ProgramZer0.SoundSystem;
+using Unity.Netcode;
 using UnityEngine;
 
 public class PlayerInventoryNet : NetworkBehaviour
@@ -76,9 +77,13 @@ public class PlayerInventoryNet : NetworkBehaviour
 
         if (HeldItemId.Value != 0) return;
 
-        HeldItemId.Value = pickup.itemId;
+        int itemId = pickup.itemId;
+        HeldItemId.Value = itemId;
 
+        Vector3 soundPos = pickup.transform.position;
         pickupNO.Despawn(true);
+
+        PlayItemSoundClientRpc(itemId, soundPos, false);
     }
 
     [ServerRpc]
@@ -100,6 +105,20 @@ public class PlayerInventoryNet : NetworkBehaviour
         spawned.Spawn(true);
 
         HeldItemId.Value = 0;
+
+        PlayItemSoundClientRpc(id, position, true);
+    }
+
+    /// <summary>
+    /// Sent by the server only after a pickup/place actually succeeds, so every player
+    /// (including the one acting) hears it at the item's spot, and rejected attempts are silent.
+    /// Only the item id travels over the network; each client looks up the item's own clip.
+    /// </summary>
+    [ClientRpc]
+    private void PlayItemSoundClientRpc(int itemId, Vector3 position, bool placed)
+    {
+        if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemId, out var def)) return;
+        WorldAudio.PlayOneShot(placed ? def.PlaceClip : def.PickupClip, position);
     }
 
     [ServerRpc]

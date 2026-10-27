@@ -1,12 +1,24 @@
 using System;
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Audio;
 
 namespace ProgramZer0.SoundSystem
 {
     public class SoundManager : MonoBehaviour
     {
+        public static SoundManager Instance { get; private set; }
+
+        // LOCAL sounds only: menu, UI, music, "you did a thing" feedback.
+        // Everything here is 2D and plays on this machine alone. Sounds that happen at a
+        // place in the world (items, footsteps, carts) go through WorldAudio / MovementAudio.
         public Sound[] sounds;
+
+        [Header("Mixer Routing (optional)")]
+        [Tooltip("Audio Mixer group for sounds marked Is Music.")]
+        [SerializeField] private AudioMixerGroup musicGroup;
+        [Tooltip("Audio Mixer group for every other sound (menu/UI).")]
+        [SerializeField] private AudioMixerGroup uiGroup;
 
         [SerializeField] private bool enableDebugLogs = false;
 
@@ -26,6 +38,19 @@ namespace ProgramZer0.SoundSystem
 
         private void Awake()
         {
+            // One SoundManager per machine. It belongs on its own scene object, NOT the player
+            // prefab: every client has a copy of every player, so a player-mounted manager
+            // would exist several times over. If a duplicate shows up anyway, remove only this
+            // component - never the GameObject, which could be a player.
+            if (Instance != null && Instance != this)
+            {
+                Debug.LogWarning($"[SoundManager] Duplicate on '{name}' removed. " +
+                                 "Keep a single SoundManager on a scene object, not on the player prefab.", this);
+                Destroy(this);
+                return;
+            }
+            Instance = this;
+
             foreach (Sound s in sounds)
             {
                 s.source = gameObject.AddComponent<AudioSource>();
@@ -36,6 +61,7 @@ namespace ProgramZer0.SoundSystem
                 s.source.volume = s.volume;
                 s.source.pitch = s.pitch;
                 s.source.priority = s.priority;
+                s.source.outputAudioMixerGroup = s.isMusic ? musicGroup : uiGroup;
             }
 
             ApplyMuteStates();
@@ -44,10 +70,17 @@ namespace ProgramZer0.SoundSystem
 
         private Sound FindSound(string name)
         {
-            Sound s = Array.Find(sounds, sound => sound.name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            // sound.name defaults to null, so guard it or an unnamed entry throws here.
+            Sound s = Array.Find(sounds, sound => sound.name != null &&
+                                                  sound.name.Equals(name, StringComparison.OrdinalIgnoreCase));
             if (s == null)
                 Debug.LogWarning($"Sound '{name}' not found!");
             return s;
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
         }
 
         public float GetSoundMod() { return modSound; }

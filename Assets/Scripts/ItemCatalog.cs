@@ -7,6 +7,15 @@ public class ItemCatalog : MonoBehaviour
     public static ItemCatalog Instance { get; private set; }
     [SerializeField] private List<ItemDef> items = new();
 
+    [Header("Default Item Sounds")]
+    [Tooltip("Used for any item that doesn't set its own Pickup Clip.")]
+    [SerializeField] private AudioClip defaultPickupClip;
+    [Tooltip("Used for any item that doesn't set its own Place Clip.")]
+    [SerializeField] private AudioClip defaultPlaceClip;
+
+    public AudioClip DefaultPickupClip => defaultPickupClip;
+    public AudioClip DefaultPlaceClip => defaultPlaceClip;
+
     private Dictionary<int, ItemDef> map;
 
     private void Awake()
@@ -27,6 +36,15 @@ public class ItemDef
     public string displayName;
     public GameObject handVisualPrefab;
     public NetworkObject worldNetworkPrefab;
+
+    [Header("Sounds (leave empty to use the catalog defaults)")]
+    public AudioClip pickupClip;
+    public AudioClip placeClip;
+
+    public AudioClip PickupClip => pickupClip != null ? pickupClip
+        : ItemCatalog.Instance != null ? ItemCatalog.Instance.DefaultPickupClip : null;
+    public AudioClip PlaceClip => placeClip != null ? placeClip
+        : ItemCatalog.Instance != null ? ItemCatalog.Instance.DefaultPlaceClip : null;
 
     [System.NonSerialized] private GameObject ghostTemplate;
     [System.NonSerialized] private bool localBoundsComputed;

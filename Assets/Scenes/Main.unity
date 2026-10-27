@@ -119,6 +119,73 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &472295385
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 472295387}
+  - component: {fileID: 472295386}
+  - component: {fileID: 472295388}
+  m_Layer: 0
+  m_Name: Audio
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &472295386
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 472295385}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3ef315cfca30b448a010ab3562d2c35, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ProgramZer0.SoundSystem.WorldAudio
+  worldGroup: {fileID: -1048024365354730183, guid: 60c37cf91e947124d8b5c942bf7237c5, type: 2}
+  minDistance: 2
+  maxDistance: 25
+  pitchVariance: 0
+--- !u!4 &472295387
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 472295385}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -2.61554, y: -0.6859, z: -0.75458}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &472295388
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 472295385}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9c283e57b30fcc54ba4451f46addc11b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ProgramZer0.SoundSystem.SoundManager
+  sounds: []
+  musicGroup: {fileID: 4438966132824050843, guid: 60c37cf91e947124d8b5c942bf7237c5, type: 2}
+  uiGroup: {fileID: -6780121430877283097, guid: 60c37cf91e947124d8b5c942bf7237c5, type: 2}
+  enableDebugLogs: 0
+  modSound: 0.9
+  modMusicSound: 0.7
 --- !u!1 &670745772
 GameObject:
   m_ObjectHideFlags: 0
@@ -384,19 +451,28 @@ MonoBehaviour:
     displayName: Test Cube
     handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
     worldNetworkPrefab: {fileID: 5976144729851372552, guid: d4d248d7e84344a46bbfb0b524251c0b, type: 3}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
   - id: 2
     displayName: BookShelf
     handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
     worldNetworkPrefab: {fileID: 1596268347389550911, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
   - id: 3
     displayName: BookShelf
     handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
     worldNetworkPrefab: {fileID: 1596268347389550911, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
   - id: 4
     displayName: Washing MAchine
     handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
     worldNetworkPrefab: {fileID: 5349476074656871480, guid: e258abd6dede2c248a951fb62a325c33, type: 3}
-  ghostAlpha: 0.45
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
+  defaultPickupClip: {fileID: 8300000, guid: b0b6305f02b720e4490beeeb41c410d6, type: 3}
+  defaultPlaceClip: {fileID: 8300000, guid: 382cd51e5d8f86d42b7132faadb6ac88, type: 3}
 --- !u!4 &1459986144
 Transform:
   m_ObjectHideFlags: 0
@@ -510,8 +586,8 @@ Transform:
   m_GameObject: {fileID: 3910245037314643984}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 47.99, y: 1.26, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 0.5, y: 0.37, z: 0.5}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 3852864368394040306}
@@ -698,3 +774,4 @@ SceneRoots:
   - {fileID: 4397812901313757866}
   - {fileID: 7149086683456735529}
   - {fileID: 1328193520}
+  - {fileID: 472295387}
