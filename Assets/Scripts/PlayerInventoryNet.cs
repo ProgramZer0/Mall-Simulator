@@ -75,6 +75,10 @@ public class PlayerInventoryNet : NetworkBehaviour
         var actor = NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject;
         if (Vector3.Distance(actor.transform.position, pickup.transform.position) > 3.0f) return;
 
+        // Store rules: only from inside your own store, only items inside your own store.
+        if (!MallManager.CanPickupOrPlace(rpcParams.Receive.SenderClientId,
+                actor.transform.position, pickup.transform.position)) return;
+
         if (HeldItemId.Value != 0) return;
 
         int itemId = pickup.itemId;
@@ -94,6 +98,10 @@ public class PlayerInventoryNet : NetworkBehaviour
 
         var actor = NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject;
         if (Vector3.Distance(actor.transform.position, position) > 5.0f) return;
+
+        // Store rules: only from inside your own store, only onto a spot inside your own store.
+        if (!MallManager.CanPickupOrPlace(rpcParams.Receive.SenderClientId,
+                actor.transform.position, position)) return;
 
         if (!ItemCatalog.Instance.TryGet(id, out var def) || def.worldNetworkPrefab == null) return;
 
@@ -131,6 +139,10 @@ public class PlayerInventoryNet : NetworkBehaviour
 
         var actor = NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject;
         if (Vector3.Distance(actor.transform.position, targetNO.transform.position) > 4.0f) return;
+
+        // Store rules: never inside another player's store; carts etc. only in your own store or a dock.
+        if (!MallManager.CanInteract(rpcParams.Receive.SenderClientId, targetNO.transform.position,
+                interactable.OnlyInOwnZones)) return;
 
         bool consumed = interactable.ServerTryInteract(HeldItemId.Value, rpcParams.Receive.SenderClientId);
 
