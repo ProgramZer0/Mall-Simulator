@@ -11,18 +11,18 @@ public class PlayerController3D : NetworkBehaviour
     [SerializeField] private float airControl = 0.5f;
 
     [Header("Mouse Look")]
-    [SerializeField] private float mouseSensitivity = 1.2f; 
+    [SerializeField] private float mouseSensitivity = 1.2f;
     [SerializeField] private float minPitch = -80f;
     [SerializeField] private float maxPitch = 80f;
 
     [Header("References")]
-    [SerializeField] private Transform cameraRoot; 
+    [SerializeField] private Transform cameraRoot;
 
     private CharacterController controller;
     private Camera playerCamera;
     private float yaw;
     private float pitch;
-    private Vector3 velocity; 
+    private Vector3 velocity;
 
     private void Awake()
     {
@@ -33,7 +33,7 @@ public class PlayerController3D : NetworkBehaviour
         }
 
         if (cameraRoot != null)
-        { 
+        {
             playerCamera = cameraRoot.GetComponentInChildren<Camera>(true);
         }
     }
@@ -97,8 +97,8 @@ public class PlayerController3D : NetworkBehaviour
     {
         bool grounded = controller.isGrounded;
 
-        float h = Input.GetAxisRaw("Horizontal");   
-        float v = Input.GetAxisRaw("Vertical");    
+        float h = Input.GetAxisRaw("Horizontal");
+        float v = Input.GetAxisRaw("Vertical");
         Vector3 inputDir = new Vector3(h, 0f, v);
         inputDir = Vector3.ClampMagnitude(inputDir, 1f);
 

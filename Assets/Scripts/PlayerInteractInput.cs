@@ -13,8 +13,13 @@ public class PlayerInteractInput : NetworkBehaviour
     private Camera cam;
     private PlayerInventoryNet inventory;
 
+    [Header("Rotation")]
+    [Tooltip("Degrees per second while holding < or > in preview.")]
+    [SerializeField] private float fineRotateSpeed = 45f;
+
     private float placeRotationY;
     private GameObject ghostPreview;
+    private bool previewActive;
 
     // After a place request, keep the hand item hidden until the server answers.
     // If the server rejects the place (HeldItemId never changes), it reappears after this.
@@ -111,11 +116,29 @@ public class PlayerInteractInput : NetworkBehaviour
 
     /* ========================= ROTATION ========================= */
 
+    /// <summary>True while the placement preview is up.</summary>
+    public bool IsPreviewing => ghostPreview != null;
+
     private void HandleRotation()
     {
-        if (!Input.GetKeyDown(KeyCode.R)) return;
+        // Fine rotation while previewing: hold > to turn clockwise, < to turn counter-clockwise.
+        // These are the , and . keys, so Shift isn't needed.
+        if (IsPreviewing)
+        {
+            bool cw = Input.GetKey(KeyCode.Period); // >
+            bool ccw = Input.GetKey(KeyCode.Comma);  // <
+            float dir = (cw ? 1f : 0f) - (ccw ? 1f : 0f);
+            if (dir != 0f)
+                placeRotationY = Mathf.Repeat(placeRotationY + dir * fineRotateSpeed * Time.deltaTime, 360f);
+        }
 
-        placeRotationY = (placeRotationY + 90f) % 360f;
+        // Tap R: jump to the next exact 90° step. After fine-tuning to e.g. 17°,
+        // a tap lands on 90°, so you can always get back to a clean right angle.
+        if (Input.GetKeyDown(KeyCode.R))
+        {
+            float nextStep = (Mathf.Floor(placeRotationY / 90f + 0.001f) + 1f) * 90f;
+            placeRotationY = Mathf.Repeat(nextStep, 360f);
+        }
     }
 
     /* ========================= PLACEMENT ========================= */
@@ -125,13 +148,21 @@ public class PlayerInteractInput : NetworkBehaviour
         if (inventory.HeldItemId.Value == 0)
         {
             DestroyGhost();
+            previewActive = false;
             placePendingUntil = -1f;
             return;
         }
 
-        bool previewing = Input.GetMouseButton(1);
-        bool confirmPlace = Input.GetMouseButtonDown(0);
         bool placePending = Time.time < placePendingUntil;
+
+        // Right-click toggles the preview on/off; Esc also cancels it.
+        if (Input.GetMouseButtonDown(1) && !placePending)
+            previewActive = !previewActive;
+        if (previewActive && Input.GetKeyDown(KeyCode.Escape))
+            previewActive = false;
+
+        bool previewing = previewActive;
+        bool confirmPlace = Input.GetMouseButtonDown(0);
 
         if (previewing && !placePending)
         {
@@ -154,6 +185,7 @@ public class PlayerInteractInput : NetworkBehaviour
             {
                 inventory.RequestPlaceServerRpc(pos, rot);
                 DestroyGhost();
+                previewActive = false;
                 // Stay hidden so the item doesn't flash back into the hand before the server confirms.
                 placePendingUntil = Time.time + placeResponseTimeout;
             }
