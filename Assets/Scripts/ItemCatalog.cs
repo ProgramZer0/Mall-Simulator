@@ -7,13 +7,6 @@ public class ItemCatalog : MonoBehaviour
     public static ItemCatalog Instance { get; private set; }
     [SerializeField] private List<ItemDef> items = new();
 
-    [Header("Placement Ghost")]
-    [Tooltip("Opacity of the placement preview (0 = invisible, 1 = solid).")]
-    [Range(0.05f, 1f)]
-    [SerializeField] private float ghostAlpha = 0.45f;
-
-    public float GhostAlpha => ghostAlpha;
-
     private Dictionary<int, ItemDef> map;
 
     private void Awake()
@@ -62,8 +55,8 @@ public class ItemDef
         if (ghostTemplate != null) return ghostTemplate;
         if (worldNetworkPrefab == null) return null;
 
-        float alpha = ItemCatalog.Instance != null ? ItemCatalog.Instance.GhostAlpha : 0.45f;
-        ghostTemplate = GhostBuilder.BuildTemplate(worldNetworkPrefab.gameObject, alpha);
+        // Starting opacity only; PlayerInteractInput sets the real per-ghost opacity.
+        ghostTemplate = GhostBuilder.BuildTemplate(worldNetworkPrefab.gameObject, 0.45f);
         return ghostTemplate;
     }
 }

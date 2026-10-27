@@ -21,11 +21,38 @@ public class PlayerInteractInput : NetworkBehaviour
     [SerializeField] private float placeResponseTimeout = 0.5f;
     private float placePendingUntil = -1f;
 
-    [Header("Ghost Tint")]
+    [Header("Ghost Settings")]
     [Tooltip("How strongly an invalid placement is washed toward Invalid Color. 0 = no tint at all.")]
     [Range(0f, 1f)]
     [SerializeField] private float invalidTintStrength = 0.35f;
     [SerializeField] private Color invalidColor = new(1f, 0.25f, 0.25f, 1f);
+    [Tooltip("Opacity of the preview when the item can be placed there.")]
+    [Range(0.02f, 1f)]
+    [SerializeField] private float validAlpha = 0.45f;
+    [Tooltip("Opacity when the spot is blocked. Keep it below Valid Alpha so blocked ghosts look fainter.")]
+    [Range(0.02f, 1f)]
+    [SerializeField] private float invalidAlpha = 0.2f;
+
+    /// <summary>Preview opacity when placeable. Safe to set at runtime (e.g. from a settings slider).</summary>
+    public float ValidGhostAlpha
+    {
+        get => validAlpha;
+        set { validAlpha = Mathf.Clamp(value, 0.02f, 1f); ghostShownValid = null; }
+    }
+
+    /// <summary>Preview opacity when blocked. Safe to set at runtime.</summary>
+    public float InvalidGhostAlpha
+    {
+        get => invalidAlpha;
+        set { invalidAlpha = Mathf.Clamp(value, 0.02f, 1f); ghostShownValid = null; }
+    }
+
+    // Lets Inspector tweaks during Play mode show up on the current ghost immediately.
+    private void OnValidate() => ghostShownValid = null;
+
+    [Header("Debug")]
+    [Tooltip("Draw the fit-test box and log what it overlaps (once a second) while previewing.")]
+    [SerializeField] private bool debugPlacement;
 
     private readonly List<(Material mat, Color original)> ghostMaterials = new();
     private bool? ghostShownValid;
@@ -147,7 +174,11 @@ public class PlayerInteractInput : NetworkBehaviour
             ghostPreview.transform.SetPositionAndRotation(pos, rot);
         }
 
-        UpdateGhostColor(IsPlacementValid(ghostPreview));
+        bool valid = IsPlacementValid(ghostPreview);
+        UpdateGhostColor(valid);
+
+        if (debugPlacement)
+            DebugPlacement(ghostPreview.transform.position, ghostPreview.transform.rotation, valid);
     }
 
     private void CreateGhost()
@@ -197,7 +228,9 @@ public class PlayerInteractInput : NetworkBehaviour
             if (mat == null) continue;
 
             Color c = valid ? original : Color.Lerp(original, invalidColor, invalidTintStrength);
-            c.a = original.a;
+            // Blocked ghosts fade out further, so "can't place" reads even when the
+            // item's own color is close to the red tint.
+            c.a = valid ? validAlpha : invalidAlpha;
             GhostBuilder.SetColor(mat, c);
         }
     }
@@ -208,23 +241,102 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         Vector3 rayStart = cam.transform.position + cam.transform.forward * 0.5f;
 
+        Quaternion yaw = Quaternion.Euler(0f, placeRotationY, 0f);
+
         if (Physics.Raycast(rayStart, cam.transform.forward,
             out RaycastHit hit, 5f, placementMask, QueryTriggerInteraction.Ignore))
         {
             pos = hit.point;
 
-            if (hit.collider.gameObject.layer == LayerMask.NameToLayer("Ground"))
-                rot = Quaternion.Euler(0f, placeRotationY, 0f);
-            else
-                rot = Quaternion.Euler(0f, placeRotationY, 0f) *
-                      Quaternion.FromToRotation(Vector3.up, hit.normal);
-
-            return true;
+            // Items always stand upright. Aiming at the top of something puts the item on it;
+            // aiming at a side leaves it hanging in the air, so the support check turns it red.
+            // (Wall-mounted items can tilt to the surface later via a floor/wall placement type.)
+            rot = yaw;
+        }
+        else
+        {
+            pos = cam.transform.position + cam.transform.forward * 2f;
+            rot = yaw;
         }
 
-        pos = cam.transform.position + cam.transform.forward * 2f;
-        rot = Quaternion.Euler(0f, placeRotationY, 0f);
+        // Sit the item on the surface by its measured bottom, not its pivot,
+        // so models with a centered pivot don't sink halfway into the floor.
+        if (ItemCatalog.Instance != null &&
+            ItemCatalog.Instance.TryGet(inventory.HeldItemId.Value, out var def))
+        {
+            pos += rot * Vector3.up * PlacementCheck.PivotHeightAboveBase(def);
+        }
+
         return true;
+    }
+
+    /* ========================= DEBUG ========================= */
+
+    private float nextDebugLogTime;
+
+    /// <summary>
+    /// Draws the fit-test box (Scene view, or Game view with Gizmos on) and, once a second,
+    /// logs every collider inside it and whether the fit test counts it.
+    /// </summary>
+    private void DebugPlacement(Vector3 pos, Quaternion rot, bool valid)
+    {
+        if (!ItemCatalog.Instance.TryGet(inventory.HeldItemId.Value, out var def)) return;
+
+        if (!PlacementCheck.GetTestBox(def, pos, rot, out Vector3 center, out Vector3 half))
+        {
+            if (Time.time >= nextDebugLogTime)
+            {
+                nextDebugLogTime = Time.time + 1f;
+                Debug.LogWarning($"[Placement] '{def.displayName}' has no measurable size " +
+                                 "(no colliders or meshes found on its world prefab).", this);
+            }
+            return;
+        }
+
+        DrawBox(center, half, rot, valid ? Color.green : Color.red);
+
+        if (Time.time < nextDebugLogTime) return;
+        nextDebugLogTime = Time.time + 1f;
+
+        int ground = LayerMask.NameToLayer("Ground");
+        var all = Physics.OverlapBox(center, half, rot, ~0, QueryTriggerInteraction.Collide);
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"[Placement] '{def.displayName}' valid={valid}, box size={(half * 2f):F2}, ")
+          .Append($"overlapping {all.Length} collider(s):");
+
+        foreach (var c in all)
+        {
+            int layer = c.gameObject.layer;
+            bool inMask = (placementBlockingMask.value & (1 << layer)) != 0;
+
+            string verdict =
+                c.isTrigger ? "IGNORED (trigger)" :
+                layer == ground ? "IGNORED (Ground layer never blocks)" :
+                !inMask ? "IGNORED (layer not in Placement Blocking Mask)" :
+                                   "BLOCKS";
+
+            sb.Append($"\n  - '{c.name}' (root '{c.transform.root.name}') layer '{LayerMask.LayerToName(layer)}' -> {verdict}");
+        }
+
+        Debug.Log(sb.ToString(), this);
+    }
+
+    private static void DrawBox(Vector3 c, Vector3 h, Quaternion r, Color col)
+    {
+        Vector3 P(float x, float y, float z) => c + r * new Vector3(h.x * x, h.y * y, h.z * z);
+
+        Vector3[] p =
+        {
+            P(-1,-1,-1), P( 1,-1,-1), P( 1,-1, 1), P(-1,-1, 1),
+            P(-1, 1,-1), P( 1, 1,-1), P( 1, 1, 1), P(-1, 1, 1),
+        };
+        for (int i = 0; i < 4; i++)
+        {
+            Debug.DrawLine(p[i], p[(i + 1) % 4], col); // bottom
+            Debug.DrawLine(p[i + 4], p[(i + 1) % 4 + 4], col); // top
+            Debug.DrawLine(p[i], p[i + 4], col); // sides
+        }
     }
 
     private bool IsPlacementValid(GameObject ghost)

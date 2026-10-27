@@ -378,10 +378,16 @@ MonoBehaviour:
     m_Bits: 8
   placementMask:
     serializedVersion: 2
-    m_Bits: 371
+    m_Bits: 379
   placementBlockingMask:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 456
+  placeResponseTimeout: 0.5
+  invalidTintStrength: 0.35
+  invalidColor: {r: 1, g: 0.25, b: 0.25, a: 1}
+  validAlpha: 0.79
+  invalidAlpha: 0.12
+  debugPlacement: 0
 --- !u!143 &2986661850691434819
 CharacterController:
   m_ObjectHideFlags: 0

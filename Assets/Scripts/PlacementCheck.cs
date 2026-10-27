@@ -24,18 +24,8 @@ public static class PlacementCheck
                             LayerMask blockingMask, LayerMask supportMask)
     {
         if (def == null || def.worldNetworkPrefab == null) return false;
-
-        Bounds local = def.LocalBounds;
-        if (local.size == Vector3.zero) return true; // nothing measurable; don't block
-
-        Vector3 scale = def.worldNetworkPrefab.transform.localScale;
-        Vector3 halfExtents = Vector3.Scale(local.extents, Abs(scale));
-        halfExtents = new Vector3(
-            Mathf.Max(0.001f, halfExtents.x - Skin),
-            Mathf.Max(0.001f, halfExtents.y - Skin),
-            Mathf.Max(0.001f, halfExtents.z - Skin));
-
-        Vector3 center = position + rotation * Vector3.Scale(local.center, scale);
+        if (!GetTestBox(def, position, rotation, out Vector3 center, out Vector3 halfExtents))
+            return true; // nothing measurable; don't block
 
         // 1) Nothing in the way.
         int count = Physics.OverlapBoxNonAlloc(center, halfExtents, Hits, rotation,
@@ -47,6 +37,43 @@ public static class PlacementCheck
         Vector3 baseCenter = center - up * (halfExtents.y + Skin);
         return Physics.Raycast(baseCenter + up * 0.05f, -up, 0.05f + SupportProbe,
                                supportMask, QueryTriggerInteraction.Ignore);
+    }
+
+    /// <summary>
+    /// The world-space box the fit test uses (already shrunk by the skin).
+    /// Returns false if the item has no measurable size.
+    /// </summary>
+    public static bool GetTestBox(ItemDef def, Vector3 position, Quaternion rotation,
+                                  out Vector3 center, out Vector3 halfExtents)
+    {
+        center = position;
+        halfExtents = Vector3.zero;
+        if (def == null || def.worldNetworkPrefab == null) return false;
+
+        Bounds local = def.LocalBounds;
+        if (local.size == Vector3.zero) return false;
+
+        Vector3 scale = def.worldNetworkPrefab.transform.localScale;
+        halfExtents = Vector3.Scale(local.extents, Abs(scale));
+        halfExtents = new Vector3(
+            Mathf.Max(0.001f, halfExtents.x - Skin),
+            Mathf.Max(0.001f, halfExtents.y - Skin),
+            Mathf.Max(0.001f, halfExtents.z - Skin));
+
+        center = position + rotation * Vector3.Scale(local.center, scale);
+        return true;
+    }
+
+    /// <summary>
+    /// Distance from the item's pivot up to its lowest point. Adding (rotation * up * this)
+    /// to a surface hit point makes the item sit ON the surface, wherever its pivot is.
+    /// </summary>
+    public static float PivotHeightAboveBase(ItemDef def)
+    {
+        if (def == null || def.worldNetworkPrefab == null) return 0f;
+        Bounds local = def.LocalBounds;
+        if (local.size == Vector3.zero) return 0f;
+        return -local.min.y * def.worldNetworkPrefab.transform.localScale.y;
     }
 
     /// <summary>
@@ -91,12 +118,12 @@ public static class PlacementCheck
                     Add(col.transform, new Bounds(s.center, Vector3.one * s.radius * 2f));
                     break;
                 case CapsuleCollider cap:
-                {
-                    Vector3 size = Vector3.one * cap.radius * 2f;
-                    size[cap.direction] = Mathf.Max(cap.height, cap.radius * 2f);
-                    Add(col.transform, new Bounds(cap.center, size));
-                    break;
-                }
+                    {
+                        Vector3 size = Vector3.one * cap.radius * 2f;
+                        size[cap.direction] = Mathf.Max(cap.height, cap.radius * 2f);
+                        Add(col.transform, new Bounds(cap.center, size));
+                        break;
+                    }
                 case MeshCollider mc when mc.sharedMesh != null:
                     Add(col.transform, mc.sharedMesh.bounds);
                     break;
