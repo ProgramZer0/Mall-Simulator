@@ -8,7 +8,7 @@ using UnityEngine;
 /// 0          enter edit mode (standing in your own store) / save and leave
 /// WASD / QE  pan / turn the top-down camera, mouse wheel zooms
 /// Click      select an item in your store
-/// X          switch between Move (arrows) and Rotate (rings)
+/// X          cycle Move (arrows) -> Rotate (rings) -> no handles
 /// Drag       an arrow to slide along that axis (stops on contact), a ring to rotate
 ///            (hold Ctrl to snap to 15 degrees)
 /// G          toggle gravity for the selected item (everything hangs in place otherwise)
@@ -316,7 +316,7 @@ public class StoreEditController : NetworkBehaviour
         if (selected != null)
         {
             if (Input.GetKeyDown(toolKey))
-                tool = tool == Tool.Move ? Tool.Rotate : Tool.Move; // None -> Move -> Rotate -> Move ...
+                tool = tool == Tool.None ? Tool.Move : tool == Tool.Move ? Tool.Rotate : Tool.None; // None -> Move -> Rotate -> None
 
             if (Input.GetKeyDown(gravityKey))
                 selected.SetGravity(!selected.Gravity);
@@ -554,7 +554,7 @@ public class StoreEditController : NetworkBehaviour
     {
         if (!showHud || !IsOwner || !IsEditing) return;
 
-        string toolName = selected == null ? "-" : tool == Tool.None ? "none (press X)" : tool.ToString();
+        string toolName = selected == null ? "-" : tool == Tool.None ? "none (X for arrows)" : tool.ToString();
         string gravity = selected == null ? "-" : selected.Gravity ? "ON" : "off";
         string itemName = selected == null ? "nothing (click an item)" : selected.Def.displayName;
 
@@ -562,7 +562,7 @@ public class StoreEditController : NetworkBehaviour
         GUI.Label(new Rect(20, 16, 400, 20), finishing ? "STORE EDIT MODE - saving..." : "STORE EDIT MODE   (0 = save & exit)");
         GUI.Label(new Rect(20, 36, 400, 20), $"Selected: {itemName}");
         GUI.Label(new Rect(20, 56, 400, 20), $"Tool: {toolName}     Gravity: {gravity}");
-        GUI.Label(new Rect(20, 76, 400, 20), "X: move/rotate   G: gravity   Ctrl: snap   Esc: deselect");
+        GUI.Label(new Rect(20, 76, 400, 20), "X: move > rotate > hide   G: gravity   Ctrl: snap   Esc: deselect");
     }
 
     /* ========================= HELPERS ========================= */
