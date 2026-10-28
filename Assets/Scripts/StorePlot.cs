@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Unity.Netcode;
 using UnityEngine;
@@ -64,7 +65,7 @@ public class StorePlot : NetworkBehaviour
     public event Action<StorePlot> Changed;
 
     public ulong EditorClientId => editorClientId.Value;
-    /// <summary>In edit mode: closed, renovation wall up, items frozen in the air.</summary>
+    /// <summary>In edit mode: closed, renovation wall up, items out of the world until it ends.</summary>
     public bool IsRenovating => editorClientId.Value != NoOwner;
     /// <summary>Owned and not under renovation. Customers/sales should check this.</summary>
     public bool IsOpen => HasOwner && !IsRenovating;
@@ -186,26 +187,125 @@ public class StorePlot : NetworkBehaviour
         purchasedSegments.Value = 0;
     }
 
+    /* ========================= EDIT SESSIONS (SERVER) ========================= */
+
+    /// <summary>One item taken out of the world for an edit session.</summary>
+    public struct EditEntry
+    {
+        public int itemId;
+        public Vector3 position;
+        public Quaternion rotation;
+    }
+
+    private readonly List<EditEntry> editSession = new();
+
+    /// <summary>Server: the items in the current edit session, in the order sent to the editor.</summary>
+    public IReadOnlyList<EditEntry> ServerEditSession => editSession;
+
+    /// <summary>Server: bumps every session so late messages from an old one are ignored.</summary>
+    public int ServerEditSessionId { get; private set; }
+
     /// <summary>
-    /// Server only. Starts (clientId) or ends (NoOwner) edit mode. Items in the store freeze
-    /// in place while editing; ending it gives every item its gravity back.
+    /// Server only. Starts (clientId) or ends (NoOwner) edit mode.
+    ///
+    /// Starting records every item in the store and despawns it; the editor works on local
+    /// copies, so nothing is sent over the network while they drag things around. Ending this
+    /// way (disconnect, store released) respawns everything where it was. A normal finish goes
+    /// through ServerEndEdit with the editor's final positions instead.
     /// Use MallManager.ServerTryStartEdit / ServerStopEdit rather than calling this directly.
     /// </summary>
     public void ServerSetEditor(ulong clientId)
     {
         if (!IsServer || editorClientId.Value == clientId) return;
 
-        bool ending = clientId == NoOwner;
-        editorClientId.Value = clientId;
+        if (IsRenovating) ServerEndEdit(null, null, null); // put the old session's items back
+        if (clientId == NoOwner) return;
 
-        // Snapshot first: refreshing physics can't change membership, but be safe anyway.
+        editSession.Clear();
+        ServerEditSessionId++;
+
+        var catalog = ItemCatalog.Instance;
         foreach (var item in ItemPickupNet.All.ToArray())
         {
-            if (item == null || !Contains(item.transform.position)) continue;
-            if (ending) item.ServerSetGravityInEdit(false); // next session starts frozen again
-            else item.ServerRefreshPhysics();
+            if (item == null || !item.IsSpawned || !Contains(item.transform.position)) continue;
+
+            // Only take items we can respawn later; anything else is left untouched.
+            if (catalog == null || !catalog.TryGet(item.itemId, out var def) || def.worldNetworkPrefab == null)
+            {
+                Debug.LogWarning($"[StorePlot] '{item.name}' (item id {item.itemId}) has no catalog entry " +
+                                 "with a world prefab, so it can't be edited and stays where it is.", item);
+                continue;
+            }
+
+            editSession.Add(new EditEntry
+            {
+                itemId = item.itemId,
+                position = item.transform.position,
+                rotation = item.transform.rotation
+            });
+            item.NetworkObject.Despawn(true);
         }
+
+        editorClientId.Value = clientId;
     }
+
+    /// <summary>
+    /// Server only. Ends the edit session and respawns its items. Each item uses the editor's
+    /// position when one was given and it passes the checks (inside this store, isValid);
+    /// otherwise it goes back to where it was before editing.
+    /// </summary>
+    public void ServerEndEdit(Vector3[] positions, Quaternion[] rotations,
+                              Func<ItemDef, Vector3, Quaternion, bool> isValid)
+    {
+        if (!IsServer || !IsRenovating) return;
+
+        var catalog = ItemCatalog.Instance;
+        for (int i = 0; i < editSession.Count; i++)
+        {
+            var entry = editSession[i];
+            if (catalog == null || !catalog.TryGet(entry.itemId, out var def) || def.worldNetworkPrefab == null)
+                continue;
+
+            Vector3 pos = entry.position;
+            Quaternion rot = entry.rotation;
+
+            if (positions != null && rotations != null && i < positions.Length && i < rotations.Length)
+            {
+                Vector3 p = positions[i];
+                Quaternion r = rotations[i];
+                if (IsFinite(p) && IsFinite(r))
+                {
+                    r = r.normalized;
+                    Physics.SyncTransforms(); // see the items respawned earlier in this loop
+                    if (ContainsItem(def, p, r) && (isValid == null || isValid(def, p, r)))
+                    {
+                        pos = p;
+                        rot = r;
+                    }
+                }
+            }
+
+            var spawned = Instantiate(def.worldNetworkPrefab, pos, rot);
+            spawned.Spawn(true);
+        }
+
+        editSession.Clear();
+        editorClientId.Value = NoOwner;
+    }
+
+    /// <summary>True if the middle of the item at this pose is inside the store.</summary>
+    public bool ContainsItem(ItemDef def, Vector3 position, Quaternion rotation)
+    {
+        Vector3 center = PlacementCheck.GetTestBox(def, position, rotation, out Vector3 c, out _) ? c : position;
+        return Contains(center);
+    }
+
+    private static bool IsFinite(Vector3 v) =>
+        float.IsFinite(v.x) && float.IsFinite(v.y) && float.IsFinite(v.z);
+
+    private static bool IsFinite(Quaternion q) =>
+        float.IsFinite(q.x) && float.IsFinite(q.y) && float.IsFinite(q.z) && float.IsFinite(q.w) &&
+        (q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w) > 1e-6f;
 
     /// <summary>World-space box around the base space plus every purchased segment.</summary>
     public Bounds GetWorldBounds()

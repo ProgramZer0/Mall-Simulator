@@ -5,21 +5,27 @@ using UnityEngine;
 /// <summary>
 /// Store edit mode (GDD 11b). Goes on the player prefab next to PlayerController.
 ///
-/// 0          enter / leave edit mode (while standing in your own store)
+/// 0          enter edit mode (standing in your own store) / save and leave
 /// WASD / QE  pan / turn the top-down camera, mouse wheel zooms
-/// Click      select a placed item in your store
-/// X          cycle Move (arrows) and Rotate (rings) for the selected item
+/// Click      select an item in your store
+/// X          switch between Move (arrows) and Rotate (rings)
 /// Drag       an arrow to slide along that axis (stops on contact), a ring to rotate
 ///            (hold Ctrl to snap to 15 degrees)
-/// G          toggle gravity for the selected item (everything is frozen in the air otherwise)
+/// G          toggle gravity for the selected item (everything hangs in place otherwise)
 /// Esc / RMB  deselect
 ///
-/// The host owns every decision: entering edit mode, each move/rotate (re-checked for
-/// collisions and store bounds) and gravity. The editor only sees a preview while dragging.
+/// Networking: entering edit mode, the host takes the store's items out of the world and
+/// sends this player a list of them; this player edits local copies, so nothing goes over
+/// the network while dragging. Leaving, the final positions go back to the host, which
+/// checks each one and respawns the items (anything invalid returns to where it was).
+/// Nobody else can see in during renovation, so they don't need live updates.
 /// </summary>
 public class StoreEditController : NetworkBehaviour
 {
-    private enum Tool { Select, Move, Rotate }
+    private enum Tool { None, Move, Rotate }
+
+    // Items per network message, to stay well under the transport's payload limit.
+    private const int ChunkSize = 64;
 
     [Header("Keys")]
     [SerializeField] private KeyCode toggleKey = KeyCode.Alpha0;
@@ -42,14 +48,15 @@ public class StoreEditController : NetworkBehaviour
     [Header("Handles")]
     [Tooltip("How close (pixels) the mouse must be to an arrow or ring to grab it.")]
     [SerializeField] private float grabRadiusPixels = 14f;
+    [Tooltip("Clicks this many times the grab radius from a handle are ignored instead of deselecting.")]
+    [SerializeField] private float nearMissFactor = 2.5f;
     [SerializeField] private float rotateDegreesPerPixel = 0.5f;
     [SerializeField] private float snapAngle = 15f;
     [Tooltip("Line thickness per meter of camera distance.")]
     [SerializeField] private float lineWidth = 0.006f;
-    [Range(0.1f, 1f)]
-    [SerializeField] private float ghostAlpha = 0.85f;
-    [Tooltip("After a move is sent, how long to show the preview before following the host's real pose.")]
-    [SerializeField] private float resyncDelay = 0.5f;
+
+    [Header("HUD")]
+    [SerializeField] private bool showHud = true;
 
     private static readonly Color BoxColor = new(1f, 1f, 1f, 0.9f);
     private static readonly Color BoxGravityColor = new(0.3f, 0.9f, 1f, 0.9f);
@@ -65,19 +72,16 @@ public class StoreEditController : NetworkBehaviour
     private float yaw;
     private float distance;
 
-    // Selection
-    private ItemPickupNet selected;
-    private ItemDef selectedDef;
-    private GameObject ghost;
-    private readonly List<Material> ghostMaterials = new();
-    private readonly List<Renderer> hiddenRenderers = new();
-    private Vector3 desiredPos;
-    private Quaternion desiredRot;
+    // Local copies of the store's items (index = position in the host's session list)
+    private readonly List<EditLocalItem> localItems = new();
+    private int clientSessionId = -1;
+    private bool finishing;
+    private float finishStartedAt;
+
+    // Selection and dragging
+    private EditLocalItem selected;
     private Tool tool;
     private int hoverHandle = StoreEditHandles.None;
-    private float lastCommitTime = -10f;
-
-    // Dragging
     private int dragHandle = StoreEditHandles.None;
     private Vector3 dragStartPos;
     private Quaternion dragStartRot;
@@ -86,8 +90,12 @@ public class StoreEditController : NetworkBehaviour
     private float rotateRaw;
     private Vector2 dragTangent;
     private Vector2 lastMouse;
-
     private readonly Vector3[] ringBuffer = new Vector3[StoreEditHandles.RingSegments];
+
+    // Server: final positions arriving from the editor
+    private Vector3[] pendingPositions;
+    private Quaternion[] pendingRotations;
+    private int pendingSessionId = -1;
 
     /// <summary>True while this player is in edit mode. PlayerController / PlayerInteractInput pause on it.</summary>
     public bool IsEditing => editPlot != null;
@@ -107,11 +115,12 @@ public class StoreEditController : NetworkBehaviour
     public override void OnNetworkDespawn()
     {
         if (IsOwner && IsEditing) ExitView();
+        ClearLocalItems();
     }
 
     public override void OnDestroy()
     {
-        Deselect();
+        ClearLocalItems();
         if (editCam != null) Destroy(editCam.gameObject);
         if (handles != null) Destroy(handles.gameObject);
         base.OnDestroy();
@@ -122,26 +131,23 @@ public class StoreEditController : NetworkBehaviour
         if (!IsOwner || !IsSpawned) return;
 
         if (Input.GetKeyDown(toggleKey) || (toggleKey == KeyCode.Alpha0 && Input.GetKeyDown(KeyCode.Keypad0)))
-            RequestToggle();
+        {
+            if (IsEditing) Finish();
+            else TryStart();
+        }
 
         SyncEditState();
         if (!IsEditing) return;
 
         UpdateCamera();
-        UpdateTools();
+        if (!finishing) UpdateTools();
         DrawHandles();
     }
 
     /* ========================= ENTER / EXIT ========================= */
 
-    private void RequestToggle()
+    private void TryStart()
     {
-        if (IsEditing)
-        {
-            RequestStopEditServerRpc();
-            return;
-        }
-
         var mall = MallManager.Instance;
         if (mall == null)
         {
@@ -161,7 +167,36 @@ public class StoreEditController : NetworkBehaviour
             return;
         }
 
-        RequestStartEditServerRpc();
+        RequestStartEditRpc();
+    }
+
+    /// <summary>Send every local copy's final position to the host, then ask it to finish.</summary>
+    private void Finish()
+    {
+        // Pressing 0 again after a few seconds re-sends, in case the first attempt was lost.
+        if (finishing && Time.time - finishStartedAt < 3f) return;
+        finishing = true;
+        finishStartedAt = Time.time;
+        Deselect();
+
+        int count = localItems.Count;
+        for (int start = 0; start < count; start += ChunkSize)
+        {
+            int n = Mathf.Min(ChunkSize, count - start);
+            var positions = new Vector3[n];
+            var rotations = new Quaternion[n];
+            for (int k = 0; k < n; k++)
+            {
+                var item = localItems[start + k];
+                // A missing copy sends "no position", so the host keeps that item where it was.
+                positions[k] = item != null ? item.transform.position : Vector3.positiveInfinity;
+                rotations[k] = item != null ? item.transform.rotation : Quaternion.identity;
+            }
+            SubmitEditPosesRpc(clientSessionId, start, positions, rotations);
+        }
+
+        FinishEditRpc(clientSessionId);
+        // The local copies stay until the host's respawned items arrive (see SyncEditState).
     }
 
     /// <summary>Follows the host's decision: enter/leave the view when the synced edit state changes.</summary>
@@ -177,6 +212,7 @@ public class StoreEditController : NetworkBehaviour
     private void EnterView(StorePlot plot)
     {
         editPlot = plot;
+        finishing = false;
         if (editCam == null) CreateEditCamera();
         if (handles == null) handles = StoreEditHandles.Create();
 
@@ -196,6 +232,10 @@ public class StoreEditController : NetworkBehaviour
     private void ExitView()
     {
         Deselect();
+        ClearLocalItems();
+        clientSessionId = -1;
+        finishing = false;
+
         if (handles != null) handles.HideAll();
         if (editCam != null) editCam.enabled = false;
         if (playerCam != null) playerCam.enabled = true;
@@ -212,6 +252,14 @@ public class StoreEditController : NetworkBehaviour
         if (playerCam != null) editCam.CopyFrom(playerCam);
         editCam.cullingMask &= ~hiddenInEditView.value;
         editCam.enabled = false;
+    }
+
+    private void ClearLocalItems()
+    {
+        foreach (var item in localItems)
+            if (item != null) Destroy(item.gameObject);
+        localItems.Clear();
+        selected = null;
     }
 
     /* ========================= CAMERA ========================= */
@@ -254,12 +302,10 @@ public class StoreEditController : NetworkBehaviour
         Vector2 mouse = Input.mousePosition;
         Ray ray = editCam.ScreenPointToRay(mouse);
 
-        // Selected item vanished (despawned, store released...): drop the selection.
-        if (selectedDef != null && selected == null) Deselect();
-
         if (dragHandle != StoreEditHandles.None)
         {
-            if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1)) CancelDrag();
+            if (selected == null) dragHandle = StoreEditHandles.None;
+            else if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1)) CancelDrag();
             else if (Input.GetMouseButton(0)) ContinueDrag(ray, mouse);
             else EndDrag();
 
@@ -267,32 +313,26 @@ public class StoreEditController : NetworkBehaviour
             return;
         }
 
-        // Once a sent move has had time to land, follow the host's real pose. This also
-        // snaps the preview back if the host rejected a move, and tracks falling items.
-        if (selected != null && Time.time - lastCommitTime > resyncDelay)
-        {
-            desiredPos = selected.transform.position;
-            desiredRot = selected.transform.rotation;
-        }
-
         if (selected != null)
         {
             if (Input.GetKeyDown(toolKey))
-                tool = tool == Tool.Move ? Tool.Rotate : Tool.Move;
+                tool = tool == Tool.Move ? Tool.Rotate : Tool.Move; // None -> Move -> Rotate -> Move ...
 
             if (Input.GetKeyDown(gravityKey))
-                RequestSetGravityServerRpc(selected.NetworkObject, !selected.GravityInEdit);
+                selected.SetGravity(!selected.Gravity);
 
             if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
                 Deselect();
         }
 
-        hoverHandle = selected != null ? PickHandle(mouse) : StoreEditHandles.None;
+        hoverHandle = PickHandle(mouse, grabRadiusPixels);
 
         if (Input.GetMouseButtonDown(0))
         {
-            if (hoverHandle != StoreEditHandles.None) BeginDrag(hoverHandle, ray, mouse);
-            else TrySelect(ray);
+            if (hoverHandle != StoreEditHandles.None)
+                BeginDrag(hoverHandle, ray, mouse);
+            else if (PickHandle(mouse, grabRadiusPixels * nearMissFactor) == StoreEditHandles.None)
+                TrySelect(ray); // a near-miss on a handle keeps the selection instead
         }
 
         lastMouse = mouse;
@@ -303,75 +343,29 @@ public class StoreEditController : NetworkBehaviour
         int mask = interact != null ? interact.PickupMask.value : Physics.DefaultRaycastLayers;
         if (Physics.Raycast(ray, out RaycastHit hit, 500f, mask, QueryTriggerInteraction.Ignore))
         {
-            var item = hit.collider.GetComponentInParent<ItemPickupNet>();
-            if (item != null && item == selected) return;
-            if (item != null && editPlot.Contains(item.transform.position))
+            var item = hit.collider.GetComponentInParent<EditLocalItem>();
+            if (item != null)
             {
-                Select(item);
+                if (item != selected) Select(item);
                 return;
             }
         }
         Deselect();
     }
 
-    private void Select(ItemPickupNet item)
+    private void Select(EditLocalItem item)
     {
         Deselect();
-        if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(item.itemId, out var def)) return;
-
         selected = item;
-        selectedDef = def;
-        desiredPos = item.transform.position;
-        desiredRot = item.transform.rotation;
-        tool = Tool.Select;
-        lastCommitTime = -10f;
-
-        // Show a preview copy and hide the real item locally, so dragging looks immediate
-        // even though the host decides where the item actually ends up.
-        var template = def.GetGhostPrefab();
-        if (template != null)
-        {
-            ghost = Instantiate(template, desiredPos, desiredRot);
-            ghost.SetActive(true);
-            foreach (var r in ghost.GetComponentsInChildren<Renderer>())
-            {
-                foreach (var mat in r.materials)
-                {
-                    Color c = GhostBuilder.GetColor(mat);
-                    c.a = ghostAlpha;
-                    GhostBuilder.SetColor(mat, c);
-                    ghostMaterials.Add(mat);
-                }
-            }
-
-            foreach (var r in item.GetComponentsInChildren<Renderer>())
-            {
-                if (!r.enabled) continue;
-                r.enabled = false;
-                hiddenRenderers.Add(r);
-            }
-        }
+        tool = Tool.None;
     }
 
     private void Deselect()
     {
-        dragHandle = StoreEditHandles.None;
+        if (dragHandle != StoreEditHandles.None) CancelDrag();
         hoverHandle = StoreEditHandles.None;
-
-        foreach (var r in hiddenRenderers)
-            if (r != null) r.enabled = true;
-        hiddenRenderers.Clear();
-
-        foreach (var m in ghostMaterials)
-            if (m != null) Destroy(m);
-        ghostMaterials.Clear();
-
-        if (ghost != null) Destroy(ghost);
-        ghost = null;
         selected = null;
-        selectedDef = null;
-        tool = Tool.Select;
-
+        tool = Tool.None;
         if (handles != null) handles.HideAll();
     }
 
@@ -382,8 +376,8 @@ public class StoreEditController : NetworkBehaviour
         GetHandleGeometry(out Vector3 center, out _, out float radius);
         Vector3 axis = StoreEditHandles.Axes[handle];
 
-        dragStartPos = desiredPos;
-        dragStartRot = desiredRot;
+        dragStartPos = selected.transform.position;
+        dragStartRot = selected.transform.rotation;
         dragPivot = center;
         lastMouse = mouse;
 
@@ -415,11 +409,14 @@ public class StoreEditController : NetworkBehaviour
         }
 
         dragHandle = handle;
+        selected.SetDragging(true);
     }
 
     private void ContinueDrag(Ray ray, Vector2 mouse)
     {
         Vector3 axis = StoreEditHandles.Axes[dragHandle];
+        Vector3 pos = selected.transform.position;
+        Quaternion rot = selected.transform.rotation;
         int mask = EditMask();
 
         if (tool == Tool.Move)
@@ -429,15 +426,14 @@ public class StoreEditController : NetworkBehaviour
 
             // Slide from where the item is now toward the mouse, stopping at the first contact.
             Vector3 target = dragStartPos + axis * (t - dragStartT);
-            Vector3 delta = target - desiredPos;
+            Vector3 delta = target - pos;
             float dist = delta.magnitude;
             if (dist < 1e-5f) return;
 
             Vector3 dir = delta / dist;
-            float allowed = PlacementCheck.CastDistance(selectedDef, desiredPos, desiredRot, dir, dist,
-                                                        mask, selected.transform);
-            Vector3 next = desiredPos + dir * allowed;
-            if (InsidePlot(next, desiredRot)) desiredPos = next;
+            float allowed = PlacementCheck.CastDistance(selected.Def, pos, rot, dir, dist, mask, selected.transform);
+            Vector3 next = pos + dir * allowed;
+            if (editPlot.ContainsItem(selected.Def, next, rot)) selected.SetPose(next, rot);
         }
         else
         {
@@ -450,32 +446,24 @@ public class StoreEditController : NetworkBehaviour
             Vector3 nextPos = dragPivot + q * (dragStartPos - dragPivot); // spin around the item's middle
 
             // Rotations that would push into something are skipped, so nothing ends up overlapping.
-            if (PlacementCheck.IsClear(selectedDef, nextPos, nextRot, mask, selected.transform) &&
-                InsidePlot(nextPos, nextRot))
-            {
-                desiredPos = nextPos;
-                desiredRot = nextRot;
-            }
+            if (PlacementCheck.IsClear(selected.Def, nextPos, nextRot, mask, selected.transform) &&
+                editPlot.ContainsItem(selected.Def, nextPos, nextRot))
+                selected.SetPose(nextPos, nextRot);
         }
     }
 
     private void EndDrag()
     {
         dragHandle = StoreEditHandles.None;
-
-        bool moved = (desiredPos - dragStartPos).sqrMagnitude > 1e-8f ||
-                     Quaternion.Angle(desiredRot, dragStartRot) > 0.01f;
-        if (!moved || selected == null) return;
-
-        RequestEditPoseServerRpc(selected.NetworkObject, desiredPos, desiredRot);
-        lastCommitTime = Time.time;
+        if (selected != null) selected.SetDragging(false);
     }
 
     private void CancelDrag()
     {
-        desiredPos = dragStartPos;
-        desiredRot = dragStartRot;
         dragHandle = StoreEditHandles.None;
+        if (selected == null) return;
+        selected.SetPose(dragStartPos, dragStartRot);
+        selected.SetDragging(false);
     }
 
     /* ========================= HANDLES ========================= */
@@ -483,15 +471,15 @@ public class StoreEditController : NetworkBehaviour
     private void DrawHandles()
     {
         if (handles == null) return;
-        if (selected == null) { handles.HideAll(); return; }
+        if (selected == null || finishing) { handles.HideAll(); return; }
 
-        if (ghost != null) ghost.transform.SetPositionAndRotation(desiredPos, desiredRot);
-
+        Vector3 pos = selected.transform.position;
+        Quaternion rot = selected.transform.rotation;
         GetHandleGeometry(out Vector3 center, out float length, out float radius);
         float width = Vector3.Distance(editCam.transform.position, center) * lineWidth;
 
-        if (PlacementCheck.GetTestBox(selectedDef, desiredPos, desiredRot, out Vector3 boxCenter, out Vector3 half))
-            handles.DrawBox(boxCenter, half, desiredRot, selected.GravityInEdit ? BoxGravityColor : BoxColor, width * 0.6f);
+        if (PlacementCheck.GetTestBox(selected.Def, pos, rot, out Vector3 boxCenter, out Vector3 half))
+            handles.DrawBox(boxCenter, half, rot, selected.Gravity ? BoxGravityColor : BoxColor, width * 0.6f);
         else
             handles.HideBox();
 
@@ -515,8 +503,9 @@ public class StoreEditController : NetworkBehaviour
     private void GetHandleGeometry(out Vector3 center, out float arrowLength, out float ringRadius)
     {
         float size = 0.5f;
-        center = desiredPos;
-        if (PlacementCheck.GetTestBox(selectedDef, desiredPos, desiredRot, out Vector3 c, out Vector3 half))
+        center = selected.transform.position;
+        if (PlacementCheck.GetTestBox(selected.Def, selected.transform.position, selected.transform.rotation,
+                                      out Vector3 c, out Vector3 half))
         {
             center = c;
             size = Mathf.Max(half.x, Mathf.Max(half.y, half.z));
@@ -525,13 +514,13 @@ public class StoreEditController : NetworkBehaviour
         ringRadius = size * 1.15f + 0.3f;
     }
 
-    private int PickHandle(Vector2 mouse)
+    private int PickHandle(Vector2 mouse, float radiusPixels)
     {
-        if (tool == Tool.Select) return StoreEditHandles.None;
+        if (selected == null || tool == Tool.None) return StoreEditHandles.None;
 
         GetHandleGeometry(out Vector3 center, out float length, out float radius);
         int best = StoreEditHandles.None;
-        float bestDist = grabRadiusPixels;
+        float bestDist = radiusPixels;
 
         for (int i = 0; i < 3; i++)
         {
@@ -559,6 +548,23 @@ public class StoreEditController : NetworkBehaviour
         return best;
     }
 
+    /* ========================= HUD ========================= */
+
+    private void OnGUI()
+    {
+        if (!showHud || !IsOwner || !IsEditing) return;
+
+        string toolName = selected == null ? "-" : tool == Tool.None ? "none (press X)" : tool.ToString();
+        string gravity = selected == null ? "-" : selected.Gravity ? "ON" : "off";
+        string itemName = selected == null ? "nothing (click an item)" : selected.Def.displayName;
+
+        GUI.Box(new Rect(10, 10, 420, 96), GUIContent.none);
+        GUI.Label(new Rect(20, 16, 400, 20), finishing ? "STORE EDIT MODE - saving..." : "STORE EDIT MODE   (0 = save & exit)");
+        GUI.Label(new Rect(20, 36, 400, 20), $"Selected: {itemName}");
+        GUI.Label(new Rect(20, 56, 400, 20), $"Tool: {toolName}     Gravity: {gravity}");
+        GUI.Label(new Rect(20, 76, 400, 20), "X: move/rotate   G: gravity   Ctrl: snap   Esc: deselect");
+    }
+
     /* ========================= HELPERS ========================= */
 
     /// <summary>Layers that stop an item: the placement blocking layers plus the floor.</summary>
@@ -568,15 +574,6 @@ public class StoreEditController : NetworkBehaviour
         int ground = LayerMask.NameToLayer("Ground");
         if (ground >= 0) mask |= 1 << ground;
         return mask;
-    }
-
-    private bool InsidePlot(Vector3 pos, Quaternion rot) => InsidePlot(editPlot, selectedDef, pos, rot);
-
-    private static bool InsidePlot(StorePlot plot, ItemDef def, Vector3 pos, Quaternion rot)
-    {
-        if (plot == null) return false;
-        Vector3 center = PlacementCheck.GetTestBox(def, pos, rot, out Vector3 c, out _) ? c : pos;
-        return plot.Contains(center);
     }
 
     private bool ToScreen(Vector3 world, out Vector2 screen)
@@ -609,53 +606,127 @@ public class StoreEditController : NetworkBehaviour
         return (b * e - d) / denom;
     }
 
-    /* ========================= SERVER ========================= */
+    /* ========================= NETWORK ========================= */
 
-    [ServerRpc]
-    private void RequestStartEditServerRpc()
+    [Rpc(SendTo.Server)]
+    private void RequestStartEditRpc(RpcParams rpcParams = default)
     {
-        if (MallManager.Instance != null)
-            MallManager.Instance.ServerTryStartEdit(OwnerClientId, transform.position);
+        if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+
+        var mall = MallManager.Instance;
+        if (mall == null || !mall.ServerTryStartEdit(OwnerClientId, transform.position)) return;
+
+        var plot = mall.GetPlotEditedBy(OwnerClientId);
+        if (plot == null) return;
+
+        // Hand the editor the list of items that were taken out, a chunk at a time.
+        var session = plot.ServerEditSession;
+        int sessionId = plot.ServerEditSessionId;
+        if (session.Count == 0)
+        {
+            ReceiveEditItemsRpc(sessionId, 0, new int[0], new Vector3[0], new Quaternion[0]);
+            return;
+        }
+
+        for (int start = 0; start < session.Count; start += ChunkSize)
+        {
+            int n = Mathf.Min(ChunkSize, session.Count - start);
+            var ids = new int[n];
+            var positions = new Vector3[n];
+            var rotations = new Quaternion[n];
+            for (int k = 0; k < n; k++)
+            {
+                var entry = session[start + k];
+                ids[k] = entry.itemId;
+                positions[k] = entry.position;
+                rotations[k] = entry.rotation;
+            }
+            ReceiveEditItemsRpc(sessionId, start, ids, positions, rotations);
+        }
     }
 
-    [ServerRpc]
-    private void RequestStopEditServerRpc()
+    /// <summary>Editor: build local copies of the items the host took out of the store.</summary>
+    [Rpc(SendTo.Owner)]
+    private void ReceiveEditItemsRpc(int sessionId, int start, int[] itemIds, Vector3[] positions, Quaternion[] rotations)
     {
-        if (MallManager.Instance != null)
-            MallManager.Instance.ServerStopEdit(OwnerClientId);
+        if (sessionId != clientSessionId)
+        {
+            ClearLocalItems();
+            clientSessionId = sessionId;
+        }
+
+        var catalog = ItemCatalog.Instance;
+        for (int k = 0; k < itemIds.Length; k++)
+        {
+            int index = start + k;
+            while (localItems.Count <= index) localItems.Add(null);
+            if (localItems[index] != null) continue; // duplicate message
+
+            if (catalog == null || !catalog.TryGet(itemIds[k], out var def) || def.worldNetworkPrefab == null)
+            {
+                Debug.LogWarning($"[StoreEdit] No catalog entry for item id {itemIds[k]}; it will stay where it was.");
+                continue;
+            }
+            localItems[index] = EditLocalItem.Create(def, index, positions[k], rotations[k]);
+        }
     }
 
-    [ServerRpc]
-    private void RequestEditPoseServerRpc(NetworkObjectReference itemRef, Vector3 position, Quaternion rotation)
+    /// <summary>Host: collect a chunk of the editor's final positions.</summary>
+    [Rpc(SendTo.Server)]
+    private void SubmitEditPosesRpc(int sessionId, int start, Vector3[] positions, Quaternion[] rotations,
+                                    RpcParams rpcParams = default)
     {
-        if (!ServerCanEdit(itemRef, out var item, out var plot)) return;
-        if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(item.itemId, out var def)) return;
+        if (!ServerTryGetSession(rpcParams, sessionId, out _)) return;
 
-        rotation.Normalize();
-        if (!InsidePlot(plot, def, position, rotation)) return;
-        if (!PlacementCheck.IsClear(def, position, rotation, EditMask(), item.transform)) return;
-
-        item.ServerApplyEditPose(position, rotation);
+        int n = Mathf.Min(positions.Length, rotations.Length);
+        for (int k = 0; k < n; k++)
+        {
+            int index = start + k;
+            if (index < 0 || index >= pendingPositions.Length) continue;
+            pendingPositions[index] = positions[k];
+            pendingRotations[index] = rotations[k];
+        }
     }
 
-    [ServerRpc]
-    private void RequestSetGravityServerRpc(NetworkObjectReference itemRef, bool on)
+    /// <summary>Host: respawn every item, at the editor's position where it's valid.</summary>
+    [Rpc(SendTo.Server)]
+    private void FinishEditRpc(int sessionId, RpcParams rpcParams = default)
     {
-        if (ServerCanEdit(itemRef, out var item, out _))
-            item.ServerSetGravityInEdit(on);
+        if (!ServerTryGetSession(rpcParams, sessionId, out var plot)) return;
+
+        int mask = EditMask();
+        plot.ServerEndEdit(pendingPositions, pendingRotations,
+            (def, pos, rot) => PlacementCheck.IsClear(def, pos, rot, mask, null));
+
+        pendingPositions = null;
+        pendingRotations = null;
+        pendingSessionId = -1;
     }
 
-    /// <summary>Server: is this player editing the store that this item sits in?</summary>
-    private bool ServerCanEdit(NetworkObjectReference itemRef, out ItemPickupNet item, out StorePlot plot)
+    /// <summary>
+    /// Host: is this message from the player who owns this controller, for the session they're
+    /// editing right now? Sets up the position buffer (pre-filled with "keep where it was").
+    /// </summary>
+    private bool ServerTryGetSession(RpcParams rpcParams, int sessionId, out StorePlot plot)
     {
-        item = null;
         plot = null;
-        if (MallManager.Instance == null || !itemRef.TryGet(out NetworkObject no)) return false;
-
-        item = no.GetComponent<ItemPickupNet>();
-        if (item == null) return false;
+        if (rpcParams.Receive.SenderClientId != OwnerClientId || MallManager.Instance == null) return false;
 
         plot = MallManager.Instance.GetPlotEditedBy(OwnerClientId);
-        return plot != null && plot.Contains(item.transform.position);
+        if (plot == null || plot.ServerEditSessionId != sessionId) return false;
+
+        if (pendingSessionId != sessionId || pendingPositions == null)
+        {
+            int count = plot.ServerEditSession.Count;
+            pendingPositions = new Vector3[count];
+            pendingRotations = new Quaternion[count];
+            for (int i = 0; i < count; i++)
+            {
+                pendingPositions[i] = Vector3.positiveInfinity;
+                pendingRotations[i] = Quaternion.identity;
+            }
+            pendingSessionId = sessionId;
+        }
+        return true;
     }
 }
