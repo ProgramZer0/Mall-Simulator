@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -44,6 +45,10 @@ public class StorePlot : NetworkBehaviour
     [Tooltip("Max 32. Order matters: the index is what gets synced.")]
     [SerializeField] private Segment[] segments;
 
+    [Header("Renovation")]
+    [Tooltip("Shown over the storefront while the store is in edit mode (hidden otherwise).")]
+    [SerializeField] private GameObject[] renovationWalls;
+
     private readonly NetworkVariable<ulong> ownerClientId =
         new(NoOwner, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
@@ -51,8 +56,18 @@ public class StorePlot : NetworkBehaviour
     private readonly NetworkVariable<int> purchasedSegments =
         new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    /// <summary>Raised on every client when the owner or purchased segments change.</summary>
+    // Who is editing this store right now (NoOwner = open for business).
+    private readonly NetworkVariable<ulong> editorClientId =
+        new(NoOwner, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    /// <summary>Raised on every client when the owner, purchased segments or edit state change.</summary>
     public event Action<StorePlot> Changed;
+
+    public ulong EditorClientId => editorClientId.Value;
+    /// <summary>In edit mode: closed, renovation wall up, items frozen in the air.</summary>
+    public bool IsRenovating => editorClientId.Value != NoOwner;
+    /// <summary>Owned and not under renovation. Customers/sales should check this.</summary>
+    public bool IsOpen => HasOwner && !IsRenovating;
 
     public int PlotId => plotId;
     public string DisplayName => displayName;
@@ -73,13 +88,18 @@ public class StorePlot : NetworkBehaviour
 
         if (SegmentCount > 32)
             Debug.LogError($"[StorePlot] '{displayName}' has {SegmentCount} segments; max is 32.", this);
+
+        // Renovation walls start hidden until the synced edit state says otherwise.
+        ApplyRenovationWalls();
     }
 
     public override void OnNetworkSpawn()
     {
         ownerClientId.OnValueChanged += OnOwnerChanged;
         purchasedSegments.OnValueChanged += OnSegmentsChanged;
+        editorClientId.OnValueChanged += OnEditorChanged;
         ApplyWalls();
+        ApplyRenovationWalls();
 
         if (MallManager.Instance != null) MallManager.Instance.Register(this);
     }
@@ -88,11 +108,18 @@ public class StorePlot : NetworkBehaviour
     {
         ownerClientId.OnValueChanged -= OnOwnerChanged;
         purchasedSegments.OnValueChanged -= OnSegmentsChanged;
+        editorClientId.OnValueChanged -= OnEditorChanged;
 
         if (MallManager.Instance != null) MallManager.Instance.Unregister(this);
     }
 
     private void OnOwnerChanged(ulong prev, ulong next) => Changed?.Invoke(this);
+
+    private void OnEditorChanged(ulong prev, ulong next)
+    {
+        ApplyRenovationWalls();
+        Changed?.Invoke(this);
+    }
 
     private void OnSegmentsChanged(int prev, int next)
     {
@@ -150,12 +177,60 @@ public class StorePlot : NetworkBehaviour
         ownerClientId.Value = clientId;
     }
 
-    /// <summary>Server only. Clears the owner and rebuilds the false walls.</summary>
+    /// <summary>Server only. Ends any edit session, clears the owner and rebuilds the false walls.</summary>
     public void ServerRelease()
     {
         if (!IsServer) return;
+        ServerSetEditor(NoOwner);
         ownerClientId.Value = NoOwner;
         purchasedSegments.Value = 0;
+    }
+
+    /// <summary>
+    /// Server only. Starts (clientId) or ends (NoOwner) edit mode. Items in the store freeze
+    /// in place while editing; ending it gives every item its gravity back.
+    /// Use MallManager.ServerTryStartEdit / ServerStopEdit rather than calling this directly.
+    /// </summary>
+    public void ServerSetEditor(ulong clientId)
+    {
+        if (!IsServer || editorClientId.Value == clientId) return;
+
+        bool ending = clientId == NoOwner;
+        editorClientId.Value = clientId;
+
+        // Snapshot first: refreshing physics can't change membership, but be safe anyway.
+        foreach (var item in ItemPickupNet.All.ToArray())
+        {
+            if (item == null || !Contains(item.transform.position)) continue;
+            if (ending) item.ServerSetGravityInEdit(false); // next session starts frozen again
+            else item.ServerRefreshPhysics();
+        }
+    }
+
+    /// <summary>World-space box around the base space plus every purchased segment.</summary>
+    public Bounds GetWorldBounds()
+    {
+        bool any = false;
+        Bounds result = default;
+
+        void Add(BoxCollider box)
+        {
+            if (box == null) return;
+            Vector3 c = box.center, e = box.size * 0.5f;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 corner = box.transform.TransformPoint(c + new Vector3(
+                    (i & 1) == 0 ? -e.x : e.x, (i & 2) == 0 ? -e.y : e.y, (i & 4) == 0 ? -e.z : e.z));
+                if (!any) { result = new Bounds(corner, Vector3.zero); any = true; }
+                else result.Encapsulate(corner);
+            }
+        }
+
+        foreach (var box in baseAreas) Add(box);
+        for (int i = 0; i < SegmentCount; i++)
+            if (IsSegmentPurchased(i)) Add(segments[i].area);
+
+        return any ? result : new Bounds(transform.position, Vector3.one);
     }
 
     public void ServerUnlockSegment(int index)
@@ -179,6 +254,13 @@ public class StorePlot : NetworkBehaviour
             foreach (var w in walls)
                 if (w != null) w.SetActive(!open);
         }
+    }
+
+    private void ApplyRenovationWalls()
+    {
+        if (renovationWalls == null) return;
+        foreach (var w in renovationWalls)
+            if (w != null) w.SetActive(IsRenovating);
     }
 
     /* ========================= EDITOR ========================= */

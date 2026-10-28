@@ -178,11 +178,48 @@ public class MallManager : NetworkBehaviour
 
     private void OnClientDisconnected(ulong clientId)
     {
+        // Never leave a store stuck in edit mode (closed, items floating) after its editor leaves.
+        ServerStopEdit(clientId);
+
         if (!releaseOnDisconnect) return;
 
         foreach (var plot in plots.Values)
             if (plot.HasOwner && plot.OwnerClientId == clientId)
                 plot.ServerRelease();
+    }
+
+    /// <summary>
+    /// Server: put the store the player is standing in into edit mode, with them as the editor.
+    /// Fails if it isn't their store or someone else is already editing it.
+    /// </summary>
+    public bool ServerTryStartEdit(ulong clientId, Vector3 playerPosition)
+    {
+        if (!IsServer) return false;
+
+        var plot = GetPlotAt(playerPosition);
+        if (plot == null || !plot.IsAuthorized(clientId)) return false;
+        if (plot.IsRenovating) return plot.EditorClientId == clientId;
+
+        ServerStopEdit(clientId); // one store at a time
+        plot.ServerSetEditor(clientId);
+        return true;
+    }
+
+    /// <summary>Server: end every edit session this player has open.</summary>
+    public void ServerStopEdit(ulong clientId)
+    {
+        if (!IsServer) return;
+        foreach (var plot in plots.Values)
+            if (plot.EditorClientId == clientId)
+                plot.ServerSetEditor(StorePlot.NoOwner);
+    }
+
+    /// <summary>The store this player is currently editing, or null.</summary>
+    public StorePlot GetPlotEditedBy(ulong clientId)
+    {
+        foreach (var plot in plots.Values)
+            if (plot.IsRenovating && plot.EditorClientId == clientId) return plot;
+        return null;
     }
 
     /// <summary>

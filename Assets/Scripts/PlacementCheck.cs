@@ -39,6 +39,52 @@ public static class PlacementCheck
                                supportMask, QueryTriggerInteraction.Ignore);
     }
 
+    private static readonly Collider[] EditHits = new Collider[32];
+    private static readonly RaycastHit[] EditCastHits = new RaycastHit[32];
+
+    /// <summary>
+    /// Edit mode: true if the item at this pose overlaps nothing on the mask except itself.
+    /// No support check, since items may float while a store is being edited.
+    /// </summary>
+    public static bool IsClear(ItemDef def, Vector3 position, Quaternion rotation,
+                               int blockingMask, Transform ignoreRoot)
+    {
+        if (!GetTestBox(def, position, rotation, out Vector3 center, out Vector3 half)) return true;
+
+        int count = Physics.OverlapBoxNonAlloc(center, half, EditHits, rotation,
+                                               blockingMask, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+            if (!IsPartOf(EditHits[i], ignoreRoot)) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Edit mode: how far the item can slide from this pose along a direction before touching
+    /// something (up to maxDistance). Things it already overlaps are ignored, so a stuck item
+    /// can always be slid free.
+    /// </summary>
+    public static float CastDistance(ItemDef def, Vector3 position, Quaternion rotation,
+                                     Vector3 direction, float maxDistance,
+                                     int blockingMask, Transform ignoreRoot)
+    {
+        if (maxDistance <= 0f) return 0f;
+        if (!GetTestBox(def, position, rotation, out Vector3 center, out Vector3 half)) return maxDistance;
+
+        int count = Physics.BoxCastNonAlloc(center, half, direction.normalized, EditCastHits, rotation,
+                                            maxDistance, blockingMask, QueryTriggerInteraction.Ignore);
+        float allowed = maxDistance;
+        for (int i = 0; i < count; i++)
+        {
+            var hit = EditCastHits[i];
+            if (hit.distance <= 0f || IsPartOf(hit.collider, ignoreRoot)) continue; // initial overlap / self
+            allowed = Mathf.Min(allowed, Mathf.Max(0f, hit.distance - 0.001f));
+        }
+        return allowed;
+    }
+
+    private static bool IsPartOf(Collider c, Transform root) =>
+        root != null && c != null && c.transform.IsChildOf(root);
+
     /// <summary>
     /// The world-space box the fit test uses (already shrunk by the skin).
     /// Returns false if the item has no measurable size.
