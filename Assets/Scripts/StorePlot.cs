@@ -50,6 +50,13 @@ public class StorePlot : NetworkBehaviour
     [Tooltip("Shown over the storefront while the store is in edit mode (hidden otherwise).")]
     [SerializeField] private GameObject[] renovationWalls;
 
+    [Header("Edit View")]
+    [Tooltip("In edit mode the camera cuts away everything above this store (the floor above, " +
+             "upstairs players, NPCs, items). By default the cut is the top of the base area boxes.")]
+    [SerializeField] private bool overrideCutHeight;
+    [Tooltip("World height (Y) of the cut, used when Override Cut Height is ticked.")]
+    [SerializeField] private float cutHeight = 3f;
+
     [Header("For Sale")]
     [Tooltip("Shown while nobody owns this store. Players look at it and press F to buy. " +
              "Untick Is Starter Plot to make a store buy-only.")]
@@ -347,6 +354,12 @@ public class StorePlot : NetworkBehaviour
         float.IsFinite(q.x) && float.IsFinite(q.y) && float.IsFinite(q.z) && float.IsFinite(q.w) &&
         (q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w) > 1e-6f;
 
+    /// <summary>
+    /// Height (world Y) above which the edit camera draws nothing: the top of the store's
+    /// space, or the override.
+    /// </summary>
+    public float GetEditCutHeight() => overrideCutHeight ? cutHeight : GetWorldBounds().max.y;
+
     /// <summary>World-space box around the base space plus every purchased segment.</summary>
     public Bounds GetWorldBounds()
     {
@@ -511,6 +524,15 @@ public class StorePlot : NetworkBehaviour
         style.normal.textColor = !playing ? Color.white : HasOwner ? new Color(0.4f, 1f, 0.5f) : new Color(1f, 0.85f, 0.3f);
         UnityEditor.Handles.Label(top + Vector3.up * 0.5f, $"{displayName} (#{plotId})\n{BuildStatus()}", style);
 #endif
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        // Show the edit-view cut as a flat outline at its height.
+        Bounds b = GetWorldBounds();
+        float y = GetEditCutHeight();
+        Gizmos.color = new Color(0.3f, 0.9f, 1f, 0.8f);
+        Gizmos.DrawWireCube(new Vector3(b.center.x, y, b.center.z), new Vector3(b.size.x + 1f, 0.01f, b.size.z + 1f));
     }
 
     private static void DrawBox(BoxCollider box)
