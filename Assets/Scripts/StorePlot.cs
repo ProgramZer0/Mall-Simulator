@@ -65,7 +65,8 @@ public class StorePlot : NetworkBehaviour
     [Header("Debug (read only)")]
     [SerializeField] private string status = "Not spawned";
 
-    private readonly NetworkVariable<ulong> ownerClientId =
+    // The team that owns this store (a team id is its founding player's client id).
+    private readonly NetworkVariable<ulong> ownerTeamId =
         new(NoOwner, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     // Bit i set = segments[i] has been bought.
@@ -89,8 +90,8 @@ public class StorePlot : NetworkBehaviour
     public string DisplayName => displayName;
     public int Price => price;
     public bool IsStarterPlot => isStarterPlot;
-    public ulong OwnerClientId => ownerClientId.Value;
-    public bool HasOwner => ownerClientId.Value != NoOwner;
+    public ulong OwnerTeamId => ownerTeamId.Value;
+    public bool HasOwner => ownerTeamId.Value != NoOwner;
     public int SegmentCount => segments?.Length ?? 0;
 
     private void Awake()
@@ -118,7 +119,7 @@ public class StorePlot : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        ownerClientId.OnValueChanged += OnOwnerChanged;
+        ownerTeamId.OnValueChanged += OnOwnerChanged;
         purchasedSegments.OnValueChanged += OnSegmentsChanged;
         editorClientId.OnValueChanged += OnEditorChanged;
         ApplyWalls();
@@ -132,7 +133,7 @@ public class StorePlot : NetworkBehaviour
 
     public override void OnNetworkDespawn()
     {
-        ownerClientId.OnValueChanged -= OnOwnerChanged;
+        ownerTeamId.OnValueChanged -= OnOwnerChanged;
         purchasedSegments.OnValueChanged -= OnSegmentsChanged;
         editorClientId.OnValueChanged -= OnEditorChanged;
         Changed -= OnAnyChange;
@@ -147,6 +148,13 @@ public class StorePlot : NetworkBehaviour
     }
 
     private void OnAnyChange(StorePlot _) => UpdateStatus();
+
+    /// <summary>Re-check "is this mine?" visuals and the status label (e.g. after a team change).</summary>
+    public void RefreshLocalView()
+    {
+        ApplyOwnerVisuals();
+        UpdateStatus();
+    }
 
     private void OnEditorChanged(ulong prev, ulong next)
     {
@@ -166,10 +174,10 @@ public class StorePlot : NetworkBehaviour
         index >= 0 && index < SegmentCount && (purchasedSegments.Value & (1 << index)) != 0;
 
     /// <summary>
-    /// Whether this client may build/stock here. Owner only for now; co-op members (#14)
-    /// get added here so every permission check picks them up automatically.
+    /// Whether this player may build/stock here: anyone on the owning team. Every permission
+    /// check goes through this, so co-op works everywhere once players share a team.
     /// </summary>
-    public bool IsAuthorized(ulong clientId) => HasOwner && ownerClientId.Value == clientId;
+    public bool IsAuthorized(ulong clientId) => HasOwner && MallManager.GetTeamOf(clientId) == ownerTeamId.Value;
 
     /// <summary>True if the point is inside the base space or any purchased segment.</summary>
     public bool Contains(Vector3 worldPoint)
@@ -204,10 +212,10 @@ public class StorePlot : NetworkBehaviour
     /* ========================= SERVER ========================= */
 
     /// <summary>Server only. Use MallManager's purchase methods rather than calling this directly.</summary>
-    public void ServerSetOwner(ulong clientId)
+    public void ServerSetOwner(ulong teamId)
     {
         if (!IsServer) return;
-        ownerClientId.Value = clientId;
+        ownerTeamId.Value = teamId;
     }
 
     /// <summary>Server only. Ends any edit session, clears the owner and rebuilds the false walls.</summary>
@@ -215,7 +223,7 @@ public class StorePlot : NetworkBehaviour
     {
         if (!IsServer) return;
         ServerSetEditor(NoOwner);
-        ownerClientId.Value = NoOwner;
+        ownerTeamId.Value = NoOwner;
         purchasedSegments.Value = 0;
     }
 
@@ -426,21 +434,28 @@ public class StorePlot : NetworkBehaviour
 
     /* ========================= STATUS ========================= */
 
-    /// <summary>Human-readable owner, e.g. "Client 1 (Host)", or "nobody".</summary>
+    /// <summary>Human-readable owner, e.g. "Team 0 [Client 0 (Host, You)]", or "nobody".</summary>
     public string OwnerLabel
     {
         get
         {
             if (!HasOwner) return "nobody";
-            ulong id = ownerClientId.Value;
-            string label = $"Client {id}";
+            ulong team = ownerTeamId.Value;
+
+            var mall = MallManager.Instance;
+            var members = mall != null ? mall.GetTeamMembers(team) : new List<ulong>();
+            if (members.Count == 0) return $"Team {team} [nobody online]";
+
             var nm = NetworkManager.Singleton;
-            if (nm != null && nm.IsListening)
+            var names = new List<string>();
+            foreach (ulong id in members)
             {
-                if (id == NetworkManager.ServerClientId) label += " (Host)";
-                if (id == nm.LocalClientId) label += " (You)";
+                var tags = new List<string>();
+                if (id == NetworkManager.ServerClientId) tags.Add("Host");
+                if (nm != null && nm.IsListening && id == nm.LocalClientId) tags.Add("You");
+                names.Add(tags.Count > 0 ? $"Client {id} ({string.Join(", ", tags)})" : $"Client {id}");
             }
-            return label;
+            return $"Team {team} [{string.Join(", ", names)}]";
         }
     }
 
