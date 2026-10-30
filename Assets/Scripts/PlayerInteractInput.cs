@@ -12,6 +12,12 @@ public class PlayerInteractInput : NetworkBehaviour
 
     private Camera cam;
     private PlayerInventoryNet inventory;
+    private StoreEditController storeEdit;
+
+    /// <summary>Layers placed items may not overlap. Shared with store edit mode.</summary>
+    public LayerMask PlacementBlockingMask => placementBlockingMask;
+    /// <summary>Layers items can be picked up from. Edit mode clicks items on these.</summary>
+    public LayerMask PickupMask => pickupMask;
 
     [Header("Rotation")]
     [Tooltip("Degrees per second while holding < or > in preview.")]
@@ -65,6 +71,7 @@ public class PlayerInteractInput : NetworkBehaviour
     private void Awake()
     {
         inventory = GetComponent<PlayerInventoryNet>();
+        storeEdit = GetComponent<StoreEditController>();
     }
 
     public override void OnNetworkSpawn()
@@ -76,6 +83,18 @@ public class PlayerInteractInput : NetworkBehaviour
     private void Update()
     {
         if (!IsOwner || cam == null) return;
+
+        // Store edit mode has its own controls; drop any placement preview and stand by.
+        if (storeEdit != null && storeEdit.IsEditing)
+        {
+            if (previewActive || ghostPreview != null)
+            {
+                previewActive = false;
+                DestroyGhost();
+                inventory.SetHandVisualHidden(false);
+            }
+            return;
+        }
 
         HandleInteract();
         HandleRotation();

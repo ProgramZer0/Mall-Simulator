@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -44,6 +46,10 @@ public class StorePlot : NetworkBehaviour
     [Tooltip("Max 32. Order matters: the index is what gets synced.")]
     [SerializeField] private Segment[] segments;
 
+    [Header("Renovation")]
+    [Tooltip("Shown over the storefront while the store is in edit mode (hidden otherwise).")]
+    [SerializeField] private GameObject[] renovationWalls;
+
     private readonly NetworkVariable<ulong> ownerClientId =
         new(NoOwner, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
@@ -51,8 +57,18 @@ public class StorePlot : NetworkBehaviour
     private readonly NetworkVariable<int> purchasedSegments =
         new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    /// <summary>Raised on every client when the owner or purchased segments change.</summary>
+    // Who is editing this store right now (NoOwner = open for business).
+    private readonly NetworkVariable<ulong> editorClientId =
+        new(NoOwner, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    /// <summary>Raised on every client when the owner, purchased segments or edit state change.</summary>
     public event Action<StorePlot> Changed;
+
+    public ulong EditorClientId => editorClientId.Value;
+    /// <summary>In edit mode: closed, renovation wall up, items out of the world until it ends.</summary>
+    public bool IsRenovating => editorClientId.Value != NoOwner;
+    /// <summary>Owned and not under renovation. Customers/sales should check this.</summary>
+    public bool IsOpen => HasOwner && !IsRenovating;
 
     public int PlotId => plotId;
     public string DisplayName => displayName;
@@ -73,13 +89,18 @@ public class StorePlot : NetworkBehaviour
 
         if (SegmentCount > 32)
             Debug.LogError($"[StorePlot] '{displayName}' has {SegmentCount} segments; max is 32.", this);
+
+        // Renovation walls start hidden until the synced edit state says otherwise.
+        ApplyRenovationWalls();
     }
 
     public override void OnNetworkSpawn()
     {
         ownerClientId.OnValueChanged += OnOwnerChanged;
         purchasedSegments.OnValueChanged += OnSegmentsChanged;
+        editorClientId.OnValueChanged += OnEditorChanged;
         ApplyWalls();
+        ApplyRenovationWalls();
 
         if (MallManager.Instance != null) MallManager.Instance.Register(this);
     }
@@ -88,11 +109,18 @@ public class StorePlot : NetworkBehaviour
     {
         ownerClientId.OnValueChanged -= OnOwnerChanged;
         purchasedSegments.OnValueChanged -= OnSegmentsChanged;
+        editorClientId.OnValueChanged -= OnEditorChanged;
 
         if (MallManager.Instance != null) MallManager.Instance.Unregister(this);
     }
 
     private void OnOwnerChanged(ulong prev, ulong next) => Changed?.Invoke(this);
+
+    private void OnEditorChanged(ulong prev, ulong next)
+    {
+        ApplyRenovationWalls();
+        Changed?.Invoke(this);
+    }
 
     private void OnSegmentsChanged(int prev, int next)
     {
@@ -150,12 +178,159 @@ public class StorePlot : NetworkBehaviour
         ownerClientId.Value = clientId;
     }
 
-    /// <summary>Server only. Clears the owner and rebuilds the false walls.</summary>
+    /// <summary>Server only. Ends any edit session, clears the owner and rebuilds the false walls.</summary>
     public void ServerRelease()
     {
         if (!IsServer) return;
+        ServerSetEditor(NoOwner);
         ownerClientId.Value = NoOwner;
         purchasedSegments.Value = 0;
+    }
+
+    /* ========================= EDIT SESSIONS (SERVER) ========================= */
+
+    /// <summary>One item taken out of the world for an edit session.</summary>
+    public struct EditEntry
+    {
+        public int itemId;
+        public Vector3 position;
+        public Quaternion rotation;
+    }
+
+    private readonly List<EditEntry> editSession = new();
+
+    /// <summary>Server: the items in the current edit session, in the order sent to the editor.</summary>
+    public IReadOnlyList<EditEntry> ServerEditSession => editSession;
+
+    /// <summary>Server: bumps every session so late messages from an old one are ignored.</summary>
+    public int ServerEditSessionId { get; private set; }
+
+    /// <summary>
+    /// Server only. Starts (clientId) or ends (NoOwner) edit mode.
+    ///
+    /// Starting records every item in the store and despawns it; the editor works on local
+    /// copies, so nothing is sent over the network while they drag things around. Ending this
+    /// way (disconnect, store released) respawns everything where it was. A normal finish goes
+    /// through ServerEndEdit with the editor's final positions instead.
+    /// Use MallManager.ServerTryStartEdit / ServerStopEdit rather than calling this directly.
+    /// </summary>
+    public void ServerSetEditor(ulong clientId)
+    {
+        if (!IsServer || editorClientId.Value == clientId) return;
+
+        if (IsRenovating) ServerEndEdit(null, null, null); // put the old session's items back
+        if (clientId == NoOwner) return;
+
+        editSession.Clear();
+        ServerEditSessionId++;
+
+        var catalog = ItemCatalog.Instance;
+        foreach (var item in ItemPickupNet.All.ToArray())
+        {
+            if (item == null || !item.IsSpawned || !Contains(item.transform.position)) continue;
+
+            // Only take items we can respawn later; anything else is left untouched.
+            if (catalog == null || !catalog.TryGet(item.itemId, out var def) || def.worldNetworkPrefab == null)
+            {
+                Debug.LogWarning($"[StorePlot] '{item.name}' (item id {item.itemId}) has no catalog entry " +
+                                 "with a world prefab, so it can't be edited and stays where it is.", item);
+                continue;
+            }
+
+            editSession.Add(new EditEntry
+            {
+                itemId = item.itemId,
+                position = item.transform.position,
+                rotation = item.transform.rotation
+            });
+            item.NetworkObject.Despawn(true);
+        }
+
+        editorClientId.Value = clientId;
+    }
+
+    /// <summary>
+    /// Server only. Ends the edit session and respawns its items. Each item uses the editor's
+    /// position when one was given and it passes the checks (inside this store, isValid);
+    /// otherwise it goes back to where it was before editing.
+    /// </summary>
+    public void ServerEndEdit(Vector3[] positions, Quaternion[] rotations,
+                              Func<ItemDef, Vector3, Quaternion, bool> isValid)
+    {
+        if (!IsServer || !IsRenovating) return;
+
+        var catalog = ItemCatalog.Instance;
+        for (int i = 0; i < editSession.Count; i++)
+        {
+            var entry = editSession[i];
+            if (catalog == null || !catalog.TryGet(entry.itemId, out var def) || def.worldNetworkPrefab == null)
+                continue;
+
+            Vector3 pos = entry.position;
+            Quaternion rot = entry.rotation;
+
+            if (positions != null && rotations != null && i < positions.Length && i < rotations.Length)
+            {
+                Vector3 p = positions[i];
+                Quaternion r = rotations[i];
+                if (IsFinite(p) && IsFinite(r))
+                {
+                    r = r.normalized;
+                    Physics.SyncTransforms(); // see the items respawned earlier in this loop
+                    if (ContainsItem(def, p, r) && (isValid == null || isValid(def, p, r)))
+                    {
+                        pos = p;
+                        rot = r;
+                    }
+                }
+            }
+
+            var spawned = Instantiate(def.worldNetworkPrefab, pos, rot);
+            spawned.Spawn(true);
+        }
+
+        editSession.Clear();
+        editorClientId.Value = NoOwner;
+    }
+
+    /// <summary>True if the middle of the item at this pose is inside the store.</summary>
+    public bool ContainsItem(ItemDef def, Vector3 position, Quaternion rotation)
+    {
+        Vector3 center = PlacementCheck.GetTestBox(def, position, rotation, out Vector3 c, out _) ? c : position;
+        return Contains(center);
+    }
+
+    private static bool IsFinite(Vector3 v) =>
+        float.IsFinite(v.x) && float.IsFinite(v.y) && float.IsFinite(v.z);
+
+    private static bool IsFinite(Quaternion q) =>
+        float.IsFinite(q.x) && float.IsFinite(q.y) && float.IsFinite(q.z) && float.IsFinite(q.w) &&
+        (q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w) > 1e-6f;
+
+    /// <summary>World-space box around the base space plus every purchased segment.</summary>
+    public Bounds GetWorldBounds()
+    {
+        bool any = false;
+        Bounds result = default;
+
+        void Add(BoxCollider box)
+        {
+            if (box == null) return;
+            Vector3 c = box.center, e = box.size * 0.5f;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 corner = box.transform.TransformPoint(c + new Vector3(
+                    (i & 1) == 0 ? -e.x : e.x, (i & 2) == 0 ? -e.y : e.y, (i & 4) == 0 ? -e.z : e.z));
+                if (!any) { result = new Bounds(corner, Vector3.zero); any = true; }
+                else result.Encapsulate(corner);
+            }
+        }
+
+        foreach (var box in baseAreas) Add(box);
+        for (int i = 0; i < SegmentCount; i++)
+            if (IsSegmentPurchased(i)) Add(segments[i].area);
+
+        return any ? result : new Bounds(transform.position, Vector3.one);
     }
 
     public void ServerUnlockSegment(int index)
@@ -179,6 +354,13 @@ public class StorePlot : NetworkBehaviour
             foreach (var w in walls)
                 if (w != null) w.SetActive(!open);
         }
+    }
+
+    private void ApplyRenovationWalls()
+    {
+        if (renovationWalls == null) return;
+        foreach (var w in renovationWalls)
+            if (w != null) w.SetActive(IsRenovating);
     }
 
     /* ========================= EDITOR ========================= */

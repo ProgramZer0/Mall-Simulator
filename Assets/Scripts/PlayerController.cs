@@ -23,10 +23,12 @@ public class PlayerController3D : NetworkBehaviour
     private float yaw;
     private float pitch;
     private Vector3 velocity;
+    private StoreEditController storeEdit;
 
     private void Awake()
     {
         controller = GetComponent<CharacterController>();
+        storeEdit = GetComponent<StoreEditController>();
         if (cameraRoot == null)
         {
             cameraRoot = transform.Find("CameraRoot");
@@ -72,6 +74,9 @@ public class PlayerController3D : NetworkBehaviour
     private void Update()
     {
         if (!IsOwner) return;
+
+        // Store edit mode takes over the mouse and keyboard with its own camera.
+        if (storeEdit != null && storeEdit.IsEditing) return;
 
         HandleLook();
         HandleMove();
