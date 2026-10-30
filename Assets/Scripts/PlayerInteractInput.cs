@@ -96,6 +96,7 @@ public class PlayerInteractInput : NetworkBehaviour
             return;
         }
 
+        UpdateLookedAtSign();
         HandleInteract();
         HandleRotation();
         HandlePlacement();
@@ -103,9 +104,42 @@ public class PlayerInteractInput : NetworkBehaviour
 
     /* ========================= INTERACT ========================= */
 
+    private ForSaleSign lookedAtSign;
+
+    /// <summary>Is the player looking at a for-sale wall of a store nobody owns?</summary>
+    private void UpdateLookedAtSign()
+    {
+        lookedAtSign = null;
+        if (Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit,
+                interactRange, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+        {
+            var sign = hit.collider.GetComponentInParent<ForSaleSign>();
+            if (sign != null && sign.Plot != null && sign.Plot.IsForSale) lookedAtSign = sign;
+        }
+    }
+
+    private void OnGUI()
+    {
+        if (!IsOwner || lookedAtSign == null || (storeEdit != null && storeEdit.IsEditing)) return;
+
+        var plot = lookedAtSign.Plot;
+        string text = $"F: Buy {plot.DisplayName} ({plot.Price})";
+        var style = new GUIStyle(GUI.skin.box) { fontSize = 16, alignment = TextAnchor.MiddleCenter };
+        Vector2 size = style.CalcSize(new GUIContent(text)) + new Vector2(20f, 10f);
+        GUI.Box(new Rect((Screen.width - size.x) * 0.5f, Screen.height * 0.6f, size.x, size.y), text, style);
+    }
+
     private void HandleInteract()
     {
         if (!Input.GetKeyDown(KeyCode.F)) return;
+
+        // Buying a store from its for-sale wall works whether or not you're holding something.
+        if (lookedAtSign != null)
+        {
+            if (MallManager.Instance != null)
+                MallManager.Instance.RequestBuyFromSignServerRpc(lookedAtSign.Plot.PlotId);
+            return;
+        }
 
         if (inventory.HeldItemId.Value == 0)
         {

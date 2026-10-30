@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
@@ -12,6 +13,10 @@ using UnityEngine;
 ///    on a spot inside your own store or a dock. Carrying something elsewhere is fine.
 ///  - Interactables (doors, registers, ...): allowed anywhere except another player's store.
 ///    Ones marked Only In Own Zones (carts) only work in your own store or at a dock.
+///
+/// Teams: stores belong to a team, not a single player. By default every player is a team of
+/// one (team id = their client id). A team gets one free starter store and can buy more, up to
+/// Max Stores Per Team. Co-op later just means putting more players on the same team.
 /// </summary>
 public class MallManager : NetworkBehaviour
 {
@@ -20,11 +25,13 @@ public class MallManager : NetworkBehaviour
     [Header("Ownership")]
     [Tooltip("Give every player a free starter store when they join.")]
     [SerializeField] private bool assignStarterPlots = true;
-    [Tooltip("Free a player's stores when they leave. (Client ids change on reconnect, so " +
-             "keeping them would orphan the store until saves/persistent ids exist.)")]
+    [Tooltip("Free a team's stores when its last player leaves. (Client ids change on reconnect, " +
+             "so keeping them would orphan the store until saves/persistent ids exist.)")]
     [SerializeField] private bool releaseOnDisconnect = true;
-    [Tooltip("Stores one player may own. Will come from Player Level later.")]
-    [SerializeField] private int maxStoresPerPlayer = 1;
+    [Tooltip("Stores one team may own, including its free starter store.")]
+    [SerializeField] private int maxStoresPerTeam = 6;
+    [Tooltip("Players allowed on one team. 1 = everyone plays solo (co-op off).")]
+    [SerializeField] private int maxPlayersPerTeam = 1;
 
     [Header("Development")]
     [Tooltip("B = buy the next segment of the store you're standing in (no money check). " +
@@ -33,12 +40,36 @@ public class MallManager : NetworkBehaviour
 
     private readonly Dictionary<int, StorePlot> plots = new();
 
+    /// <summary>Which team each connected player is on. Synced so clients can check permissions too.</summary>
+    public struct TeamMember : INetworkSerializable, IEquatable<TeamMember>
+    {
+        public ulong clientId;
+        public ulong teamId;
+
+        public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+        {
+            serializer.SerializeValue(ref clientId);
+            serializer.SerializeValue(ref teamId);
+        }
+
+        public bool Equals(TeamMember other) => clientId == other.clientId && teamId == other.teamId;
+    }
+
+    private NetworkList<TeamMember> teamMembers;
+
+    /// <summary>Raised on every machine when anyone changes team.</summary>
+    public event Action TeamsChanged;
+
+    public int MaxStoresPerTeam => maxStoresPerTeam;
+
     public IReadOnlyCollection<StorePlot> Plots => plots.Values;
 
     /* ========================= LIFECYCLE ========================= */
 
     private void Awake()
     {
+        EnsureTeamList();
+
         if (Instance != null && Instance != this)
         {
             Debug.LogError("[MallManager] More than one in the scene. Keep exactly one.", this);
@@ -47,11 +78,20 @@ public class MallManager : NetworkBehaviour
         Instance = this;
     }
 
+    // NetworkLists must be created before the object spawns, and only once.
+    private void EnsureTeamList()
+    {
+        teamMembers ??= new NetworkList<TeamMember>(
+            null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    }
+
     public override void OnNetworkSpawn()
     {
         // Plots may have spawned before us; pick them all up (Register ignores repeats).
         foreach (var plot in FindObjectsByType<StorePlot>(FindObjectsSortMode.None))
             Register(plot);
+
+        teamMembers.OnListChanged += OnTeamListChanged;
 
         if (!IsServer) return;
 
@@ -65,6 +105,8 @@ public class MallManager : NetworkBehaviour
 
     public override void OnNetworkDespawn()
     {
+        teamMembers.OnListChanged -= OnTeamListChanged;
+
         if (IsServer && NetworkManager != null)
         {
             NetworkManager.OnClientConnectedCallback -= OnClientConnected;
@@ -109,12 +151,85 @@ public class MallManager : NetworkBehaviour
         return null;
     }
 
-    public int CountPlotsOwnedBy(ulong clientId)
+    public int CountPlotsOwnedByTeam(ulong teamId)
     {
         int n = 0;
         foreach (var plot in plots.Values)
-            if (plot.HasOwner && plot.OwnerClientId == clientId) n++;
+            if (plot.HasOwner && plot.OwnerTeamId == teamId) n++;
         return n;
+    }
+
+    /* ========================= TEAMS ========================= */
+
+    /// <summary>
+    /// The team a player is on. Players nobody has put on a team are a team of one,
+    /// so with no MallManager (or before syncing) this is just their client id.
+    /// </summary>
+    public static ulong GetTeamOf(ulong clientId)
+    {
+        var list = Instance != null ? Instance.teamMembers : null;
+        if (list != null)
+            foreach (var m in list)
+                if (m.clientId == clientId) return m.teamId;
+        return clientId;
+    }
+
+    /// <summary>Connected players on a team.</summary>
+    public List<ulong> GetTeamMembers(ulong teamId)
+    {
+        var result = new List<ulong>();
+        foreach (var m in teamMembers)
+            if (m.teamId == teamId) result.Add(m.clientId);
+        return result;
+    }
+
+    private void OnTeamListChanged(NetworkListEvent<TeamMember> e)
+    {
+        foreach (var plot in plots.Values) plot.RefreshLocalView();
+        TeamsChanged?.Invoke();
+    }
+
+    private void ServerSetTeam(ulong clientId, ulong teamId)
+    {
+        for (int i = 0; i < teamMembers.Count; i++)
+        {
+            if (teamMembers[i].clientId != clientId) continue;
+            teamMembers[i] = new TeamMember { clientId = clientId, teamId = teamId };
+            return;
+        }
+        teamMembers.Add(new TeamMember { clientId = clientId, teamId = teamId });
+    }
+
+    private void ServerRemoveFromTeams(ulong clientId)
+    {
+        for (int i = teamMembers.Count - 1; i >= 0; i--)
+            if (teamMembers[i].clientId == clientId) teamMembers.RemoveAt(i);
+    }
+
+    /// <summary>
+    /// Server: move a player onto another team (co-op). Fails if that team is full. Their old
+    /// team keeps its stores while it still has players; an empty team's stores are freed.
+    /// Nothing calls this yet; it's the hook for the co-op menu.
+    /// </summary>
+    public bool ServerTryJoinTeam(ulong clientId, ulong teamId)
+    {
+        if (!IsServer) return false;
+
+        ulong oldTeam = GetTeamOf(clientId);
+        if (oldTeam == teamId) return true;
+        if (GetTeamMembers(teamId).Count >= maxPlayersPerTeam) return false;
+
+        ServerStopEdit(clientId);
+        ServerSetTeam(clientId, teamId);
+        if (GetTeamMembers(oldTeam).Count == 0) ServerReleaseTeam(oldTeam);
+        return true;
+    }
+
+    private void ServerReleaseTeam(ulong teamId)
+    {
+        foreach (var plot in plots.Values)
+            if (plot.HasOwner && plot.OwnerTeamId == teamId)
+                plot.ServerRelease();
     }
 
     /* ========================= PERMISSIONS ========================= */
@@ -161,13 +276,17 @@ public class MallManager : NetworkBehaviour
 
     private void OnClientConnected(ulong clientId)
     {
-        if (!assignStarterPlots || CountPlotsOwnedBy(clientId) > 0) return;
+        // Everyone starts as a team of one.
+        if (!ContainsMember(clientId)) ServerSetTeam(clientId, clientId);
+
+        ulong team = GetTeamOf(clientId);
+        if (!assignStarterPlots || CountPlotsOwnedByTeam(team) > 0) return;
 
         foreach (var plot in plots.Values)
         {
             if (plot.IsStarterPlot && !plot.HasOwner)
             {
-                plot.ServerSetOwner(clientId);
+                plot.ServerSetOwner(team);
                 return;
             }
         }
@@ -176,16 +295,24 @@ public class MallManager : NetworkBehaviour
                          "Add more StorePlots marked Is Starter Plot.", this);
     }
 
+    private bool ContainsMember(ulong clientId)
+    {
+        foreach (var m in teamMembers)
+            if (m.clientId == clientId) return true;
+        return false;
+    }
+
     private void OnClientDisconnected(ulong clientId)
     {
         // Never leave a store stuck in edit mode (closed, items floating) after its editor leaves.
         ServerStopEdit(clientId);
 
-        if (!releaseOnDisconnect) return;
+        ulong team = GetTeamOf(clientId);
+        ServerRemoveFromTeams(clientId);
 
-        foreach (var plot in plots.Values)
-            if (plot.HasOwner && plot.OwnerClientId == clientId)
-                plot.ServerRelease();
+        // A team keeps its stores while any teammate is still connected.
+        if (releaseOnDisconnect && GetTeamMembers(team).Count == 0)
+            ServerReleaseTeam(team);
     }
 
     /// <summary>
@@ -230,11 +357,38 @@ public class MallManager : NetworkBehaviour
     {
         if (!IsServer || !plots.TryGetValue(plotId, out var plot)) return false;
         if (plot.HasOwner) return false;
-        if (CountPlotsOwnedBy(clientId) >= maxStoresPerPlayer) return false;
+        ulong team = GetTeamOf(clientId);
+        if (CountPlotsOwnedByTeam(team) >= maxStoresPerTeam)
+        {
+            Debug.Log($"[MallManager] Team {team} can't buy '{plot.DisplayName}': already owns " +
+                      $"{maxStoresPerTeam} store(s) (Max Stores Per Team).", plot);
+            return false;
+        }
 
         // TODO economy: charge plot.Price.
-        plot.ServerSetOwner(clientId);
+        plot.ServerSetOwner(team);
+        Debug.Log($"[MallManager] Client {clientId} bought '{plot.DisplayName}' for team {team}.", plot);
         return true;
+    }
+
+    /// <summary>
+    /// Server: buy a store from its for-sale wall. Same as claiming, plus a check that the
+    /// player is actually standing at that store's for-sale wall.
+    /// </summary>
+    public bool ServerTryBuyFromSign(ulong clientId, int plotId)
+    {
+        if (!IsServer || !plots.TryGetValue(plotId, out var plot)) return false;
+
+        var player = NetworkManager.ConnectedClients.TryGetValue(clientId, out var client) ? client.PlayerObject : null;
+        if (player == null || !plot.IsNearForSaleWall(player.transform.position)) return false;
+
+        return ServerTryClaimPlot(clientId, plotId);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void RequestBuyFromSignServerRpc(int plotId, ServerRpcParams rpcParams = default)
+    {
+        ServerTryBuyFromSign(rpcParams.Receive.SenderClientId, plotId);
     }
 
     /// <summary>Server: unlock an expansion segment (removes its false walls on every client).</summary>
