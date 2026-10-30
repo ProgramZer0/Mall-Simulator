@@ -50,6 +50,21 @@ public class StorePlot : NetworkBehaviour
     [Tooltip("Shown over the storefront while the store is in edit mode (hidden otherwise).")]
     [SerializeField] private GameObject[] renovationWalls;
 
+    [Header("For Sale")]
+    [Tooltip("Shown while nobody owns this store. Players look at it and press F to buy. " +
+             "Untick Is Starter Plot to make a store buy-only.")]
+    [SerializeField] private GameObject[] forSaleWalls;
+    [Tooltip("How close (meters) a player must be to a for-sale wall to buy the store.")]
+    [SerializeField] private float buyRange = 4f;
+
+    [Header("Owner Only")]
+    [Tooltip("Shown only on the owner's screen, e.g. a floor glow or a 'Your Store' sign, " +
+             "so players can spot their own store. Hidden for everyone else.")]
+    [SerializeField] private GameObject[] ownerOnlyVisuals;
+
+    [Header("Debug (read only)")]
+    [SerializeField] private string status = "Not spawned";
+
     private readonly NetworkVariable<ulong> ownerClientId =
         new(NoOwner, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
@@ -90,8 +105,15 @@ public class StorePlot : NetworkBehaviour
         if (SegmentCount > 32)
             Debug.LogError($"[StorePlot] '{displayName}' has {SegmentCount} segments; max is 32.", this);
 
-        // Renovation walls start hidden until the synced edit state says otherwise.
+        // Mark the for-sale walls so the player's F raycast can find this store from them.
+        if (forSaleWalls != null)
+            foreach (var w in forSaleWalls)
+                if (w != null && !w.TryGetComponent<ForSaleSign>(out _))
+                    w.AddComponent<ForSaleSign>().Init(this);
+
+        // Start in the "nobody owns it" look until the synced state says otherwise.
         ApplyRenovationWalls();
+        ApplyOwnerVisuals();
     }
 
     public override void OnNetworkSpawn()
@@ -101,6 +123,9 @@ public class StorePlot : NetworkBehaviour
         editorClientId.OnValueChanged += OnEditorChanged;
         ApplyWalls();
         ApplyRenovationWalls();
+        ApplyOwnerVisuals();
+        UpdateStatus();
+        Changed += OnAnyChange;
 
         if (MallManager.Instance != null) MallManager.Instance.Register(this);
     }
@@ -110,11 +135,18 @@ public class StorePlot : NetworkBehaviour
         ownerClientId.OnValueChanged -= OnOwnerChanged;
         purchasedSegments.OnValueChanged -= OnSegmentsChanged;
         editorClientId.OnValueChanged -= OnEditorChanged;
+        Changed -= OnAnyChange;
 
         if (MallManager.Instance != null) MallManager.Instance.Unregister(this);
     }
 
-    private void OnOwnerChanged(ulong prev, ulong next) => Changed?.Invoke(this);
+    private void OnOwnerChanged(ulong prev, ulong next)
+    {
+        ApplyOwnerVisuals();
+        Changed?.Invoke(this);
+    }
+
+    private void OnAnyChange(StorePlot _) => UpdateStatus();
 
     private void OnEditorChanged(ulong prev, ulong next)
     {
@@ -356,6 +388,73 @@ public class StorePlot : NetworkBehaviour
         }
     }
 
+    /// <summary>For-sale walls while unowned; owner-only visuals for the owner's screen only.</summary>
+    private void ApplyOwnerVisuals()
+    {
+        if (forSaleWalls != null)
+            foreach (var w in forSaleWalls)
+                if (w != null) w.SetActive(!HasOwner);
+
+        bool mine = false;
+        var nm = NetworkManager.Singleton;
+        if (nm != null && nm.IsListening) mine = IsAuthorized(nm.LocalClientId);
+
+        if (ownerOnlyVisuals != null)
+            foreach (var v in ownerOnlyVisuals)
+                if (v != null) v.SetActive(mine);
+    }
+
+    /* ========================= BUYING ========================= */
+
+    public bool IsForSale => !HasOwner;
+
+    /// <summary>Server: is this position within buy range of one of the for-sale walls?</summary>
+    public bool IsNearForSaleWall(Vector3 position)
+    {
+        if (forSaleWalls == null) return false;
+        foreach (var w in forSaleWalls)
+        {
+            if (w == null || !w.activeInHierarchy) continue;
+            foreach (var col in w.GetComponentsInChildren<Collider>())
+            {
+                if (!col.enabled) continue;
+                if (Vector3.Distance(col.ClosestPoint(position), position) <= buyRange) return true;
+            }
+        }
+        return false;
+    }
+
+    /* ========================= STATUS ========================= */
+
+    /// <summary>Human-readable owner, e.g. "Client 1 (Host)", or "nobody".</summary>
+    public string OwnerLabel
+    {
+        get
+        {
+            if (!HasOwner) return "nobody";
+            ulong id = ownerClientId.Value;
+            string label = $"Client {id}";
+            var nm = NetworkManager.Singleton;
+            if (nm != null && nm.IsListening)
+            {
+                if (id == NetworkManager.ServerClientId) label += " (Host)";
+                if (id == nm.LocalClientId) label += " (You)";
+            }
+            return label;
+        }
+    }
+
+    private string BuildStatus()
+    {
+        if (!Application.isPlaying || !IsSpawned)
+            return isStarterPlot ? "Starter store (given to a joining player)" : $"Buy-only, price {price}";
+
+        string state = !HasOwner ? $"FOR SALE ({price})" : IsRenovating ? "Renovating" : "Open";
+        return $"Owner: {OwnerLabel} | {state}";
+    }
+
+    private void UpdateStatus() => status = BuildStatus();
+
     private void ApplyRenovationWalls()
     {
         if (renovationWalls == null) return;
@@ -372,14 +471,31 @@ public class StorePlot : NetworkBehaviour
         Gizmos.color = playing && HasOwner ? new Color(0.2f, 0.9f, 0.3f, 0.6f) : new Color(0.2f, 0.8f, 1f, 0.6f);
         foreach (var box in baseAreas) DrawBox(box);
 
-        if (segments == null) return;
-        for (int i = 0; i < segments.Length; i++)
+        if (segments != null)
         {
-            Gizmos.color = playing && IsSegmentPurchased(i)
-                ? new Color(0.2f, 0.9f, 0.3f, 0.6f)
-                : new Color(1f, 0.8f, 0.1f, 0.6f);
-            DrawBox(segments[i]?.area);
+            for (int i = 0; i < segments.Length; i++)
+            {
+                Gizmos.color = playing && IsSegmentPurchased(i)
+                    ? new Color(0.2f, 0.9f, 0.3f, 0.6f)
+                    : new Color(1f, 0.8f, 0.1f, 0.6f);
+                DrawBox(segments[i]?.area);
+            }
         }
+
+#if UNITY_EDITOR
+        // Name, owner and state floating above the store in the Scene view.
+        Vector3 top = transform.position;
+        bool found = false;
+        foreach (var box in baseAreas)
+        {
+            if (box == null) continue;
+            Vector3 p = box.transform.TransformPoint(box.center + Vector3.up * box.size.y * 0.5f);
+            if (!found || p.y > top.y) { top = new Vector3(p.x, p.y, p.z); found = true; }
+        }
+        var style = new GUIStyle(UnityEditor.EditorStyles.boldLabel) { alignment = TextAnchor.MiddleCenter };
+        style.normal.textColor = !playing ? Color.white : HasOwner ? new Color(0.4f, 1f, 0.5f) : new Color(1f, 0.85f, 0.3f);
+        UnityEditor.Handles.Label(top + Vector3.up * 0.5f, $"{displayName} (#{plotId})\n{BuildStatus()}", style);
+#endif
     }
 
     private static void DrawBox(BoxCollider box)

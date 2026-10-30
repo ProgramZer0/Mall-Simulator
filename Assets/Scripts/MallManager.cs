@@ -230,11 +230,37 @@ public class MallManager : NetworkBehaviour
     {
         if (!IsServer || !plots.TryGetValue(plotId, out var plot)) return false;
         if (plot.HasOwner) return false;
-        if (CountPlotsOwnedBy(clientId) >= maxStoresPerPlayer) return false;
+        if (CountPlotsOwnedBy(clientId) >= maxStoresPerPlayer)
+        {
+            Debug.Log($"[MallManager] Client {clientId} can't buy '{plot.DisplayName}': already owns " +
+                      $"{maxStoresPerPlayer} store(s) (Max Stores Per Player).", plot);
+            return false;
+        }
 
         // TODO economy: charge plot.Price.
         plot.ServerSetOwner(clientId);
+        Debug.Log($"[MallManager] Client {clientId} bought '{plot.DisplayName}'.", plot);
         return true;
+    }
+
+    /// <summary>
+    /// Server: buy a store from its for-sale wall. Same as claiming, plus a check that the
+    /// player is actually standing at that store's for-sale wall.
+    /// </summary>
+    public bool ServerTryBuyFromSign(ulong clientId, int plotId)
+    {
+        if (!IsServer || !plots.TryGetValue(plotId, out var plot)) return false;
+
+        var player = NetworkManager.ConnectedClients.TryGetValue(clientId, out var client) ? client.PlayerObject : null;
+        if (player == null || !plot.IsNearForSaleWall(player.transform.position)) return false;
+
+        return ServerTryClaimPlot(clientId, plotId);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void RequestBuyFromSignServerRpc(int plotId, ServerRpcParams rpcParams = default)
+    {
+        ServerTryBuyFromSign(rpcParams.Receive.SenderClientId, plotId);
     }
 
     /// <summary>Server: unlock an expansion segment (removes its false walls on every client).</summary>
