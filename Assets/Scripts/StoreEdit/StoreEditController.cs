@@ -42,8 +42,16 @@ public class StoreEditController : NetworkBehaviour
     [SerializeField] private float zoomStep = 1.5f;
     [Tooltip("How far past the store's edges the camera may pan.")]
     [SerializeField] private float panMargin = 2f;
-    [Tooltip("Layers the edit camera doesn't draw, e.g. ceilings that would block the top-down view.")]
+    [Tooltip("Layers the edit camera never draws. Rarely needed now that the cutaway hides " +
+             "everything above the store; use it for odd cases like a tall sign poking into view.")]
     [SerializeField] private LayerMask hiddenInEditView;
+
+    [Header("Cutaway")]
+    [Tooltip("Hide everything above the store (floor above, upstairs players, NPCs, items) " +
+             "in the edit camera only.")]
+    [SerializeField] private bool cutaway = true;
+    [Tooltip("Moves the cut up (+) or down (-) from the store's cut height, in meters.")]
+    [SerializeField] private float cutOffset = 0f;
 
     [Header("Handles")]
     [Tooltip("How close (pixels) the mouse must be to an arrow or ring to grab it.")]
@@ -237,7 +245,12 @@ public class StoreEditController : NetworkBehaviour
         finishing = false;
 
         if (handles != null) handles.HideAll();
-        if (editCam != null) editCam.enabled = false;
+        if (editCam != null)
+        {
+            editCam.ResetProjectionMatrix();
+            editCam.enabled = false;
+        }
+        cutActive = false;
         if (playerCam != null) playerCam.enabled = true;
 
         Cursor.lockState = CursorLockMode.Locked;
@@ -293,6 +306,52 @@ public class StoreEditController : NetworkBehaviour
     {
         Quaternion rot = Quaternion.Euler(pitch, yaw, 0f);
         editCam.transform.SetPositionAndRotation(pivot - rot * Vector3.forward * distance, rot);
+        ApplyCutaway();
+    }
+
+    /* ========================= CUTAWAY ========================= */
+
+    private bool cutActive;
+    private float cutY;
+
+    /// <summary>
+    /// Replaces the edit camera's near clipping plane with a flat plane at the store's cut
+    /// height, so nothing above it is drawn: the slab of the floor above, and anything
+    /// standing on it. Only this camera is affected; nobody else's view changes.
+    /// </summary>
+    private void ApplyCutaway()
+    {
+        editCam.ResetProjectionMatrix();
+        cutActive = false;
+        if (!cutaway || editPlot == null) return;
+
+        cutY = editPlot.GetEditCutHeight() + cutOffset;
+
+        // Only works while the camera is above the cut. When zoomed in below it, the camera
+        // looks down and can't see above the cut anyway, so the normal view is fine.
+        if (editCam.transform.position.y <= cutY + 0.05f) return;
+
+        // Plane facing down: keeps everything below cutY. Expressed in camera space.
+        Matrix4x4 view = editCam.worldToCameraMatrix;
+        Vector3 cpos = view.MultiplyPoint(new Vector3(0f, cutY, 0f));
+        Vector3 cnormal = view.MultiplyVector(Vector3.down).normalized;
+        var plane = new Vector4(cnormal.x, cnormal.y, cnormal.z, -Vector3.Dot(cpos, cnormal));
+
+        editCam.projectionMatrix = editCam.CalculateObliqueMatrix(plane);
+        cutActive = true;
+    }
+
+    /// <summary>
+    /// Mouse ray for clicking, started just below the cut so it can't hit hidden things
+    /// above it (like the bottom of the floor slab).
+    /// </summary>
+    private Ray EditRay(Vector2 mouse)
+    {
+        Ray ray = editCam.ScreenPointToRay(mouse);
+        float start = cutY - 0.01f;
+        if (cutActive && ray.direction.y < -1e-4f && ray.origin.y > start)
+            ray.origin += ray.direction * ((ray.origin.y - start) / -ray.direction.y);
+        return ray;
     }
 
     /* ========================= TOOLS ========================= */
@@ -300,7 +359,7 @@ public class StoreEditController : NetworkBehaviour
     private void UpdateTools()
     {
         Vector2 mouse = Input.mousePosition;
-        Ray ray = editCam.ScreenPointToRay(mouse);
+        Ray ray = EditRay(mouse);
 
         if (dragHandle != StoreEditHandles.None)
         {
