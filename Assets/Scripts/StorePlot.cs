@@ -51,8 +51,13 @@ public class StorePlot : NetworkBehaviour
     [SerializeField] private Segment[] segments;
 
     [Header("Front Wall")]
-    [Tooltip("Wall modules (see WallModule) within this many meters of the store's space are its " +
-             "storefront and can be swapped in edit mode. Each module goes to the closest store.")]
+    [Tooltip("The wall sections (scene objects with a WallModule) the owner can swap in edit mode. " +
+             "Drag them in from the Hierarchy; the order here is the order they're numbered in.")]
+    [SerializeField] private WallModule[] frontWalls;
+    [Tooltip("If Front Walls is empty, find wall modules near the store automatically instead.")]
+    [SerializeField] private bool autoFindFrontWalls;
+    [Tooltip("Automatic search only: wall modules within this many meters of the store's space " +
+             "belong to it. Each module goes to the closest store.")]
     [SerializeField] private float frontWallReach = 1f;
 
     [Header("Spawn")]
@@ -143,6 +148,29 @@ public class StorePlot : NetworkBehaviour
         // Start in the "nobody owns it" look until the synced state says otherwise.
         ApplyRenovationWalls();
         ApplyOwnerVisuals();
+    }
+
+    private void Start()
+    {
+        // A wall section can only belong to one store, once.
+        if (frontWalls == null) return;
+        var allPlots = FindObjectsByType<StorePlot>(FindObjectsSortMode.None);
+        for (int i = 0; i < frontWalls.Length; i++)
+        {
+            var w = frontWalls[i];
+            if (w == null) continue;
+            for (int j = 0; j < i; j++)
+                if (frontWalls[j] == w)
+                    Debug.LogWarning($"[StorePlot] '{displayName}' lists front wall '{w.name}' twice.", this);
+            foreach (var other in allPlots)
+            {
+                if (other == this || other.frontWalls == null || other.plotId < plotId) continue; // warn once per pair
+                foreach (var ow in other.frontWalls)
+                    if (ow == w)
+                        Debug.LogWarning($"[StorePlot] Front wall '{w.name}' is listed by both '{displayName}' " +
+                                         $"and '{other.displayName}'. Give it to one store only.", w);
+            }
+        }
     }
 
     public override void OnNetworkSpawn()
@@ -276,9 +304,9 @@ public class StorePlot : NetworkBehaviour
     public int FrontSlotCount { get { EnsureFrontSlots(); return frontSlots.Count; } }
 
     /// <summary>
-    /// Finds this store's storefront: every WallModule within Front Wall Reach of its space
-    /// (base areas and segments, bought or not) that isn't closer to another store. Sorted by
-    /// position, so every machine numbers the sections the same way.
+    /// This store's storefront sections: the Front Walls list if it has any entries; otherwise,
+    /// with Auto Find Front Walls on, every WallModule within Front Wall Reach that isn't closer
+    /// to another store. Either way every machine numbers the sections the same way.
     /// </summary>
     private void EnsureFrontSlots()
     {
@@ -290,12 +318,29 @@ public class StorePlot : NetworkBehaviour
 
     private List<(WallModule module, Vector3 center)> FindFrontModules()
     {
+        var result = new List<(WallModule module, Vector3 center)>();
+
+        // Hand-picked list: use exactly these, in this order.
+        if (frontWalls != null && frontWalls.Length > 0)
+        {
+            foreach (var m in frontWalls)
+                if (m != null) result.Add((m, WallModule.GeometryBounds(m.gameObject).center));
+            return result;
+        }
+
+        if (!autoFindFrontWalls) return result;
+        return AutoFindFrontModules();
+    }
+
+    private List<(WallModule module, Vector3 center)> AutoFindFrontModules()
+    {
         var allPlots = FindObjectsByType<StorePlot>(FindObjectsSortMode.None);
         var claimed = new List<(WallModule module, Vector3 center)>();
 
         foreach (var m in FindObjectsByType<WallModule>(FindObjectsInactive.Include, FindObjectsSortMode.None))
         {
             if (m == null || m.IsReplacement) continue;
+            if (IsListedByAnotherStore(m, allPlots)) continue;
 
             Vector3 center = WallModule.GeometryBounds(m.gameObject).center;
             float mine = DistanceToSpace(center);
@@ -324,6 +369,17 @@ public class StorePlot : NetworkBehaviour
         });
 
         return claimed;
+    }
+
+    private bool IsListedByAnotherStore(WallModule m, StorePlot[] allPlots)
+    {
+        foreach (var other in allPlots)
+        {
+            if (other == this || other.frontWalls == null) continue;
+            foreach (var w in other.frontWalls)
+                if (w == m) return true;
+        }
+        return false;
     }
 
     /// <summary>How far (meters) a point is from this store's space; 0 if inside.</summary>
