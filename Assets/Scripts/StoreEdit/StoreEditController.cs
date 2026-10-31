@@ -10,6 +10,7 @@ using UnityEngine.Rendering.Universal;
 /// WASD / QE  pan / turn the top-down camera, mouse wheel zooms
 /// RMB drag   rotate (orbit) the camera, or pan it (Right Drag setting); RMB click deselects
 /// Click      select an item in your store; click and drag an item to slide it across the floor
+///            click a storefront wall section, then pick a module (wall, window, doorway, ...)
 /// X          cycle Move (arrows) -> Rotate (rings) -> no handles
 /// Drag       an arrow to slide along that axis (stops on contact), a ring to rotate
 ///            (hold Ctrl to snap to 15 degrees)
@@ -98,6 +99,12 @@ public class StoreEditController : NetworkBehaviour
 
     private static readonly Color BoxColor = new(1f, 1f, 1f, 0.9f);
     private static readonly Color BoxGravityColor = new(0.3f, 0.9f, 1f, 0.9f);
+    private static readonly Color SlotColor = new(1f, 0.75f, 0.2f, 0.95f);
+
+    // Storefront section being changed (-1 = none) and its on-screen module panel.
+    private int selectedSlot = -1;
+    private Rect slotPanelRect;
+    private string slotMessage;
 
     private PlayerInteractInput interact;
     private Camera playerCam;
@@ -226,6 +233,7 @@ public class StoreEditController : NetworkBehaviour
         finishing = true;
         finishStartedAt = Time.time;
         Deselect();
+        selectedSlot = -1;
 
         int count = localItems.Count;
         for (int start = 0; start < count; start += ChunkSize)
@@ -299,6 +307,7 @@ public class StoreEditController : NetworkBehaviour
     private void ExitView()
     {
         Deselect();
+        selectedSlot = -1;
         ClearLocalItems();
         clientSessionId = -1;
         finishing = false;
@@ -505,7 +514,10 @@ public class StoreEditController : NetworkBehaviour
 
         hoverHandle = PickHandle(mouse, grabRadiusPixels);
 
-        if (Input.GetMouseButtonDown(0))
+        if (selectedSlot >= 0 && (Input.GetKeyDown(KeyCode.Escape) || rmbClicked))
+            selectedSlot = -1;
+
+        if (Input.GetMouseButtonDown(0) && !IsMouseOverSlotPanel(mouse))
         {
             if (hoverHandle != StoreEditHandles.None)
                 BeginDrag(hoverHandle, ray, mouse);
@@ -535,7 +547,89 @@ public class StoreEditController : NetworkBehaviour
                 return;
             }
         }
+
+        if (TryPickFrontSlot(ray, out int slot))
+        {
+            Deselect();
+            selectedSlot = slot;
+            slotMessage = null;
+            return;
+        }
+
         Deselect();
+    }
+
+    /* ========================= STOREFRONT ========================= */
+
+    /// <summary>
+    /// Did the click land on one of this store's storefront sections? The renovation wall in
+    /// front of it is looked through; anything else in the way blocks the click.
+    /// </summary>
+    private bool TryPickFrontSlot(Ray ray, out int slot)
+    {
+        slot = -1;
+        var hits = Physics.RaycastAll(ray, 500f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+        foreach (var hit in hits)
+        {
+            if (editPlot.IsStorefrontCover(hit.collider.transform)) continue;
+            return editPlot.TryGetFrontSlot(hit.collider.transform, out slot);
+        }
+        return false;
+    }
+
+    private bool IsMouseOverSlotPanel(Vector2 mouse)
+    {
+        if (selectedSlot < 0) return false;
+        // GUI rects count y from the top; mouse positions from the bottom.
+        return slotPanelRect.Contains(new Vector2(mouse.x, Screen.height - mouse.y));
+    }
+
+    private void DrawSlotPanel()
+    {
+        var catalog = FrontWallCatalog.Instance;
+        if (selectedSlot < 0 || editPlot == null || selectedSlot >= editPlot.FrontSlotCount) return;
+
+        int count = catalog != null ? catalog.Modules.Count : 0;
+        float width = Mathf.Max(360f, 20f + count * 110f);
+        slotPanelRect = new Rect((Screen.width - width) * 0.5f, Screen.height - 110f, width, 96f);
+
+        GUI.Box(slotPanelRect, GUIContent.none);
+        GUI.Label(new Rect(slotPanelRect.x + 10, slotPanelRect.y + 6, width - 20, 20),
+            $"Storefront section {selectedSlot + 1}/{editPlot.FrontSlotCount}: {editPlot.GetFrontModuleName(selectedSlot)}" +
+            "   (Esc / RMB click to close)");
+
+        if (catalog == null || count == 0)
+        {
+            GUI.Label(new Rect(slotPanelRect.x + 10, slotPanelRect.y + 32, width - 20, 40),
+                "No FrontWallCatalog in the scene (or it's empty), so there's nothing to choose from.");
+            return;
+        }
+
+        int current = editPlot.GetFrontModuleId(selectedSlot);
+        for (int i = 0; i < count; i++)
+        {
+            var m = catalog.Modules[i];
+            if (m == null) continue;
+
+            var r = new Rect(slotPanelRect.x + 10 + i * 110f, slotPanelRect.y + 30, 100, 32);
+            bool isCurrent = m.ModuleId == current;
+            GUI.enabled = !isCurrent;
+            if (GUI.Button(r, isCurrent ? $"[{m.DisplayName}]" : m.DisplayName))
+            {
+                if (editPlot.WouldRemoveLastEntrance(selectedSlot, m.ModuleId))
+                    slotMessage = "Your store needs at least one doorway.";
+                else
+                {
+                    slotMessage = null;
+                    RequestSetFrontModuleRpc(selectedSlot, m.ModuleId);
+                }
+            }
+            GUI.enabled = true;
+        }
+
+        if (!string.IsNullOrEmpty(slotMessage))
+            GUI.Label(new Rect(slotPanelRect.x + 10, slotPanelRect.y + 68, width - 20, 20), slotMessage);
     }
 
     /* ========================= CLICK-AND-DRAG ========================= */
@@ -609,6 +703,7 @@ public class StoreEditController : NetworkBehaviour
     private void Select(EditLocalItem item)
     {
         Deselect();
+        selectedSlot = -1;
         selected = item;
         tool = Tool.None;
     }
@@ -726,6 +821,18 @@ public class StoreEditController : NetworkBehaviour
     private void DrawHandles()
     {
         if (handles == null) return;
+
+        // A storefront section is selected: outline it.
+        if (selected == null && selectedSlot >= 0 && !finishing && selectedSlot < editPlot.FrontSlotCount)
+        {
+            Bounds sb = editPlot.GetFrontSlotBounds(selectedSlot);
+            float w = Vector3.Distance(editCam.transform.position, sb.center) * lineWidth;
+            handles.HideArrows();
+            handles.HideRings();
+            handles.DrawBox(sb.center, sb.extents, Quaternion.identity, SlotColor, w * 0.8f);
+            return;
+        }
+
         if (selected == null || finishing) { handles.HideAll(); return; }
 
         Vector3 pos = selected.transform.position;
@@ -813,12 +920,15 @@ public class StoreEditController : NetworkBehaviour
         string gravity = selected == null ? "-" : selected.Gravity ? "ON" : "off";
         string itemName = selected == null ? "nothing (click an item)" : selected.Def.displayName;
 
-        GUI.Box(new Rect(10, 10, 420, 116), GUIContent.none);
+        GUI.Box(new Rect(10, 10, 420, 136), GUIContent.none);
         GUI.Label(new Rect(20, 16, 400, 20), finishing ? "STORE EDIT MODE - saving..." : "STORE EDIT MODE   (0 = save & exit)");
         GUI.Label(new Rect(20, 36, 400, 20), $"Selected: {itemName}");
         GUI.Label(new Rect(20, 56, 400, 20), $"Tool: {toolName}     Gravity: {gravity}");
         GUI.Label(new Rect(20, 76, 400, 20), "X: move > rotate > hide   G: gravity   Ctrl: snap   Esc: deselect");
         GUI.Label(new Rect(20, 96, 400, 20), "Drag item: slide   RMB drag: camera   RMB click: deselect");
+        GUI.Label(new Rect(20, 116, 400, 20), "Click a storefront wall section to change it");
+
+        if (!finishing) DrawSlotPanel();
     }
 
     /* ========================= HELPERS ========================= */
@@ -863,6 +973,19 @@ public class StoreEditController : NetworkBehaviour
     }
 
     /* ========================= NETWORK ========================= */
+
+    /// <summary>Host: swap one storefront section of the store this player is editing.</summary>
+    [Rpc(SendTo.Server)]
+    private void RequestSetFrontModuleRpc(int slot, int moduleId, RpcParams rpcParams = default)
+    {
+        if (rpcParams.Receive.SenderClientId != OwnerClientId || MallManager.Instance == null) return;
+
+        var plot = MallManager.Instance.GetPlotEditedBy(OwnerClientId);
+        if (plot == null) return;
+
+        // TODO economy: charge the module's Price.
+        plot.ServerTrySetFrontModule(slot, moduleId);
+    }
 
     [Rpc(SendTo.Server)]
     private void RequestStartEditRpc(RpcParams rpcParams = default)
