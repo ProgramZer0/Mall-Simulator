@@ -4,6 +4,9 @@
 //
 // It does nothing unless StoreEditIsolation turns it on (_EditClipEnabled), and that only
 // happens while the edit camera is drawing, so every other camera is untouched.
+//
+// Pixels inside the store are discarded (left exactly as drawn); only outside pixels are
+// painted. So it doesn't need the camera image: leave Fetch Color Buffer off on the feature.
 Shader "MallSim/Edit Plot Clip"
 {
     SubShader
@@ -35,10 +38,10 @@ Shader "MallSim/Edit Plot Clip"
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
                 float2 uv = input.texcoord;
-                half4 color = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv);
 
+                // Off (every camera except the edit camera): leave the image untouched.
                 if (_EditClipEnabled < 0.5)
-                    return color;
+                    discard;
 
                 // Rebuild the world position of whatever is drawn at this pixel.
             #if UNITY_REVERSED_Z
@@ -56,7 +59,7 @@ Shader "MallSim/Edit Plot Clip"
                 {
                     if (i >= count) break;
                     float3 p = mul(_EditClipBoxes[i], float4(worldPos, 1.0)).xyz;
-                    if (all(abs(p) <= 0.5)) return color;
+                    if (all(abs(p) <= 0.5)) discard; // inside the store: keep what's there
                 }
                 return _EditClipBackground;
             }
