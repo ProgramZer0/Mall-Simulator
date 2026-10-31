@@ -50,6 +50,13 @@ public class StorePlot : NetworkBehaviour
     [Tooltip("Max 32. Order matters: the index is what gets synced.")]
     [SerializeField] private Segment[] segments;
 
+    [Header("Spawn")]
+    [Tooltip("Where a player appears when this is their starter store. Leave empty to use a spot " +
+             "just outside the storefront, worked out from the renovation (or for-sale) walls.")]
+    [SerializeField] private Transform spawnPoint;
+    [Tooltip("How far outside the storefront the automatic spawn spot is, in meters.")]
+    [SerializeField] private float spawnDistance = 1.5f;
+
     [Header("Renovation")]
     [Tooltip("Shown over the storefront while the store is in edit mode (hidden otherwise).")]
     [SerializeField] private GameObject[] renovationWalls;
@@ -394,6 +401,62 @@ public class StorePlot : NetworkBehaviour
             b.Encapsulate(box.transform.TransformPoint(c + new Vector3(
                 (i & 1) == 0 ? -e.x : e.x, (i & 2) == 0 ? -e.y : e.y, (i & 4) == 0 ? -e.z : e.z)));
         return b;
+    }
+
+    /// <summary>
+    /// Where a player should appear for this store: the Spawn Point if set, otherwise just
+    /// outside the storefront facing in. The height is the store's floor; the player adjusts
+    /// for its own size.
+    /// </summary>
+    public void GetSpawnPose(out Vector3 position, out Quaternion rotation)
+    {
+        if (spawnPoint != null)
+        {
+            position = spawnPoint.position;
+            rotation = Quaternion.Euler(0f, spawnPoint.eulerAngles.y, 0f);
+            return;
+        }
+
+        Bounds store = GetWorldBounds();
+        float floor = store.min.y;
+
+        // The storefront is where the renovation walls (or for-sale walls) stand.
+        if (TryGetWallsCenter(renovationWalls, out Vector3 front) || TryGetWallsCenter(forSaleWalls, out front))
+        {
+            Vector3 outward = front - store.center;
+            outward.y = 0f;
+            if (outward.sqrMagnitude < 1e-4f) outward = Vector3.forward;
+            outward.Normalize();
+
+            position = new Vector3(front.x, floor, front.z) + outward * spawnDistance;
+            rotation = Quaternion.LookRotation(-outward, Vector3.up);
+            return;
+        }
+
+        // No storefront walls to go by: stand in the middle of the store.
+        position = new Vector3(store.center.x, floor, store.center.z);
+        rotation = Quaternion.identity;
+    }
+
+    /// <summary>Center of a set of wall objects (from their renderers/colliders, even while hidden).</summary>
+    private static bool TryGetWallsCenter(GameObject[] walls, out Vector3 center)
+    {
+        center = default;
+        if (walls == null) return false;
+
+        bool any = false;
+        Bounds b = default;
+        foreach (var w in walls)
+        {
+            if (w == null) continue;
+            foreach (var r in w.GetComponentsInChildren<Renderer>(true))
+            {
+                if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds);
+            }
+            if (!any) { b = new Bounds(w.transform.position, Vector3.zero); any = true; }
+        }
+        if (any) center = b.center;
+        return any;
     }
 
     /// <summary>World-space box around the base space plus every purchased segment.</summary>
