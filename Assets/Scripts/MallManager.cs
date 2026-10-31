@@ -35,6 +35,7 @@ public class MallManager : NetworkBehaviour
 
     [Header("Development")]
     [Tooltip("B = buy the next segment of the store you're standing in (no money check). " +
+             "C = open/close your store (stand inside it or near one of its doors). " +
              "Turn off once the store menu exists.")]
     [SerializeField] private bool devHotkeys = true;
 
@@ -417,11 +418,34 @@ public class MallManager : NetworkBehaviour
         ServerTryBuySegment(rpcParams.Receive.SenderClientId, plotId, segmentIndex);
     }
 
+    /* ========================= OPEN / CLOSED ========================= */
+
+    /// <summary>Server: open or close a store. Only its team may.</summary>
+    public bool ServerTrySetStoreClosed(ulong clientId, int plotId, bool closed)
+    {
+        if (!IsServer || !plots.TryGetValue(plotId, out var plot)) return false;
+        if (!plot.IsAuthorized(clientId)) return false;
+        plot.ServerSetClosed(closed);
+        return true;
+    }
+
+    /// <summary>
+    /// Open or close one of your stores, from any client. This is the call for the store menu:
+    /// MallManager.Instance.RequestSetStoreClosedServerRpc(plot.PlotId, true).
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void RequestSetStoreClosedServerRpc(int plotId, bool closed, ServerRpcParams rpcParams = default)
+    {
+        ServerTrySetStoreClosed(rpcParams.Receive.SenderClientId, plotId, closed);
+    }
+
     /* ========================= DEV ========================= */
 
     private void Update()
     {
-        if (!devHotkeys || !IsSpawned || !Input.GetKeyDown(KeyCode.B)) return;
+        if (!devHotkeys || !IsSpawned) return;
+        if (Input.GetKeyDown(KeyCode.C)) DevToggleClosed();
+        if (!Input.GetKeyDown(KeyCode.B)) return;
 
         var player = NetworkManager.LocalClient?.PlayerObject;
         if (player == null) return;
@@ -441,5 +465,26 @@ public class MallManager : NetworkBehaviour
             Debug.Log($"[MallManager] Dev: '{plot.DisplayName}' has no segments left to buy.", plot);
             return;
         }
+    }
+
+    /// <summary>C: open/close the store you're in, or whose door you're standing at.</summary>
+    private void DevToggleClosed()
+    {
+        var player = NetworkManager.LocalClient?.PlayerObject;
+        if (player == null) return;
+
+        Vector3 pos = player.transform.position;
+        ulong me = NetworkManager.LocalClientId;
+        foreach (var plot in plots.Values)
+        {
+            if (!plot.IsAuthorized(me)) continue;
+            if (!plot.Contains(pos) && !plot.IsNearDoor(pos, 4f)) continue;
+
+            bool close = !plot.IsClosedByOwner;
+            RequestSetStoreClosedServerRpc(plot.PlotId, close);
+            Debug.Log($"[MallManager] Dev: {(close ? "closing" : "opening")} '{plot.DisplayName}'.", plot);
+            return;
+        }
+        Debug.Log("[MallManager] Dev: stand in your store (or at one of its doors) to open/close it.");
     }
 }

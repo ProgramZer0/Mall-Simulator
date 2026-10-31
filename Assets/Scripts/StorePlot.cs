@@ -60,6 +60,13 @@ public class StorePlot : NetworkBehaviour
              "belong to it. Each module goes to the closest store.")]
     [SerializeField] private float frontWallReach = 1f;
 
+    [Header("Doors")]
+    [Tooltip("Door objects for this store (e.g. the door inside each doorway). Shown while the store " +
+             "is closed, for sale or being renovated; hidden while it's open. Doors of doorway modules " +
+             "in Front Walls (WallModule > Door) are included automatically. A door can also be in " +
+             "For Sale Walls; this rule wins.")]
+    [SerializeField] private GameObject[] doors;
+
     [Header("Spawn")]
     [Tooltip("Where a player appears when this is their starter store. Leave empty to use a spot " +
              "just outside the storefront, worked out from the renovation (or for-sale) walls.")]
@@ -105,14 +112,20 @@ public class StorePlot : NetworkBehaviour
     private readonly NetworkVariable<ulong> editorClientId =
         new(NoOwner, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    // The owners closed the store (doors shut, no customers). Separate from renovating.
+    private readonly NetworkVariable<bool> closedByOwner =
+        new(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
     /// <summary>Raised on every client when the owner, purchased segments or edit state change.</summary>
     public event Action<StorePlot> Changed;
 
     public ulong EditorClientId => editorClientId.Value;
     /// <summary>In edit mode: closed, renovation wall up, items out of the world until it ends.</summary>
     public bool IsRenovating => editorClientId.Value != NoOwner;
-    /// <summary>Owned and not under renovation. Customers/sales should check this.</summary>
-    public bool IsOpen => HasOwner && !IsRenovating;
+    /// <summary>The owners have closed the store.</summary>
+    public bool IsClosedByOwner => closedByOwner.Value;
+    /// <summary>Owned, not closed and not under renovation. Customers/sales should check this.</summary>
+    public bool IsOpen => HasOwner && !IsRenovating && !closedByOwner.Value;
 
     public int PlotId => plotId;
     public string DisplayName => displayName;
@@ -178,6 +191,7 @@ public class StorePlot : NetworkBehaviour
         ownerTeamId.OnValueChanged += OnOwnerChanged;
         purchasedSegments.OnValueChanged += OnSegmentsChanged;
         editorClientId.OnValueChanged += OnEditorChanged;
+        closedByOwner.OnValueChanged += OnClosedChanged;
         frontOverrides.OnListChanged += OnFrontOverridesChanged;
         ApplyFrontWall();
         ApplyWalls();
@@ -194,6 +208,7 @@ public class StorePlot : NetworkBehaviour
         ownerTeamId.OnValueChanged -= OnOwnerChanged;
         purchasedSegments.OnValueChanged -= OnSegmentsChanged;
         editorClientId.OnValueChanged -= OnEditorChanged;
+        closedByOwner.OnValueChanged -= OnClosedChanged;
         frontOverrides.OnListChanged -= OnFrontOverridesChanged;
         Changed -= OnAnyChange;
 
@@ -215,9 +230,16 @@ public class StorePlot : NetworkBehaviour
         UpdateStatus();
     }
 
+    private void OnClosedChanged(bool prev, bool next)
+    {
+        ApplyDoors();
+        Changed?.Invoke(this);
+    }
+
     private void OnEditorChanged(ulong prev, ulong next)
     {
         ApplyRenovationWalls();
+        ApplyDoors();
         Changed?.Invoke(this);
     }
 
@@ -284,7 +306,58 @@ public class StorePlot : NetworkBehaviour
         ServerSetEditor(NoOwner);
         ownerTeamId.Value = NoOwner;
         purchasedSegments.Value = 0;
+        closedByOwner.Value = false;
         frontOverrides.Clear(); // storefront goes back to how the scene placed it
+    }
+
+    /// <summary>
+    /// Server only. Open or close the store (doors shown while closed). Use
+    /// MallManager.ServerTrySetStoreClosed / RequestSetStoreClosedServerRpc rather than calling
+    /// this directly, so ownership is checked.
+    /// </summary>
+    public void ServerSetClosed(bool closed)
+    {
+        if (!IsServer) return;
+        closedByOwner.Value = closed;
+    }
+
+    /* ========================= DOORS ========================= */
+
+    /// <summary>
+    /// Every door of this store: the Doors list plus the door of each storefront section's
+    /// current module (original or one a player put in).
+    /// </summary>
+    private IEnumerable<GameObject> AllDoors()
+    {
+        if (doors != null)
+            foreach (var d in doors)
+                if (d != null) yield return d;
+
+        if (frontSlots == null) yield break;
+        foreach (var slot in frontSlots)
+        {
+            GameObject shown = slot.replacement != null ? slot.replacement
+                             : slot.original != null ? slot.original.gameObject : null;
+            if (shown == null || !shown.TryGetComponent<WallModule>(out var wm) || wm.Door == null) continue;
+            yield return wm.Door;
+        }
+    }
+
+    /// <summary>Doors show while the store is for sale, closed or being renovated; hidden while open.</summary>
+    private void ApplyDoors()
+    {
+        bool show = !HasOwner || closedByOwner.Value || IsRenovating;
+        foreach (var d in AllDoors())
+            d.SetActive(show);
+    }
+
+    /// <summary>Is this position within range of one of the store's doors?</summary>
+    public bool IsNearDoor(Vector3 position, float range)
+    {
+        float r2 = range * range;
+        foreach (var d in AllDoors())
+            if (WallModule.GeometryBounds(d).SqrDistance(position) <= r2) return true;
+        return false;
     }
 
     /* ========================= FRONT WALL ========================= */
@@ -413,6 +486,7 @@ public class StorePlot : NetworkBehaviour
         EnsureFrontSlots();
         for (int i = 0; i < frontSlots.Count; i++)
             SetSlotVisual(i, i < frontOverrides.Count ? frontOverrides[i] : 0);
+        ApplyDoors(); // a swapped-in doorway brings its own door
     }
 
     private void SetSlotVisual(int index, int moduleId)
@@ -829,6 +903,8 @@ public class StorePlot : NetworkBehaviour
         if (ownerOnlyVisuals != null)
             foreach (var v in ownerOnlyVisuals)
                 if (v != null) v.SetActive(mine);
+
+        ApplyDoors();
     }
 
     /* ========================= BUYING ========================= */
@@ -883,7 +959,8 @@ public class StorePlot : NetworkBehaviour
         if (!Application.isPlaying || !IsSpawned)
             return isStarterPlot ? $"Starter store, start money {startingMoney}" : $"Buy-only, price {price}";
 
-        string state = !HasOwner ? $"FOR SALE ({price})" : IsRenovating ? "Renovating" : "Open";
+        string state = !HasOwner ? $"FOR SALE ({price})" : IsRenovating ? "Renovating"
+                     : closedByOwner.Value ? "Closed" : "Open";
         return $"Owner: {OwnerLabel} | {state}";
     }
 
