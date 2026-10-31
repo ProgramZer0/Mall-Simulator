@@ -357,6 +357,8 @@ MonoBehaviour:
   mouseSensitivity: 5
   minPitch: -80
   maxPitch: 80
+  spawnAtOwnStore: 1
+  storeWaitTimeout: 10
   cameraRoot: {fileID: 4351029141827459660}
 --- !u!114 &1950175109902404849
 MonoBehaviour:
@@ -498,10 +500,10 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 0
   hideOutsideStore: 1
-  outsideMargin: 2
+  outsideMargin: 0.6
   editRendererIndex: 1
   solidBackground: 1
-  backgroundColor: {r: 0.08, g: 0.09, b: 0.11, a: 1}
+  backgroundColor: {r: 0, g: 0, b: 0, a: 1}
   cutaway: 1
   cutOffset: 0
   grabRadiusPixels: 14

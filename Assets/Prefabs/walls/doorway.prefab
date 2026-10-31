@@ -130,6 +130,7 @@ MonoBehaviour:
   displayName: Doorway
   isEntrance: 1
   price: 0
+  door: {fileID: 8320954584137097773}
 --- !u!1 &8320954584137097773
 GameObject:
   m_ObjectHideFlags: 0
