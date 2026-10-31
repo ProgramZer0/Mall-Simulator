@@ -2257,9 +2257,8 @@ MonoBehaviour:
   - {fileID: 1392447296}
   autoFindFrontWalls: 0
   frontWallReach: 1
-  docks:
-  - {fileID: 835049722}
-  - {fileID: 1220173182}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -2912,6 +2911,7 @@ Transform:
   - {fileID: 905347079}
   - {fileID: 45753414}
   - {fileID: 1611391606}
+  - {fileID: 1013455993}
   m_Father: {fileID: 1583798796}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &270896797
@@ -2949,8 +2949,8 @@ MonoBehaviour:
   - {fileID: 2021201725}
   autoFindFrontWalls: 0
   frontWallReach: 1
-  docks:
-  - {fileID: 835049722}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -3430,8 +3430,8 @@ MonoBehaviour:
   - {fileID: 1726030371}
   autoFindFrontWalls: 0
   frontWallReach: 1
-  docks:
-  - {fileID: 749563857}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -3834,8 +3834,8 @@ MonoBehaviour:
   - {fileID: 1975515535}
   autoFindFrontWalls: 0
   frontWallReach: 1
-  docks:
-  - {fileID: 835049722}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -4382,9 +4382,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EconomyManager
   ShowTopMostFoldoutHeaderGroup: 1
   reservationSeconds: 600
-  maxOrderQuantity: 100
+  maxItemsPerOrder: 100
   devHotkeys: 1
   devOrderItemId: 1
+  devOrderQuantity: 1
   devDeliverySeconds: 10
   devMoneyAmount: 1000
   showDebugHud: 1
@@ -4591,8 +4592,8 @@ MonoBehaviour:
   - {fileID: 1394374745}
   autoFindFrontWalls: 0
   frontWallReach: 1
-  docks:
-  - {fileID: 749563857}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -4900,8 +4901,8 @@ MonoBehaviour:
   - {fileID: 1808849674}
   autoFindFrontWalls: 0
   frontWallReach: 1
-  docks:
-  - {fileID: 1220173182}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -6307,8 +6308,6 @@ MonoBehaviour:
   areas:
   - {fileID: 0}
   - {fileID: 2051155481}
-  shipmentAreas: []
-  shipmentAreaRadius: 0.75
 --- !u!1001 &750075563
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -6866,6 +6865,7 @@ Transform:
   m_Children:
   - {fileID: 1524379435}
   - {fileID: 1951264907}
+  - {fileID: 1414821615}
   m_Father: {fileID: 1993411097}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &835049722
@@ -6884,8 +6884,6 @@ MonoBehaviour:
   areas:
   - {fileID: 1524379436}
   - {fileID: 1951264908}
-  shipmentAreas: []
-  shipmentAreaRadius: 0.75
 --- !u!1 &835612279
 GameObject:
   m_ObjectHideFlags: 0
@@ -8136,7 +8134,7 @@ Transform:
   m_GameObject: {fileID: 1013455992}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -61.07, y: -1.05, z: -78}
+  m_LocalPosition: {x: 0, y: 0, z: 21.800003}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -8144,7 +8142,7 @@ Transform:
   - {fileID: 375272726}
   - {fileID: 985615847}
   - {fileID: 1413278509}
-  m_Father: {fileID: 1583798796}
+  m_Father: {fileID: 270896796}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1013455994
 MonoBehaviour:
@@ -8176,8 +8174,8 @@ MonoBehaviour:
   - {fileID: 1461409802}
   autoFindFrontWalls: 0
   frontWallReach: 1
-  docks:
-  - {fileID: 835049722}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -9587,8 +9585,6 @@ MonoBehaviour:
   areas:
   - {fileID: 0}
   - {fileID: 807058341}
-  shipmentAreas: []
-  shipmentAreaRadius: 0.75
 --- !u!1001 &1232748343
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -9981,8 +9977,8 @@ MonoBehaviour:
   - {fileID: 1646047949}
   autoFindFrontWalls: 0
   frontWallReach: 1
-  docks:
-  - {fileID: 835049722}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -10179,8 +10175,8 @@ MonoBehaviour:
   - {fileID: 135561074}
   autoFindFrontWalls: 0
   frontWallReach: 1
-  docks:
-  - {fileID: 749563857}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -10686,8 +10682,8 @@ MonoBehaviour:
   - {fileID: 909041111}
   autoFindFrontWalls: 0
   frontWallReach: 1
-  docks:
-  - {fileID: 1619646153}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -11182,6 +11178,37 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8210e9a71076a7b43a579c5292f4edd9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WallModule
+--- !u!1 &1414821614
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1414821615}
+  m_Layer: 8
+  m_Name: ShipmentArea
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1414821615
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1414821614}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -23.56, y: 0, z: 47.94}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 835049721}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1415020423
 GameObject:
   m_ObjectHideFlags: 0
@@ -11258,9 +11285,8 @@ MonoBehaviour:
   - {fileID: 2092476681}
   autoFindFrontWalls: 0
   frontWallReach: 1
-  docks:
-  - {fileID: 1619646153}
-  - {fileID: 1220173182}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -11739,6 +11765,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 5976144729851372552, guid: d4d248d7e84344a46bbfb0b524251c0b, type: 3}
     price: 1
     deliverySeconds: 30
+    shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
   - id: 2
@@ -11747,6 +11774,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 1596268347389550911, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
     price: 100
     deliverySeconds: 200
+    shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
   - id: 3
@@ -11755,6 +11783,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 1596268347389550911, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
     price: 150
     deliverySeconds: 100
+    shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
   - id: 4
@@ -11763,10 +11792,12 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 5349476074656871480, guid: e258abd6dede2c248a951fb62a325c33, type: 3}
     price: 800
     deliverySeconds: 500
+    shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
   defaultPickupClip: {fileID: 8300000, guid: b0b6305f02b720e4490beeeb41c410d6, type: 3}
   defaultPlaceClip: {fileID: 8300000, guid: 382cd51e5d8f86d42b7132faadb6ac88, type: 3}
+  defaultShipmentPrefab: {fileID: 5976144729851372552, guid: 771bc865ce9ffeb42930bb74e38e4209, type: 3}
 --- !u!4 &1459986144
 Transform:
   m_ObjectHideFlags: 0
@@ -11998,9 +12029,8 @@ MonoBehaviour:
   - {fileID: 1935503141}
   autoFindFrontWalls: 0
   frontWallReach: 1
-  docks:
-  - {fileID: 749563857}
-  - {fileID: 835049722}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -13325,7 +13355,6 @@ Transform:
   m_Children:
   - {fileID: 1282217223}
   - {fileID: 391662816}
-  - {fileID: 1013455993}
   - {fileID: 270896796}
   - {fileID: 1462705344}
   - {fileID: 1320047867}
@@ -13797,8 +13826,6 @@ MonoBehaviour:
   areas:
   - {fileID: 86745700}
   - {fileID: 1711671281}
-  shipmentAreas: []
-  shipmentAreaRadius: 0.75
 --- !u!114 &1622666806 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 1147893365021119914, guid: d8e3da20ef15e38468563fe0ddff63a5, type: 3}
@@ -14509,8 +14536,8 @@ MonoBehaviour:
   - {fileID: 436065565000100016}
   autoFindFrontWalls: 0
   frontWallReach: 1
-  docks:
-  - {fileID: 1619646153}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -16216,8 +16243,8 @@ MonoBehaviour:
   - {fileID: 1125725284}
   autoFindFrontWalls: 0
   frontWallReach: 1
-  docks:
-  - {fileID: 1619646153}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
