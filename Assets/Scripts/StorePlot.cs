@@ -40,6 +40,10 @@ public class StorePlot : NetworkBehaviour
     [SerializeField] private int price = 0;
     [Tooltip("Handed out automatically to players who join without a store.")]
     [SerializeField] private bool isStarterPlot = true;
+    [Tooltip("Money a team starts the game with when this is the starter store it's given. " +
+             "Lets you balance starter stores against each other (e.g. a worse spot = more cash). " +
+             "Used once the economy exists.")]
+    [SerializeField] private int startingMoney = 5000;
 
     [Header("Space")]
     [SerializeField] private BoxCollider[] baseAreas;
@@ -97,6 +101,7 @@ public class StorePlot : NetworkBehaviour
     public string DisplayName => displayName;
     public int Price => price;
     public bool IsStarterPlot => isStarterPlot;
+    public int StartingMoney => startingMoney;
     public ulong OwnerTeamId => ownerTeamId.Value;
     public bool HasOwner => ownerTeamId.Value != NoOwner;
     public int SegmentCount => segments?.Length ?? 0;
@@ -475,7 +480,7 @@ public class StorePlot : NetworkBehaviour
     private string BuildStatus()
     {
         if (!Application.isPlaying || !IsSpawned)
-            return isStarterPlot ? "Starter store (given to a joining player)" : $"Buy-only, price {price}";
+            return isStarterPlot ? $"Starter store, start money {startingMoney}" : $"Buy-only, price {price}";
 
         string state = !HasOwner ? $"FOR SALE ({price})" : IsRenovating ? "Renovating" : "Open";
         return $"Owner: {OwnerLabel} | {state}";

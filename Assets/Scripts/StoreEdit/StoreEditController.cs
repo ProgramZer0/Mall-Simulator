@@ -7,12 +7,13 @@ using UnityEngine;
 ///
 /// 0          enter edit mode (standing in your own store) / save and leave
 /// WASD / QE  pan / turn the top-down camera, mouse wheel zooms
-/// Click      select an item in your store
+/// RMB drag   rotate (orbit) the camera, or pan it (Right Drag setting); RMB click deselects
+/// Click      select an item in your store; click and drag an item to slide it across the floor
 /// X          cycle Move (arrows) -> Rotate (rings) -> no handles
 /// Drag       an arrow to slide along that axis (stops on contact), a ring to rotate
 ///            (hold Ctrl to snap to 15 degrees)
 /// G          toggle gravity for the selected item (everything hangs in place otherwise)
-/// Esc / RMB  deselect
+/// Esc        cancel the current drag / deselect
 ///
 /// Networking: entering edit mode, the host takes the store's items out of the world and
 /// sends this player a list of them; this player edits local copies, so nothing goes over
@@ -32,8 +33,19 @@ public class StoreEditController : NetworkBehaviour
     [SerializeField] private KeyCode toolKey = KeyCode.X;
     [SerializeField] private KeyCode gravityKey = KeyCode.G;
 
+    private enum RightDrag { Orbit, Pan }
+
     [Header("Camera")]
+    [Tooltip("Starting down-angle of the camera, in degrees.")]
     [SerializeField] private float pitch = 55f;
+    [Tooltip("What holding the right mouse button and moving the mouse does.")]
+    [SerializeField] private RightDrag rightDrag = RightDrag.Orbit;
+    [Tooltip("Degrees the camera turns per pixel of right-drag (Orbit).")]
+    [SerializeField] private float orbitSensitivity = 0.25f;
+    [SerializeField] private float minPitch = 25f;
+    [SerializeField] private float maxPitch = 89f;
+    [Tooltip("Pixels the mouse must move before a press counts as a drag rather than a click.")]
+    [SerializeField] private float clickDragThreshold = 5f;
     [SerializeField] private float startDistance = 12f;
     [SerializeField] private float minDistance = 4f;
     [SerializeField] private float maxDistance = 30f;
@@ -78,7 +90,16 @@ public class StoreEditController : NetworkBehaviour
     // Camera
     private Vector3 pivot;
     private float yaw;
+    private float camPitch;
     private float distance;
+    private bool rmbHeld, rmbDragging, rmbClicked;
+    private Vector2 rmbPressPos, rmbLast;
+
+    // Click-and-drag an item across the floor
+    private bool freeDragPending, freeDragging;
+    private Vector2 lmbPressPos;
+    private Plane freePlane;
+    private Vector3 freeOffset;
 
     // Local copies of the store's items (index = position in the host's session list)
     private readonly List<EditLocalItem> localItems = new();
@@ -227,7 +248,9 @@ public class StoreEditController : NetworkBehaviour
         Bounds b = plot.GetWorldBounds();
         pivot = new Vector3(b.center.x, b.min.y, b.center.z);
         yaw = transform.eulerAngles.y;
+        camPitch = Mathf.Clamp(pitch, minPitch, maxPitch);
         distance = Mathf.Clamp(startDistance, minDistance, maxDistance);
+        rmbHeld = rmbDragging = rmbClicked = false;
         ApplyCamera();
 
         if (playerCam != null) playerCam.enabled = false;
@@ -295,6 +318,44 @@ public class StoreEditController : NetworkBehaviour
         float scroll = Input.mouseScrollDelta.y;
         if (scroll != 0f) distance = Mathf.Clamp(distance - scroll * zoomStep, minDistance, maxDistance);
 
+        // Right mouse: drag moves the camera, a plain click (no drag) deselects.
+        Vector2 mouse = Input.mousePosition;
+        rmbClicked = false;
+        if (Input.GetMouseButtonDown(1))
+        {
+            rmbHeld = true;
+            rmbDragging = false;
+            rmbPressPos = rmbLast = mouse;
+        }
+        if (rmbHeld && Input.GetMouseButton(1))
+        {
+            if (!rmbDragging && (mouse - rmbPressPos).sqrMagnitude > clickDragThreshold * clickDragThreshold)
+                rmbDragging = true;
+
+            if (rmbDragging)
+            {
+                Vector2 d = mouse - rmbLast;
+                if (rightDrag == RightDrag.Orbit)
+                {
+                    yaw += d.x * orbitSensitivity;
+                    camPitch = Mathf.Clamp(camPitch - d.y * orbitSensitivity, minPitch, maxPitch);
+                }
+                else
+                {
+                    // Grab-the-floor panning: the store moves with the mouse.
+                    float metersPerPixel = 2f * distance * Mathf.Tan(editCam.fieldOfView * 0.5f * Mathf.Deg2Rad)
+                                           / Mathf.Max(1, Screen.height);
+                    pivot -= (right * d.x + fwd * d.y) * metersPerPixel;
+                }
+            }
+            rmbLast = mouse;
+        }
+        if (rmbHeld && Input.GetMouseButtonUp(1))
+        {
+            rmbClicked = !rmbDragging;
+            rmbHeld = rmbDragging = false;
+        }
+
         Bounds b = editPlot.GetWorldBounds();
         pivot.x = Mathf.Clamp(pivot.x, b.min.x - panMargin, b.max.x + panMargin);
         pivot.z = Mathf.Clamp(pivot.z, b.min.z - panMargin, b.max.z + panMargin);
@@ -304,7 +365,7 @@ public class StoreEditController : NetworkBehaviour
 
     private void ApplyCamera()
     {
-        Quaternion rot = Quaternion.Euler(pitch, yaw, 0f);
+        Quaternion rot = Quaternion.Euler(camPitch, yaw, 0f);
         editCam.transform.SetPositionAndRotation(pivot - rot * Vector3.forward * distance, rot);
         ApplyCutaway();
     }
@@ -364,10 +425,17 @@ public class StoreEditController : NetworkBehaviour
         if (dragHandle != StoreEditHandles.None)
         {
             if (selected == null) dragHandle = StoreEditHandles.None;
-            else if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1)) CancelDrag();
+            else if (Input.GetKeyDown(KeyCode.Escape)) CancelDrag();
             else if (Input.GetMouseButton(0)) ContinueDrag(ray, mouse);
             else EndDrag();
 
+            lastMouse = mouse;
+            return;
+        }
+
+        if (freeDragPending || freeDragging)
+        {
+            UpdateFreeDrag(ray, mouse);
             lastMouse = mouse;
             return;
         }
@@ -380,7 +448,7 @@ public class StoreEditController : NetworkBehaviour
             if (Input.GetKeyDown(gravityKey))
                 selected.SetGravity(!selected.Gravity);
 
-            if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+            if (Input.GetKeyDown(KeyCode.Escape) || rmbClicked)
                 Deselect();
         }
 
@@ -391,13 +459,13 @@ public class StoreEditController : NetworkBehaviour
             if (hoverHandle != StoreEditHandles.None)
                 BeginDrag(hoverHandle, ray, mouse);
             else if (PickHandle(mouse, grabRadiusPixels * nearMissFactor) == StoreEditHandles.None)
-                TrySelect(ray); // a near-miss on a handle keeps the selection instead
+                TrySelect(ray, mouse); // a near-miss on a handle keeps the selection instead
         }
 
         lastMouse = mouse;
     }
 
-    private void TrySelect(Ray ray)
+    private void TrySelect(Ray ray, Vector2 mouse)
     {
         int mask = interact != null ? interact.PickupMask.value : Physics.DefaultRaycastLayers;
         if (Physics.Raycast(ray, out RaycastHit hit, 500f, mask, QueryTriggerInteraction.Ignore))
@@ -406,10 +474,85 @@ public class StoreEditController : NetworkBehaviour
             if (item != null)
             {
                 if (item != selected) Select(item);
+
+                // Get ready to slide it if the mouse moves before the button is released.
+                freeDragPending = true;
+                lmbPressPos = mouse;
+                freePlane = new Plane(Vector3.up, hit.point);
+                freeOffset = item.transform.position - hit.point;
+                freeOffset.y = 0f;
                 return;
             }
         }
         Deselect();
+    }
+
+    /* ========================= CLICK-AND-DRAG ========================= */
+
+    private void UpdateFreeDrag(Ray ray, Vector2 mouse)
+    {
+        if (selected == null)
+        {
+            freeDragPending = freeDragging = false;
+            return;
+        }
+
+        if (freeDragPending)
+        {
+            if (!Input.GetMouseButton(0)) { freeDragPending = false; return; } // just a click
+            if ((mouse - lmbPressPos).sqrMagnitude < clickDragThreshold * clickDragThreshold) return;
+
+            freeDragPending = false;
+            freeDragging = true;
+            dragStartPos = selected.transform.position;
+            dragStartRot = selected.transform.rotation;
+            selected.SetDragging(true);
+        }
+
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            freeDragging = false;
+            selected.SetPose(dragStartPos, dragStartRot);
+            selected.SetDragging(false);
+            return;
+        }
+        if (!Input.GetMouseButton(0))
+        {
+            freeDragging = false;
+            selected.SetDragging(false);
+            return;
+        }
+
+        if (!freePlane.Raycast(ray, out float enter)) return;
+
+        Vector3 pos = selected.transform.position;
+        Vector3 target = ray.GetPoint(enter) + freeOffset;
+        target.y = pos.y;
+
+        // Slide toward the mouse; on contact, keep sliding along whichever side is free.
+        Vector3 reached = Step(pos, target - pos);
+        Vector3 rest = target - reached;
+        if (rest.sqrMagnitude > 1e-6f)
+        {
+            reached = Step(reached, new Vector3(rest.x, 0f, 0f));
+            reached = Step(reached, new Vector3(0f, 0f, rest.z));
+        }
+
+        if ((reached - pos).sqrMagnitude > 1e-10f)
+            selected.SetPose(reached, selected.transform.rotation);
+    }
+
+    /// <summary>Move the selected item by delta, stopping at the first thing it touches.</summary>
+    private Vector3 Step(Vector3 from, Vector3 delta)
+    {
+        float dist = delta.magnitude;
+        if (dist < 1e-5f) return from;
+
+        Quaternion rot = selected.transform.rotation;
+        Vector3 dir = delta / dist;
+        float allowed = PlacementCheck.CastDistance(selected.Def, from, rot, dir, dist, EditMask(), selected.transform);
+        Vector3 next = from + dir * allowed;
+        return editPlot.ContainsItem(selected.Def, next, rot) ? next : from;
     }
 
     private void Select(EditLocalItem item)
@@ -422,6 +565,8 @@ public class StoreEditController : NetworkBehaviour
     private void Deselect()
     {
         if (dragHandle != StoreEditHandles.None) CancelDrag();
+        if (freeDragging && selected != null) selected.SetDragging(false);
+        freeDragPending = freeDragging = false;
         hoverHandle = StoreEditHandles.None;
         selected = null;
         tool = Tool.None;
@@ -617,11 +762,12 @@ public class StoreEditController : NetworkBehaviour
         string gravity = selected == null ? "-" : selected.Gravity ? "ON" : "off";
         string itemName = selected == null ? "nothing (click an item)" : selected.Def.displayName;
 
-        GUI.Box(new Rect(10, 10, 420, 96), GUIContent.none);
+        GUI.Box(new Rect(10, 10, 420, 116), GUIContent.none);
         GUI.Label(new Rect(20, 16, 400, 20), finishing ? "STORE EDIT MODE - saving..." : "STORE EDIT MODE   (0 = save & exit)");
         GUI.Label(new Rect(20, 36, 400, 20), $"Selected: {itemName}");
         GUI.Label(new Rect(20, 56, 400, 20), $"Tool: {toolName}     Gravity: {gravity}");
         GUI.Label(new Rect(20, 76, 400, 20), "X: move > rotate > hide   G: gravity   Ctrl: snap   Esc: deselect");
+        GUI.Label(new Rect(20, 96, 400, 20), "Drag item: slide   RMB drag: camera   RMB click: deselect");
     }
 
     /* ========================= HELPERS ========================= */

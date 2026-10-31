@@ -287,6 +287,7 @@ public class MallManager : NetworkBehaviour
             if (plot.IsStarterPlot && !plot.HasOwner)
             {
                 plot.ServerSetOwner(team);
+                // TODO economy: give the team plot.StartingMoney here (only for its first store).
                 return;
             }
         }
