@@ -365,6 +365,28 @@ public class StorePlot : NetworkBehaviour
     /// </summary>
     public float GetEditCutHeight() => overrideCutHeight ? cutHeight : GetWorldBounds().max.y;
 
+    /// <summary>
+    /// Adds a world-space box for each piece of this store's space (base areas plus purchased
+    /// segments) to the list. Used by edit mode to hide everything that isn't in the store.
+    /// </summary>
+    public void GetAreaBounds(List<Bounds> into)
+    {
+        foreach (var box in baseAreas)
+            if (box != null) into.Add(BoxWorldBounds(box));
+        for (int i = 0; i < SegmentCount; i++)
+            if (IsSegmentPurchased(i) && segments[i].area != null) into.Add(BoxWorldBounds(segments[i].area));
+    }
+
+    private static Bounds BoxWorldBounds(BoxCollider box)
+    {
+        Vector3 c = box.center, e = box.size * 0.5f;
+        var b = new Bounds(box.transform.TransformPoint(c), Vector3.zero);
+        for (int i = 0; i < 8; i++)
+            b.Encapsulate(box.transform.TransformPoint(c + new Vector3(
+                (i & 1) == 0 ? -e.x : e.x, (i & 2) == 0 ? -e.y : e.y, (i & 4) == 0 ? -e.z : e.z)));
+        return b;
+    }
+
     /// <summary>World-space box around the base space plus every purchased segment.</summary>
     public Bounds GetWorldBounds()
     {
