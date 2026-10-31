@@ -2257,6 +2257,7 @@ MonoBehaviour:
   - {fileID: 1392447296}
   autoFindFrontWalls: 0
   frontWallReach: 1
+  dock: {fileID: 835049722}
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -2946,6 +2947,7 @@ MonoBehaviour:
   - {fileID: 2021201725}
   autoFindFrontWalls: 0
   frontWallReach: 1
+  dock: {fileID: 835049722}
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -3447,6 +3449,7 @@ MonoBehaviour:
   - {fileID: 1726030371}
   autoFindFrontWalls: 0
   frontWallReach: 1
+  dock: {fileID: 0}
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -3849,6 +3852,7 @@ MonoBehaviour:
   - {fileID: 1975515535}
   autoFindFrontWalls: 0
   frontWallReach: 1
+  dock: {fileID: 835049722}
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -4605,6 +4609,7 @@ MonoBehaviour:
   - {fileID: 1394374745}
   autoFindFrontWalls: 0
   frontWallReach: 1
+  dock: {fileID: 0}
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -4912,6 +4917,7 @@ MonoBehaviour:
   - {fileID: 1808849674}
   autoFindFrontWalls: 0
   frontWallReach: 1
+  dock: {fileID: 0}
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -6317,6 +6323,8 @@ MonoBehaviour:
   areas:
   - {fileID: 0}
   - {fileID: 2051155481}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
 --- !u!1001 &750075563
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -6892,6 +6900,8 @@ MonoBehaviour:
   areas:
   - {fileID: 1524379436}
   - {fileID: 1951264908}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
 --- !u!1 &835612279
 GameObject:
   m_ObjectHideFlags: 0
@@ -8204,6 +8214,7 @@ MonoBehaviour:
   - {fileID: 1461409802}
   autoFindFrontWalls: 0
   frontWallReach: 1
+  dock: {fileID: 835049722}
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -9657,6 +9668,8 @@ MonoBehaviour:
   areas:
   - {fileID: 0}
   - {fileID: 807058341}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
 --- !u!1001 &1232748343
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -10049,6 +10062,7 @@ MonoBehaviour:
   - {fileID: 1646047949}
   autoFindFrontWalls: 0
   frontWallReach: 1
+  dock: {fileID: 835049722}
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -10267,6 +10281,7 @@ MonoBehaviour:
   - {fileID: 135561074}
   autoFindFrontWalls: 0
   frontWallReach: 1
+  dock: {fileID: 0}
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -10772,6 +10787,7 @@ MonoBehaviour:
   - {fileID: 909041111}
   autoFindFrontWalls: 0
   frontWallReach: 1
+  dock: {fileID: 0}
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -11342,6 +11358,7 @@ MonoBehaviour:
   - {fileID: 2092476681}
   autoFindFrontWalls: 0
   frontWallReach: 1
+  dock: {fileID: 0}
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -11818,24 +11835,32 @@ MonoBehaviour:
     displayName: Test Cube
     handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
     worldNetworkPrefab: {fileID: 5976144729851372552, guid: d4d248d7e84344a46bbfb0b524251c0b, type: 3}
+    price: 10
+    deliverySeconds: 30
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
   - id: 2
     displayName: BookShelf
     handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
     worldNetworkPrefab: {fileID: 1596268347389550911, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+    price: 10
+    deliverySeconds: 30
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
   - id: 3
     displayName: BookShelf
     handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
     worldNetworkPrefab: {fileID: 1596268347389550911, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+    price: 10
+    deliverySeconds: 30
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
   - id: 4
     displayName: Washing MAchine
     handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
     worldNetworkPrefab: {fileID: 5349476074656871480, guid: e258abd6dede2c248a951fb62a325c33, type: 3}
+    price: 10
+    deliverySeconds: 30
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
   defaultPickupClip: {fileID: 8300000, guid: b0b6305f02b720e4490beeeb41c410d6, type: 3}
@@ -12071,6 +12096,7 @@ MonoBehaviour:
   - {fileID: 1935503141}
   autoFindFrontWalls: 0
   frontWallReach: 1
+  dock: {fileID: 0}
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -13867,6 +13893,8 @@ MonoBehaviour:
   areas:
   - {fileID: 86745700}
   - {fileID: 1711671281}
+  shipmentAreas: []
+  shipmentAreaRadius: 0.75
 --- !u!114 &1622666806 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 1147893365021119914, guid: d8e3da20ef15e38468563fe0ddff63a5, type: 3}
@@ -14577,6 +14605,7 @@ MonoBehaviour:
   - {fileID: 436065565000100016}
   autoFindFrontWalls: 0
   frontWallReach: 1
+  dock: {fileID: 0}
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
@@ -16304,6 +16333,7 @@ MonoBehaviour:
   - {fileID: 1125725284}
   autoFindFrontWalls: 0
   frontWallReach: 1
+  dock: {fileID: 0}
   doors: []
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
