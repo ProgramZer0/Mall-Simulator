@@ -432,6 +432,8 @@ public class PlayerInteractInput : NetworkBehaviour
         // Same store rule the server applies, so the ghost goes red before you even click.
         if (!MallManager.CanPickupOrPlace(OwnerClientId, transform.position, ghost.transform.position))
             return false;
+        if (MallManager.IsOthersShipmentArea(OwnerClientId, ghost.transform.position))
+            return false;
 
         return FitsAt(inventory.HeldItemId.Value, ghost.transform.position, ghost.transform.rotation);
     }

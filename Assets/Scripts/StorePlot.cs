@@ -60,10 +60,12 @@ public class StorePlot : NetworkBehaviour
     [SerializeField] private float frontWallReach = 1f;
 
     [Header("Deliveries")]
-    [Tooltip("Loading docks this store's orders can arrive at. Each delivery goes to the first one " +
-             "(in this order) with a free shipment spot. Several stores can share a dock.")]
-    [SerializeField] private LoadingDockZone[] docks;
-    // Older single-dock setting; still honoured (added to the list) so nothing set up is lost.
+    [Tooltip("Spots where this store's deliveries appear (empty objects; their rotation sets the box's " +
+             "facing). One box per spot. Put them where the team can pick up: inside a loading dock " +
+             "zone or the store itself. Other teams can't place things on them.")]
+    [SerializeField] private Transform[] shipmentAreas;
+    [Tooltip("A spot counts as taken while any item or box is within this many meters of it.")]
+    [SerializeField] private float shipmentAreaRadius = 0.75f;
 
     [Header("Doors")]
     [Tooltip("Door objects for this store (e.g. the door inside each doorway). Shown while the store " +
@@ -137,14 +139,53 @@ public class StorePlot : NetworkBehaviour
     public int Price => price;
     public bool IsStarterPlot => isStarterPlot;
     public int StartingMoney => startingMoney;
-    /// <summary>This store's docks in preference order (the Docks list, plus the old single Dock if set).</summary>
-    public List<LoadingDockZone> GetDocks()
+    /* ========================= SHIPMENT AREAS ========================= */
+
+    /// <summary>How many shipment spots this store has.</summary>
+    public int ShipmentAreaCount
     {
-        var list = new List<LoadingDockZone>();
-        if (docks != null)
-            foreach (var d in docks)
-                if (d != null && !list.Contains(d)) list.Add(d);
-        return list;
+        get
+        {
+            int n = 0;
+            if (shipmentAreas != null)
+                foreach (var a in shipmentAreas) if (a != null) n++;
+            return n;
+        }
+    }
+
+    /// <summary>Server: fills the list with this store's shipment spots that have nothing on them.</summary>
+    public void GetFreeShipmentAreas(List<Transform> into)
+    {
+        into.Clear();
+        if (shipmentAreas == null) return;
+        foreach (var a in shipmentAreas)
+            if (a != null && !IsAreaOccupied(a.position)) into.Add(a);
+    }
+
+    /// <summary>Is this position on one of the store's shipment spots?</summary>
+    public bool IsOnShipmentArea(Vector3 position)
+    {
+        if (shipmentAreas == null) return false;
+        float r2 = shipmentAreaRadius * shipmentAreaRadius;
+        foreach (var a in shipmentAreas)
+        {
+            if (a == null) continue;
+            Vector3 d = position - a.position;
+            if (d.x * d.x + d.z * d.z <= r2 && Mathf.Abs(d.y) < 2f) return true;
+        }
+        return false;
+    }
+
+    private bool IsAreaOccupied(Vector3 spot)
+    {
+        float r2 = shipmentAreaRadius * shipmentAreaRadius;
+        foreach (var item in ItemPickupNet.All)
+        {
+            if (item == null) continue;
+            Vector3 d = item.transform.position - spot;
+            if (d.x * d.x + d.z * d.z <= r2 && Mathf.Abs(d.y) < 2f) return true;
+        }
+        return false;
     }
     public ulong OwnerTeamId => ownerTeamId.Value;
     public bool HasOwner => ownerTeamId.Value != NoOwner;
@@ -682,6 +723,7 @@ public class StorePlot : NetworkBehaviour
         foreach (var item in ItemPickupNet.All.ToArray())
         {
             if (item == null || !item.IsSpawned || !Contains(item.transform.position)) continue;
+            if (item.TryGetComponent<ShipmentPackage>(out _)) continue; // boxes stay where they are
 
             // Only take items we can respawn later; anything else is left untouched.
             if (catalog == null || !catalog.TryGet(item.itemId, out var def) || def.worldNetworkPrefab == null)
@@ -1025,11 +1067,27 @@ public class StorePlot : NetworkBehaviour
 
     private void OnDrawGizmosSelected()
     {
-        // Lines to the docks this store's deliveries can go to.
-        Gizmos.color = new Color(0.7f, 0.4f, 1f, 0.9f);
-        Vector3 storeCenter = GetWorldBounds().center;
-        foreach (var d in GetDocks())
-            Gizmos.DrawLine(storeCenter, d.transform.position);
+        // Shipment spots: a ring of the free-check radius, an arrow for facing, and a line from the store.
+        if (shipmentAreas != null)
+        {
+            Vector3 storeCenter = GetWorldBounds().center;
+            foreach (var a in shipmentAreas)
+            {
+                if (a == null) continue;
+                Vector3 p = a.position;
+                Gizmos.color = new Color(1f, 0.6f, 0.9f, 0.9f);
+                const int seg = 24;
+                for (int i = 0; i < seg; i++)
+                {
+                    float t0 = i * Mathf.PI * 2f / seg, t1 = (i + 1) * Mathf.PI * 2f / seg;
+                    Gizmos.DrawLine(p + new Vector3(Mathf.Cos(t0), 0f, Mathf.Sin(t0)) * shipmentAreaRadius,
+                                    p + new Vector3(Mathf.Cos(t1), 0f, Mathf.Sin(t1)) * shipmentAreaRadius);
+                }
+                Gizmos.DrawLine(p, p + a.forward * shipmentAreaRadius);
+                Gizmos.color = new Color(1f, 0.6f, 0.9f, 0.35f);
+                Gizmos.DrawLine(storeCenter, p);
+            }
+        }
 
         // Outline the wall sections this store treats as its storefront (numbered like in edit mode).
         var found = FindFrontModules();
