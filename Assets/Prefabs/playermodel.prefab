@@ -277,7 +277,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 3197465306
+  GlobalObjectIdHash: 2510073993
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -497,6 +497,11 @@ MonoBehaviour:
   hiddenInEditView:
     serializedVersion: 2
     m_Bits: 0
+  hideOutsideStore: 1
+  outsideMargin: 0.3
+  editRendererIndex: 1
+  solidBackground: 1
+  backgroundColor: {r: 0.08, g: 0.09, b: 0.11, a: 1}
   cutaway: 1
   cutOffset: 0
   grabRadiusPixels: 14
