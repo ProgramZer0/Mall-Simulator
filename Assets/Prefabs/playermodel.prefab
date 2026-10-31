@@ -277,7 +277,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 2510073993
+  GlobalObjectIdHash: 3197465306
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -482,6 +482,11 @@ MonoBehaviour:
   toolKey: 120
   gravityKey: 103
   pitch: 55
+  rightDrag: 0
+  orbitSensitivity: 0.25
+  minPitch: 25
+  maxPitch: 89
+  clickDragThreshold: 5
   startDistance: 12
   minDistance: 4
   maxDistance: 30
