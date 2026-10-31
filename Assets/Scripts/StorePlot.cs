@@ -64,7 +64,6 @@ public class StorePlot : NetworkBehaviour
              "(in this order) with a free shipment spot. Several stores can share a dock.")]
     [SerializeField] private LoadingDockZone[] docks;
     // Older single-dock setting; still honoured (added to the list) so nothing set up is lost.
-    [SerializeField, HideInInspector] private LoadingDockZone dock;
 
     [Header("Doors")]
     [Tooltip("Door objects for this store (e.g. the door inside each doorway). Shown while the store " +
@@ -145,7 +144,6 @@ public class StorePlot : NetworkBehaviour
         if (docks != null)
             foreach (var d in docks)
                 if (d != null && !list.Contains(d)) list.Add(d);
-        if (dock != null && !list.Contains(dock)) list.Add(dock);
         return list;
     }
     public ulong OwnerTeamId => ownerTeamId.Value;
