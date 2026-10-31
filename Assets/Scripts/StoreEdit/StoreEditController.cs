@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
 /// <summary>
 /// Store edit mode (GDD 11b). Goes on the player prefab next to PlayerController.
@@ -67,6 +68,10 @@ public class StoreEditController : NetworkBehaviour
     [SerializeField] private bool hideOutsideStore = true;
     [Tooltip("Things within this many meters of your store's space still show (e.g. its walls).")]
     [SerializeField] private float outsideMargin = 0.3f;
+    [Tooltip("Index (in the URP asset's Renderer List) of the renderer that has the " +
+             "'MallSim/Edit Plot Clip' full-screen pass. It cuts walls and floors exactly at the " +
+             "store's edge. -1 = use the default renderer (no exact cut, whole objects only).")]
+    [SerializeField] private int editRendererIndex = -1;
     [Tooltip("Fill the hidden area with a plain colour instead of the sky.")]
     [SerializeField] private bool solidBackground = true;
     [SerializeField] private Color backgroundColor = new(0.08f, 0.09f, 0.11f, 1f);
@@ -263,6 +268,7 @@ public class StoreEditController : NetworkBehaviour
         isolation.Plot = plot;
         isolation.Margin = outsideMargin;
         isolation.AlwaysShow = new[] { handles.transform };
+        isolation.Background = backgroundColor;
         isolation.enabled = hideOutsideStore;
         if (hideOutsideStore && solidBackground)
         {
@@ -322,6 +328,17 @@ public class StoreEditController : NetworkBehaviour
 
         isolation = go.AddComponent<StoreEditIsolation>();
         isolation.enabled = false;
+
+        // Match the player camera's URP settings (post-processing, anti-aliasing), and switch
+        // to the edit renderer that holds the exact-edge cut if one is set.
+        var editData = editCam.GetUniversalAdditionalCameraData();
+        if (playerCam != null && playerCam.TryGetComponent<UniversalAdditionalCameraData>(out var playerData))
+        {
+            editData.renderPostProcessing = playerData.renderPostProcessing;
+            editData.antialiasing = playerData.antialiasing;
+            editData.antialiasingQuality = playerData.antialiasingQuality;
+        }
+        if (editRendererIndex >= 0) editData.SetRenderer(editRendererIndex);
     }
 
     private void ClearLocalItems()

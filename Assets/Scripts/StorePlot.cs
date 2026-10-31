@@ -377,6 +377,15 @@ public class StorePlot : NetworkBehaviour
             if (IsSegmentPurchased(i) && segments[i].area != null) into.Add(BoxWorldBounds(segments[i].area));
     }
 
+    /// <summary>Adds the store's space boxes (base areas plus purchased segments) to the list.</summary>
+    public void GetAreaBoxes(List<BoxCollider> into)
+    {
+        foreach (var box in baseAreas)
+            if (box != null) into.Add(box);
+        for (int i = 0; i < SegmentCount; i++)
+            if (IsSegmentPurchased(i) && segments[i].area != null) into.Add(segments[i].area);
+    }
+
     private static Bounds BoxWorldBounds(BoxCollider box)
     {
         Vector3 c = box.center, e = box.size * 0.5f;
