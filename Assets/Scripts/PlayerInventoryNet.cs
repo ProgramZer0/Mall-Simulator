@@ -79,6 +79,9 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (!MallManager.CanPickupOrPlace(rpcParams.Receive.SenderClientId,
                 actor.transform.position, pickup.transform.position)) return;
 
+        // Deliveries are held for the team that ordered them for a while.
+        if (pickup.IsReservedAgainst(MallManager.GetTeamOf(rpcParams.Receive.SenderClientId))) return;
+
         if (HeldItemId.Value != 0) return;
 
         int itemId = pickup.itemId;

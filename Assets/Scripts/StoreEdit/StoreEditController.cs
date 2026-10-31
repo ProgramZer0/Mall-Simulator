@@ -983,8 +983,14 @@ public class StoreEditController : NetworkBehaviour
         var plot = MallManager.Instance.GetPlotEditedBy(OwnerClientId);
         if (plot == null) return;
 
-        // TODO economy: charge the module's Price.
-        plot.ServerTrySetFrontModule(slot, moduleId);
+        // Charge the module's price only if the swap actually happens.
+        var eco = EconomyManager.Instance;
+        ulong team = MallManager.GetTeamOf(OwnerClientId);
+        int price = FrontWallCatalog.TryGet(moduleId, out var module) ? module.Price : 0;
+        if (eco != null && eco.IsSpawned && !eco.ServerCanAfford(team, price)) return;
+
+        if (plot.ServerTrySetFrontModule(slot, moduleId) && eco != null && eco.IsSpawned)
+            eco.ServerTrySpend(team, price);
     }
 
     [Rpc(SendTo.Server)]

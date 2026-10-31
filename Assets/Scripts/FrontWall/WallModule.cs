@@ -15,7 +15,7 @@ public class WallModule : MonoBehaviour
     [SerializeField] private string displayName = "Wall";
     [Tooltip("Customers can walk through this one (doorways). A store always keeps at least one.")]
     [SerializeField] private bool isEntrance;
-    [Tooltip("Cost to put this module in. Not charged yet; used once the economy exists.")]
+    [Tooltip("Cost to put this module in (charged when swapped in during edit mode).")]
     [SerializeField] private int price;
     [Tooltip("Doorways: the door object inside this module. The store shows it while closed, for " +
              "sale or being renovated, and hides it while open.")]

@@ -37,6 +37,13 @@ public class ItemDef
     public GameObject handVisualPrefab;
     public NetworkObject worldNetworkPrefab;
 
+    [Header("Buying")]
+    [Tooltip("Cost of one when ordered.")]
+    public int price = 10;
+    [Tooltip("Default seconds from ordering until it arrives at the dock (used when the order " +
+             "doesn't give its own time).")]
+    public float deliverySeconds = 30f;
+
     [Header("Sounds (leave empty to use the catalog defaults)")]
     public AudioClip pickupClip;
     public AudioClip placeClip;
