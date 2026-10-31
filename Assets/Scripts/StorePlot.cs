@@ -50,6 +50,11 @@ public class StorePlot : NetworkBehaviour
     [Tooltip("Max 32. Order matters: the index is what gets synced.")]
     [SerializeField] private Segment[] segments;
 
+    [Header("Front Wall")]
+    [Tooltip("Wall modules (see WallModule) within this many meters of the store's space are its " +
+             "storefront and can be swapped in edit mode. Each module goes to the closest store.")]
+    [SerializeField] private float frontWallReach = 1f;
+
     [Header("Spawn")]
     [Tooltip("Where a player appears when this is their starter store. Leave empty to use a spot " +
              "just outside the storefront, worked out from the renovation (or for-sale) walls.")]
@@ -115,6 +120,10 @@ public class StorePlot : NetworkBehaviour
 
     private void Awake()
     {
+        // Which module each storefront section shows (0 = the one placed in the scene).
+        frontOverrides = new NetworkList<byte>(
+            null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
         // The colliders are just authoring shapes; Contains() reads them directly.
         foreach (var box in baseAreas)
             if (box != null) box.enabled = false;
@@ -141,6 +150,8 @@ public class StorePlot : NetworkBehaviour
         ownerTeamId.OnValueChanged += OnOwnerChanged;
         purchasedSegments.OnValueChanged += OnSegmentsChanged;
         editorClientId.OnValueChanged += OnEditorChanged;
+        frontOverrides.OnListChanged += OnFrontOverridesChanged;
+        ApplyFrontWall();
         ApplyWalls();
         ApplyRenovationWalls();
         ApplyOwnerVisuals();
@@ -155,6 +166,7 @@ public class StorePlot : NetworkBehaviour
         ownerTeamId.OnValueChanged -= OnOwnerChanged;
         purchasedSegments.OnValueChanged -= OnSegmentsChanged;
         editorClientId.OnValueChanged -= OnEditorChanged;
+        frontOverrides.OnListChanged -= OnFrontOverridesChanged;
         Changed -= OnAnyChange;
 
         if (MallManager.Instance != null) MallManager.Instance.Unregister(this);
@@ -244,6 +256,245 @@ public class StorePlot : NetworkBehaviour
         ServerSetEditor(NoOwner);
         ownerTeamId.Value = NoOwner;
         purchasedSegments.Value = 0;
+        frontOverrides.Clear(); // storefront goes back to how the scene placed it
+    }
+
+    /* ========================= FRONT WALL ========================= */
+
+    private class FrontSlot
+    {
+        public WallModule original;    // the module placed in the scene
+        public Vector3 anchor;         // middle of its mesh; replacements line up on this
+        public GameObject replacement; // spawned locally when another module is chosen
+        public int replacementId;
+    }
+
+    private List<FrontSlot> frontSlots;
+    private NetworkList<byte> frontOverrides;
+
+    /// <summary>Number of storefront sections this store has.</summary>
+    public int FrontSlotCount { get { EnsureFrontSlots(); return frontSlots.Count; } }
+
+    /// <summary>
+    /// Finds this store's storefront: every WallModule within Front Wall Reach of its space
+    /// (base areas and segments, bought or not) that isn't closer to another store. Sorted by
+    /// position, so every machine numbers the sections the same way.
+    /// </summary>
+    private void EnsureFrontSlots()
+    {
+        if (frontSlots != null) return;
+        frontSlots = new List<FrontSlot>();
+        foreach (var (module, center) in FindFrontModules())
+            frontSlots.Add(new FrontSlot { original = module, anchor = center });
+    }
+
+    private List<(WallModule module, Vector3 center)> FindFrontModules()
+    {
+        var allPlots = FindObjectsByType<StorePlot>(FindObjectsSortMode.None);
+        var claimed = new List<(WallModule module, Vector3 center)>();
+
+        foreach (var m in FindObjectsByType<WallModule>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            if (m == null || m.IsReplacement) continue;
+
+            Vector3 center = WallModule.GeometryBounds(m.gameObject).center;
+            float mine = DistanceToSpace(center);
+            if (mine > frontWallReach) continue;
+
+            bool closest = true;
+            foreach (var other in allPlots)
+            {
+                if (other == this) continue;
+                float theirs = other.DistanceToSpace(center);
+                if (theirs < mine || (Mathf.Approximately(theirs, mine) && other.plotId < plotId))
+                {
+                    closest = false;
+                    break;
+                }
+            }
+            if (closest) claimed.Add((m, center));
+        }
+
+        claimed.Sort((a, b) =>
+        {
+            int c = Mathf.RoundToInt(a.center.x * 100f).CompareTo(Mathf.RoundToInt(b.center.x * 100f));
+            if (c == 0) c = Mathf.RoundToInt(a.center.z * 100f).CompareTo(Mathf.RoundToInt(b.center.z * 100f));
+            if (c == 0) c = Mathf.RoundToInt(a.center.y * 100f).CompareTo(Mathf.RoundToInt(b.center.y * 100f));
+            return c;
+        });
+
+        return claimed;
+    }
+
+    /// <summary>How far (meters) a point is from this store's space; 0 if inside.</summary>
+    private float DistanceToSpace(Vector3 worldPoint)
+    {
+        float best = float.MaxValue;
+        foreach (var box in baseAreas) best = Mathf.Min(best, DistanceToBox(box, worldPoint));
+        if (segments != null)
+            foreach (var seg in segments) best = Mathf.Min(best, DistanceToBox(seg?.area, worldPoint));
+        return best;
+    }
+
+    private static float DistanceToBox(BoxCollider box, Vector3 worldPoint)
+    {
+        if (box == null) return float.MaxValue;
+        Vector3 local = box.transform.InverseTransformPoint(worldPoint) - box.center;
+        Vector3 half = box.size * 0.5f;
+        Vector3 scale = box.transform.lossyScale;
+        var outside = new Vector3(
+            Mathf.Max(0f, Mathf.Abs(local.x) - half.x) * Mathf.Abs(scale.x),
+            Mathf.Max(0f, Mathf.Abs(local.y) - half.y) * Mathf.Abs(scale.y),
+            Mathf.Max(0f, Mathf.Abs(local.z) - half.z) * Mathf.Abs(scale.z));
+        return outside.magnitude;
+    }
+
+    private void OnFrontOverridesChanged(NetworkListEvent<byte> e) => ApplyFrontWall();
+
+    /// <summary>Make every storefront section show the module the synced state says.</summary>
+    private void ApplyFrontWall()
+    {
+        EnsureFrontSlots();
+        for (int i = 0; i < frontSlots.Count; i++)
+            SetSlotVisual(i, i < frontOverrides.Count ? frontOverrides[i] : 0);
+    }
+
+    private void SetSlotVisual(int index, int moduleId)
+    {
+        var slot = frontSlots[index];
+        if (slot.original == null) return;
+
+        // Back to the module the scene placed here.
+        if (moduleId == 0 || moduleId == slot.original.ModuleId || !FrontWallCatalog.TryGet(moduleId, out var prefab))
+        {
+            if (slot.replacement != null) Destroy(slot.replacement);
+            slot.replacement = null;
+            slot.replacementId = 0;
+            slot.original.gameObject.SetActive(true);
+            return;
+        }
+
+        if (slot.replacement != null && slot.replacementId == moduleId) return;
+        if (slot.replacement != null) Destroy(slot.replacement);
+
+        // Same rotation, scale and parent as the original, then slide it so the meshes line up
+        // (the prefabs' pivots are in different places, so matching positions wouldn't work).
+        Transform t = slot.original.transform;
+        var go = Instantiate(prefab.gameObject, t.position, t.rotation, t.parent);
+        go.transform.localScale = t.localScale;
+        go.name = $"{prefab.name} ({displayName} front {index})";
+        if (go.TryGetComponent<WallModule>(out var wm)) wm.IsReplacement = true;
+        go.transform.position += slot.anchor - WallModule.GeometryBounds(go).center;
+
+        slot.original.gameObject.SetActive(false);
+        slot.replacement = go;
+        slot.replacementId = moduleId;
+    }
+
+    /// <summary>The module type a section currently shows.</summary>
+    public int GetFrontModuleId(int index)
+    {
+        EnsureFrontSlots();
+        if (index < 0 || index >= frontSlots.Count || frontSlots[index].original == null) return 0;
+        int over = index < frontOverrides.Count ? frontOverrides[index] : 0;
+        return over != 0 ? over : frontSlots[index].original.ModuleId;
+    }
+
+    /// <summary>Name of the module a section shows, for menus.</summary>
+    public string GetFrontModuleName(int index)
+    {
+        int id = GetFrontModuleId(index);
+        if (FrontWallCatalog.TryGet(id, out var m)) return m.DisplayName;
+        return index >= 0 && index < FrontSlotCount && frontSlots[index].original != null
+            ? frontSlots[index].original.DisplayName : "?";
+    }
+
+    /// <summary>World box around a section's current module (for highlighting).</summary>
+    public Bounds GetFrontSlotBounds(int index)
+    {
+        EnsureFrontSlots();
+        var slot = frontSlots[index];
+        GameObject shown = slot.replacement != null ? slot.replacement : slot.original.gameObject;
+        return WallModule.GeometryBounds(shown);
+    }
+
+    /// <summary>Which storefront section (if any) this object is part of.</summary>
+    public bool TryGetFrontSlot(Transform t, out int index)
+    {
+        EnsureFrontSlots();
+        index = -1;
+        var module = t != null ? t.GetComponentInParent<WallModule>() : null;
+        if (module == null) return false;
+
+        for (int i = 0; i < frontSlots.Count; i++)
+        {
+            var slot = frontSlots[i];
+            if (slot.original == module || (slot.replacement != null && slot.replacement == module.gameObject))
+            {
+                index = i;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>True for the renovation and for-sale walls (they stand in front of the storefront).</summary>
+    public bool IsStorefrontCover(Transform t)
+    {
+        if (t == null) return false;
+        foreach (var arr in new[] { renovationWalls, forSaleWalls })
+        {
+            if (arr == null) continue;
+            foreach (var w in arr)
+                if (w != null && t.IsChildOf(w.transform)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Would putting this module in this section leave the store without a doorway?
+    /// Only counts if the store had a doorway to begin with.
+    /// </summary>
+    public bool WouldRemoveLastEntrance(int index, int moduleId)
+    {
+        if (FrontWallCatalog.Instance != null && !FrontWallCatalog.Instance.RequireEntrance) return false;
+        return CountEntrances(-1, 0) > 0 && CountEntrances(index, moduleId) == 0;
+    }
+
+    private int CountEntrances(int changedIndex, int newId)
+    {
+        EnsureFrontSlots();
+        int n = 0;
+        for (int i = 0; i < frontSlots.Count; i++)
+        {
+            var original = frontSlots[i].original;
+            if (original == null) continue;
+            int id = i == changedIndex ? (newId == 0 ? original.ModuleId : newId) : GetFrontModuleId(i);
+            bool entrance = id == original.ModuleId ? original.IsEntrance
+                          : FrontWallCatalog.TryGet(id, out var m) && m.IsEntrance;
+            if (entrance) n++;
+        }
+        return n;
+    }
+
+    /// <summary>
+    /// Server: swap one storefront section. Fails for unknown modules, bad indexes, or a change
+    /// that would remove the store's last doorway. Every player sees the change.
+    /// </summary>
+    public bool ServerTrySetFrontModule(int index, int moduleId)
+    {
+        if (!IsServer) return false;
+        EnsureFrontSlots();
+        if (index < 0 || index >= frontSlots.Count || frontSlots[index].original == null) return false;
+        if (moduleId < 0 || moduleId > 255) return false;
+        if (moduleId != 0 && moduleId != frontSlots[index].original.ModuleId && !FrontWallCatalog.TryGet(moduleId, out _))
+            return false;
+        if (WouldRemoveLastEntrance(index, moduleId)) return false;
+
+        if (moduleId == frontSlots[index].original.ModuleId) moduleId = 0;
+        while (frontOverrides.Count < frontSlots.Count) frontOverrides.Add(0);
+        frontOverrides[index] = (byte)moduleId;
+        return true;
     }
 
     /* ========================= EDIT SESSIONS (SERVER) ========================= */
@@ -627,6 +878,18 @@ public class StorePlot : NetworkBehaviour
 
     private void OnDrawGizmosSelected()
     {
+        // Outline the wall sections this store treats as its storefront (numbered like in edit mode).
+        var found = FindFrontModules();
+        for (int i = 0; i < found.Count; i++)
+        {
+            Bounds mb = WallModule.GeometryBounds(found[i].module.gameObject);
+            Gizmos.color = new Color(1f, 0.75f, 0.2f, 0.9f);
+            Gizmos.DrawWireCube(mb.center, mb.size);
+#if UNITY_EDITOR
+            UnityEditor.Handles.Label(mb.center, $"{i + 1}");
+#endif
+        }
+
         // Show the edit-view cut as a flat outline at its height.
         Bounds b = GetWorldBounds();
         float y = GetEditCutHeight();
