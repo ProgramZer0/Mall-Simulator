@@ -84,9 +84,10 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         if (!IsOwner || cam == null) return;
 
-        // Store edit mode has its own controls; drop any placement preview and stand by.
-        if (storeEdit != null && storeEdit.IsEditing)
+        // Store edit mode or an open menu: drop any placement preview and stand by.
+        if ((storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen)
         {
+            lookedAtSign = null;
             if (previewActive || ghostPreview != null)
             {
                 previewActive = false;
@@ -120,7 +121,7 @@ public class PlayerInteractInput : NetworkBehaviour
 
     private void OnGUI()
     {
-        if (!IsOwner || lookedAtSign == null || (storeEdit != null && storeEdit.IsEditing)) return;
+        if (!IsOwner || lookedAtSign == null || (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return;
 
         var plot = lookedAtSign.Plot;
         string text = $"F: Buy {plot.DisplayName} ({plot.Price})";

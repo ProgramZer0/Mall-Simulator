@@ -464,7 +464,7 @@ public class MallManager : NetworkBehaviour
 
     private void Update()
     {
-        if (!devHotkeys || !IsSpawned) return;
+        if (!devHotkeys || !IsSpawned || UIState.IsMenuOpen) return;
         if (Input.GetKeyDown(KeyCode.C)) DevToggleClosed();
         if (!Input.GetKeyDown(KeyCode.B)) return;
 

@@ -11,8 +11,8 @@ using UnityEngine;
 /// them through synced lists and ask the host to spend.
 ///
 /// Ordering: call RequestOrderRpc(plotId, itemId, quantity, deliverySeconds). The host checks
-/// the store is yours, charges the team, and after the delivery time the items appear on free
-/// shipment spots at that store's dock, held for your team for a while.
+/// the store is yours, charges the team, and after the delivery time each item appears on a free
+/// shipment spot at the first of that store's docks that has one, held for your team for a while.
 ///
 /// For the ordering GUI:
 ///   EconomyManager.Instance.LocalMoney                 money of your team
@@ -103,7 +103,7 @@ public class EconomyManager : NetworkBehaviour
     public event Action<OrderResult> OrderResultReceived;
 
     // Server only
-    private readonly Dictionary<int, LoadingDockZone> orderDocks = new();
+    private readonly Dictionary<int, List<LoadingDockZone>> orderDocks = new();
     private readonly HashSet<ulong> startingMoneyGiven = new();
     private readonly List<(ulong team, int amount)> pendingGrants = new();
     private int nextOrderId = 1;
@@ -267,7 +267,9 @@ public class EconomyManager : NetworkBehaviour
         var mall = MallManager.Instance;
         if (!IsServer || mall == null || !mall.TryGetPlot(plotId, out var plot) || !plot.IsAuthorized(clientId))
             return OrderResult.NotYourStore;
-        if (plot.Dock == null || plot.Dock.ShipmentAreaCount == 0)
+        var docks = plot.GetDocks();
+        docks.RemoveAll(d => d.ShipmentAreaCount == 0);
+        if (docks.Count == 0)
             return OrderResult.NoDock;
         if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemId, out var def) || def.worldNetworkPrefab == null)
             return OrderResult.UnknownItem;
@@ -290,7 +292,7 @@ public class EconomyManager : NetworkBehaviour
             quantity = quantity,
             arriveAt = NetworkManager.ServerTime.Time + Mathf.Max(0f, wait),
         });
-        orderDocks[id] = plot.Dock; // deliver to the dock the store had when ordered
+        orderDocks[id] = docks; // deliver to the docks the store had when ordered
         return OrderResult.Ordered;
     }
 
@@ -299,7 +301,7 @@ public class EconomyManager : NetworkBehaviour
     private void Update()
     {
         if (IsServer && IsSpawned) ServerDeliverDueOrders();
-        if (devHotkeys && IsSpawned) DevKeys();
+        if (devHotkeys && IsSpawned && !UIState.IsMenuOpen) DevKeys();
     }
 
     /// <summary>Put due items on free shipment spots; anything that doesn't fit waits for a spot.</summary>
@@ -311,18 +313,20 @@ public class EconomyManager : NetworkBehaviour
             var o = orders[i];
             if (o.arriveAt > now) continue;
 
-            if (!orderDocks.TryGetValue(o.orderId, out var dock) || dock == null ||
+            if (!orderDocks.TryGetValue(o.orderId, out var docks) ||
+                !docks.Exists(d => d != null) ||
                 ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(o.itemId, out var def) ||
                 def.worldNetworkPrefab == null)
             {
-                Debug.LogWarning($"[EconomyManager] Dropping order {o.orderId}: its dock or item no longer exists.");
+                Debug.LogWarning($"[EconomyManager] Dropping order {o.orderId}: its docks or item no longer exist.");
                 orderDocks.Remove(o.orderId);
                 orders.RemoveAt(i);
                 continue;
             }
 
+            // Each item goes to the first dock (in the store's order) with a free spot.
             int left = o.quantity;
-            while (left > 0 && dock.TryGetFreeShipmentArea(out var area))
+            while (left > 0 && TryGetFreeArea(docks, out var area))
             {
                 SpawnDelivery(def, area, o.teamId);
                 left--;
@@ -339,6 +343,14 @@ public class EconomyManager : NetworkBehaviour
                 orders[i] = o;
             }
         }
+    }
+
+    private static bool TryGetFreeArea(List<LoadingDockZone> docks, out Transform area)
+    {
+        foreach (var d in docks)
+            if (d != null && d.TryGetFreeShipmentArea(out area)) return true;
+        area = null;
+        return false;
     }
 
     private void SpawnDelivery(ItemDef def, Transform area, ulong teamId)

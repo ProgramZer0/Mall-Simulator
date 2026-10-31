@@ -23,7 +23,11 @@ public class NetworkTestingButtons : MonoBehaviour
             GUILayout.BeginArea(new Rect(Screen.width - 160, 10, 150, 80));
             string mode = nm.IsHost ? "Host" : nm.IsServer ? "Server" : "Client";
             GUILayout.Label($"Running as {mode}");
-            if (GUILayout.Button("Shutdown")) nm.Shutdown();
+            if (GUILayout.Button("Shutdown"))
+            {
+                UIState.CloseAll();
+                nm.Shutdown();
+            }
             GUILayout.EndArea();
         }
     }

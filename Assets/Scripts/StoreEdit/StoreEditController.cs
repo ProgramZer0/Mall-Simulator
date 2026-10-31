@@ -185,7 +185,10 @@ public class StoreEditController : NetworkBehaviour
     {
         if (!IsOwner || !IsSpawned) return;
 
-        if (Input.GetKeyDown(toggleKey) || (toggleKey == KeyCode.Alpha0 && Input.GetKeyDown(KeyCode.Keypad0)))
+        // A menu is open: ignore edit-mode keys and mouse until it closes.
+        bool menuOpen = UIState.IsMenuOpen;
+
+        if (!menuOpen && (Input.GetKeyDown(toggleKey) || (toggleKey == KeyCode.Alpha0 && Input.GetKeyDown(KeyCode.Keypad0))))
         {
             if (IsEditing) Finish();
             else TryStart();
@@ -194,8 +197,11 @@ public class StoreEditController : NetworkBehaviour
         SyncEditState();
         if (!IsEditing) return;
 
-        UpdateCamera();
-        if (!finishing) UpdateTools();
+        if (!menuOpen)
+        {
+            UpdateCamera();
+            if (!finishing) UpdateTools();
+        }
         DrawHandles();
     }
 

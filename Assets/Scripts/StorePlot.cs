@@ -60,8 +60,11 @@ public class StorePlot : NetworkBehaviour
     [SerializeField] private float frontWallReach = 1f;
 
     [Header("Deliveries")]
-    [Tooltip("The loading dock this store's orders arrive at. Several stores can share a dock.")]
-    [SerializeField] private LoadingDockZone dock;
+    [Tooltip("Loading docks this store's orders can arrive at. Each delivery goes to the first one " +
+             "(in this order) with a free shipment spot. Several stores can share a dock.")]
+    [SerializeField] private LoadingDockZone[] docks;
+    // Older single-dock setting; still honoured (added to the list) so nothing set up is lost.
+    [SerializeField, HideInInspector] private LoadingDockZone dock;
 
     [Header("Doors")]
     [Tooltip("Door objects for this store (e.g. the door inside each doorway). Shown while the store " +
@@ -135,7 +138,16 @@ public class StorePlot : NetworkBehaviour
     public int Price => price;
     public bool IsStarterPlot => isStarterPlot;
     public int StartingMoney => startingMoney;
-    public LoadingDockZone Dock => dock;
+    /// <summary>This store's docks in preference order (the Docks list, plus the old single Dock if set).</summary>
+    public List<LoadingDockZone> GetDocks()
+    {
+        var list = new List<LoadingDockZone>();
+        if (docks != null)
+            foreach (var d in docks)
+                if (d != null && !list.Contains(d)) list.Add(d);
+        if (dock != null && !list.Contains(dock)) list.Add(dock);
+        return list;
+    }
     public ulong OwnerTeamId => ownerTeamId.Value;
     public bool HasOwner => ownerTeamId.Value != NoOwner;
     public int SegmentCount => segments?.Length ?? 0;
@@ -1015,12 +1027,11 @@ public class StorePlot : NetworkBehaviour
 
     private void OnDrawGizmosSelected()
     {
-        // Line to the dock this store's deliveries go to.
-        if (dock != null)
-        {
-            Gizmos.color = new Color(0.7f, 0.4f, 1f, 0.9f);
-            Gizmos.DrawLine(GetWorldBounds().center, dock.transform.position);
-        }
+        // Lines to the docks this store's deliveries can go to.
+        Gizmos.color = new Color(0.7f, 0.4f, 1f, 0.9f);
+        Vector3 storeCenter = GetWorldBounds().center;
+        foreach (var d in GetDocks())
+            Gizmos.DrawLine(storeCenter, d.transform.position);
 
         // Outline the wall sections this store treats as its storefront (numbered like in edit mode).
         var found = FindFrontModules();
