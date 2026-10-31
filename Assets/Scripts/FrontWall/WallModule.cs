@@ -17,11 +17,15 @@ public class WallModule : MonoBehaviour
     [SerializeField] private bool isEntrance;
     [Tooltip("Cost to put this module in. Not charged yet; used once the economy exists.")]
     [SerializeField] private int price;
+    [Tooltip("Doorways: the door object inside this module. The store shows it while closed, for " +
+             "sale or being renovated, and hides it while open.")]
+    [SerializeField] private GameObject door;
 
     public int ModuleId => moduleId;
     public string DisplayName => displayName;
     public bool IsEntrance => isEntrance;
     public int Price => price;
+    public GameObject Door => door;
 
     /// <summary>Set on copies a store spawned to replace a section, so they're never counted as slots.</summary>
     [System.NonSerialized] public bool IsReplacement;
