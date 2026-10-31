@@ -12,8 +12,8 @@ using UnityEngine;
 ///
 /// Ordering: one purchase can hold several items. The host checks the store is yours, charges
 /// the team and starts one delivery. Each item arrives as its own box (ItemDef > Shipment
-/// Prefab) on the store's shipment spots, all at once. The countdown only runs while the store
-/// has enough free spots for the whole delivery; while they're blocked it pauses.
+/// Prefab), all at once, packed into the store's shipment zones wherever they fit. The countdown
+/// only runs while there's room for the whole delivery; while there isn't, it pauses.
 ///
 /// For the ordering GUI:
 ///   EconomyManager.Instance.LocalMoney                         money of your team
@@ -33,8 +33,8 @@ public class EconomyManager : NetworkBehaviour
     {
         Ordered,
         NotYourStore,
-        NoShipmentAreas, // the store has no shipment spots set up
-        TooBig,          // more boxes than the store has shipment spots, so it could never arrive
+        NoShipmentAreas, // the store has no shipment zones set up
+        TooBig,          // couldn't fit in the store's zones even if they were empty, so it would never arrive
         UnknownItem,
         BadQuantity,
         NotEnoughMoney,
@@ -45,6 +45,13 @@ public class EconomyManager : NetworkBehaviour
     [SerializeField] private float reservationSeconds = 600f;
     [Tooltip("Most items (boxes) one purchase may contain.")]
     [SerializeField] private int maxItemsPerOrder = 100;
+    [Tooltip("What a delivery box may not overlap when it's set down (items, boxes, walls, players...). " +
+             "The Ground layer never counts, so boxes can sit on the floor.")]
+    [SerializeField] private LayerMask shipmentBlockingMask = ~0;
+    [Tooltip("How finely (meters) the zone floor is searched for a free spot. Smaller packs tighter but costs more.")]
+    [SerializeField] private float packStep = 0.2f;
+    [Tooltip("How often (seconds) a waiting delivery re-checks whether it fits.")]
+    [SerializeField] private float fitCheckInterval = 1f;
 
     [Header("Development")]
     [Tooltip("O = order Dev Order Item Id for the store you're standing in. M = give your team Dev Money Amount. " +
@@ -79,10 +86,10 @@ public class EconomyManager : NetworkBehaviour
         public int orderId;
         public ulong teamId;
         public int plotId;
-        public int boxCount;     // total items = boxes = shipment spots needed
+        public int boxCount;     // total items = boxes
         public float remaining;  // seconds left as of stampTime
         public double stampTime; // server time when remaining was recorded
-        public bool blocked;     // not enough free spots: countdown paused
+        public bool blocked;     // no room in the shipment zones: countdown paused
 
         public void NetworkSerialize<T>(BufferSerializer<T> s) where T : IReaderWriter
         {
@@ -135,7 +142,10 @@ public class EconomyManager : NetworkBehaviour
     // Server only
     private readonly HashSet<ulong> startingMoneyGiven = new();
     private readonly List<(ulong team, int amount)> pendingGrants = new();
-    private readonly List<Transform> freeAreas = new();
+    private readonly List<ShipmentPacker.Box> planBoxes = new();
+    private readonly List<(NetworkObject prefab, int itemId)> planItems = new();
+    private readonly List<Pose> plan = new();
+    private readonly Dictionary<int, (double nextCheck, bool fits)> fitCache = new();
     private int nextOrderId = 1;
 
     private OrderResult? lastResult;
@@ -226,7 +236,7 @@ public class EconomyManager : NetworkBehaviour
     public float SecondsUntil(OrderInfo order) =>
         IsSpawned ? order.RemainingAt(NetworkManager.ServerTime.Time) : order.remaining;
 
-    /// <summary>True while a delivery is paused because the store's shipment spots are full.</summary>
+    /// <summary>True while a delivery is paused because the store's shipment zones are too full.</summary>
     public bool IsBlocked(OrderInfo order) => order.blocked;
 
     /* ========================= MONEY (SERVER) ========================= */
@@ -316,7 +326,7 @@ public class EconomyManager : NetworkBehaviour
         var mall = MallManager.Instance;
         if (!IsServer || mall == null || !mall.TryGetPlot(plotId, out var plot) || !plot.IsAuthorized(clientId))
             return OrderResult.NotYourStore;
-        if (plot.ShipmentAreaCount == 0)
+        if (!plot.HasShipmentZones)
             return OrderResult.NoShipmentAreas;
         if (itemIds == null || quantities == null || itemIds.Length == 0 || itemIds.Length != quantities.Length)
             return OrderResult.BadQuantity;
@@ -337,7 +347,8 @@ public class EconomyManager : NetworkBehaviour
             slowest = Mathf.Max(slowest, def.deliverySeconds);
         }
 
-        if (boxes > plot.ShipmentAreaCount)
+        BuildBoxes(itemIds, quantities);
+        if (!ShipmentPacker.CouldEverFit(plot.ShipmentZones, planBoxes))
             return OrderResult.TooBig;
 
         ulong team = MallManager.GetTeamOf(clientId);
@@ -388,8 +399,7 @@ public class EconomyManager : NetworkBehaviour
                 continue;
             }
 
-            plot.GetFreeShipmentAreas(freeAreas);
-            bool fits = freeAreas.Count >= o.boxCount;
+            bool fits = CheckFits(o, plot, now);
             float left = o.RemainingAt(now);
 
             if (!fits)
@@ -416,60 +426,95 @@ public class EconomyManager : NetworkBehaviour
 
             if (left > 0f) continue;
 
-            ServerDeliver(o);
+            // Due: find room for every box right now; if something moved in the way, wait.
+            if (!ServerDeliver(o, plot))
+            {
+                o.remaining = 0f;
+                o.stampTime = now;
+                o.blocked = true;
+                orders[i] = o;
+                fitCache[o.orderId] = (now + fitCheckInterval, false);
+                continue;
+            }
             ServerRemoveOrderAt(i);
         }
     }
 
-    private void ServerDeliver(OrderInfo order)
+    /// <summary>Does this delivery fit in its store's zones? Re-checked every Fit Check Interval.</summary>
+    private bool CheckFits(OrderInfo o, StorePlot plot, double now)
     {
-        int next = 0;
-        foreach (var line in GetOrderLines(order.orderId))
+        if (fitCache.TryGetValue(o.orderId, out var c) && now < c.nextCheck) return c.fits;
+        bool fits = PlanOrder(o, plot);
+        fitCache[o.orderId] = (now + fitCheckInterval, fits);
+        return fits;
+    }
+
+    /// <summary>Plans spots for all of a delivery's boxes (fills planItems + plan).</summary>
+    private bool PlanOrder(OrderInfo o, StorePlot plot)
+    {
+        var lines = GetOrderLines(o.orderId);
+        var ids = new int[lines.Count];
+        var qty = new int[lines.Count];
+        for (int i = 0; i < lines.Count; i++) { ids[i] = lines[i].itemId; qty[i] = lines[i].quantity; }
+        BuildBoxes(ids, qty);
+        return ShipmentPacker.TryPlan(plot.ShipmentZones, planBoxes, BlockingMask(), packStep, plan);
+    }
+
+    /// <summary>Fills planBoxes/planItems with one entry per box for these items.</summary>
+    private void BuildBoxes(int[] itemIds, int[] quantities)
+    {
+        planBoxes.Clear();
+        planItems.Clear();
+        for (int i = 0; i < itemIds.Length; i++)
         {
-            if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(line.itemId, out var def)) continue;
-            for (int q = 0; q < line.quantity && next < freeAreas.Count; q++)
-                SpawnBox(def, line.itemId, freeAreas[next++], order.teamId);
+            if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemIds[i], out var def)) continue;
+            var prefab = def.GetShipmentPrefab();
+            if (prefab == null) continue;
+            var box = ShipmentPacker.GetBox(prefab.gameObject);
+            for (int q = 0; q < quantities[i]; q++)
+            {
+                planBoxes.Add(box);
+                planItems.Add((prefab, itemIds[i]));
+            }
         }
     }
 
-    private void SpawnBox(ItemDef def, int itemId, Transform area, ulong teamId)
+    private int BlockingMask()
     {
-        NetworkObject prefab = def.GetShipmentPrefab();
-        if (prefab == null) return;
+        int mask = shipmentBlockingMask.value;
+        int ground = LayerMask.NameToLayer("Ground");
+        if (ground >= 0) mask &= ~(1 << ground);
+        return mask;
+    }
 
-        // Sit it on whatever is under the spot, by the box's own base rather than its pivot.
-        Vector3 pos = area.position;
-        if (Physics.Raycast(pos + Vector3.up, Vector3.down, out RaycastHit hit, 3f,
-                Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
-            pos.y = hit.point.y;
-        pos.y += PivotHeightAboveBase(prefab);
+    /// <summary>Plans fresh spots and spawns every box of a delivery. False if it doesn't fit right now.</summary>
+    private bool ServerDeliver(OrderInfo order, StorePlot plot)
+    {
+        if (!PlanOrder(order, plot) || plan.Count != planItems.Count) return false;
+        for (int i = 0; i < plan.Count; i++)
+            SpawnBox(planItems[i].prefab, planItems[i].itemId, plan[i], order.teamId);
+        return true;
+    }
 
-        var spawned = Instantiate(prefab, pos, Quaternion.Euler(0f, area.eulerAngles.y, 0f));
+    private void SpawnBox(NetworkObject prefab, int itemId, Pose pose, ulong teamId)
+    {
+        var spawned = Instantiate(prefab, pose.position, pose.rotation);
         if (spawned.TryGetComponent<ShipmentPackage>(out var box))
             box.ServerSetContents(itemId);
-        else if (prefab != def.worldNetworkPrefab)
+        else if (!spawned.TryGetComponent<ItemPickupNet>(out var plain) || plain.itemId != itemId)
             Debug.LogWarning($"[EconomyManager] Shipment prefab '{prefab.name}' has no ShipmentPackage, so " +
                              "picking it up won't give the item inside.", prefab);
         spawned.Spawn(true);
+        Physics.SyncTransforms(); // so the next plan sees this box
 
         if (spawned.TryGetComponent<ItemPickupNet>(out var item))
             item.ServerReserve(teamId, reservationSeconds);
     }
 
-    private static readonly Dictionary<NetworkObject, float> pivotHeights = new();
-
-    private static float PivotHeightAboveBase(NetworkObject prefab)
-    {
-        if (pivotHeights.TryGetValue(prefab, out float h)) return h;
-        Bounds b = PlacementCheck.ComputeLocalBounds(prefab.gameObject);
-        h = b.size == Vector3.zero ? 0f : -b.min.y * prefab.transform.localScale.y;
-        pivotHeights[prefab] = h;
-        return h;
-    }
-
     private void ServerRemoveOrderAt(int index)
     {
         int id = orders[index].orderId;
+        fitCache.Remove(id);
         for (int i = orderLines.Count - 1; i >= 0; i--)
             if (orderLines[i].orderId == id) orderLines.RemoveAt(i);
         orders.RemoveAt(index);
@@ -528,7 +573,7 @@ public class EconomyManager : NetworkBehaviour
                     ? def.displayName : $"Item {l.itemId}";
                 parts.Add($"{name} x{l.quantity}");
             }
-            string when = o.blocked ? $"paused, spots full ({SecondsUntil(o):0}s left)" : $"{SecondsUntil(o):0}s";
+            string when = o.blocked ? $"paused, no room ({SecondsUntil(o):0}s left)" : $"{SecondsUntil(o):0}s";
             GUI.Label(new Rect(r.x + 8, r.y + 40 + i * 18, 310, 20), $"  {string.Join(", ", parts)}: {when}");
         }
 
