@@ -151,9 +151,25 @@ public class PlayerController3D : NetworkBehaviour
         // Store edit mode takes over the mouse and keyboard with its own camera.
         if (storeEdit != null && storeEdit.IsEditing) return;
 
-        HandleLook();
-        HandleMove();
+        // A menu is open: free the cursor and stop looking/walking (gravity still applies).
+        bool menuOpen = UIState.IsMenuOpen;
+        if (menuOpen)
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+        else if (wasMenuOpen)
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
+        wasMenuOpen = menuOpen;
+
+        if (!menuOpen) HandleLook();
+        HandleMove(allowInput: !menuOpen);
     }
+
+    private bool wasMenuOpen;
 
     private void HandleLook()
     {
@@ -171,18 +187,18 @@ public class PlayerController3D : NetworkBehaviour
         }
     }
 
-    private void HandleMove()
+    private void HandleMove(bool allowInput = true)
     {
         bool grounded = controller.isGrounded;
 
-        float h = Input.GetAxisRaw("Horizontal");
-        float v = Input.GetAxisRaw("Vertical");
+        float h = allowInput ? Input.GetAxisRaw("Horizontal") : 0f;
+        float v = allowInput ? Input.GetAxisRaw("Vertical") : 0f;
         Vector3 inputDir = new Vector3(h, 0f, v);
         inputDir = Vector3.ClampMagnitude(inputDir, 1f);
 
         Vector3 moveDir = transform.TransformDirection(inputDir);
 
-        float targetSpeed = Input.GetKey(KeyCode.LeftShift) ? sprintSpeed : walkSpeed;
+        float targetSpeed = allowInput && Input.GetKey(KeyCode.LeftShift) ? sprintSpeed : walkSpeed;
 
         Vector3 horizontalVel = new Vector3(velocity.x, 0f, velocity.z);
         Vector3 targetHorizontal = moveDir * targetSpeed;
@@ -190,7 +206,7 @@ public class PlayerController3D : NetworkBehaviour
         if (grounded)
         {
             horizontalVel = targetHorizontal;
-            if (Input.GetKeyDown(KeyCode.Space))
+            if (allowInput && Input.GetKeyDown(KeyCode.Space))
             {
                 velocity.y = Mathf.Sqrt(-2f * gravity * jumpHeight);
             }
