@@ -1,3 +1,4 @@
+using System.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -14,6 +15,12 @@ public class PlayerController3D : NetworkBehaviour
     [SerializeField] private float mouseSensitivity = 1.2f;
     [SerializeField] private float minPitch = -80f;
     [SerializeField] private float maxPitch = 80f;
+
+    [Header("Spawn")]
+    [Tooltip("When you join, move to the front of your team's store once it's assigned.")]
+    [SerializeField] private bool spawnAtOwnStore = true;
+    [Tooltip("Give up waiting for a store after this many seconds (stay where you spawned).")]
+    [SerializeField] private float storeWaitTimeout = 10f;
 
     [Header("References")]
     [SerializeField] private Transform cameraRoot;
@@ -60,6 +67,72 @@ public class PlayerController3D : NetworkBehaviour
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+
+        if (spawnAtOwnStore) StartCoroutine(MoveToOwnStoreWhenAssigned());
+    }
+
+    /* ========================= SPAWN AT STORE ========================= */
+
+    /// <summary>
+    /// The host hands out starter stores as players join, which can land a moment after this
+    /// player spawns. Wait for our team's store, then step to its front door once.
+    /// </summary>
+    private IEnumerator MoveToOwnStoreWhenAssigned()
+    {
+        float giveUpAt = Time.time + storeWaitTimeout;
+        while (Time.time < giveUpAt)
+        {
+            var plot = FindOwnStore();
+            if (plot != null)
+            {
+                plot.GetSpawnPose(out Vector3 pos, out Quaternion rot);
+                Teleport(pos, rot);
+                yield break;
+            }
+            yield return null;
+        }
+    }
+
+    /// <summary>Our team's store, preferring the starter store if the team owns several.</summary>
+    private StorePlot FindOwnStore()
+    {
+        var mall = MallManager.Instance;
+        if (mall == null) return null;
+
+        StorePlot any = null;
+        foreach (var plot in mall.Plots)
+        {
+            if (!plot.IsAuthorized(OwnerClientId)) continue;
+            if (plot.IsStarterPlot) return plot;
+            any ??= plot;
+        }
+        return any;
+    }
+
+    /// <summary>Move the player (feet on the floor) and face a direction.</summary>
+    public void Teleport(Vector3 feetPosition, Quaternion facing)
+    {
+        // Find the actual floor under the spot, in case the store's box sits a little off it.
+        Vector3 pos = feetPosition;
+        if (Physics.Raycast(feetPosition + Vector3.up * 2f, Vector3.down, out RaycastHit hit, 5f,
+                Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore) && !hit.collider.transform.IsChildOf(transform))
+            pos.y = hit.point.y;
+
+        // Lift by however far the controller's bottom is below the pivot.
+        if (controller != null)
+            pos.y += controller.height * 0.5f - controller.center.y + controller.skinWidth;
+
+        // CharacterController overrides the transform while enabled, so switch it off to move.
+        bool wasEnabled = controller != null && controller.enabled;
+        if (controller != null) controller.enabled = false;
+
+        transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, facing.eulerAngles.y, 0f));
+        yaw = facing.eulerAngles.y;
+        pitch = 0f;
+        velocity = Vector3.zero;
+        if (cameraRoot != null) cameraRoot.localRotation = Quaternion.identity;
+
+        if (controller != null) controller.enabled = wasEnabled;
     }
 
     private void OnDestroy()
