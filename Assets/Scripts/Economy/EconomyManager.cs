@@ -10,17 +10,20 @@ using UnityEngine;
 /// money; with co-op on, teammates share a wallet). The host owns every number; clients see
 /// them through synced lists and ask the host to spend.
 ///
-/// Ordering: call RequestOrderRpc(plotId, itemId, quantity, deliverySeconds). The host checks
-/// the store is yours, charges the team, and after the delivery time each item appears on a free
-/// shipment spot at the first of that store's docks that has one, held for your team for a while.
+/// Ordering: one purchase can hold several items. The host checks the store is yours, charges
+/// the team and starts one delivery. Each item arrives as its own box (ItemDef > Shipment
+/// Prefab) on the store's shipment spots, all at once. The countdown only runs while the store
+/// has enough free spots for the whole delivery; while they're blocked it pauses.
 ///
 /// For the ordering GUI:
-///   EconomyManager.Instance.LocalMoney                 money of your team
-///   EconomyManager.Instance.MoneyChanged               event when any team's money changes
-///   EconomyManager.Instance.RequestOrderRpc(...)       place an order
-///   EconomyManager.Instance.OrderResultReceived        event with the host's answer to your order
-///   EconomyManager.Instance.GetOrdersForTeam(team)     pending deliveries (with arrival times)
-///   EconomyManager.Instance.SecondsUntil(order)        countdown for one of them
+///   EconomyManager.Instance.LocalMoney                         money of your team
+///   EconomyManager.Instance.MoneyChanged                       event when any team's money changes
+///   EconomyManager.Instance.Order(plotId, itemIds, quantities, seconds)   place a purchase
+///   EconomyManager.Instance.Order(plotId, itemId, quantity, seconds)      one kind of item
+///   EconomyManager.Instance.OrderResultReceived                event with the host's answer
+///   EconomyManager.Instance.GetOrdersForTeam(team)             pending deliveries
+///   EconomyManager.Instance.GetOrderLines(orderId)             what's in one
+///   EconomyManager.Instance.SecondsUntil(order) / IsBlocked(order)
 /// </summary>
 public class EconomyManager : NetworkBehaviour
 {
@@ -30,7 +33,8 @@ public class EconomyManager : NetworkBehaviour
     {
         Ordered,
         NotYourStore,
-        NoDock,
+        NoShipmentAreas, // the store has no shipment spots set up
+        TooBig,          // more boxes than the store has shipment spots, so it could never arrive
         UnknownItem,
         BadQuantity,
         NotEnoughMoney,
@@ -39,14 +43,15 @@ public class EconomyManager : NetworkBehaviour
     [Header("Deliveries")]
     [Tooltip("Seconds a delivery is held for the team that ordered it before anyone may take it (GDD: 10 minutes).")]
     [SerializeField] private float reservationSeconds = 600f;
-    [Tooltip("Largest quantity a single order may ask for.")]
-    [SerializeField] private int maxOrderQuantity = 100;
+    [Tooltip("Most items (boxes) one purchase may contain.")]
+    [SerializeField] private int maxItemsPerOrder = 100;
 
     [Header("Development")]
     [Tooltip("O = order Dev Order Item Id for the store you're standing in. M = give your team Dev Money Amount. " +
              "Turn off once the ordering GUI exists.")]
     [SerializeField] private bool devHotkeys = true;
     [SerializeField] private int devOrderItemId = 1;
+    [SerializeField] private int devOrderQuantity = 1;
     [SerializeField] private float devDeliverySeconds = 10f;
     [SerializeField] private int devMoneyAmount = 1000;
     [Tooltip("Small on-screen readout of your money and pending deliveries.")]
@@ -68,44 +73,69 @@ public class EconomyManager : NetworkBehaviour
         public bool Equals(TeamMoney o) => teamId == o.teamId && money == o.money;
     }
 
+    /// <summary>One pending delivery (one purchase).</summary>
     public struct OrderInfo : INetworkSerializable, IEquatable<OrderInfo>
     {
         public int orderId;
         public ulong teamId;
         public int plotId;
-        public int itemId;
-        public int quantity;   // still to arrive
-        public double arriveAt; // server time
+        public int boxCount;     // total items = boxes = shipment spots needed
+        public float remaining;  // seconds left as of stampTime
+        public double stampTime; // server time when remaining was recorded
+        public bool blocked;     // not enough free spots: countdown paused
 
         public void NetworkSerialize<T>(BufferSerializer<T> s) where T : IReaderWriter
         {
             s.SerializeValue(ref orderId);
             s.SerializeValue(ref teamId);
             s.SerializeValue(ref plotId);
-            s.SerializeValue(ref itemId);
-            s.SerializeValue(ref quantity);
-            s.SerializeValue(ref arriveAt);
+            s.SerializeValue(ref boxCount);
+            s.SerializeValue(ref remaining);
+            s.SerializeValue(ref stampTime);
+            s.SerializeValue(ref blocked);
         }
 
         public bool Equals(OrderInfo o) =>
-            orderId == o.orderId && teamId == o.teamId && plotId == o.plotId && itemId == o.itemId &&
-            quantity == o.quantity && arriveAt.Equals(o.arriveAt);
+            orderId == o.orderId && teamId == o.teamId && plotId == o.plotId && boxCount == o.boxCount &&
+            remaining.Equals(o.remaining) && stampTime.Equals(o.stampTime) && blocked == o.blocked;
+
+        /// <summary>Seconds left at a given server time (doesn't go down while blocked).</summary>
+        public float RemainingAt(double now) =>
+            blocked ? remaining : Mathf.Max(0f, remaining - (float)(now - stampTime));
+    }
+
+    /// <summary>One kind of item in a delivery.</summary>
+    public struct OrderLine : INetworkSerializable, IEquatable<OrderLine>
+    {
+        public int orderId;
+        public int itemId;
+        public int quantity;
+
+        public void NetworkSerialize<T>(BufferSerializer<T> s) where T : IReaderWriter
+        {
+            s.SerializeValue(ref orderId);
+            s.SerializeValue(ref itemId);
+            s.SerializeValue(ref quantity);
+        }
+
+        public bool Equals(OrderLine o) => orderId == o.orderId && itemId == o.itemId && quantity == o.quantity;
     }
 
     private NetworkList<TeamMoney> money;
     private NetworkList<OrderInfo> orders;
+    private NetworkList<OrderLine> orderLines;
 
     /// <summary>Any team's money changed (on every machine).</summary>
     public event Action MoneyChanged;
-    /// <summary>The pending orders list changed (on every machine).</summary>
+    /// <summary>A pending delivery was added, delivered, or paused/resumed (on every machine).</summary>
     public event Action OrdersChanged;
     /// <summary>The host answered one of this player's orders (on that player's machine only).</summary>
     public event Action<OrderResult> OrderResultReceived;
 
     // Server only
-    private readonly Dictionary<int, List<LoadingDockZone>> orderDocks = new();
     private readonly HashSet<ulong> startingMoneyGiven = new();
     private readonly List<(ulong team, int amount)> pendingGrants = new();
+    private readonly List<Transform> freeAreas = new();
     private int nextOrderId = 1;
 
     private OrderResult? lastResult;
@@ -118,6 +148,7 @@ public class EconomyManager : NetworkBehaviour
         // NetworkLists must exist before the object spawns.
         money = new NetworkList<TeamMoney>(null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
         orders = new NetworkList<OrderInfo>(null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+        orderLines = new NetworkList<OrderLine>(null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
         if (Instance != null && Instance != this)
         {
@@ -174,16 +205,29 @@ public class EconomyManager : NetworkBehaviour
     /// <summary>Pending deliveries for a team, soonest first.</summary>
     public List<OrderInfo> GetOrdersForTeam(ulong teamId)
     {
+        double now = IsSpawned ? NetworkManager.ServerTime.Time : 0d;
         var list = new List<OrderInfo>();
         foreach (var o in orders)
             if (o.teamId == teamId) list.Add(o);
-        list.Sort((a, b) => a.arriveAt.CompareTo(b.arriveAt));
+        list.Sort((a, b) => a.RemainingAt(now).CompareTo(b.RemainingAt(now)));
         return list;
     }
 
-    /// <summary>Seconds until an order arrives (0 once it's due; it may still be waiting for a free spot).</summary>
+    /// <summary>The items in one delivery.</summary>
+    public List<OrderLine> GetOrderLines(int orderId)
+    {
+        var list = new List<OrderLine>();
+        foreach (var l in orderLines)
+            if (l.orderId == orderId) list.Add(l);
+        return list;
+    }
+
+    /// <summary>Seconds until a delivery arrives. Holds still while it's blocked.</summary>
     public float SecondsUntil(OrderInfo order) =>
-        IsSpawned ? Mathf.Max(0f, (float)(order.arriveAt - NetworkManager.ServerTime.Time)) : 0f;
+        IsSpawned ? order.RemainingAt(NetworkManager.ServerTime.Time) : order.remaining;
+
+    /// <summary>True while a delivery is paused because the store's shipment spots are full.</summary>
+    public bool IsBlocked(OrderInfo order) => order.blocked;
 
     /* ========================= MONEY (SERVER) ========================= */
 
@@ -224,32 +268,37 @@ public class EconomyManager : NetworkBehaviour
         ServerAddMoney(teamId, amount);
     }
 
-    /// <summary>Server: a team is gone (last player left). Drop its money and pending orders.</summary>
+    /// <summary>Server: a team is gone (last player left). Drop its money and pending deliveries.</summary>
     public void ServerForgetTeam(ulong teamId)
     {
         if (!IsServer) return;
         for (int i = money.Count - 1; i >= 0; i--)
             if (money[i].teamId == teamId) money.RemoveAt(i);
         for (int i = orders.Count - 1; i >= 0; i--)
-        {
-            if (orders[i].teamId != teamId) continue;
-            orderDocks.Remove(orders[i].orderId);
-            orders.RemoveAt(i);
-        }
+            if (orders[i].teamId == teamId) ServerRemoveOrderAt(i);
         startingMoneyGiven.Remove(teamId);
     }
 
-    /* ========================= ORDERS ========================= */
+    /* ========================= ORDERING ========================= */
 
     /// <summary>
-    /// Order items for one of your stores. deliverySeconds &lt; 0 uses the item's own Delivery
-    /// Seconds. The answer comes back through OrderResultReceived.
+    /// Buy several items for one of your stores in one delivery. itemIds[i] comes quantities[i]
+    /// times. deliverySeconds &lt; 0 uses the slowest item's Delivery Seconds. The host's answer
+    /// arrives through OrderResultReceived.
     /// </summary>
+    public void Order(int plotId, int[] itemIds, int[] quantities, float deliverySeconds = -1f) =>
+        RequestOrderRpc(plotId, itemIds, quantities, deliverySeconds);
+
+    /// <summary>Buy one kind of item (any quantity) in one delivery.</summary>
+    public void Order(int plotId, int itemId, int quantity, float deliverySeconds = -1f) =>
+        RequestOrderRpc(plotId, new[] { itemId }, new[] { quantity }, deliverySeconds);
+
     [Rpc(SendTo.Server, RequireOwnership = false)]
-    public void RequestOrderRpc(int plotId, int itemId, int quantity, float deliverySeconds, RpcParams rpcParams = default)
+    private void RequestOrderRpc(int plotId, int[] itemIds, int[] quantities, float deliverySeconds,
+                                 RpcParams rpcParams = default)
     {
         ulong sender = rpcParams.Receive.SenderClientId;
-        var result = ServerTryOrder(sender, plotId, itemId, quantity, deliverySeconds);
+        var result = ServerTryOrder(sender, plotId, itemIds, quantities, deliverySeconds);
         OrderResultRpc(result, RpcTarget.Single(sender, RpcTargetUse.Temp));
     }
 
@@ -261,38 +310,54 @@ public class EconomyManager : NetworkBehaviour
         OrderResultReceived?.Invoke(result);
     }
 
-    /// <summary>Server: check, charge and queue an order.</summary>
-    public OrderResult ServerTryOrder(ulong clientId, int plotId, int itemId, int quantity, float deliverySeconds)
+    /// <summary>Server: check, charge and start a delivery.</summary>
+    public OrderResult ServerTryOrder(ulong clientId, int plotId, int[] itemIds, int[] quantities, float deliverySeconds)
     {
         var mall = MallManager.Instance;
         if (!IsServer || mall == null || !mall.TryGetPlot(plotId, out var plot) || !plot.IsAuthorized(clientId))
             return OrderResult.NotYourStore;
-        var docks = plot.GetDocks();
-        docks.RemoveAll(d => d.ShipmentAreaCount == 0);
-        if (docks.Count == 0)
-            return OrderResult.NoDock;
-        if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemId, out var def) || def.worldNetworkPrefab == null)
-            return OrderResult.UnknownItem;
-        if (quantity < 1 || quantity > maxOrderQuantity)
+        if (plot.ShipmentAreaCount == 0)
+            return OrderResult.NoShipmentAreas;
+        if (itemIds == null || quantities == null || itemIds.Length == 0 || itemIds.Length != quantities.Length)
             return OrderResult.BadQuantity;
 
+        long cost = 0;
+        int boxes = 0;
+        float slowest = 0f;
+        for (int i = 0; i < itemIds.Length; i++)
+        {
+            if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemIds[i], out var def) ||
+                def.worldNetworkPrefab == null)
+                return OrderResult.UnknownItem;
+            if (quantities[i] < 1) return OrderResult.BadQuantity;
+
+            boxes += quantities[i];
+            if (boxes > maxItemsPerOrder) return OrderResult.BadQuantity;
+            cost += (long)Mathf.Max(0, def.price) * quantities[i];
+            slowest = Mathf.Max(slowest, def.deliverySeconds);
+        }
+
+        if (boxes > plot.ShipmentAreaCount)
+            return OrderResult.TooBig;
+
         ulong team = MallManager.GetTeamOf(clientId);
-        long cost = (long)Mathf.Max(0, def.price) * quantity;
         if (cost > int.MaxValue || !ServerTrySpend(team, (int)cost))
             return OrderResult.NotEnoughMoney;
 
-        float wait = deliverySeconds < 0f ? def.deliverySeconds : deliverySeconds;
         int id = nextOrderId++;
         orders.Add(new OrderInfo
         {
             orderId = id,
             teamId = team,
             plotId = plotId,
-            itemId = itemId,
-            quantity = quantity,
-            arriveAt = NetworkManager.ServerTime.Time + Mathf.Max(0f, wait),
+            boxCount = boxes,
+            remaining = Mathf.Max(0f, deliverySeconds < 0f ? slowest : deliverySeconds),
+            stampTime = NetworkManager.ServerTime.Time,
+            blocked = false,
         });
-        orderDocks[id] = docks; // deliver to the docks the store had when ordered
+        for (int i = 0; i < itemIds.Length; i++)
+            orderLines.Add(new OrderLine { orderId = id, itemId = itemIds[i], quantity = quantities[i] });
+
         return OrderResult.Ordered;
     }
 
@@ -300,73 +365,114 @@ public class EconomyManager : NetworkBehaviour
 
     private void Update()
     {
-        if (IsServer && IsSpawned) ServerDeliverDueOrders();
+        if (IsServer && IsSpawned) ServerUpdateOrders();
         if (devHotkeys && IsSpawned && !UIState.IsMenuOpen) DevKeys();
     }
 
-    /// <summary>Put due items on free shipment spots; anything that doesn't fit waits for a spot.</summary>
-    private void ServerDeliverDueOrders()
+    /// <summary>
+    /// Pause or resume each delivery depending on whether its store has room for all its boxes,
+    /// and drop the whole delivery once its countdown is done.
+    /// </summary>
+    private void ServerUpdateOrders()
     {
+        var mall = MallManager.Instance;
         double now = NetworkManager.ServerTime.Time;
+
         for (int i = orders.Count - 1; i >= 0; i--)
         {
             var o = orders[i];
-            if (o.arriveAt > now) continue;
-
-            if (!orderDocks.TryGetValue(o.orderId, out var docks) ||
-                !docks.Exists(d => d != null) ||
-                ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(o.itemId, out var def) ||
-                def.worldNetworkPrefab == null)
+            if (mall == null || !mall.TryGetPlot(o.plotId, out var plot))
             {
-                Debug.LogWarning($"[EconomyManager] Dropping order {o.orderId}: its docks or item no longer exist.");
-                orderDocks.Remove(o.orderId);
-                orders.RemoveAt(i);
+                Debug.LogWarning($"[EconomyManager] Dropping delivery {o.orderId}: its store no longer exists.");
+                ServerRemoveOrderAt(i);
                 continue;
             }
 
-            // Each item goes to the first dock (in the store's order) with a free spot.
-            int left = o.quantity;
-            while (left > 0 && TryGetFreeArea(docks, out var area))
+            plot.GetFreeShipmentAreas(freeAreas);
+            bool fits = freeAreas.Count >= o.boxCount;
+            float left = o.RemainingAt(now);
+
+            if (!fits)
             {
-                SpawnDelivery(def, area, o.teamId);
-                left--;
+                // Pause: freeze the time left until the spots clear.
+                if (!o.blocked)
+                {
+                    o.remaining = left;
+                    o.stampTime = now;
+                    o.blocked = true;
+                    orders[i] = o;
+                }
+                continue;
             }
 
-            if (left == 0)
+            if (o.blocked)
             {
-                orderDocks.Remove(o.orderId);
-                orders.RemoveAt(i);
-            }
-            else if (left != o.quantity)
-            {
-                o.quantity = left;
+                // Resume from where it paused.
+                o.blocked = false;
+                o.stampTime = now;
                 orders[i] = o;
+                continue;
             }
+
+            if (left > 0f) continue;
+
+            ServerDeliver(o);
+            ServerRemoveOrderAt(i);
         }
     }
 
-    private static bool TryGetFreeArea(List<LoadingDockZone> docks, out Transform area)
+    private void ServerDeliver(OrderInfo order)
     {
-        foreach (var d in docks)
-            if (d != null && d.TryGetFreeShipmentArea(out area)) return true;
-        area = null;
-        return false;
+        int next = 0;
+        foreach (var line in GetOrderLines(order.orderId))
+        {
+            if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(line.itemId, out var def)) continue;
+            for (int q = 0; q < line.quantity && next < freeAreas.Count; q++)
+                SpawnBox(def, line.itemId, freeAreas[next++], order.teamId);
+        }
     }
 
-    private void SpawnDelivery(ItemDef def, Transform area, ulong teamId)
+    private void SpawnBox(ItemDef def, int itemId, Transform area, ulong teamId)
     {
-        // Sit it on whatever is under the spot, by its base rather than its pivot.
+        NetworkObject prefab = def.GetShipmentPrefab();
+        if (prefab == null) return;
+
+        // Sit it on whatever is under the spot, by the box's own base rather than its pivot.
         Vector3 pos = area.position;
         if (Physics.Raycast(pos + Vector3.up, Vector3.down, out RaycastHit hit, 3f,
                 Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
             pos.y = hit.point.y;
-        pos.y += PlacementCheck.PivotHeightAboveBase(def);
+        pos.y += PivotHeightAboveBase(prefab);
 
-        var spawned = Instantiate(def.worldNetworkPrefab, pos, Quaternion.Euler(0f, area.eulerAngles.y, 0f));
+        var spawned = Instantiate(prefab, pos, Quaternion.Euler(0f, area.eulerAngles.y, 0f));
+        if (spawned.TryGetComponent<ShipmentPackage>(out var box))
+            box.ServerSetContents(itemId);
+        else if (prefab != def.worldNetworkPrefab)
+            Debug.LogWarning($"[EconomyManager] Shipment prefab '{prefab.name}' has no ShipmentPackage, so " +
+                             "picking it up won't give the item inside.", prefab);
         spawned.Spawn(true);
 
         if (spawned.TryGetComponent<ItemPickupNet>(out var item))
             item.ServerReserve(teamId, reservationSeconds);
+    }
+
+    private static readonly Dictionary<NetworkObject, float> pivotHeights = new();
+
+    private static float PivotHeightAboveBase(NetworkObject prefab)
+    {
+        if (pivotHeights.TryGetValue(prefab, out float h)) return h;
+        Bounds b = PlacementCheck.ComputeLocalBounds(prefab.gameObject);
+        h = b.size == Vector3.zero ? 0f : -b.min.y * prefab.transform.localScale.y;
+        pivotHeights[prefab] = h;
+        return h;
+    }
+
+    private void ServerRemoveOrderAt(int index)
+    {
+        int id = orders[index].orderId;
+        for (int i = orderLines.Count - 1; i >= 0; i--)
+            if (orderLines[i].orderId == id) orderLines.RemoveAt(i);
+        orders.RemoveAt(index);
     }
 
     /* ========================= DEV ========================= */
@@ -387,7 +493,7 @@ public class EconomyManager : NetworkBehaviour
                 Debug.Log("[EconomyManager] Dev: stand in your store to order for it.");
                 return;
             }
-            RequestOrderRpc(plot.PlotId, devOrderItemId, 1, devDeliverySeconds);
+            Order(plot.PlotId, devOrderItemId, Mathf.Max(1, devOrderQuantity), devDeliverySeconds);
         }
     }
 
@@ -404,24 +510,29 @@ public class EconomyManager : NetworkBehaviour
 
         ulong team = MallManager.GetTeamOf(NetworkManager.LocalClientId);
         var mine = GetOrdersForTeam(team);
+        int shown = Mathf.Min(mine.Count, 6);
 
-        float h = 46f + Mathf.Min(mine.Count, 6) * 18f + (lastResult.HasValue ? 18f : 0f);
-        var r = new Rect(Screen.width - 260f, 96f, 250f, h);
+        float h = 46f + shown * 18f + (lastResult.HasValue ? 18f : 0f);
+        var r = new Rect(Screen.width - 330f, 96f, 320f, h);
         GUI.Box(r, GUIContent.none);
-        GUI.Label(new Rect(r.x + 8, r.y + 4, 240, 20), $"Money: ${LocalMoney:N0}");
-        GUI.Label(new Rect(r.x + 8, r.y + 22, 240, 20), mine.Count == 0 ? "No deliveries pending" : "Deliveries:");
+        GUI.Label(new Rect(r.x + 8, r.y + 4, 310, 20), $"Money: ${LocalMoney:N0}");
+        GUI.Label(new Rect(r.x + 8, r.y + 22, 310, 20), mine.Count == 0 ? "No deliveries pending" : "Deliveries:");
 
-        for (int i = 0; i < mine.Count && i < 6; i++)
+        for (int i = 0; i < shown; i++)
         {
             var o = mine[i];
-            string name = ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(o.itemId, out var def)
-                ? def.displayName : $"Item {o.itemId}";
-            float s = SecondsUntil(o);
-            string when = s > 0f ? $"{s:0}s" : "waiting for a free spot";
-            GUI.Label(new Rect(r.x + 8, r.y + 40 + i * 18, 240, 20), $"  {name} x{o.quantity}: {when}");
+            var parts = new List<string>();
+            foreach (var l in GetOrderLines(o.orderId))
+            {
+                string name = ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(l.itemId, out var def)
+                    ? def.displayName : $"Item {l.itemId}";
+                parts.Add($"{name} x{l.quantity}");
+            }
+            string when = o.blocked ? $"paused, spots full ({SecondsUntil(o):0}s left)" : $"{SecondsUntil(o):0}s";
+            GUI.Label(new Rect(r.x + 8, r.y + 40 + i * 18, 310, 20), $"  {string.Join(", ", parts)}: {when}");
         }
 
         if (lastResult.HasValue && Time.time - lastResultTime < 5f)
-            GUI.Label(new Rect(r.x + 8, r.y + h - 22, 240, 20), $"Last order: {lastResult.Value}");
+            GUI.Label(new Rect(r.x + 8, r.y + h - 22, 310, 20), $"Last order: {lastResult.Value}");
     }
 }

@@ -262,6 +262,18 @@ public class MallManager : NetworkBehaviour
     /// carrying something out into the hallway is fine; you just can't set it down there.
     /// With no MallManager in the scene everything is allowed, so test scenes still work.
     /// </summary>
+    /// <summary>
+    /// True if this spot is on a shipment area of a store this player isn't allowed in, so they
+    /// can't block someone else's deliveries by parking things there.
+    /// </summary>
+    public static bool IsOthersShipmentArea(ulong clientId, Vector3 position)
+    {
+        if (Instance == null) return false;
+        foreach (var plot in Instance.plots.Values)
+            if (!plot.IsAuthorized(clientId) && plot.IsOnShipmentArea(position)) return true;
+        return false;
+    }
+
     public static bool CanPickupOrPlace(ulong clientId, Vector3 playerPosition, Vector3 targetPosition)
     {
         if (Instance == null) return true;

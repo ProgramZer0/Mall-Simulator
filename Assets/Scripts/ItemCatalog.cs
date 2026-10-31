@@ -14,6 +14,13 @@ public class ItemCatalog : MonoBehaviour
     [SerializeField] private AudioClip defaultPlaceClip;
 
     public AudioClip DefaultPickupClip => defaultPickupClip;
+
+    [Header("Default Shipment Box")]
+    [Tooltip("Box delivered for items that don't set their own Shipment Prefab. Needs a NetworkObject, " +
+             "ItemPickupNet and ShipmentPackage, and must be in the NetworkManager's prefab list.")]
+    [SerializeField] private NetworkObject defaultShipmentPrefab;
+
+    public NetworkObject DefaultShipmentPrefab => defaultShipmentPrefab;
     public AudioClip DefaultPlaceClip => defaultPlaceClip;
 
     private Dictionary<int, ItemDef> map;
@@ -40,9 +47,21 @@ public class ItemDef
     [Header("Buying")]
     [Tooltip("Cost of one when ordered.")]
     public int price = 10;
-    [Tooltip("Default seconds from ordering until it arrives at the dock (used when the order " +
-             "doesn't give its own time).")]
+    [Tooltip("Default seconds from ordering until it arrives (used when the order doesn't give its own time).")]
     public float deliverySeconds = 30f;
+    [Tooltip("What arrives at the shipment area: a box (NetworkObject + ItemPickupNet + ShipmentPackage). " +
+             "Picking it up gives you this item; placing it puts down the real item. Empty = the catalog's " +
+             "default box (or, if that's empty too, the item itself).")]
+    public NetworkObject shipmentPrefab;
+
+    /// <summary>The object to deliver for this item.</summary>
+    public NetworkObject GetShipmentPrefab()
+    {
+        if (shipmentPrefab != null) return shipmentPrefab;
+        if (ItemCatalog.Instance != null && ItemCatalog.Instance.DefaultShipmentPrefab != null)
+            return ItemCatalog.Instance.DefaultShipmentPrefab;
+        return worldNetworkPrefab;
+    }
 
     [Header("Sounds (leave empty to use the catalog defaults)")]
     public AudioClip pickupClip;

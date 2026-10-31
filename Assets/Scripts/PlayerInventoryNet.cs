@@ -84,7 +84,9 @@ public class PlayerInventoryNet : NetworkBehaviour
 
         if (HeldItemId.Value != 0) return;
 
-        int itemId = pickup.itemId;
+        // A delivery box gives you the item inside it.
+        int itemId = pickupNO.TryGetComponent<ShipmentPackage>(out var box) ? box.ContainedItemId : pickup.itemId;
+        if (itemId == 0) return;
         HeldItemId.Value = itemId;
 
         Vector3 soundPos = pickup.transform.position;
@@ -105,6 +107,9 @@ public class PlayerInventoryNet : NetworkBehaviour
         // Store rules: only from inside your own store, only onto a spot inside your own store.
         if (!MallManager.CanPickupOrPlace(rpcParams.Receive.SenderClientId,
                 actor.transform.position, position)) return;
+
+        // Can't park things on another store's shipment spots.
+        if (MallManager.IsOthersShipmentArea(rpcParams.Receive.SenderClientId, position)) return;
 
         if (!ItemCatalog.Instance.TryGet(id, out var def) || def.worldNetworkPrefab == null) return;
 
