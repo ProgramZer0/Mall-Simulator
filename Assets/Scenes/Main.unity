@@ -2164,6 +2164,8 @@ MonoBehaviour:
   - {fileID: 820470612}
   - {fileID: 835612281}
   segments: []
+  spawnPoint: {fileID: 0}
+  spawnDistance: 1.5
   renovationWalls:
   - {fileID: 1594823806}
   overrideCutHeight: 0
@@ -2794,6 +2796,8 @@ MonoBehaviour:
   - {fileID: 393636833}
   - {fileID: 905347080}
   segments: []
+  spawnPoint: {fileID: 0}
+  spawnDistance: 1.5
   renovationWalls:
   - {fileID: 1611391605}
   overrideCutHeight: 0
@@ -3279,6 +3283,8 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 621830574}
   segments: []
+  spawnPoint: {fileID: 0}
+  spawnDistance: 1.5
   renovationWalls:
   - {fileID: 464905934}
   overrideCutHeight: 0
@@ -3671,6 +3677,8 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 1777711584}
   segments: []
+  spawnPoint: {fileID: 0}
+  spawnDistance: 1.5
   renovationWalls:
   - {fileID: 596268758}
   overrideCutHeight: 0
@@ -4349,6 +4357,8 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 45084481}
   segments: []
+  spawnPoint: {fileID: 0}
+  spawnDistance: 1.5
   renovationWalls:
   - {fileID: 555231788}
   overrideCutHeight: 0
@@ -4623,6 +4633,8 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 1674493701}
   segments: []
+  spawnPoint: {fileID: 0}
+  spawnDistance: 1.5
   renovationWalls:
   - {fileID: 2121226880}
   overrideCutHeight: 0
@@ -7864,6 +7876,8 @@ MonoBehaviour:
   - {fileID: 1147578148}
   - {fileID: 375272727}
   segments: []
+  spawnPoint: {fileID: 0}
+  spawnDistance: 1.5
   renovationWalls:
   - {fileID: 1413278508}
   overrideCutHeight: 0
@@ -9512,6 +9526,8 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 699179719}
   segments: []
+  spawnPoint: {fileID: 0}
+  spawnDistance: 1.5
   renovationWalls:
   - {fileID: 5956691172464362032}
   overrideCutHeight: 0
@@ -9704,6 +9720,8 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 614015631}
   segments: []
+  spawnPoint: {fileID: 0}
+  spawnDistance: 1.5
   renovationWalls:
   - {fileID: 1513467531}
   overrideCutHeight: 0
@@ -10249,6 +10267,8 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 2135702459}
   segments: []
+  spawnPoint: {fileID: 0}
+  spawnDistance: 1.5
   renovationWalls:
   - {fileID: 1743499166}
   overrideCutHeight: 0
@@ -10753,6 +10773,8 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 1575867551}
   segments: []
+  spawnPoint: {fileID: 0}
+  spawnDistance: 1.5
   renovationWalls:
   - {fileID: 1704726873}
   overrideCutHeight: 0
@@ -11411,6 +11433,8 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 471373357}
   segments: []
+  spawnPoint: {fileID: 0}
+  spawnDistance: 1.5
   renovationWalls:
   - {fileID: 10674439}
   overrideCutHeight: 0
@@ -13622,6 +13646,8 @@ MonoBehaviour:
   - {fileID: 1062302410}
   - {fileID: 1403322358}
   segments: []
+  spawnPoint: {fileID: 0}
+  spawnDistance: 1.5
   renovationWalls:
   - {fileID: 1080094472}
   overrideCutHeight: 0
@@ -15034,6 +15060,8 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 56890948}
   segments: []
+  spawnPoint: {fileID: 0}
+  spawnDistance: 1.5
   renovationWalls:
   - {fileID: 1715966275}
   - {fileID: 1674855097}
@@ -16864,13 +16892,13 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 3745622627342280595}
   - {fileID: 4865064392343513842}
   - {fileID: 4306643201913468524}
   - {fileID: 4083501150421041840}
   - {fileID: 7129599250530658524}
   - {fileID: 5680519943317920548}
   - {fileID: 7967766326954959101}
+  - {fileID: 3745622627342280595}
   m_Father: {fileID: 4397812901313757866}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!4 &697465477354136017
