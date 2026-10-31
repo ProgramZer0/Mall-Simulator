@@ -156,6 +156,7 @@ GameObject:
   - component: {fileID: 2986661850691434819}
   - component: {fileID: 2123849330509129994}
   - component: {fileID: 1450381561150076667}
+  - component: {fileID: 2803416138932026377}
   m_Layer: 7
   m_Name: playermodel
   m_TagString: Player
@@ -379,10 +380,10 @@ MonoBehaviour:
     m_Bits: 8
   placementMask:
     serializedVersion: 2
-    m_Bits: 379
+    m_Bits: 1403
   placementBlockingMask:
     serializedVersion: 2
-    m_Bits: 456
+    m_Bits: 1480
   fineRotateSpeed: 45
   placeResponseTimeout: 0.5
   invalidTintStrength: 0.35
@@ -464,6 +465,41 @@ MonoBehaviour:
   loopMinPitch: 0.85
   loopMaxPitch: 1.15
   loopFadeSpeed: 6
+--- !u!114 &2803416138932026377
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4772898928607901605}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: af47e560d178e534398a2337aba22d68, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StoreEditController
+  ShowTopMostFoldoutHeaderGroup: 1
+  toggleKey: 48
+  toolKey: 120
+  gravityKey: 103
+  pitch: 55
+  startDistance: 12
+  minDistance: 4
+  maxDistance: 30
+  panSpeed: 10
+  turnSpeed: 90
+  zoomStep: 1.5
+  panMargin: 2
+  hiddenInEditView:
+    serializedVersion: 2
+    m_Bits: 0
+  cutaway: 1
+  cutOffset: 0
+  grabRadiusPixels: 14
+  nearMissFactor: 2.5
+  rotateDegreesPerPixel: 0.5
+  snapAngle: 15
+  lineWidth: 0.006
+  showHud: 1
 --- !u!1 &5427521708554327154
 GameObject:
   m_ObjectHideFlags: 0
