@@ -498,7 +498,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 0
   hideOutsideStore: 1
-  outsideMargin: 0.3
+  outsideMargin: 2
   editRendererIndex: 1
   solidBackground: 1
   backgroundColor: {r: 0.08, g: 0.09, b: 0.11, a: 1}

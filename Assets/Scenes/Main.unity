@@ -920,8 +920,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 47.59438, y: 3.6093545, z: 70.85449}
-  m_Center: {x: 12.296728, y: 0.82181096, z: 26.797787}
+  m_Size: {x: 47.59438, y: 4.4957438, z: 70.85449}
+  m_Center: {x: 12.296728, y: 1.2650049, z: 26.797787}
 --- !u!1 &45753413
 GameObject:
   m_ObjectHideFlags: 0
@@ -2159,6 +2159,7 @@ MonoBehaviour:
   displayName: Store14
   price: 1000
   isStarterPlot: 0
+  startingMoney: 5000
   baseAreas:
   - {fileID: 820470612}
   - {fileID: 835612281}
@@ -2788,6 +2789,7 @@ MonoBehaviour:
   displayName: Store04
   price: 1000
   isStarterPlot: 0
+  startingMoney: 5000
   baseAreas:
   - {fileID: 393636833}
   - {fileID: 905347080}
@@ -3273,6 +3275,7 @@ MonoBehaviour:
   displayName: Store07
   price: 1000
   isStarterPlot: 0
+  startingMoney: 5000
   baseAreas:
   - {fileID: 621830574}
   segments: []
@@ -3664,6 +3667,7 @@ MonoBehaviour:
   displayName: Store02
   price: 0
   isStarterPlot: 1
+  startingMoney: 5000
   baseAreas:
   - {fileID: 1777711584}
   segments: []
@@ -4341,6 +4345,7 @@ MonoBehaviour:
   displayName: Store08
   price: 1000
   isStarterPlot: 0
+  startingMoney: 5000
   baseAreas:
   - {fileID: 45084481}
   segments: []
@@ -4614,6 +4619,7 @@ MonoBehaviour:
   displayName: Store13
   price: 1000
   isStarterPlot: 0
+  startingMoney: 5000
   baseAreas:
   - {fileID: 1674493701}
   segments: []
@@ -7853,6 +7859,7 @@ MonoBehaviour:
   displayName: Store03
   price: 1000
   isStarterPlot: 0
+  startingMoney: 5000
   baseAreas:
   - {fileID: 1147578148}
   - {fileID: 375272727}
@@ -9501,6 +9508,7 @@ MonoBehaviour:
   displayName: Store01
   price: 0
   isStarterPlot: 1
+  startingMoney: 5000
   baseAreas:
   - {fileID: 699179719}
   segments: []
@@ -9692,6 +9700,7 @@ MonoBehaviour:
   displayName: Store06
   price: 1000
   isStarterPlot: 0
+  startingMoney: 5000
   baseAreas:
   - {fileID: 614015631}
   segments: []
@@ -10236,6 +10245,7 @@ MonoBehaviour:
   displayName: Store10
   price: 0
   isStarterPlot: 1
+  startingMoney: 5000
   baseAreas:
   - {fileID: 2135702459}
   segments: []
@@ -10739,6 +10749,7 @@ MonoBehaviour:
   displayName: Store12
   price: 1000
   isStarterPlot: 0
+  startingMoney: 5000
   baseAreas:
   - {fileID: 1575867551}
   segments: []
@@ -11396,6 +11407,7 @@ MonoBehaviour:
   displayName: Store05
   price: 1000
   isStarterPlot: 0
+  startingMoney: 5000
   baseAreas:
   - {fileID: 471373357}
   segments: []
@@ -13605,6 +13617,7 @@ MonoBehaviour:
   displayName: Store11
   price: 1000
   isStarterPlot: 0
+  startingMoney: 5000
   baseAreas:
   - {fileID: 1062302410}
   - {fileID: 1403322358}
@@ -15017,6 +15030,7 @@ MonoBehaviour:
   displayName: Store09
   price: 0
   isStarterPlot: 1
+  startingMoney: 5000
   baseAreas:
   - {fileID: 56890948}
   segments: []
