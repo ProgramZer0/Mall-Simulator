@@ -2164,6 +2164,7 @@ MonoBehaviour:
   - {fileID: 820470612}
   - {fileID: 835612281}
   segments: []
+  frontWallReach: 1
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
   renovationWalls:
@@ -2796,6 +2797,7 @@ MonoBehaviour:
   - {fileID: 393636833}
   - {fileID: 905347080}
   segments: []
+  frontWallReach: 1
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
   renovationWalls:
@@ -3283,6 +3285,7 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 621830574}
   segments: []
+  frontWallReach: 1
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
   renovationWalls:
@@ -3677,6 +3680,7 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 1777711584}
   segments: []
+  frontWallReach: 1
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
   renovationWalls:
@@ -4123,6 +4127,7 @@ GameObject:
   - component: {fileID: 451575849}
   - component: {fileID: 451575847}
   - component: {fileID: 451575848}
+  - component: {fileID: 451575850}
   m_Layer: 0
   m_Name: MallManager
   m_TagString: Untagged
@@ -4188,6 +4193,20 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &451575850
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 451575846}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 80cc2084904fdb64a91e62075f673ec1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FrontWallCatalog
+  modules: []
+  requireEntrance: 1
 --- !u!1 &464905934
 GameObject:
   m_ObjectHideFlags: 0
@@ -4357,6 +4376,7 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 45084481}
   segments: []
+  frontWallReach: 1
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
   renovationWalls:
@@ -4633,6 +4653,7 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 1674493701}
   segments: []
+  frontWallReach: 1
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
   renovationWalls:
@@ -7876,6 +7897,7 @@ MonoBehaviour:
   - {fileID: 1147578148}
   - {fileID: 375272727}
   segments: []
+  frontWallReach: 1
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
   renovationWalls:
@@ -9526,6 +9548,7 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 699179719}
   segments: []
+  frontWallReach: 1
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
   renovationWalls:
@@ -9720,6 +9743,7 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 614015631}
   segments: []
+  frontWallReach: 1
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
   renovationWalls:
@@ -10267,6 +10291,7 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 2135702459}
   segments: []
+  frontWallReach: 1
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
   renovationWalls:
@@ -10773,6 +10798,7 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 1575867551}
   segments: []
+  frontWallReach: 1
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
   renovationWalls:
@@ -11433,6 +11459,7 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 471373357}
   segments: []
+  frontWallReach: 1
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
   renovationWalls:
@@ -13646,6 +13673,7 @@ MonoBehaviour:
   - {fileID: 1062302410}
   - {fileID: 1403322358}
   segments: []
+  frontWallReach: 1
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
   renovationWalls:
@@ -15060,6 +15088,7 @@ MonoBehaviour:
   baseAreas:
   - {fileID: 56890948}
   segments: []
+  frontWallReach: 1
   spawnPoint: {fileID: 0}
   spawnDistance: 1.5
   renovationWalls:

@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 7084155749104057131}
   - component: {fileID: 6313981043723472555}
   - component: {fileID: 8084689249265090823}
+  - component: {fileID: 7023942416306843722}
   m_Layer: 8
   m_Name: Window2
   m_TagString: Untagged
@@ -112,3 +113,19 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1.0393263, y: 3.2876127, z: 4.319453}
   m_Center: {x: -0.050795358, y: -3.0515277, z: 0.97980297}
+--- !u!114 &7023942416306843722
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6970659404445058545}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8210e9a71076a7b43a579c5292f4edd9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::WallModule
+  moduleId: 4
+  displayName: Large Window
+  isEntrance: 0
+  price: 0
