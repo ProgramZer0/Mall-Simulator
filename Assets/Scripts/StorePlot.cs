@@ -41,8 +41,7 @@ public class StorePlot : NetworkBehaviour
     [Tooltip("Handed out automatically to players who join without a store.")]
     [SerializeField] private bool isStarterPlot = true;
     [Tooltip("Money a team starts the game with when this is the starter store it's given. " +
-             "Lets you balance starter stores against each other (e.g. a worse spot = more cash). " +
-             "Used once the economy exists.")]
+             "Lets you balance starter stores against each other (e.g. a worse spot = more cash).")]
     [SerializeField] private int startingMoney = 5000;
 
     [Header("Space")]
@@ -59,6 +58,10 @@ public class StorePlot : NetworkBehaviour
     [Tooltip("Automatic search only: wall modules within this many meters of the store's space " +
              "belong to it. Each module goes to the closest store.")]
     [SerializeField] private float frontWallReach = 1f;
+
+    [Header("Deliveries")]
+    [Tooltip("The loading dock this store's orders arrive at. Several stores can share a dock.")]
+    [SerializeField] private LoadingDockZone dock;
 
     [Header("Doors")]
     [Tooltip("Door objects for this store (e.g. the door inside each doorway). Shown while the store " +
@@ -132,6 +135,7 @@ public class StorePlot : NetworkBehaviour
     public int Price => price;
     public bool IsStarterPlot => isStarterPlot;
     public int StartingMoney => startingMoney;
+    public LoadingDockZone Dock => dock;
     public ulong OwnerTeamId => ownerTeamId.Value;
     public bool HasOwner => ownerTeamId.Value != NoOwner;
     public int SegmentCount => segments?.Length ?? 0;
@@ -1011,6 +1015,13 @@ public class StorePlot : NetworkBehaviour
 
     private void OnDrawGizmosSelected()
     {
+        // Line to the dock this store's deliveries go to.
+        if (dock != null)
+        {
+            Gizmos.color = new Color(0.7f, 0.4f, 1f, 0.9f);
+            Gizmos.DrawLine(GetWorldBounds().center, dock.transform.position);
+        }
+
         // Outline the wall sections this store treats as its storefront (numbered like in edit mode).
         var found = FindFrontModules();
         for (int i = 0; i < found.Count; i++)

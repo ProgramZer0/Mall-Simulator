@@ -231,6 +231,17 @@ public class MallManager : NetworkBehaviour
         foreach (var plot in plots.Values)
             if (plot.HasOwner && plot.OwnerTeamId == teamId)
                 plot.ServerRelease();
+
+        if (EconomyManager.Instance != null) EconomyManager.Instance.ServerForgetTeam(teamId);
+    }
+
+    /// <summary>Server: charge a team, if there's an economy. With no EconomyManager everything is free.</summary>
+    private static bool ServerTryCharge(ulong teamId, int amount, string what, UnityEngine.Object context)
+    {
+        var eco = EconomyManager.Instance;
+        if (eco == null || !eco.IsSpawned || eco.ServerTrySpend(teamId, amount)) return true;
+        Debug.Log($"[MallManager] Team {teamId} can't afford {what} ({amount}).", context);
+        return false;
     }
 
     /* ========================= PERMISSIONS ========================= */
@@ -288,7 +299,9 @@ public class MallManager : NetworkBehaviour
             if (plot.IsStarterPlot && !plot.HasOwner)
             {
                 plot.ServerSetOwner(team);
-                // TODO economy: give the team plot.StartingMoney here (only for its first store).
+                // A team's first store pays its Starting Money (once per team).
+                if (EconomyManager.Instance != null)
+                    EconomyManager.Instance.ServerGrantStartingMoney(team, plot.StartingMoney);
                 return;
             }
         }
@@ -367,7 +380,7 @@ public class MallManager : NetworkBehaviour
             return false;
         }
 
-        // TODO economy: charge plot.Price.
+        if (!ServerTryCharge(team, plot.Price, $"'{plot.DisplayName}'", plot)) return false;
         plot.ServerSetOwner(team);
         Debug.Log($"[MallManager] Client {clientId} bought '{plot.DisplayName}' for team {team}.", plot);
         return true;
@@ -394,14 +407,15 @@ public class MallManager : NetworkBehaviour
     }
 
     /// <summary>Server: unlock an expansion segment (removes its false walls on every client).</summary>
-    public bool ServerTryBuySegment(ulong clientId, int plotId, int segmentIndex)
+    public bool ServerTryBuySegment(ulong clientId, int plotId, int segmentIndex, bool charge = true)
     {
         if (!IsServer || !plots.TryGetValue(plotId, out var plot)) return false;
         if (!plot.IsAuthorized(clientId)) return false;
         if (segmentIndex < 0 || segmentIndex >= plot.SegmentCount) return false;
         if (plot.IsSegmentPurchased(segmentIndex)) return false;
 
-        // TODO economy: charge plot.GetSegmentPrice(segmentIndex).
+        if (charge && !ServerTryCharge(GetTeamOf(clientId), plot.GetSegmentPrice(segmentIndex),
+                $"segment {segmentIndex} of '{plot.DisplayName}'", plot)) return false;
         plot.ServerUnlockSegment(segmentIndex);
         return true;
     }
@@ -416,6 +430,13 @@ public class MallManager : NetworkBehaviour
     public void RequestBuySegmentServerRpc(int plotId, int segmentIndex, ServerRpcParams rpcParams = default)
     {
         ServerTryBuySegment(rpcParams.Receive.SenderClientId, plotId, segmentIndex);
+    }
+
+    /// <summary>Dev hotkey B: segment for free (only while the host has Dev Hotkeys on).</summary>
+    [ServerRpc(RequireOwnership = false)]
+    private void DevBuySegmentServerRpc(int plotId, int segmentIndex, ServerRpcParams rpcParams = default)
+    {
+        if (devHotkeys) ServerTryBuySegment(rpcParams.Receive.SenderClientId, plotId, segmentIndex, charge: false);
     }
 
     /* ========================= OPEN / CLOSED ========================= */
@@ -458,7 +479,7 @@ public class MallManager : NetworkBehaviour
             for (int i = 0; i < plot.SegmentCount; i++)
             {
                 if (plot.IsSegmentPurchased(i)) continue;
-                RequestBuySegmentServerRpc(plot.PlotId, i);
+                DevBuySegmentServerRpc(plot.PlotId, i);
                 Debug.Log($"[MallManager] Dev: buying segment {i} of '{plot.DisplayName}'.", plot);
                 return;
             }
