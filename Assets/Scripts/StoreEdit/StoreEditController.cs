@@ -15,6 +15,9 @@ using UnityEngine;
 /// G          toggle gravity for the selected item (everything hangs in place otherwise)
 /// Esc        cancel the current drag / deselect
 ///
+/// The edit camera shows only your store: everything above it (Cutaway) and everything
+/// beside it (Hide Neighbours, see StoreEditIsolation) is left out of the view.
+///
 /// Networking: entering edit mode, the host takes the store's items out of the world and
 /// sends this player a list of them; this player edits local copies, so nothing goes over
 /// the network while dragging. Leaving, the final positions go back to the host, which
@@ -58,6 +61,16 @@ public class StoreEditController : NetworkBehaviour
              "everything above the store; use it for odd cases like a tall sign poking into view.")]
     [SerializeField] private LayerMask hiddenInEditView;
 
+    [Header("Hide Neighbours")]
+    [Tooltip("Hide everything outside your store in the edit camera (neighbouring stores, the " +
+             "hallway, other players and NPCs). Walls and floors touching your store stay visible.")]
+    [SerializeField] private bool hideOutsideStore = true;
+    [Tooltip("Things within this many meters of your store's space still show (e.g. its walls).")]
+    [SerializeField] private float outsideMargin = 0.3f;
+    [Tooltip("Fill the hidden area with a plain colour instead of the sky.")]
+    [SerializeField] private bool solidBackground = true;
+    [SerializeField] private Color backgroundColor = new(0.08f, 0.09f, 0.11f, 1f);
+
     [Header("Cutaway")]
     [Tooltip("Hide everything above the store (floor above, upstairs players, NPCs, items) " +
              "in the edit camera only.")]
@@ -84,6 +97,7 @@ public class StoreEditController : NetworkBehaviour
     private PlayerInteractInput interact;
     private Camera playerCam;
     private Camera editCam;
+    private StoreEditIsolation isolation;
     private StoreEditHandles handles;
     private StorePlot editPlot;
 
@@ -245,6 +259,22 @@ public class StoreEditController : NetworkBehaviour
         if (editCam == null) CreateEditCamera();
         if (handles == null) handles = StoreEditHandles.Create();
 
+        // Hide everything outside this store from the edit camera.
+        isolation.Plot = plot;
+        isolation.Margin = outsideMargin;
+        isolation.AlwaysShow = new[] { handles.transform };
+        isolation.enabled = hideOutsideStore;
+        if (hideOutsideStore && solidBackground)
+        {
+            editCam.clearFlags = CameraClearFlags.SolidColor;
+            editCam.backgroundColor = backgroundColor;
+        }
+        else if (playerCam != null)
+        {
+            editCam.clearFlags = playerCam.clearFlags;
+            editCam.backgroundColor = playerCam.backgroundColor;
+        }
+
         Bounds b = plot.GetWorldBounds();
         pivot = new Vector3(b.center.x, b.min.y, b.center.z);
         yaw = transform.eulerAngles.y;
@@ -268,6 +298,7 @@ public class StoreEditController : NetworkBehaviour
         finishing = false;
 
         if (handles != null) handles.HideAll();
+        if (isolation != null) isolation.enabled = false; // turns everything it hid back on
         if (editCam != null)
         {
             editCam.ResetProjectionMatrix();
@@ -288,6 +319,9 @@ public class StoreEditController : NetworkBehaviour
         if (playerCam != null) editCam.CopyFrom(playerCam);
         editCam.cullingMask &= ~hiddenInEditView.value;
         editCam.enabled = false;
+
+        isolation = go.AddComponent<StoreEditIsolation>();
+        isolation.enabled = false;
     }
 
     private void ClearLocalItems()
