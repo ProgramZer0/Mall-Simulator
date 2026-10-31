@@ -3,9 +3,13 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 /// <summary>
-/// Edit mode privacy: while the edit camera draws, everything that isn't inside the store
-/// being edited is switched off, so you can't see into neighbouring stores or the hallway.
-/// Walls and floors that touch the store stay visible.
+/// Edit mode privacy: nothing outside the store being edited is drawn by the edit camera.
+///
+/// Two layers:
+///  1. Objects entirely outside the store are switched off, so they can't block the view.
+///  2. The "MallSim/Edit Plot Clip" full-screen pass (if the edit renderer has it) paints over
+///     every remaining pixel outside the store's boxes, cutting walls and floors that cross the
+///     boundary exactly at the edge. Without that pass, those just show in full.
 ///
 /// Only the edit camera is affected. Objects are turned off just before that camera draws and
 /// back on right after, so nobody else (and no other camera) ever sees anything hidden.
@@ -25,6 +29,18 @@ public class StoreEditIsolation : MonoBehaviour
 
     /// <summary>Objects under these are never hidden (e.g. the edit handles).</summary>
     public Transform[] AlwaysShow;
+
+    /// <summary>Colour painted where nothing is drawn (outside the store).</summary>
+    public Color Background = Color.black;
+
+    private const int MaxBoxes = 16;
+    private static readonly int EnabledId = Shader.PropertyToID("_EditClipEnabled");
+    private static readonly int CountId = Shader.PropertyToID("_EditClipBoxCount");
+    private static readonly int BoxesId = Shader.PropertyToID("_EditClipBoxes");
+    private static readonly int BackgroundId = Shader.PropertyToID("_EditClipBackground");
+    private readonly Matrix4x4[] boxMatrices = new Matrix4x4[MaxBoxes];
+    private readonly List<BoxCollider> boxes = new();
+    private bool warnedTooManyBoxes;
 
     private Camera cam;
     private Renderer[] renderers = new Renderer[0];
@@ -70,6 +86,8 @@ public class StoreEditIsolation : MonoBehaviour
         Restore();
         if (Plot == null) return;
 
+        SetPixelClip();
+
         if (Time.unscaledTime >= nextRefresh)
         {
             renderers = FindObjectsByType<Renderer>(FindObjectsSortMode.None);
@@ -110,6 +128,47 @@ public class StoreEditIsolation : MonoBehaviour
         foreach (var r in hidden)
             if (r != null) r.forceRenderingOff = false;
         hidden.Clear();
+        Shader.SetGlobalFloat(EnabledId, 0f); // every other camera draws normally
+    }
+
+    /// <summary>Hands the store's boxes (grown by Margin) to the full-screen clip shader.</summary>
+    private void SetPixelClip()
+    {
+        boxes.Clear();
+        Plot.GetAreaBoxes(boxes);
+
+        if (boxes.Count > MaxBoxes && !warnedTooManyBoxes)
+        {
+            warnedTooManyBoxes = true;
+            Debug.LogWarning($"[StoreEdit] '{Plot.DisplayName}' has {boxes.Count} area boxes; only the first " +
+                             $"{MaxBoxes} are used for the edit view cut.", Plot);
+        }
+
+        int count = Mathf.Min(boxes.Count, MaxBoxes);
+        for (int i = 0; i < MaxBoxes; i++)
+        {
+            if (i >= count) { boxMatrices[i] = Matrix4x4.identity; continue; }
+
+            var box = boxes[i];
+            Vector3 scale = box.transform.lossyScale;
+            Vector3 world = new(Mathf.Abs(box.size.x * scale.x), Mathf.Abs(box.size.y * scale.y),
+                                Mathf.Abs(box.size.z * scale.z));
+            // Grow the box by Margin on every side (in meters), so the store's own walls stay.
+            Vector3 grow = new(
+                (world.x + Margin * 2f) / Mathf.Max(world.x, 1e-4f),
+                (world.y + Margin * 2f) / Mathf.Max(world.y, 1e-4f),
+                (world.z + Margin * 2f) / Mathf.Max(world.z, 1e-4f));
+
+            Matrix4x4 boxToWorld = box.transform.localToWorldMatrix *
+                                   Matrix4x4.TRS(box.center, Quaternion.identity, Vector3.Scale(box.size, grow));
+            boxMatrices[i] = boxToWorld.inverse;
+        }
+
+        Color bg = QualitySettings.activeColorSpace == ColorSpace.Linear ? Background.linear : Background;
+        Shader.SetGlobalMatrixArray(BoxesId, boxMatrices);
+        Shader.SetGlobalFloat(CountId, count);
+        Shader.SetGlobalColor(BackgroundId, bg);
+        Shader.SetGlobalFloat(EnabledId, count > 0 ? 1f : 0f);
     }
 
     private bool IsAlwaysShown(Transform t)
