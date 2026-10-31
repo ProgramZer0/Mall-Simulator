@@ -1,17 +1,30 @@
 using UnityEngine;
 using Unity.Netcode;
 
-public class  NetworkTestingButtons : MonoBehaviour
+public class NetworkTestingButtons : MonoBehaviour
 {
     private void OnGUI()
     {
-        GUILayout.BeginArea(new Rect(10, 10, 300, 300));
-        if (!NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer) {
-            if (GUILayout.Button("Host")) NetworkManager.Singleton.StartHost();
-            if (GUILayout.Button("Server")) NetworkManager.Singleton.StartServer();
-            if (GUILayout.Button("Client")) NetworkManager.Singleton.StartClient();
-        }
+        // The NetworkManager can be gone (e.g. while Play mode is stopping); draw nothing then.
+        var nm = NetworkManager.Singleton;
+        if (nm == null) return;
 
-        GUILayout.EndArea();
+        if (!nm.IsClient && !nm.IsServer)
+        {
+            GUILayout.BeginArea(new Rect(10, 10, 300, 300));
+            if (GUILayout.Button("Host")) nm.StartHost();
+            if (GUILayout.Button("Server")) nm.StartServer();
+            if (GUILayout.Button("Client")) nm.StartClient();
+            GUILayout.EndArea();
+        }
+        else
+        {
+            // Top-right, out of the way of the store edit panel in the top-left.
+            GUILayout.BeginArea(new Rect(Screen.width - 160, 10, 150, 80));
+            string mode = nm.IsHost ? "Host" : nm.IsServer ? "Server" : "Client";
+            GUILayout.Label($"Running as {mode}");
+            if (GUILayout.Button("Shutdown")) nm.Shutdown();
+            GUILayout.EndArea();
+        }
     }
 }
