@@ -80,6 +80,9 @@ public class PlayerInventoryNet : NetworkBehaviour
                 actor.transform.position, pickup.transform.position)) return;
 
         // Deliveries are held for the team that ordered them for a while.
+        // A shelf with stock on it has to be emptied first.
+        if (pickupNO.TryGetComponent<StockContainer>(out var container) && container.HasStock) return;
+
         bool isBox = pickupNO.TryGetComponent<ShipmentPackage>(out var box);
         if (isBox && box.IsReservedAgainst(MallManager.GetTeamOf(rpcParams.Receive.SenderClientId))) return;
 
@@ -94,6 +97,51 @@ public class PlayerInventoryNet : NetworkBehaviour
         pickupNO.Despawn(true);
 
         PlayItemSoundClientRpc(itemId, soundPos, false);
+    }
+
+    /// <summary>Put the held stock crate on one of a container's place points.</summary>
+    [ServerRpc]
+    public void RequestStockServerRpc(NetworkObjectReference containerRef, int point, ServerRpcParams rpcParams = default)
+    {
+        int id = HeldItemId.Value;
+        if (id == 0 || !StockContainer.IsStockCrate(id)) return;
+        if (!TryGetContainerPoint(containerRef, point, rpcParams.Receive.SenderClientId, out var container, out var spot)) return;
+        if (container.GetStock(point) != 0) return; // someone got there first
+
+        container.ServerSetStock(point, id);
+        HeldItemId.Value = 0;
+        PlayItemSoundClientRpc(id, spot.position, true);
+    }
+
+    /// <summary>Take the crate off one of a container's place points into empty hands.</summary>
+    [ServerRpc]
+    public void RequestUnstockServerRpc(NetworkObjectReference containerRef, int point, ServerRpcParams rpcParams = default)
+    {
+        if (HeldItemId.Value != 0) return;
+        if (!TryGetContainerPoint(containerRef, point, rpcParams.Receive.SenderClientId, out var container, out var spot)) return;
+
+        int id = container.GetStock(point);
+        if (id == 0) return;
+
+        container.ServerSetStock(point, 0);
+        HeldItemId.Value = id;
+        PlayItemSoundClientRpc(id, spot.position, false);
+    }
+
+    // Same rules as picking up and placing: close enough, standing in your own store, container in it too.
+    private static bool TryGetContainerPoint(NetworkObjectReference containerRef, int point, ulong sender,
+                                             out StockContainer container, out Transform spot)
+    {
+        spot = null;
+        container = null;
+        if (!containerRef.TryGet(out NetworkObject no) || !no.TryGetComponent(out container)) return false;
+
+        spot = container.GetPoint(point);
+        if (spot == null) return false;
+
+        var actor = NetworkManager.Singleton.ConnectedClients[sender].PlayerObject;
+        if (actor == null || Vector3.Distance(actor.transform.position, spot.position) > 4.0f) return false;
+        return MallManager.CanPickupOrPlace(sender, actor.transform.position, spot.position);
     }
 
     [ServerRpc]

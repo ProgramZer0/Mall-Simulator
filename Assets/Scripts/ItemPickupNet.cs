@@ -19,6 +19,13 @@ public class ItemPickupNet : NetworkBehaviour
     [Tooltip("Can't be picked up in normal play, only moved in store edit mode (e.g. the shop monitor).")]
     [SerializeField] private bool editModeOnly;
 
+    [Header("Stocking")]
+    [Tooltip("This item is stock: hold it, look at a StockContainer (shelf, rack...) and press F to put it on a place point.")]
+    [SerializeField] private bool isStockCrate;
+    [Tooltip("What this crate looks like once it's on a container's place point. Plain visual; its pivot sits " +
+             "on the point. Any scripts, physics or networking on it are stripped.")]
+    [SerializeField] private GameObject stockedPrefab;
+
     [Header("Physics")]
     [Tooltip("Frozen: stays where it's put.\n" +
              "Fall Then Freeze: falls, and once it has touched something and held still for Still Seconds, " +
@@ -35,6 +42,8 @@ public class ItemPickupNet : NetworkBehaviour
     [SerializeField] private float stillSpeed = 0.05f;
 
     public bool EditModeOnly => editModeOnly;
+    public bool IsStockCrate => isStockCrate;
+    public GameObject StockedPrefab => stockedPrefab;
 
     /// <summary>Every spawned item on this machine (stores use it to find their contents).</summary>
     public static readonly List<ItemPickupNet> All = new();
