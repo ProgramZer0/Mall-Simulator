@@ -178,9 +178,9 @@ MonoBehaviour:
   itemId: 10
   editModeOnly: 0
   isStockCrate: 0
-  stockedPrefab: {fileID: 0}
+  shelfPrefab: {fileID: 0}
+  hangPrefab: {fileID: 0}
   unitsPerCrate: 1
-  stockStyle: 0
   physicsMode: 1
   stillSeconds: 4
   maxFallSeconds: 20

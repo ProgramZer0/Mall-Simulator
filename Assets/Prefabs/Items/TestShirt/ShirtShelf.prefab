@@ -16,7 +16,7 @@ GameObject:
   - component: {fileID: 323429474624334279}
   - component: {fileID: 7971765392998675163}
   m_Layer: 3
-  m_Name: Shirt
+  m_Name: ShirtShelf
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
