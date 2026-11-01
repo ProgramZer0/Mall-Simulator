@@ -8,6 +8,9 @@ public class PlayerInventoryNet : NetworkBehaviour
 
     public NetworkVariable<int> HeldItemId = new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    /// <summary>Products left in the held stock crate (0 when not holding one).</summary>
+    public NetworkVariable<int> HeldUnits = new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
     private GameObject currentHandVisual;
     private bool handVisualHidden;
     private PlayerInteractInput interact;
@@ -80,6 +83,9 @@ public class PlayerInventoryNet : NetworkBehaviour
                 actor.transform.position, pickup.transform.position)) return;
 
         // Deliveries are held for the team that ordered them for a while.
+        // A shelf with stock on it has to be emptied first.
+        if (pickupNO.TryGetComponent<StockContainer>(out var container) && container.HasStock) return;
+
         bool isBox = pickupNO.TryGetComponent<ShipmentPackage>(out var box);
         if (isBox && box.IsReservedAgainst(MallManager.GetTeamOf(rpcParams.Receive.SenderClientId))) return;
 
@@ -89,11 +95,72 @@ public class PlayerInventoryNet : NetworkBehaviour
         int itemId = isBox ? box.ContainedItemId : pickup.itemId;
         if (itemId == 0) return;
         HeldItemId.Value = itemId;
+        // A crate on the floor remembers how much is left; one from a delivery box is full.
+        int perCrate = StockContainer.GetUnitsPerCrate(itemId);
+        HeldUnits.Value = perCrate == 0 ? 0 : isBox ? perCrate : pickup.Units;
 
         Vector3 soundPos = pickup.transform.position;
         pickupNO.Despawn(true);
 
         PlayItemSoundClientRpc(itemId, soundPos, false);
+    }
+
+    /// <summary>Put one product from the held stock crate into a container's zone.</summary>
+    [ServerRpc]
+    public void RequestStockServerRpc(NetworkObjectReference containerRef, int zone, ServerRpcParams rpcParams = default)
+    {
+        int id = HeldItemId.Value;
+        if (id == 0 || !StockContainer.IsStockCrate(id)) return;
+        if (!TryGetContainerZone(containerRef, zone, rpcParams.Receive.SenderClientId, out var container, out var at)) return;
+        if (!container.ServerAddOne(zone, id)) return; // full, or holds something else
+
+        // The empty crate goes away.
+        int left = Mathf.Max(1, HeldUnits.Value) - 1;
+        HeldUnits.Value = left;
+        if (left == 0) HeldItemId.Value = 0;
+        PlayItemSoundClientRpc(id, at, true);
+    }
+
+    /// <summary>
+    /// Take one product out of a container's zone: into empty hands (as a crate holding one),
+    /// or back into a held crate of the same product that has room.
+    /// </summary>
+    [ServerRpc]
+    public void RequestUnstockServerRpc(NetworkObjectReference containerRef, int zone, ServerRpcParams rpcParams = default)
+    {
+        if (!TryGetContainerZone(containerRef, zone, rpcParams.Receive.SenderClientId, out var container, out var at)) return;
+
+        int id = container.GetZone(zone).itemId;
+        if (id == 0) return;
+
+        bool emptyHands = HeldItemId.Value == 0;
+        bool roomInCrate = HeldItemId.Value == id && HeldUnits.Value < StockContainer.GetUnitsPerCrate(id);
+        if (!emptyHands && !roomInCrate) return;
+        if (container.ServerRemoveOne(zone) != id) return;
+
+        if (emptyHands)
+        {
+            HeldItemId.Value = id;
+            HeldUnits.Value = 1;
+        }
+        else HeldUnits.Value++;
+
+        PlayItemSoundClientRpc(id, at, false);
+    }
+
+    // Same rules as picking up and placing: close enough, standing in your own store, container in it too.
+    private static bool TryGetContainerZone(NetworkObjectReference containerRef, int zone, ulong sender,
+                                            out StockContainer container, out Vector3 at)
+    {
+        at = default;
+        container = null;
+        if (!containerRef.TryGet(out NetworkObject no) || !no.TryGetComponent(out container)) return false;
+        if (zone < 0 || zone >= container.ZoneCount) return false;
+
+        at = container.GetZoneCenter(zone);
+        var actor = NetworkManager.Singleton.ConnectedClients[sender].PlayerObject;
+        if (actor == null || Vector3.Distance(actor.transform.position, at) > 4.5f) return false;
+        return MallManager.CanPickupOrPlace(sender, actor.transform.position, at);
     }
 
     [ServerRpc]
@@ -119,9 +186,12 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (interact == null || !interact.FitsAt(id, position, rotation)) return;
 
         var spawned = Instantiate(def.worldNetworkPrefab, position, rotation);
+        if (HeldUnits.Value > 0 && spawned.TryGetComponent<ItemPickupNet>(out var crate))
+            crate.ServerSetUnits(HeldUnits.Value); // a part-used crate stays part-used
         spawned.Spawn(true);
 
         HeldItemId.Value = 0;
+        HeldUnits.Value = 0;
 
         PlayItemSoundClientRpc(id, position, true);
     }
@@ -158,6 +228,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (consumed)
         {
             HeldItemId.Value = 0;
+            HeldUnits.Value = 0;
         }
     }
 }

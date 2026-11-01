@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -13,6 +14,8 @@ public class EditLocalItem : MonoBehaviour
 
     private Rigidbody rb;
     private bool dragging;
+    private StockContainer stockSource; // the prefab's, if this item is a shelf
+    private List<GameObject> stockModels;
 
     /// <summary>Position of this item in the host's edit session list.</summary>
     public int Index { get; private set; }
@@ -36,6 +39,13 @@ public class EditLocalItem : MonoBehaviour
         item.Index = index;
         item.Def = def;
         item.rb = go.GetComponent<Rigidbody>();
+
+        // Shelves: their stock zones are only markers, so they mustn't catch clicks here.
+        item.stockSource = def.worldNetworkPrefab.GetComponent<StockContainer>();
+        if (item.stockSource != null)
+            foreach (var zone in item.stockSource.FindZonesOnCopy(go.transform))
+                if (zone != null) zone.enabled = false;
+
         item.ApplyKinematic();
         return item;
     }
@@ -57,6 +67,14 @@ public class EditLocalItem : MonoBehaviour
         var comps = root.GetComponentsInChildren<T>(true);
         for (int i = comps.Length - 1; i >= 0; i--)
             if (comps[i] != null) DestroyImmediate(comps[i]);
+    }
+
+    /// <summary>Show what's on this shelf, so the stock moves with it while editing.</summary>
+    public void ShowStock(int[] itemIds, int[] counts)
+    {
+        if (stockSource == null) return;
+        if (stockModels != null) foreach (var m in stockModels) if (m != null) Destroy(m);
+        stockModels = stockSource.BuildStockOnCopy(transform, itemIds, counts);
     }
 
     public void SetPose(Vector3 position, Quaternion rotation)

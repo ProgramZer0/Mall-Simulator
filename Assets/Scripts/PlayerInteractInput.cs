@@ -89,6 +89,7 @@ public class PlayerInteractInput : NetworkBehaviour
         {
             lookedAtSign = null;
             lookedAtMonitor = null;
+            ClearStockTarget();
             if (previewActive || ghostPreview != null)
             {
                 previewActive = false;
@@ -99,6 +100,7 @@ public class PlayerInteractInput : NetworkBehaviour
         }
 
         UpdateLookedAtSign();
+        UpdateStockTarget();
         HandleInteract();
         HandleRotation();
         HandlePlacement();
@@ -125,24 +127,148 @@ public class PlayerInteractInput : NetworkBehaviour
         }
     }
 
+    /* ========================= STOCKING ========================= */
+
+    [Header("Stocking")]
+    [Tooltip("Opacity of the preview showing where a stock crate will go.")]
+    [Range(0.02f, 1f)]
+    [SerializeField] private float stockPreviewAlpha = 0.45f;
+
+    [Tooltip("While holding a stock crate: put the product you're looking at back into the crate.")]
+    [SerializeField] private KeyCode putBackKey = KeyCode.G;
+
+    private StockContainer stockTarget;
+    private int stockZone = -1;       // F: the zone to stock, or (empty hands) the zone to take from
+    private bool stockTargetIsTake;   // true: F takes a product off; false: F puts one from the held crate on
+    private int putBackZone = -1;     // G: a zone holding the held crate's product, to put one back into it
+    private GameObject stockPreview;
+    private GameObject stockPreviewSource;
+    private static readonly Dictionary<GameObject, GameObject> StockGhostTemplates = new();
+
+    /// <summary>
+    /// Holding a stock crate: the zone nearest where you're looking that has room for it (F), and
+    /// the nearest zone holding the same product if the crate has room for one back (G).
+    /// Empty hands: the stocked zone nearest where you're looking (F).
+    /// </summary>
+    private void UpdateStockTarget()
+    {
+        stockTarget = null;
+        stockZone = -1;
+        putBackZone = -1;
+
+        int held = inventory.HeldItemId.Value;
+        bool holdingCrate = held != 0 && StockContainer.IsStockCrate(held);
+        bool placePending = Time.time < placePendingUntil;
+
+        if ((held == 0 || holdingCrate) && !previewActive && !placePending &&
+            Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit,
+                interactRange, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+        {
+            var container = hit.collider.GetComponentInParent<StockContainer>();
+            if (container != null && container.IsSpawned &&
+                MallManager.CanPickupOrPlace(OwnerClientId, transform.position, container.transform.position))
+            {
+                stockTargetIsTake = held == 0;
+                stockZone = container.FindNearestZone(hit.point, held, wantStock: held == 0);
+                if (holdingCrate && inventory.HeldUnits.Value < StockContainer.GetUnitsPerCrate(held))
+                    putBackZone = container.FindNearestZone(hit.point, held, wantStock: true);
+                if (stockZone >= 0 || putBackZone >= 0) stockTarget = container;
+            }
+        }
+
+        // Show the product where it'll go.
+        if (stockTarget != null && !stockTargetIsTake && stockZone >= 0 &&
+            stockTarget.TryGetNextSlot(stockZone, held, out Vector3 slotPos, out Quaternion slotRot))
+            ShowStockPreview(StockContainer.GetStockedPrefab(held), slotPos, slotRot);
+        else DestroyStockPreview();
+    }
+
+    private void ClearStockTarget()
+    {
+        stockTarget = null;
+        stockZone = -1;
+        putBackZone = -1;
+        DestroyStockPreview();
+    }
+
+    private void ShowStockPreview(GameObject prefab, Vector3 position, Quaternion rotation)
+    {
+        if (prefab == null) { DestroyStockPreview(); return; }
+
+        if (stockPreview == null || stockPreviewSource != prefab)
+        {
+            DestroyStockPreview();
+            if (!StockGhostTemplates.TryGetValue(prefab, out var template) || template == null)
+                StockGhostTemplates[prefab] = template = GhostBuilder.BuildTemplate(prefab, stockPreviewAlpha);
+            stockPreview = Instantiate(template);
+            stockPreview.SetActive(true);
+            foreach (var c in stockPreview.GetComponentsInChildren<Collider>()) c.enabled = false;
+            stockPreviewSource = prefab;
+        }
+        stockPreview.transform.SetPositionAndRotation(position, rotation);
+    }
+
+    private void DestroyStockPreview()
+    {
+        if (stockPreview != null) Destroy(stockPreview);
+        stockPreview = null;
+        stockPreviewSource = null;
+    }
+
+    public override void OnDestroy()
+    {
+        DestroyStockPreview();
+        base.OnDestroy();
+    }
+
     private static GUIStyle promptStyle; // made once; a new GUIStyle every OnGUI call makes garbage
     private static readonly GUIContent PromptContent = new();
 
     private void OnGUI()
     {
-        if (!IsOwner || (lookedAtSign == null && lookedAtMonitor == null) ||
+        if (!IsOwner || (lookedAtSign == null && lookedAtMonitor == null && stockTarget == null) ||
             (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return;
 
         string text = lookedAtMonitor != null ? "F: Shop monitor"
-                    : $"F: Buy {lookedAtSign.Plot.DisplayName} ({lookedAtSign.Plot.Price})";
+                    : lookedAtSign != null ? $"F: Buy {lookedAtSign.Plot.DisplayName} ({lookedAtSign.Plot.Price})"
+                    : StockPrompt();
         promptStyle ??= new GUIStyle(GUI.skin.box) { fontSize = 16, alignment = TextAnchor.MiddleCenter };
         PromptContent.text = text;
         Vector2 size = promptStyle.CalcSize(PromptContent) + new Vector2(20f, 10f);
         GUI.Box(new Rect((Screen.width - size.x) * 0.5f, Screen.height * 0.6f, size.x, size.y), PromptContent, promptStyle);
     }
 
+    private string StockPrompt()
+    {
+        if (stockTargetIsTake)
+        {
+            var z = stockTarget.GetZone(stockZone);
+            return $"F: Take {ItemName(z.itemId)} ({z.count} on shelf)";
+        }
+
+        int held = inventory.HeldItemId.Value;
+        string text = $"{ItemName(held)}: {inventory.HeldUnits.Value}/{StockContainer.GetUnitsPerCrate(held)} in crate";
+        if (stockZone >= 0)
+        {
+            var z = stockTarget.GetZone(stockZone);
+            text = $"F: Stock {text}   (shelf {(z.itemId == held ? z.count : 0)}/{stockTarget.GetCapacity(stockZone, held)})";
+        }
+        if (putBackZone >= 0) text += $"    {putBackKey}: Put back";
+        return text;
+    }
+
+    private static string ItemName(int itemId) =>
+        ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(itemId, out var def) ? def.displayName : "item";
+
     private void HandleInteract()
     {
+        // Put a product back into the held crate.
+        if (Input.GetKeyDown(putBackKey) && stockTarget != null && putBackZone >= 0)
+        {
+            inventory.RequestUnstockServerRpc(stockTarget.NetworkObject, putBackZone);
+            return;
+        }
+
         if (!Input.GetKeyDown(KeyCode.F)) return;
 
         // The shop monitor opens the shop GUI for its store (local only; orders go through the host).
@@ -158,6 +284,24 @@ public class PlayerInteractInput : NetworkBehaviour
         {
             if (MallManager.Instance != null)
                 MallManager.Instance.RequestBuyFromSignServerRpc(lookedAtSign.Plot.PlotId);
+            return;
+        }
+
+        // Stocking a shelf, or taking stock off it. (An empty shelf is picked up as usual below.)
+        if (stockTarget != null && stockZone >= 0)
+        {
+            if (stockTargetIsTake) inventory.RequestUnstockServerRpc(stockTarget.NetworkObject, stockZone);
+            else
+            {
+                inventory.RequestStockServerRpc(stockTarget.NetworkObject, stockZone);
+                // Last product: the crate empties and goes away, so hide it until the server answers.
+                if (inventory.HeldUnits.Value <= 1)
+                {
+                    inventory.SetHandVisualHidden(true);
+                    placePendingUntil = Time.time + placeResponseTimeout;
+                    DestroyStockPreview();
+                }
+            }
             return;
         }
 

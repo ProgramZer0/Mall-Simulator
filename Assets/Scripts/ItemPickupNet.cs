@@ -19,6 +19,15 @@ public class ItemPickupNet : NetworkBehaviour
     [Tooltip("Can't be picked up in normal play, only moved in store edit mode (e.g. the shop monitor).")]
     [SerializeField] private bool editModeOnly;
 
+    [Header("Stocking")]
+    [Tooltip("This item is stock: hold it, look at a StockContainer (shelf, rack...) and press F to put it on a place point.")]
+    [SerializeField] private bool isStockCrate;
+    [Tooltip("What this crate looks like once it's on a container's place point. Plain visual; its pivot sits " +
+             "on the point. Any scripts, physics or networking on it are stripped.")]
+    [SerializeField] private GameObject stockedPrefab;
+    [Tooltip("How many products a full crate holds. Each one fills one place point.")]
+    [Min(1)] [SerializeField] private int unitsPerCrate = 1;
+
     [Header("Physics")]
     [Tooltip("Frozen: stays where it's put.\n" +
              "Fall Then Freeze: falls, and once it has touched something and held still for Still Seconds, " +
@@ -35,6 +44,19 @@ public class ItemPickupNet : NetworkBehaviour
     [SerializeField] private float stillSpeed = 0.05f;
 
     public bool EditModeOnly => editModeOnly;
+    public bool IsStockCrate => isStockCrate;
+    public GameObject StockedPrefab => stockedPrefab;
+    public int UnitsPerCrate => Mathf.Max(1, unitsPerCrate);
+
+    // Products left in this crate. 0 means "full", so crates spawned from a prefab start full.
+    private readonly NetworkVariable<int> units =
+        new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    /// <summary>Products left in this crate (meaningless for items that aren't stock crates).</summary>
+    public int Units => units.Value > 0 ? Mathf.Min(units.Value, UnitsPerCrate) : UnitsPerCrate;
+
+    /// <summary>Server: how many products are left in this crate. Call after Instantiate, before Spawn.</summary>
+    public void ServerSetUnits(int count) => units.Value = count >= UnitsPerCrate ? 0 : Mathf.Max(1, count);
 
     /// <summary>Every spawned item on this machine (stores use it to find their contents).</summary>
     public static readonly List<ItemPickupNet> All = new();
