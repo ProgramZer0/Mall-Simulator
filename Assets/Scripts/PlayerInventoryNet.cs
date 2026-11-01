@@ -70,7 +70,7 @@ public class PlayerInventoryNet : NetworkBehaviour
     {
         if (!pickupRef.TryGet(out NetworkObject pickupNO)) return;
         var pickup = pickupNO.GetComponent<ItemPickupNet>();
-        if (pickup == null) return;
+        if (pickup == null || pickup.EditModeOnly) return; // e.g. the shop monitor: edit mode only
 
         var actor = NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject;
         if (Vector3.Distance(actor.transform.position, pickup.transform.position) > 3.0f) return;
