@@ -760,6 +760,8 @@ public class StorePlot : NetworkBehaviour
             }
 
             var spawned = Instantiate(def.worldNetworkPrefab, pos, rot);
+            // Edit mode already let the player choose whether it falls, so it comes back exactly as left.
+            if (spawned.TryGetComponent<ItemPickupNet>(out var item)) item.ServerPrepareFrozen();
             spawned.Spawn(true);
         }
 
