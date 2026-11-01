@@ -5,13 +5,16 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// The shop's buy screen. Fills your page prefab with items from the ItemCatalog (those with
-/// Show In Shop ticked), adds pages automatically when there are more items than tiles, and
-/// filters by category.
+/// The shop's buy screen. Lists the ItemCatalog's items (those with Show In Shop ticked), filtered
+/// by category, across as many pages as it takes.
 ///
-/// Page prefab: any layout of item tiles. Each tile is an Image (the item's picture) with a Button
-/// inside it (buy). Add a BuyItemSlot to a tile to also show its name and price, or to point at
-/// the parts explicitly.
+/// Usual setup: Page Prefab is an empty page with a Grid Layout Group, and Item Slot Prefab is one
+/// item tile (with a BuyItemSlot). One tile is made per item; when a page is full a new page is
+/// started. How many fit on a page is worked out from the Grid Layout Group (cell size, spacing,
+/// padding and the page's size), unless Items Per Page is set.
+///
+/// Without an Item Slot Prefab, the page prefab's own tiles are reused instead (each tile an Image
+/// with a buy Button inside, or a BuyItemSlot), refilled for each page.
 ///
 /// With Use Cart on, buy buttons add to a cart and Checkout orders everything in one delivery.
 /// With it off, each buy button orders one item straight away.
@@ -28,13 +31,24 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     }
 
     [Header("Pages")]
-    [Tooltip("Your page of item tiles: a prefab (made under Page Parent) or an object already in the scene.")]
+    [Tooltip("A page: usually an empty object with a Grid Layout Group. Made under Page Parent.")]
     [SerializeField] private GameObject pagePrefab;
-    [Tooltip("Where the page is created, if Page Prefab is a prefab.")]
+    [Tooltip("One item tile (with a BuyItemSlot). One is made per item, inside the pages.")]
+    [SerializeField] private BuyItemSlot itemSlotPrefab;
+    [Tooltip("Where pages are created.")]
     [SerializeField] private RectTransform pageParent;
+    [Tooltip("Tiles per page. 0 = work it out from the page's Grid Layout Group and size.")]
+    [SerializeField] private int itemsPerPage;
+    [Tooltip("Used when it can't be worked out (no Grid Layout Group, or the page has no size yet).")]
+    [SerializeField] private int fallbackItemsPerPage = 8;
     [SerializeField] private Button nextPageButton;
     [SerializeField] private Button previousPageButton;
     [SerializeField] private TMP_Text pageLabel;
+
+    [Header("Debug (read only)")]
+    [Tooltip("How many tiles fit on a page the last time the list was built.")]
+    [SerializeField] private int tilesPerPageInUse;
+    [SerializeField] private int pagesInUse;
 
     [Header("Filters")]
     [SerializeField] private Filter[] filters;
@@ -64,8 +78,10 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     }
 
     private StorePlot plot;
-    private GameObject page;
-    private readonly List<Slot> slots = new();
+    private GameObject page;                       // fixed-tiles mode: the one reused page
+    private readonly List<Slot> slots = new();     // fixed-tiles mode: its tiles
+    private readonly List<GameObject> pages = new(); // slot-prefab mode: one per page
+    private bool warnedFallback;
     private readonly List<ItemDef> shown = new();
     private readonly List<(int itemId, int quantity)> cart = new();
     private int pageIndex;
@@ -91,7 +107,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
                 f.button.onClick.AddListener(() => SetCategory(cat));
             }
 
-        BuildPage();
+        if (itemSlotPrefab == null) BuildPage();
     }
 
     private void OnEnable()
@@ -121,9 +137,10 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         RefreshAll();
     }
 
+    /// <summary>Fixed-tiles mode: make (or use) the one page and find its tiles.</summary>
     private void BuildPage()
     {
-        if (page != null || pagePrefab == null) return;
+        if (page != null || pagePrefab == null || itemSlotPrefab != null) return;
 
         // A prefab gets a copy; an object already in the scene is used as it is.
         page = pagePrefab.scene.IsValid() ? pagePrefab
@@ -193,10 +210,22 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     private void ChangePage(int delta)
     {
         pageIndex += delta;
-        RefreshItems();
+        if (itemSlotPrefab != null) ShowCurrentPage();
+        else
+        {
+            FillFixedTiles();
+            ShowCurrentPage();
+        }
     }
 
-    private int PageCount => slots.Count == 0 ? 1 : Mathf.Max(1, Mathf.CeilToInt(shown.Count / (float)slots.Count));
+    private int PageCount
+    {
+        get
+        {
+            if (itemSlotPrefab != null) return Mathf.Max(1, pages.Count);
+            return slots.Count == 0 ? 1 : Mathf.Max(1, Mathf.CeilToInt(shown.Count / (float)slots.Count));
+        }
+    }
 
     private void RefreshAll()
     {
@@ -206,10 +235,9 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         RefreshFilterLook();
     }
 
+    /// <summary>Re-reads the catalog for the current filter and rebuilds the pages.</summary>
     private void RefreshItems()
     {
-        BuildPage();
-
         shown.Clear();
         var catalog = ItemCatalog.Instance;
         if (catalog != null)
@@ -222,30 +250,142 @@ public class BuyMenu : MonoBehaviour, IShopScreen
             }
         }
 
+        if (itemSlotPrefab != null) BuildPagesFromSlots();
+        else FillFixedTiles();
+
+        ShowCurrentPage();
+        RefreshFilterLook();
+    }
+
+    /* ---------- Slot-prefab mode: one tile per item, new page when full ---------- */
+
+    private void BuildPagesFromSlots()
+    {
+        foreach (var old in pages)
+        {
+            if (old == null) continue;
+            old.SetActive(false); // Destroy happens at the end of the frame; hide it now
+            Destroy(old);
+        }
+        pages.Clear();
+
+        if (pagePrefab == null) return;
+        Transform parent = pageParent != null ? pageParent : transform;
+
+        GameObject current = null;
+        int perPage = 1, onPage = 0;
+
+        foreach (var def in shown)
+        {
+            if (current == null || onPage >= perPage)
+            {
+                current = Instantiate(pagePrefab, parent);
+                current.name = $"{pagePrefab.name} {pages.Count + 1}";
+                pages.Add(current);
+                if (pages.Count == 1) perPage = TilesPerPage((RectTransform)current.transform);
+                onPage = 0;
+            }
+
+            var tile = Instantiate(itemSlotPrefab, current.transform);
+            tile.name = $"{itemSlotPrefab.name} ({def.displayName})";
+            FillTile(tile.gameObject, tile.icon, tile.buyButton, tile.nameText, tile.priceText, def);
+            onPage++;
+        }
+
+        // Always show at least one (empty) page.
+        if (pages.Count == 0)
+        {
+            current = Instantiate(pagePrefab, parent);
+            current.name = $"{pagePrefab.name} 1";
+            pages.Add(current);
+            perPage = TilesPerPage((RectTransform)current.transform);
+        }
+
+        tilesPerPageInUse = perPage;
+        pagesInUse = pages.Count;
+    }
+
+    /// <summary>
+    /// How many tiles fit on a page: Items Per Page if set, otherwise columns x rows from the
+    /// page's Grid Layout Group (a fixed column/row count is used as-is; the rest comes from
+    /// the page size, cell size, spacing and padding).
+    /// </summary>
+    private int TilesPerPage(RectTransform pageRect)
+    {
+        if (itemsPerPage > 0) return itemsPerPage;
+
+        var grid = pageRect.GetComponent<GridLayoutGroup>();
+        if (grid == null) return Fallback("the page has no Grid Layout Group");
+
+        Canvas.ForceUpdateCanvases(); // make sure the page has its real size
+        Rect r = pageRect.rect;
+        float w = r.width - grid.padding.horizontal;
+        float h = r.height - grid.padding.vertical;
+
+        int cols = grid.constraint == GridLayoutGroup.Constraint.FixedColumnCount
+            ? grid.constraintCount
+            : Mathf.FloorToInt((w + grid.spacing.x) / Mathf.Max(1f, grid.cellSize.x + grid.spacing.x));
+        int rows = grid.constraint == GridLayoutGroup.Constraint.FixedRowCount
+            ? grid.constraintCount
+            : Mathf.FloorToInt((h + grid.spacing.y) / Mathf.Max(1f, grid.cellSize.y + grid.spacing.y));
+
+        if (cols < 1 || rows < 1) return Fallback($"the page is only {r.width:0}x{r.height:0} (too small for one cell)");
+        return cols * rows;
+    }
+
+    private int Fallback(string why)
+    {
+        if (!warnedFallback)
+        {
+            warnedFallback = true;
+            Debug.LogWarning($"[BuyMenu] Can't work out tiles per page ({why}); using Fallback Items Per Page " +
+                             $"({fallbackItemsPerPage}). Set Items Per Page to choose it yourself.", this);
+        }
+        return Mathf.Max(1, fallbackItemsPerPage);
+    }
+
+    /* ---------- Fixed-tiles mode: refill the page's own tiles for each page ---------- */
+
+    private void FillFixedTiles()
+    {
+        BuildPage();
         pageIndex = Mathf.Clamp(pageIndex, 0, PageCount - 1);
         for (int i = 0; i < slots.Count; i++)
         {
             var slot = slots[i];
             int index = pageIndex * slots.Count + i;
-            bool has = index < shown.Count;
-            if (slot.go != null) slot.go.SetActive(has);
-            if (!has) continue;
-
-            var def = shown[index];
-            if (slot.icon != null && def.icon != null) slot.icon.sprite = def.icon;
-            if (slot.nameText != null) slot.nameText.text = def.displayName;
-            if (slot.priceText != null) slot.priceText.text = $"${def.price:N0}";
-            if (slot.button != null)
-            {
-                slot.button.onClick.RemoveAllListeners();
-                slot.button.onClick.AddListener(() => OnBuyClicked(def));
-            }
+            if (index < shown.Count) FillTile(slot.go, slot.icon, slot.button, slot.nameText, slot.priceText, shown[index]);
+            else if (slot.go != null) slot.go.SetActive(false);
         }
+        tilesPerPageInUse = slots.Count;
+        pagesInUse = PageCount;
+    }
+
+    private void FillTile(GameObject go, Image icon, Button button, TMP_Text nameText, TMP_Text priceText, ItemDef def)
+    {
+        if (go != null) go.SetActive(true);
+        if (icon != null && def.icon != null) icon.sprite = def.icon;
+        if (nameText != null) nameText.text = def.displayName;
+        if (priceText != null) priceText.text = $"${def.price:N0}";
+        if (button != null)
+        {
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => OnBuyClicked(def));
+        }
+    }
+
+    /// <summary>Show only the current page and update the page buttons and label.</summary>
+    private void ShowCurrentPage()
+    {
+        pageIndex = Mathf.Clamp(pageIndex, 0, PageCount - 1);
+
+        if (itemSlotPrefab != null)
+            for (int i = 0; i < pages.Count; i++)
+                if (pages[i] != null) pages[i].SetActive(i == pageIndex);
 
         if (pageLabel != null) pageLabel.text = $"Page {pageIndex + 1} / {PageCount}";
         if (previousPageButton != null) previousPageButton.interactable = pageIndex > 0;
         if (nextPageButton != null) nextPageButton.interactable = pageIndex < PageCount - 1;
-        RefreshFilterLook();
     }
 
     private void RefreshFilterLook()
