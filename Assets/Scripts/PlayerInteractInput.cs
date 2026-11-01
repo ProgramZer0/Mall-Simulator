@@ -88,6 +88,7 @@ public class PlayerInteractInput : NetworkBehaviour
         if ((storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen)
         {
             lookedAtSign = null;
+            lookedAtMonitor = null;
             if (previewActive || ghostPreview != null)
             {
                 previewActive = false;
@@ -106,25 +107,31 @@ public class PlayerInteractInput : NetworkBehaviour
     /* ========================= INTERACT ========================= */
 
     private ForSaleSign lookedAtSign;
+    private ShopMonitor lookedAtMonitor;
 
-    /// <summary>Is the player looking at a for-sale wall of a store nobody owns?</summary>
+    /// <summary>Is the player looking at a for-sale wall of an unowned store, or at their shop monitor?</summary>
     private void UpdateLookedAtSign()
     {
         lookedAtSign = null;
+        lookedAtMonitor = null;
         if (Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit,
                 interactRange, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
         {
             var sign = hit.collider.GetComponentInParent<ForSaleSign>();
             if (sign != null && sign.Plot != null && sign.Plot.IsForSale) lookedAtSign = sign;
+
+            var monitor = hit.collider.GetComponentInParent<ShopMonitor>();
+            if (monitor != null && monitor.CanUse(OwnerClientId)) lookedAtMonitor = monitor;
         }
     }
 
     private void OnGUI()
     {
-        if (!IsOwner || lookedAtSign == null || (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return;
+        if (!IsOwner || (lookedAtSign == null && lookedAtMonitor == null) ||
+            (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return;
 
-        var plot = lookedAtSign.Plot;
-        string text = $"F: Buy {plot.DisplayName} ({plot.Price})";
+        string text = lookedAtMonitor != null ? "F: Shop monitor"
+                    : $"F: Buy {lookedAtSign.Plot.DisplayName} ({lookedAtSign.Plot.Price})";
         var style = new GUIStyle(GUI.skin.box) { fontSize = 16, alignment = TextAnchor.MiddleCenter };
         Vector2 size = style.CalcSize(new GUIContent(text)) + new Vector2(20f, 10f);
         GUI.Box(new Rect((Screen.width - size.x) * 0.5f, Screen.height * 0.6f, size.x, size.y), text, style);
@@ -133,6 +140,14 @@ public class PlayerInteractInput : NetworkBehaviour
     private void HandleInteract()
     {
         if (!Input.GetKeyDown(KeyCode.F)) return;
+
+        // The shop monitor opens the shop GUI for its store (local only; orders go through the host).
+        if (lookedAtMonitor != null)
+        {
+            if (ShopUIController.Instance != null) ShopUIController.Instance.Open(lookedAtMonitor.GetPlot());
+            else Debug.LogWarning("[PlayerInteractInput] No ShopUIController in the scene to open.");
+            return;
+        }
 
         // Buying a store from its for-sale wall works whether or not you're holding something.
         if (lookedAtSign != null)

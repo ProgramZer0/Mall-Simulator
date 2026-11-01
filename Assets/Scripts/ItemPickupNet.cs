@@ -6,6 +6,10 @@ using UnityEngine;
 public class ItemPickupNet : NetworkBehaviour
 {
     [SerializeField] public int itemId;
+    [Tooltip("Can't be picked up in normal play, only moved in store edit mode (e.g. the shop monitor).")]
+    [SerializeField] private bool editModeOnly;
+
+    public bool EditModeOnly => editModeOnly;
 
     /// <summary>Every spawned item on this machine (stores use it to find their contents).</summary>
     public static readonly List<ItemPickupNet> All = new();

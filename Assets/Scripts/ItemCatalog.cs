@@ -34,6 +34,9 @@ public class ItemCatalog : MonoBehaviour
     }
 
     public bool TryGet(int id, out ItemDef def) => map.TryGetValue(id, out def);
+
+    /// <summary>Every item in the catalog, in the order listed (the shop shows them in this order).</summary>
+    public IReadOnlyList<ItemDef> Items => items;
 }
 
 [System.Serializable]
@@ -45,6 +48,12 @@ public class ItemDef
     public NetworkObject worldNetworkPrefab;
 
     [Header("Buying")]
+    [Tooltip("List this item in the shop monitor's buy menu.")]
+    public bool showInShop = true;
+    [Tooltip("Picture shown in the buy menu.")]
+    public Sprite icon;
+    [Tooltip("Buy menu filter group, e.g. Shelves, Products, Decor. Must match a filter's Category exactly.")]
+    public string category = "General";
     [Tooltip("Cost of one when ordered.")]
     public int price = 10;
     [Tooltip("Default seconds from ordering until it arrives (used when the order doesn't give its own time).")]
