@@ -105,64 +105,62 @@ public class PlayerInventoryNet : NetworkBehaviour
         PlayItemSoundClientRpc(itemId, soundPos, false);
     }
 
-    /// <summary>Put the held stock crate on one of a container's place points.</summary>
+    /// <summary>Put one product from the held stock crate into a container's zone.</summary>
     [ServerRpc]
-    public void RequestStockServerRpc(NetworkObjectReference containerRef, int point, ServerRpcParams rpcParams = default)
+    public void RequestStockServerRpc(NetworkObjectReference containerRef, int zone, ServerRpcParams rpcParams = default)
     {
         int id = HeldItemId.Value;
         if (id == 0 || !StockContainer.IsStockCrate(id)) return;
-        if (!TryGetContainerPoint(containerRef, point, rpcParams.Receive.SenderClientId, out var container, out var spot)) return;
-        if (container.GetStock(point) != 0) return; // someone got there first
+        if (!TryGetContainerZone(containerRef, zone, rpcParams.Receive.SenderClientId, out var container, out var at)) return;
+        if (!container.ServerAddOne(zone, id)) return; // full, or holds something else
 
-        // One product from the crate onto the point. The empty crate goes away.
-        container.ServerSetStock(point, id);
+        // The empty crate goes away.
         int left = Mathf.Max(1, HeldUnits.Value) - 1;
         HeldUnits.Value = left;
         if (left == 0) HeldItemId.Value = 0;
-        PlayItemSoundClientRpc(id, spot.position, true);
+        PlayItemSoundClientRpc(id, at, true);
     }
 
     /// <summary>
-    /// Take one product off a container's place point: into empty hands (as a crate holding one),
+    /// Take one product out of a container's zone: into empty hands (as a crate holding one),
     /// or back into a held crate of the same product that has room.
     /// </summary>
     [ServerRpc]
-    public void RequestUnstockServerRpc(NetworkObjectReference containerRef, int point, ServerRpcParams rpcParams = default)
+    public void RequestUnstockServerRpc(NetworkObjectReference containerRef, int zone, ServerRpcParams rpcParams = default)
     {
-        if (!TryGetContainerPoint(containerRef, point, rpcParams.Receive.SenderClientId, out var container, out var spot)) return;
+        if (!TryGetContainerZone(containerRef, zone, rpcParams.Receive.SenderClientId, out var container, out var at)) return;
 
-        int id = container.GetStock(point);
+        int id = container.GetZone(zone).itemId;
         if (id == 0) return;
 
-        if (HeldItemId.Value == 0)
+        bool emptyHands = HeldItemId.Value == 0;
+        bool roomInCrate = HeldItemId.Value == id && HeldUnits.Value < StockContainer.GetUnitsPerCrate(id);
+        if (!emptyHands && !roomInCrate) return;
+        if (container.ServerRemoveOne(zone) != id) return;
+
+        if (emptyHands)
         {
             HeldItemId.Value = id;
             HeldUnits.Value = 1;
         }
-        else if (HeldItemId.Value == id && HeldUnits.Value < StockContainer.GetUnitsPerCrate(id))
-        {
-            HeldUnits.Value++;
-        }
-        else return;
+        else HeldUnits.Value++;
 
-        container.ServerSetStock(point, 0);
-        PlayItemSoundClientRpc(id, spot.position, false);
+        PlayItemSoundClientRpc(id, at, false);
     }
 
     // Same rules as picking up and placing: close enough, standing in your own store, container in it too.
-    private static bool TryGetContainerPoint(NetworkObjectReference containerRef, int point, ulong sender,
-                                             out StockContainer container, out Transform spot)
+    private static bool TryGetContainerZone(NetworkObjectReference containerRef, int zone, ulong sender,
+                                            out StockContainer container, out Vector3 at)
     {
-        spot = null;
+        at = default;
         container = null;
         if (!containerRef.TryGet(out NetworkObject no) || !no.TryGetComponent(out container)) return false;
+        if (zone < 0 || zone >= container.ZoneCount) return false;
 
-        spot = container.GetPoint(point);
-        if (spot == null) return false;
-
+        at = container.GetZoneCenter(zone);
         var actor = NetworkManager.Singleton.ConnectedClients[sender].PlayerObject;
-        if (actor == null || Vector3.Distance(actor.transform.position, spot.position) > 4.0f) return false;
-        return MallManager.CanPickupOrPlace(sender, actor.transform.position, spot.position);
+        if (actor == null || Vector3.Distance(actor.transform.position, at) > 4.5f) return false;
+        return MallManager.CanPickupOrPlace(sender, actor.transform.position, at);
     }
 
     [ServerRpc]

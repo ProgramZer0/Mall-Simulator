@@ -668,7 +668,7 @@ public class StorePlot : NetworkBehaviour
         public int itemId;
         public Vector3 position;
         public Quaternion rotation;
-        public int[] stock; // what was on its StockContainer, if it has one
+        public StockContainer.ZoneStock[] stock; // what was in its StockContainer, if it has one
         public int units;   // products left, if it's a stock crate
     }
 
