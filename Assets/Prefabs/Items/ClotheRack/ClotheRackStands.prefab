@@ -17,7 +17,7 @@ GameObject:
   - component: {fileID: 4557772816896807919}
   - component: {fileID: 539076270770265909}
   m_Layer: 3
-  m_Name: HangerStands
+  m_Name: ClotheRackStands
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
