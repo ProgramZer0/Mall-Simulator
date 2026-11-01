@@ -8,6 +8,9 @@ public class PlayerInventoryNet : NetworkBehaviour
 
     public NetworkVariable<int> HeldItemId = new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    /// <summary>Products left in the held stock crate (0 when not holding one).</summary>
+    public NetworkVariable<int> HeldUnits = new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
     private GameObject currentHandVisual;
     private bool handVisualHidden;
     private PlayerInteractInput interact;
@@ -92,6 +95,9 @@ public class PlayerInventoryNet : NetworkBehaviour
         int itemId = isBox ? box.ContainedItemId : pickup.itemId;
         if (itemId == 0) return;
         HeldItemId.Value = itemId;
+        // A crate on the floor remembers how much is left; one from a delivery box is full.
+        int perCrate = StockContainer.GetUnitsPerCrate(itemId);
+        HeldUnits.Value = perCrate == 0 ? 0 : isBox ? perCrate : pickup.Units;
 
         Vector3 soundPos = pickup.transform.position;
         pickupNO.Despawn(true);
@@ -108,23 +114,38 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (!TryGetContainerPoint(containerRef, point, rpcParams.Receive.SenderClientId, out var container, out var spot)) return;
         if (container.GetStock(point) != 0) return; // someone got there first
 
+        // One product from the crate onto the point. The empty crate goes away.
         container.ServerSetStock(point, id);
-        HeldItemId.Value = 0;
+        int left = Mathf.Max(1, HeldUnits.Value) - 1;
+        HeldUnits.Value = left;
+        if (left == 0) HeldItemId.Value = 0;
         PlayItemSoundClientRpc(id, spot.position, true);
     }
 
-    /// <summary>Take the crate off one of a container's place points into empty hands.</summary>
+    /// <summary>
+    /// Take one product off a container's place point: into empty hands (as a crate holding one),
+    /// or back into a held crate of the same product that has room.
+    /// </summary>
     [ServerRpc]
     public void RequestUnstockServerRpc(NetworkObjectReference containerRef, int point, ServerRpcParams rpcParams = default)
     {
-        if (HeldItemId.Value != 0) return;
         if (!TryGetContainerPoint(containerRef, point, rpcParams.Receive.SenderClientId, out var container, out var spot)) return;
 
         int id = container.GetStock(point);
         if (id == 0) return;
 
+        if (HeldItemId.Value == 0)
+        {
+            HeldItemId.Value = id;
+            HeldUnits.Value = 1;
+        }
+        else if (HeldItemId.Value == id && HeldUnits.Value < StockContainer.GetUnitsPerCrate(id))
+        {
+            HeldUnits.Value++;
+        }
+        else return;
+
         container.ServerSetStock(point, 0);
-        HeldItemId.Value = id;
         PlayItemSoundClientRpc(id, spot.position, false);
     }
 
@@ -167,9 +188,12 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (interact == null || !interact.FitsAt(id, position, rotation)) return;
 
         var spawned = Instantiate(def.worldNetworkPrefab, position, rotation);
+        if (HeldUnits.Value > 0 && spawned.TryGetComponent<ItemPickupNet>(out var crate))
+            crate.ServerSetUnits(HeldUnits.Value); // a part-used crate stays part-used
         spawned.Spawn(true);
 
         HeldItemId.Value = 0;
+        HeldUnits.Value = 0;
 
         PlayItemSoundClientRpc(id, position, true);
     }
@@ -206,6 +230,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (consumed)
         {
             HeldItemId.Value = 0;
+            HeldUnits.Value = 0;
         }
     }
 }

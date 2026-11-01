@@ -22,6 +22,9 @@ public class StockContainer : NetworkBehaviour
     private GameObject[] visuals;
     private int[] pendingStock;              // server: contents to restore when spawned (edit mode)
 
+    /// <summary>Every spawned container on this machine (customers can search these for stock).</summary>
+    public static readonly System.Collections.Generic.List<StockContainer> All = new();
+
     public int PointCount => placePoints != null ? placePoints.Length : 0;
 
     private void Awake()
@@ -43,10 +46,12 @@ public class StockContainer : NetworkBehaviour
 
         stock.OnListChanged += OnStockChanged;
         RebuildAllVisuals();
+        All.Add(this);
     }
 
     public override void OnNetworkDespawn()
     {
+        All.Remove(this);
         stock.OnListChanged -= OnStockChanged;
         for (int i = 0; i < visuals.Length; i++) ClearVisual(i);
     }
@@ -70,14 +75,19 @@ public class StockContainer : NetworkBehaviour
     public Transform GetPoint(int point) =>
         point >= 0 && point < PointCount ? placePoints[point] : null;
 
-    /// <summary>The empty (wantFilled false) or stocked (true) point nearest a world position, or -1.</summary>
-    public int FindNearestPoint(Vector3 near, bool wantFilled)
+    /// <summary>
+    /// The empty (wantFilled false) or stocked (true) point nearest a world position, or -1.
+    /// onlyItem: only stocked points holding this item.
+    /// </summary>
+    public int FindNearestPoint(Vector3 near, bool wantFilled, int onlyItem = 0)
     {
         int best = -1;
         float bestDist = float.MaxValue;
         for (int i = 0; i < PointCount; i++)
         {
-            if (placePoints[i] == null || (GetStock(i) != 0) != wantFilled) continue;
+            int id = GetStock(i);
+            if (placePoints[i] == null || (id != 0) != wantFilled) continue;
+            if (onlyItem != 0 && id != onlyItem) continue;
             float d = (placePoints[i].position - near).sqrMagnitude;
             if (d < bestDist) { bestDist = d; best = i; }
         }
@@ -87,7 +97,10 @@ public class StockContainer : NetworkBehaviour
     /// <summary>Is this item a stock crate (and does it say what it looks like on a shelf)?</summary>
     public static bool IsStockCrate(int itemId) => GetCratePickup(itemId) != null;
 
-    /// <summary>What a stock crate looks like on a place point (null if it isn't a stock crate).</summary>
+    /// <summary>How many products a full crate of this item holds (0 if it isn't a stock crate).</summary>
+    public static int GetUnitsPerCrate(int itemId) => GetCratePickup(itemId)?.UnitsPerCrate ?? 0;
+
+    /// <summary>What one product from this crate looks like on a place point (null if it isn't a stock crate).</summary>
     public static GameObject GetStockedPrefab(int itemId) => GetCratePickup(itemId)?.StockedPrefab;
 
     private static ItemPickupNet GetCratePickup(int itemId)
@@ -105,6 +118,25 @@ public class StockContainer : NetworkBehaviour
     {
         if (!IsServer || point < 0 || point >= stock.Count) return;
         stock[point] = itemId;
+    }
+
+    /// <summary>A stocked point holding this item, or -1. For customers looking for something to buy.</summary>
+    public int FindStock(int itemId)
+    {
+        for (int i = 0; i < PointCount; i++)
+            if (GetStock(i) == itemId && itemId != 0) return i;
+        return -1;
+    }
+
+    /// <summary>
+    /// Server: take one product off a point (a customer bought it, say). Its model disappears for
+    /// everyone. Returns the item id that was there, or 0 if the point was empty.
+    /// </summary>
+    public int ServerRemoveOne(int point)
+    {
+        int id = IsServer ? GetStock(point) : 0;
+        if (id != 0) stock[point] = 0;
+        return id;
     }
 
     /// <summary>Server: a copy of what's on every point (for edit mode).</summary>

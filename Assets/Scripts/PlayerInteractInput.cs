@@ -134,21 +134,27 @@ public class PlayerInteractInput : NetworkBehaviour
     [Range(0.02f, 1f)]
     [SerializeField] private float stockPreviewAlpha = 0.45f;
 
+    [Tooltip("While holding a stock crate: put the product you're looking at back into the crate.")]
+    [SerializeField] private KeyCode putBackKey = KeyCode.G;
+
     private StockContainer stockTarget;
-    private int stockPoint = -1;
-    private bool stockTargetIsTake; // true: take the crate off the point; false: put the held crate on it
+    private int stockPoint = -1;      // F: the point to stock, or (empty hands) the product to take
+    private bool stockTargetIsTake;   // true: F takes a product off; false: F puts one from the held crate on
+    private int putBackPoint = -1;    // G: a product of the held crate's kind to put back into it
     private GameObject stockPreview;
     private GameObject stockPreviewSource;
     private static readonly Dictionary<GameObject, GameObject> StockGhostTemplates = new();
 
     /// <summary>
-    /// Holding a stock crate: the free place point nearest where you're looking.
-    /// Empty hands: the stocked point nearest where you're looking.
+    /// Holding a stock crate: the free place point nearest where you're looking (F), and the
+    /// nearest product of the same kind if the crate has room for it (G).
+    /// Empty hands: the stocked point nearest where you're looking (F).
     /// </summary>
     private void UpdateStockTarget()
     {
         stockTarget = null;
         stockPoint = -1;
+        putBackPoint = -1;
 
         int held = inventory.HeldItemId.Value;
         bool holdingCrate = held != 0 && StockContainer.IsStockCrate(held);
@@ -159,21 +165,20 @@ public class PlayerInteractInput : NetworkBehaviour
                 interactRange, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
         {
             var container = hit.collider.GetComponentInParent<StockContainer>();
-            if (container != null && container.IsSpawned)
+            if (container != null && container.IsSpawned &&
+                MallManager.CanPickupOrPlace(OwnerClientId, transform.position, container.transform.position))
             {
-                int point = container.FindNearestPoint(hit.point, wantFilled: held == 0);
-                var spot = container.GetPoint(point);
-                if (spot != null && MallManager.CanPickupOrPlace(OwnerClientId, transform.position, spot.position))
-                {
-                    stockTarget = container;
-                    stockPoint = point;
-                    stockTargetIsTake = held == 0;
-                }
+                stockTargetIsTake = held == 0;
+                stockPoint = container.FindNearestPoint(hit.point, wantFilled: held == 0);
+                if (holdingCrate && inventory.HeldUnits.Value < StockContainer.GetUnitsPerCrate(held))
+                    putBackPoint = container.FindNearestPoint(hit.point, wantFilled: true, onlyItem: held);
+                if (stockPoint >= 0 || putBackPoint >= 0) stockTarget = container;
             }
         }
 
-        // Show the crate where it'll go.
-        if (stockTarget != null && !stockTargetIsTake) ShowStockPreview(StockContainer.GetStockedPrefab(held), stockTarget.GetPoint(stockPoint));
+        // Show the product where it'll go.
+        if (stockTarget != null && !stockTargetIsTake && stockPoint >= 0)
+            ShowStockPreview(StockContainer.GetStockedPrefab(held), stockTarget.GetPoint(stockPoint));
         else DestroyStockPreview();
     }
 
@@ -181,6 +186,7 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         stockTarget = null;
         stockPoint = -1;
+        putBackPoint = -1;
         DestroyStockPreview();
     }
 
@@ -224,12 +230,22 @@ public class PlayerInteractInput : NetworkBehaviour
 
         string text = lookedAtMonitor != null ? "F: Shop monitor"
                     : lookedAtSign != null ? $"F: Buy {lookedAtSign.Plot.DisplayName} ({lookedAtSign.Plot.Price})"
-                    : stockTargetIsTake ? $"F: Take {ItemName(stockTarget.GetStock(stockPoint))}"
-                    : "F: Stock";
+                    : StockPrompt();
         promptStyle ??= new GUIStyle(GUI.skin.box) { fontSize = 16, alignment = TextAnchor.MiddleCenter };
         PromptContent.text = text;
         Vector2 size = promptStyle.CalcSize(PromptContent) + new Vector2(20f, 10f);
         GUI.Box(new Rect((Screen.width - size.x) * 0.5f, Screen.height * 0.6f, size.x, size.y), PromptContent, promptStyle);
+    }
+
+    private string StockPrompt()
+    {
+        if (stockTargetIsTake) return $"F: Take {ItemName(stockTarget.GetStock(stockPoint))}";
+
+        int held = inventory.HeldItemId.Value;
+        string left = $"{inventory.HeldUnits.Value}/{StockContainer.GetUnitsPerCrate(held)}";
+        string text = stockPoint >= 0 ? $"F: Stock {ItemName(held)} ({left})" : $"{ItemName(held)} ({left})";
+        if (putBackPoint >= 0) text += $"    {putBackKey}: Put back";
+        return text;
     }
 
     private static string ItemName(int itemId) =>
@@ -237,6 +253,13 @@ public class PlayerInteractInput : NetworkBehaviour
 
     private void HandleInteract()
     {
+        // Put a product back into the held crate.
+        if (Input.GetKeyDown(putBackKey) && stockTarget != null && putBackPoint >= 0)
+        {
+            inventory.RequestUnstockServerRpc(stockTarget.NetworkObject, putBackPoint);
+            return;
+        }
+
         if (!Input.GetKeyDown(KeyCode.F)) return;
 
         // The shop monitor opens the shop GUI for its store (local only; orders go through the host).
@@ -256,16 +279,19 @@ public class PlayerInteractInput : NetworkBehaviour
         }
 
         // Stocking a shelf, or taking stock off it. (An empty shelf is picked up as usual below.)
-        if (stockTarget != null)
+        if (stockTarget != null && stockPoint >= 0)
         {
             if (stockTargetIsTake) inventory.RequestUnstockServerRpc(stockTarget.NetworkObject, stockPoint);
             else
             {
                 inventory.RequestStockServerRpc(stockTarget.NetworkObject, stockPoint);
-                // Keep the hand empty-looking until the server answers, like placing.
-                inventory.SetHandVisualHidden(true);
-                placePendingUntil = Time.time + placeResponseTimeout;
-                DestroyStockPreview();
+                // Last product: the crate empties and goes away, so hide it until the server answers.
+                if (inventory.HeldUnits.Value <= 1)
+                {
+                    inventory.SetHandVisualHidden(true);
+                    placePendingUntil = Time.time + placeResponseTimeout;
+                    DestroyStockPreview();
+                }
             }
             return;
         }

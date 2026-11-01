@@ -669,6 +669,7 @@ public class StorePlot : NetworkBehaviour
         public Vector3 position;
         public Quaternion rotation;
         public int[] stock; // what was on its StockContainer, if it has one
+        public int units;   // products left, if it's a stock crate
     }
 
     private readonly List<EditEntry> editSession = new();
@@ -717,7 +718,8 @@ public class StorePlot : NetworkBehaviour
                 itemId = item.itemId,
                 position = item.transform.position,
                 rotation = item.transform.rotation,
-                stock = item.TryGetComponent<StockContainer>(out var container) ? container.ServerCopyStock() : null
+                stock = item.TryGetComponent<StockContainer>(out var container) ? container.ServerCopyStock() : null,
+                units = item.IsStockCrate ? item.Units : 0
             });
             item.NetworkObject.Despawn(true);
         }
@@ -763,7 +765,11 @@ public class StorePlot : NetworkBehaviour
 
             var spawned = Instantiate(def.worldNetworkPrefab, pos, rot);
             // Edit mode already let the player choose whether it falls, so it comes back exactly as left.
-            if (spawned.TryGetComponent<ItemPickupNet>(out var item)) item.ServerPrepareFrozen();
+            if (spawned.TryGetComponent<ItemPickupNet>(out var item))
+            {
+                item.ServerPrepareFrozen();
+                if (entry.units > 0) item.ServerSetUnits(entry.units);
+            }
             if (entry.stock != null && spawned.TryGetComponent<StockContainer>(out var container))
                 container.ServerPrepareStock(entry.stock);
             spawned.Spawn(true);
