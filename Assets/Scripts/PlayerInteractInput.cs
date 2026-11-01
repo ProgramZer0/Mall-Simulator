@@ -191,7 +191,7 @@ public class PlayerInteractInput : NetworkBehaviour
         // Show the product where it'll go.
         if (stockTarget != null && !stockTargetIsTake && stockZone >= 0 &&
             stockTarget.TryGetNextSlot(stockZone, held, stockOrient, out Vector3 slotPos, out Quaternion slotRot))
-            ShowStockPreview(stockTarget.GetModelFor(stockZone, held), slotPos, slotRot);
+            ShowStockPreview(stockTarget.GetNextModel(stockZone, held), slotPos, slotRot);
         else DestroyStockPreview();
     }
 

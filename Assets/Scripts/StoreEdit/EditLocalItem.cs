@@ -70,11 +70,11 @@ public class EditLocalItem : MonoBehaviour
     }
 
     /// <summary>Show what's on this shelf, so the stock moves with it while editing.</summary>
-    public void ShowStock(int[] itemIds, int[] counts, int[] orients)
+    public void ShowStock(int[] itemIds, int[] counts, int[] orients, int[] seeds)
     {
         if (stockSource == null) return;
         if (stockModels != null) foreach (var m in stockModels) if (m != null) Destroy(m);
-        stockModels = stockSource.BuildStockOnCopy(transform, itemIds, counts, orients);
+        stockModels = stockSource.BuildStockOnCopy(transform, itemIds, counts, orients, seeds);
     }
 
     public void SetPose(Vector3 position, Quaternion rotation)

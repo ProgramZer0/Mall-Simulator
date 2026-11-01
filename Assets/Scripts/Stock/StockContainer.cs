@@ -34,10 +34,12 @@ public class StockContainer : NetworkBehaviour
         public int itemId; // 0 = empty
         public int count;
         public int orient; // see Orientation
+        public int seed;   // picks the variant (colour) of each product; new each time the zone is restocked from empty
 
-        public bool Equals(ZoneStock other) => itemId == other.itemId && count == other.count && orient == other.orient;
+        public bool Equals(ZoneStock other) =>
+            itemId == other.itemId && count == other.count && orient == other.orient && seed == other.seed;
         public override bool Equals(object obj) => obj is ZoneStock other && Equals(other);
-        public override int GetHashCode() => (itemId * 397 ^ count) * 31 + orient;
+        public override int GetHashCode() => ((itemId * 397 ^ count) * 31 + orient) * 31 + seed;
     }
 
     /// <summary>
@@ -250,6 +252,21 @@ public class StockContainer : NetworkBehaviour
         return crate == null ? null : hang ? crate.HangPrefab : crate.ShelfPrefab;
     }
 
+    /// <summary>The model for the product in one slot of a zone (its variant, if the crate has several).</summary>
+    public static GameObject GetVariantPrefab(int itemId, bool hang, int seed, int slot)
+    {
+        var crate = GetCratePickup(itemId);
+        return crate == null ? null : crate.GetVariant(hang, seed, slot);
+    }
+
+    /// <summary>The model the next product put in this zone will use (for the preview).</summary>
+    public GameObject GetNextModel(int zone, int itemId)
+    {
+        var z = GetZone(zone);
+        bool same = z.count > 0 && z.itemId == itemId;
+        return same ? GetVariantPrefab(itemId, IsHangRail(zone), z.seed, z.count) : GetModelFor(zone, itemId);
+    }
+
     private static ItemPickupNet GetCratePickup(int itemId)
     {
         if (itemId == 0 || ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemId, out var def) ||
@@ -292,6 +309,7 @@ public class StockContainer : NetworkBehaviour
             itemId = itemId,
             count = (same ? z.count : 0) + 1,
             orient = OrientFor(zone, itemId, orient),
+            seed = same ? z.seed : UnityEngine.Random.Range(1, int.MaxValue),
         };
         return true;
     }
@@ -303,7 +321,7 @@ public class StockContainer : NetworkBehaviour
         var z = zones[zone];
         if (z.count <= 0) return false;
         if (!TryGetLayout(zone, z.itemId, orient, out var layout) || layout.capacity < z.count) return false;
-        zones[zone] = new ZoneStock { itemId = z.itemId, count = z.count, orient = orient };
+        zones[zone] = new ZoneStock { itemId = z.itemId, count = z.count, orient = orient, seed = z.seed };
         return true;
     }
 
@@ -316,7 +334,8 @@ public class StockContainer : NetworkBehaviour
         if (!IsServer || zone < 0 || zone >= zones.Count) return 0;
         var z = zones[zone];
         if (z.count <= 0) return 0;
-        zones[zone] = z.count == 1 ? default : new ZoneStock { itemId = z.itemId, count = z.count - 1, orient = z.orient };
+        zones[zone] = z.count == 1 ? default
+            : new ZoneStock { itemId = z.itemId, count = z.count - 1, orient = z.orient, seed = z.seed };
         return z.itemId;
     }
 
@@ -525,7 +544,7 @@ public class StockContainer : NetworkBehaviour
     /// with it. Their colliders are off so clicks reach the copy. Returns what was made (destroy it
     /// all to clear).
     /// </summary>
-    public List<GameObject> BuildStockOnCopy(Transform copyRoot, int[] itemIds, int[] counts, int[] orients)
+    public List<GameObject> BuildStockOnCopy(Transform copyRoot, int[] itemIds, int[] counts, int[] orients, int[] seeds)
     {
         var made = new List<GameObject>();
         var holder = StockVisualFollower.Create(copyRoot, null);
@@ -536,13 +555,14 @@ public class StockContainer : NetworkBehaviour
             var box = copyZones[i];
             var prefab = GetStockedPrefab(itemIds[i], IsHangRail(i));
             int orient = orients != null && i < orients.Length ? orients[i] : 0;
+            int seed = seeds != null && i < seeds.Length ? seeds[i] : 0;
             if (box == null || prefab == null || counts[i] <= 0 ||
                 !TryGetLayout(box, IsHangRail(i), itemIds[i], orient, out var layout)) continue;
 
             for (int k = 0; k < counts[i] && k < layout.capacity; k++)
             {
                 GetSlotPose(box, IsHangRail(i), layout, k, out Vector3 pos, out Quaternion rot);
-                var model = MakeVisual(prefab, pos, rot, holder.transform);
+                var model = MakeVisual(GetVariantPrefab(itemIds[i], IsHangRail(i), seed, k) ?? prefab, pos, rot, holder.transform);
                 foreach (var c in model.GetComponentsInChildren<Collider>()) c.enabled = false;
                 made.Add(model);
             }
@@ -588,7 +608,7 @@ public class StockContainer : NetworkBehaviour
     {
         var list = visuals[zone];
         var shown = visualState[zone];
-        if (shown.itemId != state.itemId || shown.orient != state.orient)
+        if (shown.itemId != state.itemId || shown.orient != state.orient || shown.seed != state.seed)
         {
             foreach (var go in list) if (go != null) Destroy(go);
             list.Clear();
@@ -611,7 +631,8 @@ public class StockContainer : NetworkBehaviour
         while (list.Count < state.count && list.Count < layout.capacity)
         {
             GetSlotPose(box, IsHangRail(zone), layout, list.Count, out Vector3 pos, out Quaternion rot);
-            list.Add(MakeVisual(prefab, pos, rot, root));
+            var model = GetVariantPrefab(state.itemId, IsHangRail(zone), state.seed, list.Count) ?? prefab;
+            list.Add(MakeVisual(model, pos, rot, root));
         }
     }
 
