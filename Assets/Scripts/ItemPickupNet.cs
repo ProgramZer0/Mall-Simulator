@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>A physical item in the world that can be picked up, placed and edited.</summary>
 public class ItemPickupNet : NetworkBehaviour
@@ -15,23 +16,22 @@ public class ItemPickupNet : NetworkBehaviour
         AlwaysSimulate,
     }
 
-    /// <summary>Where a stock crate's products go.</summary>
-    public enum StockStyle { Shelf, Hang, Either }
-
     [SerializeField] public int itemId;
     [Tooltip("Can't be picked up in normal play, only moved in store edit mode (e.g. the shop monitor).")]
     [SerializeField] private bool editModeOnly;
 
     [Header("Stocking")]
-    [Tooltip("This item is stock: hold it, look at a StockContainer (shelf, rack...) and press F to put it on a place point.")]
+    [Tooltip("This item is stock: hold it, look at a StockContainer (shelf, rack...) and press F to put one product on it.")]
     [SerializeField] private bool isStockCrate;
-    [Tooltip("What this crate looks like once it's on a container's place point. Plain visual; its pivot sits " +
-             "on the point. Any scripts, physics or networking on it are stripped.")]
-    [SerializeField] private GameObject stockedPrefab;
-    [Tooltip("How many products a full crate holds. Each one fills one place point.")]
+    [Tooltip("One product as it sits on a shelf (a container's Stock Zones). Leave empty if it can't go on shelves. " +
+             "Plain visual: any scripts, physics or networking on it are stripped.")]
+    [FormerlySerializedAs("stockedPrefab")]
+    [SerializeField] private GameObject shelfPrefab;
+    [Tooltip("One product as it hangs on a rail (a container's Hang Rails), hanger included. It hangs from the top " +
+             "of its model, or from a child named HangPoint. Leave empty if it can't be hung.")]
+    [SerializeField] private GameObject hangPrefab;
+    [Tooltip("How many products a full crate holds.")]
     [Min(1)] [SerializeField] private int unitsPerCrate = 1;
-    [Tooltip("Shelf: lined up in a container's Stock Zones. Hang: on its Hang Rails (clothes on hangers). Either: both.")]
-    [SerializeField] private StockStyle stockStyle = StockStyle.Shelf;
 
     [Header("Physics")]
     [Tooltip("Frozen: stays where it's put.\n" +
@@ -50,9 +50,9 @@ public class ItemPickupNet : NetworkBehaviour
 
     public bool EditModeOnly => editModeOnly;
     public bool IsStockCrate => isStockCrate;
-    public GameObject StockedPrefab => stockedPrefab;
+    public GameObject ShelfPrefab => shelfPrefab;
+    public GameObject HangPrefab => hangPrefab;
     public int UnitsPerCrate => Mathf.Max(1, unitsPerCrate);
-    public StockStyle Style => stockStyle;
 
     // Products left in this crate. 0 means "full", so crates spawned from a prefab start full.
     private readonly NetworkVariable<int> units =
