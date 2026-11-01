@@ -11,10 +11,11 @@ using UnityEngine;
 /// Stock Zones (shelves): products are lined up in a grid inside the box, stacked if it's tall
 /// enough, filling from the front row (the zone's blue arrow) back.
 ///
-/// Hang Rails (clothes rails): the rail runs along the box's red (X) axis at the TOP of the box.
-/// Products hang from it with the top of their model on the rail, one after another along it. The
-/// box's height is how long a product may be. Set Hang Spacing to squeeze hangers closer than
-/// their model's thickness.
+/// Hang Rails (clothes rails): the rail runs along the TOP of the box, down its longer side (red X
+/// or blue Z, whichever is longer). Products use the crate's Hang Prefab and hang with the top of
+/// their model (or a child named "HangPoint") on the rail, one after another along it. Only the
+/// rail's length matters; clothes can hang below the box. Set Hang Spacing to squeeze hangers
+/// closer than their model's thickness.
 ///
 /// Each zone holds one kind of product, in one orientation (which way it faces, and on shelves
 /// whether it stands up or lies down). The player picks it with R / T before stocking an empty
@@ -59,8 +60,8 @@ public class StockContainer : NetworkBehaviour
 
     [Tooltip("Shelf spaces: BoxColliders products are lined up and stacked in. Products face the blue arrow.")]
     [SerializeField] private BoxCollider[] stockZones;
-    [Tooltip("Clothes rails: BoxColliders whose TOP edge along the red (X) axis is the rail. Products hang from it; " +
-             "the box's height is the longest product that fits.")]
+    [Tooltip("Clothes rails: BoxColliders whose top, along their longer side, is the rail. Products hang from it " +
+             "by the top of their Hang Prefab (or a child named HangPoint). Only the length matters.")]
     [SerializeField] private BoxCollider[] hangRails;
     [Tooltip("Space left between products on shelves, in meters.")]
     [SerializeField] private float spacing = 0.01f;
@@ -141,12 +142,11 @@ public class StockContainer : NetworkBehaviour
         }
     }
 
-    /// <summary>Can this product go in this kind of zone (its Stock Style: shelf, hang or either)?</summary>
-    public bool Accepts(int zone, int itemId)
-    {
-        var style = GetStockStyle(itemId);
-        return IsHangRail(zone) ? style != ItemPickupNet.StockStyle.Shelf : style != ItemPickupNet.StockStyle.Hang;
-    }
+    /// <summary>Can this product go in this kind of zone? (Shelves need a Shelf Prefab, rails a Hang Prefab.)</summary>
+    public bool Accepts(int zone, int itemId) => GetStockedPrefab(itemId, IsHangRail(zone)) != null;
+
+    /// <summary>The model this zone shows for a product: its Hang Prefab on rails, its Shelf Prefab on shelves.</summary>
+    public GameObject GetModelFor(int zone, int itemId) => GetStockedPrefab(itemId, IsHangRail(zone));
 
     /// <summary>
     /// The orientation a product would use in this zone: the zone's own if it already holds that
@@ -223,19 +223,23 @@ public class StockContainer : NetworkBehaviour
     /// <summary>How many products a full crate of this item holds (0 if it isn't a stock crate).</summary>
     public static int GetUnitsPerCrate(int itemId) => GetCratePickup(itemId)?.UnitsPerCrate ?? 0;
 
-    /// <summary>What one product from this crate looks like on a shelf (null if it isn't a stock crate).</summary>
-    public static GameObject GetStockedPrefab(int itemId) => GetCratePickup(itemId)?.StockedPrefab;
-
-    /// <summary>Where this crate's products go: shelves, hang rails or either.</summary>
-    public static ItemPickupNet.StockStyle GetStockStyle(int itemId) =>
-        GetCratePickup(itemId)?.Style ?? ItemPickupNet.StockStyle.Shelf;
+    /// <summary>
+    /// What one product from this crate looks like on a hang rail (hang true) or a shelf (false).
+    /// Null if it isn't a stock crate or has no model for that.
+    /// </summary>
+    public static GameObject GetStockedPrefab(int itemId, bool hang)
+    {
+        var crate = GetCratePickup(itemId);
+        return crate == null ? null : hang ? crate.HangPrefab : crate.ShelfPrefab;
+    }
 
     private static ItemPickupNet GetCratePickup(int itemId)
     {
         if (itemId == 0 || ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemId, out var def) ||
             def.worldNetworkPrefab == null) return null;
         var pickup = def.worldNetworkPrefab.GetComponent<ItemPickupNet>();
-        return pickup != null && pickup.IsStockCrate && pickup.StockedPrefab != null ? pickup : null;
+        return pickup != null && pickup.IsStockCrate && (pickup.ShelfPrefab != null || pickup.HangPrefab != null)
+            ? pickup : null;
     }
 
     /// <summary>The middle of a zone, in the world.</summary>
@@ -318,6 +322,9 @@ public class StockContainer : NetworkBehaviour
         public int nx, ny, nz, capacity;
         public Vector3 cell;        // shelves: meters per product along the zone's x/y/z
         public float step;          // rails: meters between hangers
+        public float railLength;    // rails: meters
+        public bool railAlongZ;     // rails: the rail runs down the box's Z side (it's longer than X)
+        public Vector3 hook;        // rails: the hang point on the product, from its pivot (scaled, unrotated)
         public Quaternion orient;   // product rotation relative to the zone
         public Vector3 pivotOffset; // from the product's pivot to the middle of its model (scaled, unrotated)
         public Vector3 half;        // product half size along the zone's axes, in this orientation
@@ -330,26 +337,29 @@ public class StockContainer : NetworkBehaviour
     private bool TryGetLayout(BoxCollider box, bool hang, int itemId, int orient, out Layout layout)
     {
         layout = default;
-        var prefab = GetStockedPrefab(itemId);
+        var prefab = GetStockedPrefab(itemId, hang);
         if (box == null || prefab == null) return false;
 
-        var product = ShipmentPacker.GetBox(prefab);
         Vector3 size = ShipmentPacker.ZoneSize(box);
         Quaternion o = Orientation.Rotation(orient, hang);
-        Vector3 h = RotatedExtents(o, product.half);
         int max = Mathf.Max(0, maxPerZone);
 
         if (hang)
         {
-            // Must hang free of the floor of the box; thickness along the rail sets the gap unless overridden.
-            if (h.y * 2f > size.y + 1e-4f || h.x * 2f > size.x + 1e-4f) return false;
+            // Measured from the model's meshes (colliders often leave out the hook).
+            var model = GetHangShape(prefab);
+            Vector3 h = RotatedExtents(o, model.half);
+            bool alongZ = size.z > size.x;
+            float length = alongZ ? size.z : size.x;
             float step = hangSpacing > 0f ? hangSpacing : h.x * 2f + spacing;
-            int n = Mathf.FloorToInt((size.x - h.x * 2f) / step + 1e-4f) + 1;
-            layout = new Layout { capacity = Mathf.Min(n, max), step = step, orient = o,
-                                  pivotOffset = product.pivotOffset, half = h };
+            int n = length <= h.x * 2f ? 1 : Mathf.FloorToInt((length - h.x * 2f) / step + 1e-4f) + 1;
+            layout = new Layout { capacity = Mathf.Min(n, max), step = step, orient = o, half = h,
+                                  railLength = length, railAlongZ = alongZ, hook = model.hook };
         }
         else
         {
+            var product = ShipmentPacker.GetBox(prefab);
+            Vector3 h = RotatedExtents(o, product.half);
             Vector3 cell = h * 2f + Vector3.one * spacing;
             int nx = Mathf.Max(0, Mathf.FloorToInt((size.x + spacing) / cell.x));
             int ny = Mathf.Max(0, Mathf.FloorToInt((size.y + spacing) / cell.y));
@@ -358,6 +368,57 @@ public class StockContainer : NetworkBehaviour
                                   orient = o, pivotOffset = product.pivotOffset, half = h };
         }
         return layout.capacity > 0;
+    }
+
+    private struct HangShape
+    {
+        public Vector3 half; // half size of the meshes (scaled, unrotated)
+        public Vector3 hook; // the hang point from the pivot (scaled, unrotated)
+    }
+
+    private static readonly Dictionary<GameObject, HangShape> HangShapes = new();
+
+    // The hang point is a child named "HangPoint" if there is one, otherwise the top middle of the meshes.
+    private static HangShape GetHangShape(GameObject prefab)
+    {
+        if (HangShapes.TryGetValue(prefab, out var shape)) return shape;
+
+        Transform root = prefab.transform;
+        Matrix4x4 toRoot = root.worldToLocalMatrix;
+        Vector3 scale = root.localScale;
+        bool any = false;
+        Bounds b = default;
+
+        void Add(Transform t, Bounds local)
+        {
+            Matrix4x4 m = toRoot * t.localToWorldMatrix;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 corner = local.center + Vector3.Scale(local.extents,
+                    new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+                Vector3 p = Vector3.Scale(m.MultiplyPoint3x4(corner), scale);
+                if (!any) { b = new Bounds(p, Vector3.zero); any = true; }
+                else b.Encapsulate(p);
+            }
+        }
+
+        foreach (var mf in prefab.GetComponentsInChildren<MeshFilter>(true))
+            if (mf.sharedMesh != null) Add(mf.transform, mf.sharedMesh.bounds);
+        foreach (var sk in prefab.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            Add(sk.transform, sk.localBounds);
+        if (!any) b = new Bounds(Vector3.zero, Vector3.one * 0.3f);
+
+        Vector3 hook = new(b.center.x, b.max.y, b.center.z);
+        foreach (var t in prefab.GetComponentsInChildren<Transform>(true))
+        {
+            if (t.name != "HangPoint") continue;
+            hook = Vector3.Scale(toRoot.MultiplyPoint3x4(t.position), scale);
+            break;
+        }
+
+        shape = new HangShape { half = b.extents, hook = hook };
+        HangShapes[prefab] = shape;
+        return shape;
     }
 
     private static Vector3 RotatedExtents(Quaternion q, Vector3 half)
@@ -378,8 +439,15 @@ public class StockContainer : NetworkBehaviour
 
         if (hang)
         {
-            float used = (l.capacity - 1) * l.step + l.half.x * 2f; // centre the full rail's worth
-            local = new Vector3(-used * 0.5f + l.half.x + index * l.step, size.y * 0.5f - l.half.y, 0f);
+            // Hang points spaced along the rail (the box's top, down its longer side), centred on it.
+            float used = (l.capacity - 1) * l.step;
+            float along = -used * 0.5f + index * l.step;
+            Quaternion frame = l.railAlongZ ? zoneRot * Quaternion.Euler(0f, -90f, 0f) : zoneRot; // frame X = the rail
+            Vector3 railPoint = box.transform.TransformPoint(box.center) + zoneRot * new Vector3(0f, size.y * 0.5f, 0f)
+                              + frame * new Vector3(along, 0f, 0f);
+            rotation = frame * l.orient;
+            position = railPoint - rotation * l.hook;
+            return;
         }
         else
         {
@@ -433,7 +501,7 @@ public class StockContainer : NetworkBehaviour
         for (int i = 0; i < copyZones.Length && i < itemIds.Length && i < counts.Length; i++)
         {
             var box = copyZones[i];
-            var prefab = GetStockedPrefab(itemIds[i]);
+            var prefab = GetStockedPrefab(itemIds[i], IsHangRail(i));
             int orient = orients != null && i < orients.Length ? orients[i] : 0;
             if (box == null || prefab == null || counts[i] <= 0 ||
                 !TryGetLayout(box, IsHangRail(i), itemIds[i], orient, out var layout)) continue;
@@ -500,7 +568,7 @@ public class StockContainer : NetworkBehaviour
         }
 
         if (list.Count >= state.count) return;
-        var prefab = GetStockedPrefab(state.itemId);
+        var prefab = GetStockedPrefab(state.itemId, IsHangRail(zone));
         var box = GetBox(zone);
         if (prefab == null || !TryGetLayout(zone, state.itemId, state.orient, out var layout)) return;
 
@@ -574,8 +642,9 @@ public class StockContainer : NetworkBehaviour
                 Gizmos.DrawWireCube(box.center, box.size);
                 Gizmos.color = new Color(1f, 0.7f, 0.3f, 1f);
                 Vector3 top = box.center + Vector3.up * box.size.y * 0.5f;
-                Gizmos.DrawLine(top - Vector3.right * box.size.x * 0.5f, top + Vector3.right * box.size.x * 0.5f); // the rail
-                Gizmos.DrawLine(box.center, box.center + Vector3.forward * box.size.z * 0.5f); // facing
+                Vector3 s = Vector3.Scale(box.size, box.transform.lossyScale);
+                Vector3 rail = s.z > s.x ? Vector3.forward * box.size.z * 0.5f : Vector3.right * box.size.x * 0.5f;
+                Gizmos.DrawLine(top - rail, top + rail); // the rail
             }
         }
         Gizmos.matrix = Matrix4x4.identity;
