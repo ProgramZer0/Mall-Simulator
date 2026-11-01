@@ -52,7 +52,7 @@ public class ItemDef
     public bool showInShop = true;
     [Tooltip("Picture shown in the buy menu.")]
     public Sprite icon;
-    [Tooltip("Buy menu filter group, e.g. Shelves, Products, Decor. Must match a filter's Category exactly.")]
+    [Tooltip("Group like Shelves, Products, Decor. The buy menu search matches this as well as the name.")]
     public string category = "General";
     [Tooltip("Cost of one when ordered.")]
     public int price = 10;
