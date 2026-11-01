@@ -79,6 +79,7 @@ public class StockContainer : NetworkBehaviour
     private List<GameObject>[] visuals;
     private ZoneStock[] visualState;
     private ZoneStock[] pendingStock; // server: contents to restore when spawned (edit mode)
+    private StockVisualFollower visualRoot; // unscaled holder that follows this furniture
 
     private int ShelfCount => stockZones != null ? stockZones.Length : 0;
     private int RailCount => hangRails != null ? hangRails.Length : 0;
@@ -126,6 +127,21 @@ public class StockContainer : NetworkBehaviour
         All.Remove(this);
         zones.OnListChanged -= OnZonesChanged;
         for (int i = 0; i < ZoneCount; i++) SetVisuals(i, default);
+        if (visualRoot != null) Destroy(visualRoot.gameObject);
+        visualRoot = null;
+    }
+
+    public override void OnDestroy()
+    {
+        if (visualRoot != null) Destroy(visualRoot.gameObject);
+        base.OnDestroy();
+    }
+
+    private Transform GetVisualRoot()
+    {
+        if (visualRoot == null) visualRoot = StockVisualFollower.Create(transform, this);
+        visualRoot.Sync();
+        return visualRoot.transform;
     }
 
     /* ========================= QUERIES ========================= */
@@ -349,6 +365,13 @@ public class StockContainer : NetworkBehaviour
             // Measured from the model's meshes (colliders often leave out the hook).
             // The rail frame's Z runs along the rail, so thickness along the rail is the turned model's Z.
             var model = GetHangShape(prefab);
+
+            // Clothes on a rack: whichever way the model was built, its thinnest side (seen from above)
+            // runs along the rail. R then turns it from there, T tips it first.
+            Quaternion tip = Orientation.Lying(orient) ? Quaternion.Euler(-90f, 0f, 0f) : Quaternion.identity;
+            Vector3 tipped = RotatedExtents(tip, model.half);
+            float autoYaw = tipped.x < tipped.z - 1e-4f ? 90f : 0f;
+            o = Quaternion.Euler(0f, Orientation.Turns(orient) * 90f + autoYaw, 0f) * tip;
             Vector3 h = RotatedExtents(o, model.half);
             bool alongZ = size.z > size.x;
             float length = alongZ ? size.z : size.x;
@@ -498,12 +521,15 @@ public class StockContainer : NetworkBehaviour
     }
 
     /// <summary>
-    /// Lays out the stock models on an edit-mode copy, parented to its zones so they move with it.
-    /// Returns the models made (destroy them to clear).
+    /// Lays out the stock models on an edit-mode copy, under a holder that follows it so they move
+    /// with it. Their colliders are off so clicks reach the copy. Returns what was made (destroy it
+    /// all to clear).
     /// </summary>
     public List<GameObject> BuildStockOnCopy(Transform copyRoot, int[] itemIds, int[] counts, int[] orients)
     {
         var made = new List<GameObject>();
+        var holder = StockVisualFollower.Create(copyRoot, null);
+        made.Add(holder.gameObject);
         var copyZones = FindZonesOnCopy(copyRoot);
         for (int i = 0; i < copyZones.Length && i < itemIds.Length && i < counts.Length; i++)
         {
@@ -516,7 +542,9 @@ public class StockContainer : NetworkBehaviour
             for (int k = 0; k < counts[i] && k < layout.capacity; k++)
             {
                 GetSlotPose(box, IsHangRail(i), layout, k, out Vector3 pos, out Quaternion rot);
-                made.Add(MakeVisual(prefab, pos, rot, box.transform));
+                var model = MakeVisual(prefab, pos, rot, holder.transform);
+                foreach (var c in model.GetComponentsInChildren<Collider>()) c.enabled = false;
+                made.Add(model);
             }
         }
         return made;
@@ -579,10 +607,11 @@ public class StockContainer : NetworkBehaviour
         var box = GetBox(zone);
         if (prefab == null || !TryGetLayout(zone, state.itemId, state.orient, out var layout)) return;
 
+        var root = GetVisualRoot();
         while (list.Count < state.count && list.Count < layout.capacity)
         {
             GetSlotPose(box, IsHangRail(zone), layout, list.Count, out Vector3 pos, out Quaternion rot);
-            list.Add(MakeVisual(prefab, pos, rot, box.transform));
+            list.Add(MakeVisual(prefab, pos, rot, root));
         }
     }
 
@@ -607,7 +636,7 @@ public class StockContainer : NetworkBehaviour
         DestroyAll<Rigidbody>(go);
         DestroyAll<AudioSource>(go);
 
-        go.transform.SetParent(parent, true); // keeps the prefab's own size
+        go.transform.SetParent(parent, true); // parent is unscaled, so the prefab keeps its own size and shape
         go.transform.SetPositionAndRotation(position, rotation);
         return go;
     }
