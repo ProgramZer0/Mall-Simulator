@@ -5,8 +5,9 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// The shop's buy screen. Lists the ItemCatalog's items (those with Show In Shop ticked), filtered
-/// by category, across as many pages as it takes.
+/// The shop's buy screen. Lists the ItemCatalog's items (those with Show In Shop ticked) across as
+/// many pages as it takes. A search box filters them: type, then press Filter (or Enter); Clear
+/// shows everything again.
 ///
 /// Usual setup: Page Prefab is an empty page with a Grid Layout Group, and Item Slot Prefab is one
 /// item tile (with a BuyItemSlot). One tile is made per item; when a page is full a new page is
@@ -21,15 +22,6 @@ using UnityEngine.UI;
 /// </summary>
 public class BuyMenu : MonoBehaviour, IShopScreen
 {
-    [Serializable]
-    public class Filter
-    {
-        public string label = "All";
-        public Button button;
-        [Tooltip("Shows items whose Category matches exactly. Empty = everything.")]
-        public string category = "";
-    }
-
     [Header("Pages")]
     [Tooltip("A page: usually an empty object with a Grid Layout Group. Made under Page Parent.")]
     [SerializeField] private GameObject pagePrefab;
@@ -50,10 +42,15 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     [SerializeField] private int tilesPerPageInUse;
     [SerializeField] private int pagesInUse;
 
-    [Header("Filters")]
-    [SerializeField] private Filter[] filters;
-    [SerializeField] private Color selectedFilterColor = new(1f, 1f, 1f, 1f);
-    [SerializeField] private Color normalFilterColor = new(0.75f, 0.75f, 0.75f, 1f);
+    [Header("Search")]
+    [Tooltip("Where the player types what to look for.")]
+    [SerializeField] private TMP_InputField filterInput;
+    [Tooltip("Applies the search (pressing Enter in the box does too).")]
+    [SerializeField] private Button filterButton;
+    [Tooltip("Empties the box and shows everything.")]
+    [SerializeField] private Button clearFilterButton;
+    [Tooltip("Also match the item's Category, not just its name.")]
+    [SerializeField] private bool searchCategory = true;
 
     [Header("Cart")]
     [SerializeField] private bool useCart = true;
@@ -85,7 +82,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     private readonly List<ItemDef> shown = new();
     private readonly List<(int itemId, int quantity)> cart = new();
     private int pageIndex;
-    private string category = "";
+    private string filterText = "";
     private bool waitingForResult;
     private float statusUntil;
     private EconomyManager subscribedTo;
@@ -99,13 +96,9 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         if (checkoutButton != null) checkoutButton.onClick.AddListener(Checkout);
         if (clearCartButton != null) clearCartButton.onClick.AddListener(ClearCart);
 
-        if (filters != null)
-            foreach (var f in filters)
-            {
-                if (f?.button == null) continue;
-                string cat = f.category ?? "";
-                f.button.onClick.AddListener(() => SetCategory(cat));
-            }
+        if (filterButton != null) filterButton.onClick.AddListener(ApplyFilter);
+        if (clearFilterButton != null) clearFilterButton.onClick.AddListener(ClearFilter);
+        if (filterInput != null) filterInput.onSubmit.AddListener(_ => ApplyFilter());
 
         if (itemSlotPrefab == null) BuildPage();
     }
@@ -168,15 +161,10 @@ public class BuyMenu : MonoBehaviour, IShopScreen
             Debug.LogWarning("[BuyMenu] The page has no item tiles (no BuyItemSlot and no Buttons).", this);
     }
 
-    /// <summary>Page, cart and filter buttons aren't item tiles, even if they sit inside the page.</summary>
-    private bool IsControlButton(Button b)
-    {
-        if (b == nextPageButton || b == previousPageButton || b == checkoutButton || b == clearCartButton) return true;
-        if (filters != null)
-            foreach (var f in filters)
-                if (f != null && f.button == b) return true;
-        return false;
-    }
+    /// <summary>Page, cart and search buttons aren't item tiles, even if they sit inside the page.</summary>
+    private bool IsControlButton(Button b) =>
+        b == nextPageButton || b == previousPageButton || b == checkoutButton || b == clearCartButton ||
+        b == filterButton || b == clearFilterButton;
 
     private void Subscribe()
     {
@@ -200,11 +188,29 @@ public class BuyMenu : MonoBehaviour, IShopScreen
 
     /* ========================= ITEMS & PAGES ========================= */
 
-    private void SetCategory(string cat)
+    /// <summary>Show only items whose name (or category) contains what's in the search box.</summary>
+    public void ApplyFilter()
     {
-        category = cat ?? "";
+        filterText = filterInput != null ? filterInput.text.Trim() : "";
         pageIndex = 0;
         RefreshItems();
+    }
+
+    /// <summary>Empty the search box and show everything.</summary>
+    public void ClearFilter()
+    {
+        if (filterInput != null) filterInput.text = "";
+        filterText = "";
+        pageIndex = 0;
+        RefreshItems();
+    }
+
+    private bool MatchesFilter(ItemDef def)
+    {
+        if (filterText.Length == 0) return true;
+        const StringComparison ignoreCase = StringComparison.OrdinalIgnoreCase;
+        if (!string.IsNullOrEmpty(def.displayName) && def.displayName.IndexOf(filterText, ignoreCase) >= 0) return true;
+        return searchCategory && !string.IsNullOrEmpty(def.category) && def.category.IndexOf(filterText, ignoreCase) >= 0;
     }
 
     private void ChangePage(int delta)
@@ -232,7 +238,6 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         RefreshItems();
         RefreshCart();
         RefreshMoney();
-        RefreshFilterLook();
     }
 
     /// <summary>Re-reads the catalog for the current filter and rebuilds the pages.</summary>
@@ -245,7 +250,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
             foreach (var def in catalog.Items)
             {
                 if (def == null || !def.showInShop || def.worldNetworkPrefab == null) continue;
-                if (category.Length > 0 && !string.Equals(def.category, category, StringComparison.Ordinal)) continue;
+                if (!MatchesFilter(def)) continue;
                 shown.Add(def);
             }
         }
@@ -254,7 +259,6 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         else FillFixedTiles();
 
         ShowCurrentPage();
-        RefreshFilterLook();
     }
 
     /* ---------- Slot-prefab mode: one tile per item, new page when full ---------- */
@@ -386,17 +390,6 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         if (pageLabel != null) pageLabel.text = $"Page {pageIndex + 1} / {PageCount}";
         if (previousPageButton != null) previousPageButton.interactable = pageIndex > 0;
         if (nextPageButton != null) nextPageButton.interactable = pageIndex < PageCount - 1;
-    }
-
-    private void RefreshFilterLook()
-    {
-        if (filters == null) return;
-        foreach (var f in filters)
-        {
-            if (f?.button == null || f.button.targetGraphic == null) continue;
-            bool selected = string.Equals(f.category ?? "", category, StringComparison.Ordinal);
-            f.button.targetGraphic.color = selected ? selectedFilterColor : normalFilterColor;
-        }
     }
 
     /* ========================= BUYING ========================= */
