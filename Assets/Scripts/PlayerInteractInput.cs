@@ -170,7 +170,13 @@ public class PlayerInteractInput : NetworkBehaviour
             Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit,
                 interactRange, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
         {
+            // Stock models live under a holder that follows the furniture, so check for that too.
             var container = hit.collider.GetComponentInParent<StockContainer>();
+            if (container == null)
+            {
+                var holder = hit.collider.GetComponentInParent<StockVisualFollower>();
+                if (holder != null) container = holder.Container;
+            }
             if (container != null && container.IsSpawned &&
                 MallManager.CanPickupOrPlace(OwnerClientId, transform.position, container.transform.position))
             {
