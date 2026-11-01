@@ -13,9 +13,10 @@ using UnityEngine;
 ///
 /// Hang Rails (clothes rails): the rail runs along the TOP of the box, down its longer side (red X
 /// or blue Z, whichever is longer). Products use the crate's Hang Prefab and hang with the top of
-/// their model (or a child named "HangPoint") on the rail, one after another along it. Only the
-/// rail's length matters; clothes can hang below the box. Set Hang Spacing to squeeze hangers
-/// closer than their model's thickness.
+/// their model (or a child named "HangPoint") on the rail, one after another along it. By default a
+/// product's front (blue arrow) points along the rail, like clothes on a real rack; R turns it, T tips
+/// it 90 degrees (for a model built lying flat). Only the rail's length matters; clothes can hang
+/// below the box. Set Hang Spacing to squeeze hangers closer than their model's thickness.
 ///
 /// Each zone holds one kind of product, in one orientation (which way it faces, and on shelves
 /// whether it stands up or lies down). The player picks it with R / T before stocking an empty
@@ -41,7 +42,8 @@ public class StockContainer : NetworkBehaviour
 
     /// <summary>
     /// A product's orientation in a zone, packed in one int: bits 0-1 = quarter turns from facing the
-    /// zone's blue arrow, bit 2 = lying down (front facing up). Hang rails ignore lying down.
+    /// zone's blue arrow (on rails: from facing along the rail), bit 2 = tipped 90 degrees (on shelves:
+    /// lying down with the front facing up; on rails: a model built lying flat stood upright).
     /// </summary>
     public static class Orientation
     {
@@ -54,7 +56,7 @@ public class StockContainer : NetworkBehaviour
         public static Quaternion Rotation(int orient, bool hang)
         {
             var r = Quaternion.Euler(0f, Turns(orient) * 90f, 0f);
-            return !hang && Lying(orient) ? r * Quaternion.Euler(-90f, 0f, 0f) : r;
+            return Lying(orient) ? r * Quaternion.Euler(-90f, 0f, 0f) : r;
         }
     }
 
@@ -155,8 +157,7 @@ public class StockContainer : NetworkBehaviour
     public int OrientFor(int zone, int itemId, int wanted)
     {
         var z = GetZone(zone);
-        int orient = z.count > 0 && z.itemId == itemId ? z.orient : wanted;
-        return IsHangRail(zone) ? Orientation.Make(Orientation.Turns(orient), false) : orient;
+        return z.count > 0 && z.itemId == itemId ? z.orient : wanted;
     }
 
     /// <summary>How many of this product fit in a zone in that orientation (0 if it can't go there).</summary>
@@ -285,7 +286,6 @@ public class StockContainer : NetworkBehaviour
         if (!IsServer || zone < 0 || zone >= zones.Count) return false;
         var z = zones[zone];
         if (z.count <= 0) return false;
-        if (IsHangRail(zone)) orient = Orientation.Make(Orientation.Turns(orient), false);
         if (!TryGetLayout(zone, z.itemId, orient, out var layout) || layout.capacity < z.count) return false;
         zones[zone] = new ZoneStock { itemId = z.itemId, count = z.count, orient = orient };
         return true;
@@ -324,7 +324,7 @@ public class StockContainer : NetworkBehaviour
         public float step;          // rails: meters between hangers
         public float railLength;    // rails: meters
         public bool railAlongZ;     // rails: the rail runs down the box's Z side (it's longer than X)
-        public Vector3 hook;        // rails: the hang point on the product, from its pivot (scaled, unrotated)
+        public Vector3 hook;        // rails: the hang point from the pivot, already turned/tipped (rail frame)
         public Quaternion orient;   // product rotation relative to the zone
         public Vector3 pivotOffset; // from the product's pivot to the middle of its model (scaled, unrotated)
         public Vector3 half;        // product half size along the zone's axes, in this orientation
@@ -347,14 +347,19 @@ public class StockContainer : NetworkBehaviour
         if (hang)
         {
             // Measured from the model's meshes (colliders often leave out the hook).
+            // The rail frame's Z runs along the rail, so thickness along the rail is the turned model's Z.
             var model = GetHangShape(prefab);
             Vector3 h = RotatedExtents(o, model.half);
             bool alongZ = size.z > size.x;
             float length = alongZ ? size.z : size.x;
-            float step = hangSpacing > 0f ? hangSpacing : h.x * 2f + spacing;
-            int n = length <= h.x * 2f ? 1 : Mathf.FloorToInt((length - h.x * 2f) / step + 1e-4f) + 1;
+            float step = hangSpacing > 0f ? hangSpacing : h.z * 2f + spacing;
+            int n = length <= h.z * 2f ? 1 : Mathf.FloorToInt((length - h.z * 2f) / step + 1e-4f) + 1;
+
+            // Always hang from the top of the model as it hangs (after turning/tipping), unless it has a HangPoint.
+            Vector3 c = o * model.center;
+            Vector3 hook = model.hasHangPoint ? o * model.hook : new Vector3(c.x, c.y + h.y, c.z);
             layout = new Layout { capacity = Mathf.Min(n, max), step = step, orient = o, half = h,
-                                  railLength = length, railAlongZ = alongZ, hook = model.hook };
+                                  railLength = length, railAlongZ = alongZ, hook = hook };
         }
         else
         {
@@ -372,8 +377,10 @@ public class StockContainer : NetworkBehaviour
 
     private struct HangShape
     {
-        public Vector3 half; // half size of the meshes (scaled, unrotated)
-        public Vector3 hook; // the hang point from the pivot (scaled, unrotated)
+        public Vector3 center;     // middle of the meshes from the pivot (scaled, unrotated)
+        public Vector3 half;       // half size of the meshes (scaled, unrotated)
+        public Vector3 hook;       // the HangPoint child from the pivot (scaled, unrotated)
+        public bool hasHangPoint;
     }
 
     private static readonly Dictionary<GameObject, HangShape> HangShapes = new();
@@ -408,15 +415,15 @@ public class StockContainer : NetworkBehaviour
             Add(sk.transform, sk.localBounds);
         if (!any) b = new Bounds(Vector3.zero, Vector3.one * 0.3f);
 
-        Vector3 hook = new(b.center.x, b.max.y, b.center.z);
+        shape = new HangShape { center = b.center, half = b.extents };
         foreach (var t in prefab.GetComponentsInChildren<Transform>(true))
         {
             if (t.name != "HangPoint") continue;
-            hook = Vector3.Scale(toRoot.MultiplyPoint3x4(t.position), scale);
+            shape.hook = Vector3.Scale(toRoot.MultiplyPoint3x4(t.position), scale);
+            shape.hasHangPoint = true;
             break;
         }
 
-        shape = new HangShape { half = b.extents, hook = hook };
         HangShapes[prefab] = shape;
         return shape;
     }
@@ -442,11 +449,11 @@ public class StockContainer : NetworkBehaviour
             // Hang points spaced along the rail (the box's top, down its longer side), centred on it.
             float used = (l.capacity - 1) * l.step;
             float along = -used * 0.5f + index * l.step;
-            Quaternion frame = l.railAlongZ ? zoneRot * Quaternion.Euler(0f, -90f, 0f) : zoneRot; // frame X = the rail
+            Quaternion frame = l.railAlongZ ? zoneRot : zoneRot * Quaternion.Euler(0f, 90f, 0f); // frame Z = the rail
             Vector3 railPoint = box.transform.TransformPoint(box.center) + zoneRot * new Vector3(0f, size.y * 0.5f, 0f)
-                              + frame * new Vector3(along, 0f, 0f);
+                              + frame * new Vector3(0f, 0f, along);
             rotation = frame * l.orient;
-            position = railPoint - rotation * l.hook;
+            position = railPoint - frame * l.hook;
             return;
         }
         else

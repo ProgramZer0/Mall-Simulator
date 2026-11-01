@@ -138,7 +138,7 @@ public class PlayerInteractInput : NetworkBehaviour
     [SerializeField] private KeyCode putBackKey = KeyCode.G;
     [Tooltip("Turn the products a quarter turn: the next ones you stock in an empty spot, or the ones already in the spot you're looking at.")]
     [SerializeField] private KeyCode stockTurnKey = KeyCode.R;
-    [Tooltip("Shelves only: stand products up / lay them down (front facing up).")]
+    [Tooltip("Shelves: stand products up / lay them down (front facing up). Rails: tip the model 90 degrees.")]
     [SerializeField] private KeyCode stockLayKey = KeyCode.T;
 
     private int stockOrient; // the player's pick for empty spots (StockContainer.Orientation)
@@ -268,12 +268,11 @@ public class PlayerInteractInput : NetworkBehaviour
         int zone = OrientZone();
         if (zone < 0) return "";
         string text = $"\n{stockTurnKey}: Turn";
-        if (!stockTarget.IsHangRail(zone))
-        {
-            var z = stockTarget.GetZone(zone);
-            int orient = z.count > 0 ? z.orient : stockOrient;
-            text += $"   {stockLayKey}: {(StockContainer.Orientation.Lying(orient) ? "Stand up" : "Lay down")}";
-        }
+        var z = stockTarget.GetZone(zone);
+        bool tipped = StockContainer.Orientation.Lying(z.count > 0 ? z.orient : stockOrient);
+        text += stockTarget.IsHangRail(zone)
+            ? $"   {stockLayKey}: Tip over"
+            : $"   {stockLayKey}: {(tipped ? "Stand up" : "Lay down")}";
         return text;
     }
 
@@ -290,7 +289,6 @@ public class PlayerInteractInput : NetworkBehaviour
         bool lay = Input.GetKeyDown(stockLayKey);
         int zone = OrientZone();
         if ((!turn && !lay) || zone < 0) return;
-        if (lay && stockTarget.IsHangRail(zone)) return;
 
         var z = stockTarget.GetZone(zone);
         int current = z.count > 0 ? z.orient : stockOrient;
