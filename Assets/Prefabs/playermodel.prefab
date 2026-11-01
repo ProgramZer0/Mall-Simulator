@@ -382,10 +382,10 @@ MonoBehaviour:
     m_Bits: 8
   placementMask:
     serializedVersion: 2
-    m_Bits: 1403
+    m_Bits: 7547
   placementBlockingMask:
     serializedVersion: 2
-    m_Bits: 1480
+    m_Bits: 7624
   fineRotateSpeed: 45
   placeResponseTimeout: 0.5
   invalidTintStrength: 0.35
@@ -393,6 +393,8 @@ MonoBehaviour:
   validAlpha: 0.79
   invalidAlpha: 0.12
   debugPlacement: 0
+  stockPreviewAlpha: 0.37
+  putBackKey: 103
 --- !u!143 &2986661850691434819
 CharacterController:
   m_ObjectHideFlags: 0
@@ -433,6 +435,8 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   handAnchor: {fileID: 3084238086416788414}
   HeldItemId:
+    m_InternalValue: 0
+  HeldUnits:
     m_InternalValue: 0
 --- !u!114 &1450381561150076667
 MonoBehaviour:

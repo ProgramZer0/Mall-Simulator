@@ -154,7 +154,16 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 1
+  itemId: 6
+  editModeOnly: 0
+  isStockCrate: 0
+  stockedPrefab: {fileID: 0}
+  unitsPerCrate: 1
+  physicsMode: 1
+  stillSeconds: 4
+  maxFallSeconds: 20
+  lostFallDistance: 30
+  stillSpeed: 0.05
 --- !u!54 &7971765392998675163
 Rigidbody:
   m_ObjectHideFlags: 0
