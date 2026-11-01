@@ -80,12 +80,13 @@ public class PlayerInventoryNet : NetworkBehaviour
                 actor.transform.position, pickup.transform.position)) return;
 
         // Deliveries are held for the team that ordered them for a while.
-        if (pickup.IsReservedAgainst(MallManager.GetTeamOf(rpcParams.Receive.SenderClientId))) return;
+        bool isBox = pickupNO.TryGetComponent<ShipmentPackage>(out var box);
+        if (isBox && box.IsReservedAgainst(MallManager.GetTeamOf(rpcParams.Receive.SenderClientId))) return;
 
         if (HeldItemId.Value != 0) return;
 
         // A delivery box gives you the item inside it.
-        int itemId = pickupNO.TryGetComponent<ShipmentPackage>(out var box) ? box.ContainedItemId : pickup.itemId;
+        int itemId = isBox ? box.ContainedItemId : pickup.itemId;
         if (itemId == 0) return;
         HeldItemId.Value = itemId;
 

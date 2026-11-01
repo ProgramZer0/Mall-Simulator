@@ -125,6 +125,9 @@ public class PlayerInteractInput : NetworkBehaviour
         }
     }
 
+    private static GUIStyle promptStyle; // made once; a new GUIStyle every OnGUI call makes garbage
+    private static readonly GUIContent PromptContent = new();
+
     private void OnGUI()
     {
         if (!IsOwner || (lookedAtSign == null && lookedAtMonitor == null) ||
@@ -132,9 +135,10 @@ public class PlayerInteractInput : NetworkBehaviour
 
         string text = lookedAtMonitor != null ? "F: Shop monitor"
                     : $"F: Buy {lookedAtSign.Plot.DisplayName} ({lookedAtSign.Plot.Price})";
-        var style = new GUIStyle(GUI.skin.box) { fontSize = 16, alignment = TextAnchor.MiddleCenter };
-        Vector2 size = style.CalcSize(new GUIContent(text)) + new Vector2(20f, 10f);
-        GUI.Box(new Rect((Screen.width - size.x) * 0.5f, Screen.height * 0.6f, size.x, size.y), text, style);
+        promptStyle ??= new GUIStyle(GUI.skin.box) { fontSize = 16, alignment = TextAnchor.MiddleCenter };
+        PromptContent.text = text;
+        Vector2 size = promptStyle.CalcSize(PromptContent) + new Vector2(20f, 10f);
+        GUI.Box(new Rect((Screen.width - size.x) * 0.5f, Screen.height * 0.6f, size.x, size.y), PromptContent, promptStyle);
     }
 
     private void HandleInteract()
