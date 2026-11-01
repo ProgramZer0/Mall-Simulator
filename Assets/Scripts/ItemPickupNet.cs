@@ -15,6 +15,9 @@ public class ItemPickupNet : NetworkBehaviour
         AlwaysSimulate,
     }
 
+    /// <summary>Where a stock crate's products go.</summary>
+    public enum StockStyle { Shelf, Hang, Either }
+
     [SerializeField] public int itemId;
     [Tooltip("Can't be picked up in normal play, only moved in store edit mode (e.g. the shop monitor).")]
     [SerializeField] private bool editModeOnly;
@@ -27,6 +30,8 @@ public class ItemPickupNet : NetworkBehaviour
     [SerializeField] private GameObject stockedPrefab;
     [Tooltip("How many products a full crate holds. Each one fills one place point.")]
     [Min(1)] [SerializeField] private int unitsPerCrate = 1;
+    [Tooltip("Shelf: lined up in a container's Stock Zones. Hang: on its Hang Rails (clothes on hangers). Either: both.")]
+    [SerializeField] private StockStyle stockStyle = StockStyle.Shelf;
 
     [Header("Physics")]
     [Tooltip("Frozen: stays where it's put.\n" +
@@ -47,6 +52,7 @@ public class ItemPickupNet : NetworkBehaviour
     public bool IsStockCrate => isStockCrate;
     public GameObject StockedPrefab => stockedPrefab;
     public int UnitsPerCrate => Mathf.Max(1, unitsPerCrate);
+    public StockStyle Style => stockStyle;
 
     // Products left in this crate. 0 means "full", so crates spawned from a prefab start full.
     private readonly NetworkVariable<int> units =

@@ -136,6 +136,12 @@ public class PlayerInteractInput : NetworkBehaviour
 
     [Tooltip("While holding a stock crate: put the product you're looking at back into the crate.")]
     [SerializeField] private KeyCode putBackKey = KeyCode.G;
+    [Tooltip("Turn the products a quarter turn: the next ones you stock in an empty spot, or the ones already in the spot you're looking at.")]
+    [SerializeField] private KeyCode stockTurnKey = KeyCode.R;
+    [Tooltip("Shelves only: stand products up / lay them down (front facing up).")]
+    [SerializeField] private KeyCode stockLayKey = KeyCode.T;
+
+    private int stockOrient; // the player's pick for empty spots (StockContainer.Orientation)
 
     private StockContainer stockTarget;
     private int stockZone = -1;       // F: the zone to stock, or (empty hands) the zone to take from
@@ -169,7 +175,7 @@ public class PlayerInteractInput : NetworkBehaviour
                 MallManager.CanPickupOrPlace(OwnerClientId, transform.position, container.transform.position))
             {
                 stockTargetIsTake = held == 0;
-                stockZone = container.FindNearestZone(hit.point, held, wantStock: held == 0);
+                stockZone = container.FindNearestZone(hit.point, held, wantStock: held == 0, orient: stockOrient);
                 if (holdingCrate && inventory.HeldUnits.Value < StockContainer.GetUnitsPerCrate(held))
                     putBackZone = container.FindNearestZone(hit.point, held, wantStock: true);
                 if (stockZone >= 0 || putBackZone >= 0) stockTarget = container;
@@ -178,7 +184,7 @@ public class PlayerInteractInput : NetworkBehaviour
 
         // Show the product where it'll go.
         if (stockTarget != null && !stockTargetIsTake && stockZone >= 0 &&
-            stockTarget.TryGetNextSlot(stockZone, held, out Vector3 slotPos, out Quaternion slotRot))
+            stockTarget.TryGetNextSlot(stockZone, held, stockOrient, out Vector3 slotPos, out Quaternion slotRot))
             ShowStockPreview(StockContainer.GetStockedPrefab(held), slotPos, slotRot);
         else DestroyStockPreview();
     }
@@ -243,7 +249,7 @@ public class PlayerInteractInput : NetworkBehaviour
         if (stockTargetIsTake)
         {
             var z = stockTarget.GetZone(stockZone);
-            return $"F: Take {ItemName(z.itemId)} ({z.count} on shelf)";
+            return $"F: Take {ItemName(z.itemId)} ({z.count} on shelf)" + OrientPrompt();
         }
 
         int held = inventory.HeldItemId.Value;
@@ -251,10 +257,47 @@ public class PlayerInteractInput : NetworkBehaviour
         if (stockZone >= 0)
         {
             var z = stockTarget.GetZone(stockZone);
-            text = $"F: Stock {text}   (shelf {(z.itemId == held ? z.count : 0)}/{stockTarget.GetCapacity(stockZone, held)})";
+            text = $"F: Stock {text}   (shelf {(z.itemId == held ? z.count : 0)}/{stockTarget.GetCapacity(stockZone, held, stockOrient)})";
         }
         if (putBackZone >= 0) text += $"    {putBackKey}: Put back";
+        return text + OrientPrompt();
+    }
+
+    private string OrientPrompt()
+    {
+        int zone = OrientZone();
+        if (zone < 0) return "";
+        string text = $"\n{stockTurnKey}: Turn";
+        if (!stockTarget.IsHangRail(zone))
+        {
+            var z = stockTarget.GetZone(zone);
+            int orient = z.count > 0 ? z.orient : stockOrient;
+            text += $"   {stockLayKey}: {(StockContainer.Orientation.Lying(orient) ? "Stand up" : "Lay down")}";
+        }
         return text;
+    }
+
+    /// <summary>The spot R / T act on: the one being stocked (or taken from), else the put-back one.</summary>
+    private int OrientZone() => stockTarget == null ? -1 : stockZone >= 0 ? stockZone : putBackZone;
+
+    /// <summary>
+    /// R / T: a spot that already has products is changed for everyone (if they all still fit that
+    /// way); an empty spot just changes how the next product will go in.
+    /// </summary>
+    private void HandleStockOrientation()
+    {
+        bool turn = Input.GetKeyDown(stockTurnKey);
+        bool lay = Input.GetKeyDown(stockLayKey);
+        int zone = OrientZone();
+        if ((!turn && !lay) || zone < 0) return;
+        if (lay && stockTarget.IsHangRail(zone)) return;
+
+        var z = stockTarget.GetZone(zone);
+        int current = z.count > 0 ? z.orient : stockOrient;
+        int next = turn ? StockContainer.Orientation.Turn(current) : StockContainer.Orientation.ToggleLying(current);
+
+        if (z.count > 0) inventory.RequestOrientZoneServerRpc(stockTarget.NetworkObject, zone, next);
+        stockOrient = next; // remember it for the next empty spot too
     }
 
     private static string ItemName(int itemId) =>
@@ -268,6 +311,8 @@ public class PlayerInteractInput : NetworkBehaviour
             inventory.RequestUnstockServerRpc(stockTarget.NetworkObject, putBackZone);
             return;
         }
+
+        HandleStockOrientation();
 
         if (!Input.GetKeyDown(KeyCode.F)) return;
 
@@ -293,7 +338,7 @@ public class PlayerInteractInput : NetworkBehaviour
             if (stockTargetIsTake) inventory.RequestUnstockServerRpc(stockTarget.NetworkObject, stockZone);
             else
             {
-                inventory.RequestStockServerRpc(stockTarget.NetworkObject, stockZone);
+                inventory.RequestStockServerRpc(stockTarget.NetworkObject, stockZone, stockOrient);
                 // Last product: the crate empties and goes away, so hide it until the server answers.
                 if (inventory.HeldUnits.Value <= 1)
                 {
