@@ -107,12 +107,12 @@ public class PlayerInventoryNet : NetworkBehaviour
 
     /// <summary>Put one product from the held stock crate into a container's zone.</summary>
     [ServerRpc]
-    public void RequestStockServerRpc(NetworkObjectReference containerRef, int zone, ServerRpcParams rpcParams = default)
+    public void RequestStockServerRpc(NetworkObjectReference containerRef, int zone, int orient, ServerRpcParams rpcParams = default)
     {
         int id = HeldItemId.Value;
         if (id == 0 || !StockContainer.IsStockCrate(id)) return;
         if (!TryGetContainerZone(containerRef, zone, rpcParams.Receive.SenderClientId, out var container, out var at)) return;
-        if (!container.ServerAddOne(zone, id)) return; // full, or holds something else
+        if (!container.ServerAddOne(zone, id, orient)) return; // full, holds something else, or wrong kind of zone
 
         // The empty crate goes away.
         int left = Mathf.Max(1, HeldUnits.Value) - 1;
@@ -146,6 +146,14 @@ public class PlayerInventoryNet : NetworkBehaviour
         else HeldUnits.Value++;
 
         PlayItemSoundClientRpc(id, at, false);
+    }
+
+    /// <summary>Change which way a zone's products face / whether they lie down (if they all still fit).</summary>
+    [ServerRpc]
+    public void RequestOrientZoneServerRpc(NetworkObjectReference containerRef, int zone, int orient, ServerRpcParams rpcParams = default)
+    {
+        if (!TryGetContainerZone(containerRef, zone, rpcParams.Receive.SenderClientId, out var container, out _)) return;
+        container.ServerSetOrientation(zone, orient);
     }
 
     // Same rules as picking up and placing: close enough, standing in your own store, container in it too.
