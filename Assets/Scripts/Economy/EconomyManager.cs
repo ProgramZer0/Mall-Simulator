@@ -507,8 +507,7 @@ public class EconomyManager : NetworkBehaviour
         spawned.Spawn(true);
         Physics.SyncTransforms(); // so the next plan sees this box
 
-        if (spawned.TryGetComponent<ItemPickupNet>(out var item))
-            item.ServerReserve(teamId, reservationSeconds);
+        if (box != null) box.ServerReserve(teamId, reservationSeconds);
     }
 
     private void ServerRemoveOrderAt(int index)
@@ -549,35 +548,58 @@ public class EconomyManager : NetworkBehaviour
         ServerAddMoney(MallManager.GetTeamOf(rpcParams.Receive.SenderClientId), amount);
     }
 
-    private void OnGUI()
+    // The HUD text is rebuilt a few times a second instead of on every OnGUI call (which runs
+    // several times per frame), so it doesn't make garbage every frame.
+    private const float HudRefreshSeconds = 0.25f;
+    private readonly List<string> hudLines = new();
+    private readonly List<string> hudParts = new();
+    private readonly System.Text.StringBuilder hudSb = new();
+    private float hudNextRefresh;
+
+    private void RefreshHud()
     {
-        if (!showDebugHud || !IsSpawned) return;
+        hudLines.Clear();
+        hudLines.Add($"Money: ${LocalMoney:N0}");
 
         ulong team = MallManager.GetTeamOf(NetworkManager.LocalClientId);
         var mine = GetOrdersForTeam(team);
+        hudLines.Add(mine.Count == 0 ? "No deliveries pending" : "Deliveries:");
+
         int shown = Mathf.Min(mine.Count, 6);
-
-        float h = 46f + shown * 18f + (lastResult.HasValue ? 18f : 0f);
-        var r = new Rect(Screen.width - 330f, 96f, 320f, h);
-        GUI.Box(r, GUIContent.none);
-        GUI.Label(new Rect(r.x + 8, r.y + 4, 310, 20), $"Money: ${LocalMoney:N0}");
-        GUI.Label(new Rect(r.x + 8, r.y + 22, 310, 20), mine.Count == 0 ? "No deliveries pending" : "Deliveries:");
-
         for (int i = 0; i < shown; i++)
         {
             var o = mine[i];
-            var parts = new List<string>();
+            hudParts.Clear();
             foreach (var l in GetOrderLines(o.orderId))
             {
                 string name = ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(l.itemId, out var def)
                     ? def.displayName : $"Item {l.itemId}";
-                parts.Add($"{name} x{l.quantity}");
+                hudParts.Add($"{name} x{l.quantity}");
             }
-            string when = o.blocked ? $"paused, no room ({SecondsUntil(o):0}s left)" : $"{SecondsUntil(o):0}s";
-            GUI.Label(new Rect(r.x + 8, r.y + 40 + i * 18, 310, 20), $"  {string.Join(", ", parts)}: {when}");
+            hudSb.Clear().Append("  ");
+            for (int p = 0; p < hudParts.Count; p++) hudSb.Append(p == 0 ? "" : ", ").Append(hudParts[p]);
+            hudSb.Append(": ").Append(o.blocked ? $"paused, no room ({SecondsUntil(o):0}s left)" : $"{SecondsUntil(o):0}s");
+            hudLines.Add(hudSb.ToString());
         }
 
         if (lastResult.HasValue && Time.time - lastResultTime < 5f)
-            GUI.Label(new Rect(r.x + 8, r.y + h - 22, 310, 20), $"Last order: {lastResult.Value}");
+            hudLines.Add($"Last order: {lastResult.Value}");
+    }
+
+    private void OnGUI()
+    {
+        if (!showDebugHud || !Debug.isDebugBuild || !IsSpawned) return;
+
+        if (Event.current.type == EventType.Layout && Time.unscaledTime >= hudNextRefresh)
+        {
+            hudNextRefresh = Time.unscaledTime + HudRefreshSeconds;
+            RefreshHud();
+        }
+        if (hudLines.Count == 0) return;
+
+        var r = new Rect(Screen.width - 330f, 96f, 320f, 10f + hudLines.Count * 18f);
+        GUI.Box(r, GUIContent.none);
+        for (int i = 0; i < hudLines.Count; i++)
+            GUI.Label(new Rect(r.x + 8, r.y + 4 + i * 18, 310, 20), hudLines[i]);
     }
 }
