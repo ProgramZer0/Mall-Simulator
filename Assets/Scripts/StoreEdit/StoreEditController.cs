@@ -1034,6 +1034,31 @@ public class StoreEditController : NetworkBehaviour
             }
             ReceiveEditItemsRpc(sessionId, start, ids, positions, rotations);
         }
+
+        // Then what's on each shelf, so its stock shows (and moves with it) while editing.
+        for (int i = 0; i < session.Count; i++)
+        {
+            var stock = session[i].stock;
+            if (stock == null) continue;
+            var stockIds = new int[stock.Length];
+            var counts = new int[stock.Length];
+            bool any = false;
+            for (int z = 0; z < stock.Length; z++)
+            {
+                stockIds[z] = stock[z].itemId;
+                counts[z] = stock[z].count;
+                any |= stock[z].count > 0;
+            }
+            if (any) ReceiveEditStockRpc(sessionId, i, stockIds, counts);
+        }
+    }
+
+    /// <summary>Editor: show the stock on one shelf's local copy (sent after its item).</summary>
+    [Rpc(SendTo.Owner)]
+    private void ReceiveEditStockRpc(int sessionId, int index, int[] itemIds, int[] counts)
+    {
+        if (sessionId != clientSessionId || index < 0 || index >= localItems.Count || localItems[index] == null) return;
+        localItems[index].ShowStock(itemIds, counts);
     }
 
     /// <summary>Editor: build local copies of the items the host took out of the store.</summary>

@@ -244,11 +244,19 @@ public class StockContainer : NetworkBehaviour
         public Vector3 half;        // product half size along the zone's axes
     }
 
-    // Same result on every machine: it only depends on the prefab and the zone.
     private bool TryGetLayout(int zone, int itemId, out Layout layout)
     {
         layout = default;
-        var box = zone >= 0 && zone < ZoneCount ? stockZones[zone] : null;
+        return zone >= 0 && zone < ZoneCount && TryGetLayout(stockZones[zone], spacing, maxPerZone, itemId, out layout);
+    }
+
+    private void GetSlotPose(int zone, Layout l, int index, out Vector3 position, out Quaternion rotation) =>
+        GetSlotPose(stockZones[zone], spacing, l, index, out position, out rotation);
+
+    // Same result on every machine: it only depends on the prefab and the zone.
+    private static bool TryGetLayout(BoxCollider box, float spacing, int maxPerZone, int itemId, out Layout layout)
+    {
+        layout = default;
         var prefab = GetStockedPrefab(itemId);
         if (box == null || prefab == null) return false;
 
@@ -271,9 +279,9 @@ public class StockContainer : NetworkBehaviour
     }
 
     // Front row first (the zone's +Z side), left to right, then the next row back, then the next layer up.
-    private void GetSlotPose(int zone, Layout l, int index, out Vector3 position, out Quaternion rotation)
+    private static void GetSlotPose(BoxCollider box, float spacing, Layout l, int index,
+                                    out Vector3 position, out Quaternion rotation)
     {
-        var box = stockZones[zone];
         Vector3 size = ShipmentPacker.ZoneSize(box);
         Quaternion zoneRot = box.transform.rotation;
 
@@ -294,6 +302,66 @@ public class StockContainer : NetworkBehaviour
         rotation = l.turned ? zoneRot * Quaternion.Euler(0f, 90f, 0f) : zoneRot;
         Vector3 center = box.transform.TransformPoint(box.center) + zoneRot * local;
         position = center - rotation * l.pivotOffset;
+    }
+
+    /* ========================= EDIT MODE STAND-INS ========================= */
+
+    // Store edit mode works on plain copies of the world prefab (all scripts stripped), so these are
+    // called on the PREFAB's StockContainer to find and fill the matching zones on such a copy.
+
+    /// <summary>The copy's BoxColliders that match this prefab's stock zones (null where missing).</summary>
+    public BoxCollider[] FindZonesOnCopy(Transform copyRoot)
+    {
+        var result = new BoxCollider[ZoneCount];
+        for (int i = 0; i < ZoneCount; i++)
+        {
+            if (stockZones[i] == null) continue;
+            var t = FollowPath(copyRoot, PathFrom(transform, stockZones[i].transform));
+            result[i] = t != null ? t.GetComponent<BoxCollider>() : null;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Lays out the stock models on an edit-mode copy, parented to its zones so they move with it.
+    /// Returns the models made (destroy them to clear).
+    /// </summary>
+    public List<GameObject> BuildStockOnCopy(Transform copyRoot, int[] itemIds, int[] counts)
+    {
+        var made = new List<GameObject>();
+        var copyZones = FindZonesOnCopy(copyRoot);
+        for (int i = 0; i < copyZones.Length && i < itemIds.Length && i < counts.Length; i++)
+        {
+            var box = copyZones[i];
+            var prefab = GetStockedPrefab(itemIds[i]);
+            if (box == null || prefab == null || counts[i] <= 0 ||
+                !TryGetLayout(box, spacing, maxPerZone, itemIds[i], out var layout)) continue;
+
+            for (int k = 0; k < counts[i] && k < layout.capacity; k++)
+            {
+                GetSlotPose(box, spacing, layout, k, out Vector3 pos, out Quaternion rot);
+                made.Add(MakeVisual(prefab, pos, rot, box.transform));
+            }
+        }
+        return made;
+    }
+
+    private static List<int> PathFrom(Transform root, Transform target)
+    {
+        var path = new List<int>();
+        for (var t = target; t != null && t != root; t = t.parent) path.Insert(0, t.GetSiblingIndex());
+        return path;
+    }
+
+    private static Transform FollowPath(Transform root, List<int> path)
+    {
+        var t = root;
+        foreach (int index in path)
+        {
+            if (index >= t.childCount) return null;
+            t = t.GetChild(index);
+        }
+        return t;
     }
 
     /* ========================= VISUALS ========================= */
