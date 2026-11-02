@@ -37,6 +37,10 @@ public class StoreEditController : NetworkBehaviour
     [SerializeField] private KeyCode toggleKey = KeyCode.Alpha0;
     [SerializeField] private KeyCode toolKey = KeyCode.X;
     [SerializeField] private KeyCode gravityKey = KeyCode.G;
+    [Tooltip("Wall tool: build walls between two clicked points (needs BuiltWallSettings in the scene).")]
+    [SerializeField] private KeyCode wallToolKey = KeyCode.B;
+    [Tooltip("Wall tool: switch between full-height and half-height walls.")]
+    [SerializeField] private KeyCode wallHeightKey = KeyCode.H;
 
     private enum RightDrag { Orbit, Pan }
 
@@ -312,6 +316,7 @@ public class StoreEditController : NetworkBehaviour
 
     private void ExitView()
     {
+        SetWallTool(false);
         Deselect();
         selectedSlot = -1;
         ClearLocalItems();
@@ -502,6 +507,14 @@ public class StoreEditController : NetworkBehaviour
         if (freeDragPending || freeDragging)
         {
             UpdateFreeDrag(ray, mouse);
+            lastMouse = mouse;
+            return;
+        }
+
+        if (Input.GetKeyDown(wallToolKey)) SetWallTool(!wallTool);
+        if (wallTool)
+        {
+            UpdateWallTool(ray, mouse);
             lastMouse = mouse;
             return;
         }
@@ -725,7 +738,7 @@ public class StoreEditController : NetworkBehaviour
 
         Vector3 pos;
         Quaternion rot;
-        if (PlacementCheck.IsWallNormal(hit.normal))
+        if (PlacementCheck.IsWallNormal(hit.normal) && PlacementCheck.IsWallLayer(hit.collider, WallMask()))
         {
             PlacementCheck.WallPose(def, hit.point, hit.normal, 0f, out pos, out rot);
         }
@@ -966,11 +979,217 @@ public class StoreEditController : NetworkBehaviour
         return best;
     }
 
+    /* ========================= WALL TOOL ========================= */
+
+    private bool wallTool;
+    private bool hasWallStart;
+    private Vector3 wallStart;
+    private bool wallHalf;
+    private string wallInfo = "";
+    private GameObject wallGhost;
+    private GameObject wallGhostTemplate;
+    private readonly List<Material> wallGhostMats = new();
+    private bool? wallGhostShownValid;
+    private static readonly Collider[] WallHits = new Collider[32];
+    private static readonly Color WallGhostValid = new(0.6f, 0.9f, 1f, 0.45f);
+    private static readonly Color WallGhostInvalid = new(1f, 0.3f, 0.3f, 0.35f);
+
+    private void SetWallTool(bool on)
+    {
+        wallTool = on;
+        hasWallStart = false;
+        wallInfo = "";
+        if (on)
+        {
+            Deselect();
+            selectedSlot = -1;
+        }
+        else DestroyWallGhost();
+    }
+
+    /// <summary>
+    /// Click a point, then another: a wall goes between them (ends on the grid, straight or 45
+    /// degrees). The next wall starts where the last one ended. Shift+click a built wall removes it.
+    /// </summary>
+    private void UpdateWallTool(Ray ray, Vector2 mouse)
+    {
+        var settings = BuiltWallSettings.Instance;
+        if (settings == null || settings.WallPrefab == null)
+        {
+            wallInfo = "Add BuiltWallSettings (with a Wall Prefab) to the MallManager object.";
+            if (Input.GetKeyDown(KeyCode.Escape) || rmbClicked) SetWallTool(false);
+            return;
+        }
+
+        if (Input.GetKeyDown(wallHeightKey)) wallHalf = !wallHalf;
+
+        bool cancel = Input.GetKeyDown(KeyCode.Escape) || rmbClicked;
+        if (cancel)
+        {
+            if (hasWallStart) hasWallStart = false; // stop the chain
+            else { SetWallTool(false); return; }
+        }
+
+        bool click = Input.GetMouseButtonDown(0) && !IsMouseOverSlotPanel(mouse);
+
+        // Remove mode: hold Shift and click a built wall.
+        if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
+        {
+            DestroyWallGhost();
+            BuiltWallPiece piece = null;
+            if (Physics.Raycast(ray, out RaycastHit hit, 500f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+                piece = hit.collider.GetComponentInParent<BuiltWallPiece>();
+            if (piece != null && piece.Plot == editPlot)
+            {
+                wallInfo = "Click to remove this wall (part refund)";
+                if (click) RequestRemoveWallRpc(piece.WallId);
+            }
+            else wallInfo = "Shift: click a built wall to remove it";
+            return;
+        }
+
+        // The point under the mouse on the store's floor, snapped to the grid.
+        float floorY = editPlot.FloorHeight;
+        if (!new Plane(Vector3.up, new Vector3(0f, floorY, 0f)).Raycast(ray, out float enter)) return;
+        Vector3 point = settings.SnapToGrid(ray.GetPoint(enter));
+        point.y = floorY;
+
+        float height = wallHalf ? Mathf.Min(settings.HalfHeight, editPlot.FullWallHeight) : editPlot.FullWallHeight;
+        string heightName = wallHalf ? "half" : "full";
+
+        if (!hasWallStart)
+        {
+            // A post where the wall will start.
+            bool inside = editPlot.Contains(point + Vector3.up * 0.1f);
+            ShowWallGhost(point, point, height, inside);
+            wallInfo = inside ? $"Click to start a {heightName} wall" : "Start inside your store";
+            if (click && inside)
+            {
+                wallStart = point;
+                hasWallStart = true;
+            }
+            return;
+        }
+
+        Vector3 end = settings.SnapEnd(wallStart, point);
+        float length = Vector3.Distance(wallStart, end);
+        int cost = settings.GetCost(length, wallHalf);
+
+        bool valid = editPlot.CanBuildWall(wallStart, end, out string reason);
+        if (valid && !CanAffordWall(cost)) { valid = false; reason = "Not enough money"; }
+        if (valid && WallHitsEditItems(settings, wallStart, end, height)) { valid = false; reason = "An item is in the way"; }
+
+        ShowWallGhost(wallStart, end, height, valid);
+        wallInfo = valid ? $"{length:0.0} m {heightName} wall: ${cost}   (click to build)" : $"{length:0.0} m: {reason}";
+
+        if (click && valid)
+        {
+            RequestBuildWallRpc(wallStart, end, wallHalf);
+            wallStart = end; // chain: the next wall starts here
+        }
+    }
+
+    private bool CanAffordWall(int cost)
+    {
+        var econ = EconomyManager.Instance;
+        return econ == null || cost <= 0 || econ.GetMoneyOf(OwnerClientId) >= cost;
+    }
+
+    // The store's items are local copies while editing, so only this machine can check them.
+    private bool WallHitsEditItems(BuiltWallSettings settings, Vector3 a, Vector3 b, float height)
+    {
+        settings.GetWallPose(a, b, height, out Vector3 pos, out Quaternion rot, out Vector3 scale);
+        Vector3 half = Vector3.Max(scale * 0.5f - Vector3.one * 0.02f, Vector3.one * 0.001f);
+        int n = Physics.OverlapBoxNonAlloc(pos, half, WallHits, rot, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < n; i++)
+            if (WallHits[i].GetComponentInParent<EditLocalItem>() != null) return true;
+        return false;
+    }
+
+    private void ShowWallGhost(Vector3 a, Vector3 b, float height, bool valid)
+    {
+        var settings = BuiltWallSettings.Instance;
+        if (wallGhost == null)
+        {
+            if (wallGhostTemplate == null) wallGhostTemplate = GhostBuilder.BuildTemplate(settings.WallPrefab, WallGhostValid.a);
+            wallGhost = Instantiate(wallGhostTemplate);
+            wallGhost.SetActive(true);
+            foreach (var c in wallGhost.GetComponentsInChildren<Collider>()) c.enabled = false;
+            wallGhostMats.Clear();
+            foreach (var r in wallGhost.GetComponentsInChildren<Renderer>()) wallGhostMats.AddRange(r.materials);
+            wallGhostShownValid = null;
+        }
+
+        settings.GetWallPose(a, b, height, out Vector3 pos, out Quaternion rot, out Vector3 scale);
+        wallGhost.transform.SetPositionAndRotation(pos, rot);
+        wallGhost.transform.localScale = scale;
+
+        if (wallGhostShownValid == valid) return;
+        wallGhostShownValid = valid;
+        foreach (var m in wallGhostMats) if (m != null) GhostBuilder.SetColor(m, valid ? WallGhostValid : WallGhostInvalid);
+    }
+
+    private void DestroyWallGhost()
+    {
+        foreach (var m in wallGhostMats) if (m != null) Destroy(m);
+        wallGhostMats.Clear();
+        if (wallGhost != null) Destroy(wallGhost);
+        wallGhost = null;
+    }
+
+    [Rpc(SendTo.Server)]
+    private void RequestBuildWallRpc(Vector3 a, Vector3 b, bool half, RpcParams rpcParams = default)
+    {
+        if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+        var settings = BuiltWallSettings.Instance;
+        var plot = MallManager.Instance != null ? MallManager.Instance.GetPlotEditedBy(OwnerClientId) : null;
+        if (settings == null || plot == null) return;
+
+        // Same snapping the client used, so the wall can't be bent off the grid.
+        a = settings.SnapToGrid(a);
+        a.y = plot.FloorHeight;
+        b = settings.SnapEnd(a, b);
+        b.y = plot.FloorHeight;
+        if (!plot.CanBuildWall(a, b, out _)) return;
+
+        float height = half ? Mathf.Min(settings.HalfHeight, plot.FullWallHeight) : plot.FullWallHeight;
+        int cost = settings.GetCost(Vector3.Distance(a, b), half);
+        var econ = EconomyManager.Instance;
+        if (econ != null && !econ.ServerTrySpend(MallManager.GetTeamOf(OwnerClientId), cost)) return;
+
+        plot.ServerAddWall(a, b, height);
+    }
+
+    [Rpc(SendTo.Server)]
+    private void RequestRemoveWallRpc(int wallId, RpcParams rpcParams = default)
+    {
+        if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+        var settings = BuiltWallSettings.Instance;
+        var plot = MallManager.Instance != null ? MallManager.Instance.GetPlotEditedBy(OwnerClientId) : null;
+        if (settings == null || plot == null || !plot.ServerRemoveWall(wallId, out var wall)) return;
+
+        bool half = wall.height < plot.FullWallHeight - 0.01f;
+        var econ = EconomyManager.Instance;
+        if (econ != null) econ.ServerAddMoney(MallManager.GetTeamOf(OwnerClientId), settings.GetRefund(wall.Length, half));
+    }
+
     /* ========================= HUD ========================= */
 
     private void OnGUI()
     {
         if (!showHud || !IsOwner || !IsEditing) return;
+
+        if (wallTool)
+        {
+            GUI.Box(new Rect(10, 10, 420, 136), GUIContent.none);
+            GUI.Label(new Rect(20, 16, 400, 20), $"WALL TOOL   ({wallToolKey} = back to items)");
+            GUI.Label(new Rect(20, 36, 400, 20), $"Height: {(wallHalf ? "half" : "full")}   ({wallHeightKey} to switch)");
+            GUI.Label(new Rect(20, 56, 400, 20), "Click: start, click again: build (keeps going from the end)");
+            GUI.Label(new Rect(20, 76, 400, 20), "RMB / Esc: stop the chain (again to leave the tool)");
+            GUI.Label(new Rect(20, 96, 400, 20), "Shift + click a built wall: remove it");
+            GUI.Label(new Rect(20, 116, 400, 20), wallInfo);
+            return;
+        }
 
         string toolName = selected == null ? "-" : tool == Tool.None ? "none (X for arrows)" : tool.ToString();
         string gravity = selected == null ? "-" : selected.Gravity ? "ON" : "off";
@@ -982,12 +1201,14 @@ public class StoreEditController : NetworkBehaviour
         GUI.Label(new Rect(20, 56, 400, 20), $"Tool: {toolName}     Gravity: {gravity}");
         GUI.Label(new Rect(20, 76, 400, 20), "X: move > rotate > hide   G: gravity   Ctrl: snap   Esc: deselect");
         GUI.Label(new Rect(20, 96, 400, 20), "Drag item: slide   RMB drag: camera   RMB click: deselect");
-        GUI.Label(new Rect(20, 116, 400, 20), "Click a storefront wall section to change it");
+        GUI.Label(new Rect(20, 116, 400, 20), $"Click a storefront wall section to change it   {wallToolKey}: build walls");
 
         if (!finishing) DrawSlotPanel();
     }
 
     /* ========================= HELPERS ========================= */
+
+    private int WallMask() => interact != null ? interact.WallMask.value : PlacementCheck.DefaultWallMask;
 
     /// <summary>Layers that stop an item: the placement blocking layers plus the floor.</summary>
     private int EditMask()

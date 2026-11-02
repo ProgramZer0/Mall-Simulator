@@ -9,6 +9,9 @@ public class PlayerInteractInput : NetworkBehaviour
     [SerializeField] private LayerMask pickupMask;
     [SerializeField] private LayerMask placementMask;
     [SerializeField] private LayerMask placementBlockingMask;
+    [Tooltip("Layers wall items (pictures, signs) can hang on, e.g. your walls layer. Built walls should use it too. " +
+             "Nothing ticked = any upright surface.")]
+    [SerializeField] private LayerMask wallMask;
 
     private Camera cam;
     private PlayerInventoryNet inventory;
@@ -20,6 +23,8 @@ public class PlayerInteractInput : NetworkBehaviour
     public LayerMask PickupMask => pickupMask;
     /// <summary>Surfaces items are placed on (floors, shelves, walls). Edit mode hangs wall items on these.</summary>
     public LayerMask PlacementMask => placementMask;
+    /// <summary>Layers wall items hang on (empty = any upright surface).</summary>
+    public LayerMask WallMask => wallMask;
 
     [Header("Rotation")]
     [Tooltip("Degrees per second while holding < or > in preview.")]
@@ -555,7 +560,8 @@ public class PlayerInteractInput : NetworkBehaviour
         {
             // Wall items aimed at a wall hang on it, back flat against it. R / < > turn them around
             // the wall's normal (e.g. a picture from landscape to portrait).
-            if (mounting != ItemPickupNet.Mounting.Floor && PlacementCheck.IsWallNormal(hit.normal))
+            if (mounting != ItemPickupNet.Mounting.Floor && PlacementCheck.IsWallNormal(hit.normal) &&
+                PlacementCheck.IsWallLayer(hit.collider, wallMask))
             {
                 PlacementCheck.WallPose(def, hit.point, hit.normal, placeRotationY, out pos, out rot);
                 placingOnWall = true;
@@ -684,7 +690,7 @@ public class PlayerInteractInput : NetworkBehaviour
         if (ground >= 0) blocking &= ~(1 << ground);
 
         return onWall
-            ? PlacementCheck.FitsOnWall(def, position, rotation, blocking, placementMask)
+            ? PlacementCheck.FitsOnWall(def, position, rotation, blocking, wallMask.value != 0 ? wallMask : placementMask)
             : PlacementCheck.Fits(def, position, rotation, blocking, placementMask);
     }
 }

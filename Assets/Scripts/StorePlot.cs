@@ -172,6 +172,10 @@ public class StorePlot : NetworkBehaviour
         frontOverrides = new NetworkList<byte>(
             null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+        // Walls the owners built in edit mode.
+        builtWalls = new NetworkList<BuiltWall>(
+            null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
         // The colliders are just authoring shapes; Contains() reads them directly.
         foreach (var box in baseAreas)
             if (box != null) box.enabled = false;
@@ -226,6 +230,8 @@ public class StorePlot : NetworkBehaviour
         editorClientId.OnValueChanged += OnEditorChanged;
         closedByOwner.OnValueChanged += OnClosedChanged;
         frontOverrides.OnListChanged += OnFrontOverridesChanged;
+        builtWalls.OnListChanged += OnBuiltWallsChanged;
+        RebuildBuiltWalls();
         ApplyFrontWall();
         ApplyWalls();
         ApplyRenovationWalls();
@@ -243,6 +249,9 @@ public class StorePlot : NetworkBehaviour
         editorClientId.OnValueChanged -= OnEditorChanged;
         closedByOwner.OnValueChanged -= OnClosedChanged;
         frontOverrides.OnListChanged -= OnFrontOverridesChanged;
+        builtWalls.OnListChanged -= OnBuiltWallsChanged;
+        if (builtWallRoot != null) Destroy(builtWallRoot.gameObject);
+        builtWallRoot = null;
         Changed -= OnAnyChange;
 
         if (MallManager.Instance != null) MallManager.Instance.Unregister(this);
@@ -341,6 +350,7 @@ public class StorePlot : NetworkBehaviour
         purchasedSegments.Value = 0;
         closedByOwner.Value = false;
         frontOverrides.Clear(); // storefront goes back to how the scene placed it
+        builtWalls.Clear();     // and built walls come down
     }
 
     /// <summary>
@@ -352,6 +362,90 @@ public class StorePlot : NetworkBehaviour
     {
         if (!IsServer) return;
         closedByOwner.Value = closed;
+    }
+
+    /* ========================= BUILT WALLS ========================= */
+
+    private NetworkList<BuiltWall> builtWalls;
+    private Transform builtWallRoot;
+    private int nextWallId = 1; // server
+
+    public int BuiltWallCount => builtWalls != null ? builtWalls.Count : 0;
+    public BuiltWall GetBuiltWall(int index) => builtWalls[index];
+
+    /// <summary>World height of this store's floor (bottom of its space).</summary>
+    public float FloorHeight => GetWorldBounds().min.y;
+
+    /// <summary>Height of a full wall: from the floor to the top of the store's space.</summary>
+    public float FullWallHeight => Mathf.Max(0.5f, GetEditCutHeight() - FloorHeight);
+
+    /// <summary>
+    /// Can a wall go from a to b (both on the floor)? Checks the length, both ends and the middle
+    /// are inside the store, and the wall limit. Doesn't check money.
+    /// </summary>
+    public bool CanBuildWall(Vector3 a, Vector3 b, out string reason)
+    {
+        reason = null;
+        var settings = BuiltWallSettings.Instance;
+        if (settings == null || settings.WallPrefab == null) { reason = "No wall prefab set"; return false; }
+        if (BuiltWallCount >= settings.MaxWallsPerStore) { reason = "Too many walls"; return false; }
+
+        Vector3 flat = b - a;
+        flat.y = 0f;
+        if (flat.magnitude < settings.MinLength - 1e-3f) { reason = "Too short"; return false; }
+
+        Vector3 up = Vector3.up * 0.1f; // just above the floor, so floor-level points count as inside
+        if (!Contains(a + up) || !Contains(b + up) || !Contains((a + b) * 0.5f + up)) { reason = "Outside the store"; return false; }
+        return true;
+    }
+
+    /// <summary>Server: add a wall (checks done by the caller). Returns its id.</summary>
+    public int ServerAddWall(Vector3 a, Vector3 b, float height)
+    {
+        if (!IsServer) return 0;
+        int id = nextWallId++;
+        builtWalls.Add(new BuiltWall { id = id, a = a, b = b, height = height });
+        return id;
+    }
+
+    /// <summary>Server: remove a wall by id. Returns false if there's no such wall.</summary>
+    public bool ServerRemoveWall(int id, out BuiltWall removed)
+    {
+        removed = default;
+        if (!IsServer) return false;
+        for (int i = 0; i < builtWalls.Count; i++)
+        {
+            if (builtWalls[i].id != id) continue;
+            removed = builtWalls[i];
+            builtWalls.RemoveAt(i);
+            return true;
+        }
+        return false;
+    }
+
+    private void OnBuiltWallsChanged(NetworkListEvent<BuiltWall> change) => RebuildBuiltWalls();
+
+    // Every machine builds the wall objects itself from the list. They go under an unscaled holder
+    // (not under the store, which may be scaled) so they keep their exact size.
+    private void RebuildBuiltWalls()
+    {
+        if (builtWallRoot != null)
+            for (int i = builtWallRoot.childCount - 1; i >= 0; i--) Destroy(builtWallRoot.GetChild(i).gameObject);
+
+        var settings = BuiltWallSettings.Instance;
+        if (builtWalls.Count == 0 || settings == null || settings.WallPrefab == null) return;
+        if (builtWallRoot == null) builtWallRoot = new GameObject($"[Built Walls] {displayName}").transform;
+
+        foreach (var w in builtWalls)
+        {
+            settings.GetWallPose(w.a, w.b, w.height, out Vector3 pos, out Quaternion rot, out Vector3 scale);
+            var go = Instantiate(settings.WallPrefab, pos, rot, builtWallRoot);
+            go.transform.localScale = scale;
+            go.name = $"Built Wall {w.id}";
+            var piece = go.AddComponent<BuiltWallPiece>();
+            piece.Plot = this;
+            piece.WallId = w.id;
+        }
     }
 
     /* ========================= DOORS ========================= */
@@ -769,7 +863,7 @@ public class StorePlot : NetworkBehaviour
             {
                 // Hung on a wall in edit mode? Then it stays up even if what's below it is picked up.
                 bool onWall = item.MountingType != ItemPickupNet.Mounting.Floor &&
-                              PlacementCheck.HasWallBehind(def, pos, rot, Physics.DefaultRaycastLayers);
+                              PlacementCheck.HasWallBehind(def, pos, rot, PlacementCheck.DefaultWallMask);
                 item.ServerPrepareFrozen(onWall);
                 if (entry.units > 0) item.ServerSetUnits(entry.units);
             }

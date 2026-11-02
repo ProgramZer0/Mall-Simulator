@@ -477,8 +477,9 @@ public class MallManager : NetworkBehaviour
     private void Update()
     {
         if (!devHotkeys || !IsSpawned || UIState.IsMenuOpen) return;
-        if (Input.GetKeyDown(KeyCode.C)) DevToggleClosed();
-        if (!Input.GetKeyDown(KeyCode.B)) return;
+        bool editing = GetPlotEditedBy(NetworkManager.LocalClientId) != null; // edit mode uses B and C itself
+        if (!editing && Input.GetKeyDown(KeyCode.C)) DevToggleClosed();
+        if (editing || !Input.GetKeyDown(KeyCode.B)) return;
 
         var player = NetworkManager.LocalClient?.PlayerObject;
         if (player == null) return;
