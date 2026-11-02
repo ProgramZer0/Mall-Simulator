@@ -13,7 +13,9 @@ GameObject:
   - component: {fileID: 3455962263652591832}
   - component: {fileID: 5967008934325881713}
   - component: {fileID: -2659963998860780595}
-  m_Layer: 8
+  - component: {fileID: 3963777512934045183}
+  - component: {fileID: 2166510565791200733}
+  m_Layer: 12
   m_Name: doorway
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -131,6 +133,48 @@ MonoBehaviour:
   isEntrance: 1
   price: 0
   door: {fileID: 8320954584137097773}
+--- !u!65 &3963777512934045183
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1354483911086720389}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1.0022801, y: 0.1928163, z: 2.6294966}
+  m_Center: {x: -0.04297066, y: -6.1741614, z: 0.13406987}
+--- !u!65 &2166510565791200733
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1354483911086720389}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1.0022801, y: 0.1265005, z: 2.6018386}
+  m_Center: {x: -0.04297066, y: -9.339775, z: 0.12348038}
 --- !u!1 &8320954584137097773
 GameObject:
   m_ObjectHideFlags: 0

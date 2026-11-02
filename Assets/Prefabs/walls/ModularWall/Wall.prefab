@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 6264890303899230233}
   - component: {fileID: 6119251130034824377}
   - component: {fileID: 1147893365021119914}
-  m_Layer: 8
+  m_Layer: 12
   m_Name: Wall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -129,3 +129,4 @@ MonoBehaviour:
   displayName: Wall
   isEntrance: 0
   price: 0
+  door: {fileID: 0}

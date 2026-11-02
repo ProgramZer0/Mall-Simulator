@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 6313981043723472555}
   - component: {fileID: 8084689249265090823}
   - component: {fileID: 7023942416306843722}
-  m_Layer: 8
+  m_Layer: 12
   m_Name: Window2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -129,3 +129,4 @@ MonoBehaviour:
   displayName: Large Window
   isEntrance: 0
   price: 0
+  door: {fileID: 0}

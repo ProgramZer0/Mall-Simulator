@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 3455962263652591832}
   - component: {fileID: 5967008934325881713}
   - component: {fileID: -2659963998860780595}
-  m_Layer: 8
+  m_Layer: 12
   m_Name: doorwayWithoutDoor
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -129,3 +129,4 @@ MonoBehaviour:
   displayName: Doorway
   isEntrance: 1
   price: 0
+  door: {fileID: 0}
