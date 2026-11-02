@@ -485,7 +485,7 @@ public class PlayerInteractInput : NetworkBehaviour
 
             if (TryGetPlacementPose(out Vector3 pos, out Quaternion rot))
             {
-                inventory.RequestPlaceServerRpc(pos, rot, placingOnWall);
+                inventory.RequestPlaceServerRpc(pos, rot, placingOnWall, placingOnCart);
                 DestroyGhost();
                 previewActive = false;
                 // Stay hidden so the item doesn't flash back into the hand before the server confirms.
@@ -498,12 +498,17 @@ public class PlayerInteractInput : NetworkBehaviour
 
     private void UpdateGhostPreview()
     {
+        // Work out the pose first: aiming at your cart switches the preview to the item's box.
+        bool posed = TryGetPlacementPose(out Vector3 pos, out Quaternion rot);
+        bool wantBox = placingOnCart && cartBoxPrefab != null;
+        if (ghostPreview != null && ghostIsBox != wantBox) DestroyGhost();
+
         if (ghostPreview == null)
-            CreateGhost();
+            CreateGhost(wantBox ? cartBoxPrefab : null);
 
         if (ghostPreview == null) return;
 
-        if (TryGetPlacementPose(out Vector3 pos, out Quaternion rot))
+        if (posed)
         {
             ghostPreview.transform.SetPositionAndRotation(pos, rot);
         }
@@ -515,13 +520,23 @@ public class PlayerInteractInput : NetworkBehaviour
             DebugPlacement(ghostPreview.transform.position, ghostPreview.transform.rotation, valid);
     }
 
-    private void CreateGhost()
+    private static readonly Dictionary<GameObject, GameObject> BoxGhostTemplates = new();
+    private bool ghostIsBox;
+
+    private void CreateGhost(GameObject boxPrefab = null)
     {
         if (!ItemCatalog.Instance.TryGet(inventory.HeldItemId.Value, out var def))
             return;
 
-        var prefab = def.GetGhostPrefab();
+        GameObject prefab;
+        if (boxPrefab != null)
+        {
+            if (!BoxGhostTemplates.TryGetValue(boxPrefab, out prefab) || prefab == null)
+                BoxGhostTemplates[boxPrefab] = prefab = GhostBuilder.BuildTemplate(boxPrefab, validAlpha);
+        }
+        else prefab = def.GetGhostPrefab();
         if (prefab == null) return;
+        ghostIsBox = boxPrefab != null;
 
         ghostPreview = Instantiate(prefab);
         ghostPreview.SetActive(true);
@@ -573,6 +588,9 @@ public class PlayerInteractInput : NetworkBehaviour
 
     // True while the preview is hung on a wall (wall items), so the fit test and the server know.
     private bool placingOnWall;
+    // True while aiming at your own cart: the item goes on packed in its shipment box (if it has one).
+    private bool placingOnCart;
+    private GameObject cartBoxPrefab;
     private bool wallFlip; // R while on a wall: the other face outward
 
     /// <summary>Layers wall items hang on: the Wall Mask, or the "walls" layer if nothing's ticked.</summary>
@@ -581,6 +599,8 @@ public class PlayerInteractInput : NetworkBehaviour
     private bool TryGetPlacementPose(out Vector3 pos, out Quaternion rot)
     {
         placingOnWall = false;
+        placingOnCart = false;
+        cartBoxPrefab = null;
         Vector3 rayStart = cam.transform.position + cam.transform.forward * 0.5f;
 
         Quaternion yaw = Quaternion.Euler(0f, placeRotationY, 0f);
@@ -599,6 +619,22 @@ public class PlayerInteractInput : NetworkBehaviour
                 PlacementCheck.WallPose(def, hit.point, hit.normal, wallFlip, out pos, out rot);
                 placingOnWall = true;
                 return true;
+            }
+
+            // Your own cart: the item goes on as its shipment box, sitting on what was aimed at.
+            var cart = hit.collider.GetComponentInParent<CartNet>();
+            if (cart == null) cart = CartNet.FindCartAt(hit.point + Vector3.up * 0.02f);
+            if (cart != null && cart.CanUse(OwnerClientId) && hit.normal.y >= 0.7f)
+            {
+                placingOnCart = true;
+                var box = PlacementCheck.CartBoxOf(def);
+                if (box != null)
+                {
+                    cartBoxPrefab = box.gameObject;
+                    rot = yaw;
+                    pos = hit.point + rot * Vector3.up * PlacementCheck.PivotHeightAboveBase(cartBoxPrefab);
+                    return true;
+                }
             }
 
             pos = hit.point;
@@ -726,9 +762,15 @@ public class PlayerInteractInput : NetworkBehaviour
             return false;
         if (MallManager.IsOthersShipmentArea(OwnerClientId, ghost.transform.position))
             return false;
+        if (MallManager.IsNoPlaceZone(ghost.transform.position)) // the docks: pick up only
+            return false;
 
-        // A wall-only item has to be aimed at a wall.
-        if (!placingOnWall && ItemCatalog.Instance != null &&
+        // Packed into its box on your cart.
+        if (placingOnCart && cartBoxPrefab != null)
+            return FitsBoxAt(cartBoxPrefab, ghost.transform.position, ghost.transform.rotation);
+
+        // A wall-only item has to be aimed at a wall (or go on a cart).
+        if (!placingOnWall && !placingOnCart && ItemCatalog.Instance != null &&
             ItemCatalog.Instance.TryGet(inventory.HeldItemId.Value, out var def) &&
             PlacementCheck.GetMounting(def) == ItemPickupNet.Mounting.Wall)
             return false;
@@ -740,6 +782,15 @@ public class PlayerInteractInput : NetworkBehaviour
     /// Fit test using this player's placement layers. Called on the owner for the preview
     /// and on the server before spawning (see PlayerInventoryNet.RequestPlaceServerRpc).
     /// </summary>
+    /// <summary>Fit test for a shipment box set down on a cart (owner preview and server).</summary>
+    public bool FitsBoxAt(GameObject boxPrefab, Vector3 position, Quaternion rotation)
+    {
+        int ground = LayerMask.NameToLayer("Ground");
+        int blocking = placementBlockingMask.value;
+        if (ground >= 0) blocking &= ~(1 << ground);
+        return PlacementCheck.FitsPrefab(boxPrefab, position, rotation, blocking, placementMask);
+    }
+
     public bool FitsAt(int itemId, Vector3 position, Quaternion rotation, bool onWall = false)
     {
         if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemId, out var def))

@@ -13,8 +13,18 @@ public class ShipmentPackage : NetworkBehaviour
     private readonly NetworkVariable<int> containedItemId =
         new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    // Products left, if what's inside is a part-used stock crate packed onto a cart (0 = full).
+    private readonly NetworkVariable<int> containedUnits =
+        new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
     /// <summary>The item inside this box (0 = empty).</summary>
     public int ContainedItemId => containedItemId.Value;
+
+    /// <summary>Products left in the stock crate inside (0 = a full crate).</summary>
+    public int ContainedUnits => containedUnits.Value;
+
+    /// <summary>Server: how many products are left in the crate inside. Call before Spawn.</summary>
+    public void ServerSetUnits(int units) => containedUnits.Value = Mathf.Max(0, units);
 
     // Deliveries are held for the team that ordered them for a while (GDD 13a). Only boxes carry
     // this, so ordinary items don't pay for two extra synced values each.

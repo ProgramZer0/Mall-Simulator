@@ -287,6 +287,13 @@ public class MallManager : NetworkBehaviour
                Instance.IsWorkZoneFor(clientId, targetPosition);
     }
 
+    /// <summary>
+    /// Nobody may set things down here: the loading docks (deliveries are only picked up there),
+    /// unless it's onto a cart standing at the dock.
+    /// </summary>
+    public static bool IsNoPlaceZone(Vector3 targetPosition) =>
+        LoadingDockZone.GetDockAt(targetPosition) != null && CartNet.FindCartAt(targetPosition) == null;
+
     /// <summary>Server: send a store's carts back to their home spots (for the recall button).</summary>
     public void ServerRecallCarts(ulong clientId, int plotId)
     {
