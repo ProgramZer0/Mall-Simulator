@@ -277,8 +277,28 @@ public class MallManager : NetworkBehaviour
     public static bool CanPickupOrPlace(ulong clientId, Vector3 playerPosition, Vector3 targetPosition)
     {
         if (Instance == null) return true;
+
+        // Carts: your own team's cart can be loaded and unloaded anywhere (it's how things travel);
+        // another team's cart never.
+        var cart = CartNet.FindCartAt(targetPosition);
+        if (cart != null) return cart.CanUse(clientId);
+
         return Instance.IsWorkZoneFor(clientId, playerPosition) &&
                Instance.IsWorkZoneFor(clientId, targetPosition);
+    }
+
+    /// <summary>Server: send a store's carts back to their home spots (for the recall button).</summary>
+    public void ServerRecallCarts(ulong clientId, int plotId)
+    {
+        if (!IsServer || !plots.TryGetValue(plotId, out var plot) || !plot.IsAuthorized(clientId)) return;
+        foreach (var cart in CartNet.GetCartsOf(plot)) cart.ServerRecall();
+    }
+
+    /// <summary>For the recall-cart button: MallManager.Instance.RequestRecallCartsServerRpc(plot.PlotId).</summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void RequestRecallCartsServerRpc(int plotId, ServerRpcParams rpcParams = default)
+    {
+        ServerRecallCarts(rpcParams.Receive.SenderClientId, plotId);
     }
 
     /// <summary>
