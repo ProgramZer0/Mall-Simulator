@@ -46,6 +46,21 @@ public static class PlacementCheck
 
     public static bool IsWallNormal(Vector3 normal) => Mathf.Abs(normal.y) < WallNormalMaxY;
 
+    /// <summary>The "walls" layer if the project has one, otherwise every layer.</summary>
+    public static int DefaultWallMask
+    {
+        get
+        {
+            int wall = LayerMask.NameToLayer("walls");
+            if (wall < 0) wall = LayerMask.NameToLayer("Wall");
+            return wall >= 0 ? 1 << wall : Physics.DefaultRaycastLayers;
+        }
+    }
+
+    /// <summary>Is this collider on one of the wall layers? (An empty mask counts every layer.)</summary>
+    public static bool IsWallLayer(Collider c, int wallMask) =>
+        c != null && (wallMask == 0 || (wallMask & (1 << c.gameObject.layer)) != 0);
+
     /// <summary>How an item may be placed (from its ItemPickupNet; Floor if it has none).</summary>
     public static ItemPickupNet.Mounting GetMounting(ItemDef def)
     {
