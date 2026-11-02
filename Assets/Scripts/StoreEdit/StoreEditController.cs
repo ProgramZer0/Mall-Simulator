@@ -1043,24 +1043,26 @@ public class StoreEditController : NetworkBehaviour
             var stockIds = new int[stock.Length];
             var counts = new int[stock.Length];
             var orients = new int[stock.Length];
+            var seeds = new int[stock.Length];
             bool any = false;
             for (int z = 0; z < stock.Length; z++)
             {
                 stockIds[z] = stock[z].itemId;
                 counts[z] = stock[z].count;
                 orients[z] = stock[z].orient;
+                seeds[z] = stock[z].seed;
                 any |= stock[z].count > 0;
             }
-            if (any) ReceiveEditStockRpc(sessionId, i, stockIds, counts, orients);
+            if (any) ReceiveEditStockRpc(sessionId, i, stockIds, counts, orients, seeds);
         }
     }
 
     /// <summary>Editor: show the stock on one shelf's local copy (sent after its item).</summary>
     [Rpc(SendTo.Owner)]
-    private void ReceiveEditStockRpc(int sessionId, int index, int[] itemIds, int[] counts, int[] orients)
+    private void ReceiveEditStockRpc(int sessionId, int index, int[] itemIds, int[] counts, int[] orients, int[] seeds)
     {
         if (sessionId != clientSessionId || index < 0 || index >= localItems.Count || localItems[index] == null) return;
-        localItems[index].ShowStock(itemIds, counts, orients);
+        localItems[index].ShowStock(itemIds, counts, orients, seeds);
     }
 
     /// <summary>Editor: build local copies of the items the host took out of the store.</summary>

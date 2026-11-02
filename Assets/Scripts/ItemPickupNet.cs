@@ -23,13 +23,22 @@ public class ItemPickupNet : NetworkBehaviour
     [Header("Stocking")]
     [Tooltip("This item is stock: hold it, look at a StockContainer (shelf, rack...) and press F to put one product on it.")]
     [SerializeField] private bool isStockCrate;
-    [Tooltip("One product as it sits on a shelf (a container's Stock Zones). Leave empty if it can't go on shelves. " +
-             "Plain visual: any scripts, physics or networking on it are stripped.")]
+    [Tooltip("One product as it sits on a shelf (a container's Stock Zones). Add several for variants (e.g. colours); " +
+             "they should all be the same size, the first one sets the layout. Leave empty if it can't go on shelves. " +
+             "Plain visuals: any scripts, physics or networking on them are stripped.")]
+    [SerializeField] private List<GameObject> shelfPrefabs = new();
+    [Tooltip("One product as it hangs on a rail (a container's Hang Rails), hanger included. Add several for variants; " +
+             "same size, the first sets the layout. It hangs from the top of its model, or a child named HangPoint. " +
+             "Leave empty if it can't be hung.")]
+    [SerializeField] private List<GameObject> hangPrefabs = new();
+    [Tooltip("On: each product stocked is a random pick from the list (a box of mixed colours). " +
+             "Off: always the first one. With one entry it makes no difference.")]
+    [SerializeField] private bool randomVariants;
+
+    // Older single-model fields; moved into the lists above automatically.
     [FormerlySerializedAs("stockedPrefab")]
-    [SerializeField] private GameObject shelfPrefab;
-    [Tooltip("One product as it hangs on a rail (a container's Hang Rails), hanger included. It hangs from the top " +
-             "of its model, or from a child named HangPoint. Leave empty if it can't be hung.")]
-    [SerializeField] private GameObject hangPrefab;
+    [SerializeField, HideInInspector] private GameObject shelfPrefab;
+    [SerializeField, HideInInspector] private GameObject hangPrefab;
     [Tooltip("How many products a full crate holds.")]
     [Min(1)] [SerializeField] private int unitsPerCrate = 1;
 
@@ -50,8 +59,61 @@ public class ItemPickupNet : NetworkBehaviour
 
     public bool EditModeOnly => editModeOnly;
     public bool IsStockCrate => isStockCrate;
-    public GameObject ShelfPrefab => shelfPrefab;
-    public GameObject HangPrefab => hangPrefab;
+    /// <summary>The main shelf model (the first in the list); sets the shelf layout.</summary>
+    public GameObject ShelfPrefab => FirstOf(shelfPrefabs) ?? (shelfPrefab != null ? shelfPrefab : null);
+    /// <summary>The main hanging model (the first in the list); sets the rail layout.</summary>
+    public GameObject HangPrefab => FirstOf(hangPrefabs) ?? (hangPrefab != null ? hangPrefab : null);
+
+    /// <summary>
+    /// The model for one stocked product. With Random Variants on, a pick from the list that's the
+    /// same on every machine for the same seed and slot; otherwise the first.
+    /// </summary>
+    public GameObject GetVariant(bool hang, int seed, int slot)
+    {
+        var list = hang ? hangPrefabs : shelfPrefabs;
+        GameObject main = hang ? HangPrefab : ShelfPrefab;
+        if (!randomVariants || list == null) return main;
+
+        int count = 0;
+        foreach (var p in list) if (p != null) count++;
+        if (count <= 1) return main;
+
+        int pick = Hash(seed, slot) % count;
+        foreach (var p in list)
+        {
+            if (p == null) continue;
+            if (pick-- == 0) return p;
+        }
+        return main;
+    }
+
+    private static GameObject FirstOf(List<GameObject> list)
+    {
+        if (list != null) foreach (var p in list) if (p != null) return p;
+        return null;
+    }
+
+    // Plain integer mixing, so every machine picks the same variant (unlike string/object hash codes).
+    private static int Hash(int a, int b)
+    {
+        unchecked
+        {
+            uint h = (uint)a * 0x9E3779B1u ^ (uint)b * 0x85EBCA77u;
+            h ^= h >> 15; h *= 0x2C1B3C6Du; h ^= h >> 12; h *= 0x297A2D39u; h ^= h >> 15;
+            return (int)(h & 0x7FFFFFFF);
+        }
+    }
+
+#if UNITY_EDITOR
+    private void OnValidate()
+    {
+        // Move models set before variants existed into the lists.
+        bool changed = false;
+        if (shelfPrefab != null) { if (FirstOf(shelfPrefabs) == null) shelfPrefabs.Add(shelfPrefab); shelfPrefab = null; changed = true; }
+        if (hangPrefab != null) { if (FirstOf(hangPrefabs) == null) hangPrefabs.Add(hangPrefab); hangPrefab = null; changed = true; }
+        if (changed) UnityEditor.EditorUtility.SetDirty(this);
+    }
+#endif
     public int UnitsPerCrate => Mathf.Max(1, unitsPerCrate);
 
     // Products left in this crate. 0 means "full", so crates spawned from a prefab start full.
