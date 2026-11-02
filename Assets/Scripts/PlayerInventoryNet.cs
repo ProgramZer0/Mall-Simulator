@@ -197,12 +197,20 @@ public class PlayerInventoryNet : NetworkBehaviour
 
         if (interact == null || !interact.FitsAt(id, position, rotation, onWall)) return;
 
+        // Set down on a cart: it rides along from the start (no falling, so it can't be left behind).
+        CartNet cart = null;
+        if (!onWall && PlacementCheck.GetTestBox(def, position, rotation, out Vector3 center, out _))
+            cart = CartNet.FindCartAt(center);
+
         var spawned = Instantiate(def.worldNetworkPrefab, position, rotation);
         if (onWall && spawned.TryGetComponent<ItemPickupNet>(out var hung))
             hung.ServerPrepareFrozen(onWall: true); // hangs there; never falls
+        else if (cart != null && spawned.TryGetComponent<ItemPickupNet>(out var load))
+            load.ServerPrepareFrozen(carried: true);
         if (HeldUnits.Value > 0 && spawned.TryGetComponent<ItemPickupNet>(out var crate))
             crate.ServerSetUnits(HeldUnits.Value); // a part-used crate stays part-used
         spawned.Spawn(true);
+        if (cart != null) cart.ServerLoad(spawned);
 
         HeldItemId.Value = 0;
         HeldUnits.Value = 0;

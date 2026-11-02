@@ -798,6 +798,7 @@ public class StorePlot : NetworkBehaviour
         {
             if (item == null || !item.IsSpawned || !Contains(item.transform.position)) continue;
             if (item.TryGetComponent<ShipmentPackage>(out _)) continue; // boxes stay where they are
+            if (item.IsOnCart) continue;                                 // so do things riding on a cart
 
             // Only take items we can respawn later; anything else is left untouched.
             if (catalog == null || !catalog.TryGet(item.itemId, out var def) || def.worldNetworkPrefab == null)

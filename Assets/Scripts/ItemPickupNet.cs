@@ -139,6 +139,7 @@ public class ItemPickupNet : NetworkBehaviour
     {
         public bool frozen;
         public bool onWall;
+        public bool carried; // riding on a cart: the cart's parenting places it, not this pose
         public Vector3 position;
         public Quaternion rotation;
     }
@@ -169,10 +170,17 @@ public class ItemPickupNet : NetworkBehaviour
     /// Server: spawn this item already frozen where it stands (e.g. coming back from edit mode, where
     /// the player already chose whether it falls). Call after Instantiate, before Spawn.
     /// </summary>
-    public void ServerPrepareFrozen(bool onWall = false)
+    public void ServerPrepareFrozen(bool onWall = false, bool carried = false)
     {
-        freeze.Value = new FreezeState { frozen = true, onWall = onWall, position = transform.position, rotation = transform.rotation };
+        freeze.Value = new FreezeState
+        {
+            frozen = true, onWall = onWall, carried = carried,
+            position = transform.position, rotation = transform.rotation,
+        };
     }
+
+    /// <summary>Is this item riding on a cart?</summary>
+    public bool IsOnCart => transform.parent != null && transform.parent.GetComponent<CartNet>() != null;
 
     public override void OnNetworkSpawn()
     {
@@ -222,6 +230,7 @@ public class ItemPickupNet : NetworkBehaviour
             rb.angularVelocity = Vector3.zero;
         }
         rb.isKinematic = true;
+        if (state.carried) return; // on a cart, which may have moved since; parenting keeps it in place
         transform.SetPositionAndRotation(state.position, state.rotation);
         rb.position = state.position;
         rb.rotation = state.rotation;
@@ -269,16 +278,25 @@ public class ItemPickupNet : NetworkBehaviour
 
     private void ServerFreeze(Vector3 position, Quaternion rotation)
     {
-        var state = new FreezeState { frozen = true, position = position, rotation = rotation.normalized };
+        // Landed on a cart? Then it rides along from now on.
+        var cart = CartNet.FindCartAt(GetCenter(position, rotation));
+        var state = new FreezeState { frozen = true, carried = cart != null, position = position, rotation = rotation.normalized };
         freeze.Value = state;
+        transform.SetPositionAndRotation(position, rotation);
         ApplyFrozen(state); // the host doesn't wait for its own change event
+        if (cart != null) cart.ServerLoad(NetworkObject);
     }
+
+    // The middle of the item's model at a pose (its pivot may be anywhere).
+    private Vector3 GetCenter(Vector3 position, Quaternion rotation) =>
+        ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(itemId, out var def) &&
+        PlacementCheck.GetTestBox(def, position, rotation, out Vector3 c, out _) ? c : position;
 
     /// <summary>Server: unfreeze this item so it falls and settles again.</summary>
     public void ServerWake()
     {
         // Things hung on a wall stay put when what's below them is picked up.
-        if (!IsServer || !Falls || rb == null || !freeze.Value.frozen || freeze.Value.onWall) return;
+        if (!IsServer || !Falls || rb == null || !freeze.Value.frozen || freeze.Value.onWall || IsOnCart) return;
         freeze.Value = default;
         StartFalling();
     }

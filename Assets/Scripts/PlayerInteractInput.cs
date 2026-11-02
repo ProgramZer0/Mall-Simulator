@@ -96,6 +96,7 @@ public class PlayerInteractInput : NetworkBehaviour
         {
             lookedAtSign = null;
             lookedAtMonitor = null;
+            lookedAtCart = null;
             ClearStockTarget();
             if (previewActive || ghostPreview != null)
             {
@@ -116,6 +117,8 @@ public class PlayerInteractInput : NetworkBehaviour
     /* ========================= INTERACT ========================= */
 
     private ForSaleSign lookedAtSign;
+    private CartNet lookedAtCart; // a cart you could start pushing
+    private CartNet pushedCart;   // the cart you're pushing
     private ShopMonitor lookedAtMonitor;
 
     /// <summary>Is the player looking at a for-sale wall of an unowned store, or at their shop monitor?</summary>
@@ -123,9 +126,17 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         lookedAtSign = null;
         lookedAtMonitor = null;
+        lookedAtCart = null;
+        pushedCart = CartNet.GetPushedBy(OwnerClientId);
         if (Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit,
                 interactRange, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
         {
+            // A cart's body (not something riding on it), with empty hands.
+            var cart = hit.collider.GetComponentInParent<CartNet>();
+            if (cart != null && pushedCart == null && inventory.HeldItemId.Value == 0 && cart.CanUse(OwnerClientId) &&
+                !cart.IsPushed && hit.collider.GetComponentInParent<ItemPickupNet>() == null)
+                lookedAtCart = cart;
+
             var sign = hit.collider.GetComponentInParent<ForSaleSign>();
             if (sign != null && sign.Plot != null && sign.Plot.IsForSale) lookedAtSign = sign;
 
@@ -245,10 +256,13 @@ public class PlayerInteractInput : NetworkBehaviour
 
     private void OnGUI()
     {
-        if (!IsOwner || (lookedAtSign == null && lookedAtMonitor == null && stockTarget == null) ||
+        if (!IsOwner || (lookedAtSign == null && lookedAtMonitor == null && stockTarget == null &&
+                         lookedAtCart == null && pushedCart == null) ||
             (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return;
 
-        string text = lookedAtMonitor != null ? "F: Shop monitor"
+        string text = pushedCart != null ? "F: Let go of cart"
+                    : lookedAtCart != null ? "F: Push cart"
+                    : lookedAtMonitor != null ? "F: Shop monitor"
                     : lookedAtSign != null ? $"F: Buy {lookedAtSign.Plot.DisplayName} ({lookedAtSign.Plot.Price})"
                     : StockPrompt();
         promptStyle ??= new GUIStyle(GUI.skin.box) { fontSize = 16, alignment = TextAnchor.MiddleCenter };
@@ -326,6 +340,18 @@ public class PlayerInteractInput : NetworkBehaviour
         HandleStockOrientation();
 
         if (!Input.GetKeyDown(KeyCode.F)) return;
+
+        // Carts: F lets go of the one you're pushing (and does nothing else), or starts pushing one.
+        if (pushedCart != null)
+        {
+            pushedCart.RequestReleaseRpc();
+            return;
+        }
+        if (lookedAtCart != null)
+        {
+            lookedAtCart.RequestPushRpc();
+            return;
+        }
 
         // The shop monitor opens the shop GUI for its store (local only; orders go through the host).
         if (lookedAtMonitor != null)
