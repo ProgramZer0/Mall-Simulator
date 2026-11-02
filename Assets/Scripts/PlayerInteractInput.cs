@@ -10,7 +10,7 @@ public class PlayerInteractInput : NetworkBehaviour
     [SerializeField] private LayerMask placementMask;
     [SerializeField] private LayerMask placementBlockingMask;
     [Tooltip("Layers wall items (pictures, signs) can hang on, e.g. your walls layer. Built walls should use it too. " +
-             "Nothing ticked = any upright surface.")]
+             "Nothing ticked = the walls layer.")]
     [SerializeField] private LayerMask wallMask;
 
     private Camera cam;
@@ -23,7 +23,7 @@ public class PlayerInteractInput : NetworkBehaviour
     public LayerMask PickupMask => pickupMask;
     /// <summary>Surfaces items are placed on (floors, shelves, walls). Edit mode hangs wall items on these.</summary>
     public LayerMask PlacementMask => placementMask;
-    /// <summary>Layers wall items hang on (empty = any upright surface).</summary>
+    /// <summary>Layers ticked in Wall Mask (see EffectiveWallMask for what is used when none are).</summary>
     public LayerMask WallMask => wallMask;
 
     [Header("Rotation")]
@@ -396,7 +396,7 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         // Fine rotation while previewing: hold > to turn clockwise, < to turn counter-clockwise.
         // These are the , and . keys, so Shift isn't needed.
-        if (IsPreviewing)
+        if (IsPreviewing && !placingOnWall)
         {
             bool cw = Input.GetKey(KeyCode.Period); // >
             bool ccw = Input.GetKey(KeyCode.Comma);  // <
@@ -409,6 +409,9 @@ public class PlayerInteractInput : NetworkBehaviour
         // a tap lands on 90 , so you can always get back to a clean right angle.
         if (Input.GetKeyDown(KeyCode.R))
         {
+            // On a wall, R turns the item around (its other face outward) instead.
+            if (IsPreviewing && placingOnWall) { wallFlip = !wallFlip; return; }
+
             float nextStep = (Mathf.Floor(placeRotationY / 90f + 0.001f) + 1f) * 90f;
             placeRotationY = Mathf.Repeat(nextStep, 360f);
         }
@@ -544,6 +547,10 @@ public class PlayerInteractInput : NetworkBehaviour
 
     // True while the preview is hung on a wall (wall items), so the fit test and the server know.
     private bool placingOnWall;
+    private bool wallFlip; // R while on a wall: the other face outward
+
+    /// <summary>Layers wall items hang on: the Wall Mask, or the "walls" layer if nothing's ticked.</summary>
+    public int EffectiveWallMask => wallMask.value != 0 ? wallMask.value : PlacementCheck.DefaultWallMask;
 
     private bool TryGetPlacementPose(out Vector3 pos, out Quaternion rot)
     {
@@ -558,21 +565,24 @@ public class PlayerInteractInput : NetworkBehaviour
         if (Physics.Raycast(rayStart, cam.transform.forward,
             out RaycastHit hit, 5f, placementMask, QueryTriggerInteraction.Ignore))
         {
-            // Wall items aimed at a wall hang on it, back flat against it. R / < > turn them around
-            // the wall's normal (e.g. a picture from landscape to portrait).
+            // Wall items aimed at a wall hang on it: upright, thinnest side against the wall. R turns
+            // them around.
             if (mounting != ItemPickupNet.Mounting.Floor && PlacementCheck.IsWallNormal(hit.normal) &&
-                PlacementCheck.IsWallLayer(hit.collider, wallMask))
+                PlacementCheck.IsWallLayer(hit.collider, EffectiveWallMask))
             {
-                PlacementCheck.WallPose(def, hit.point, hit.normal, placeRotationY, out pos, out rot);
+                PlacementCheck.WallPose(def, hit.point, hit.normal, wallFlip, out pos, out rot);
                 placingOnWall = true;
                 return true;
             }
 
             pos = hit.point;
 
-            // Items always stand upright. Aiming at the top of something puts the item on it;
-            // aiming at a side leaves it hanging in the air, so the support check turns it red.
+            // Items always stand upright on their bottom, turned only by R / < >. Aiming at the side
+            // of something (a shelf, a wall) puts the item on the floor right next to it, instead of
+            // leaving it hanging off that side.
             rot = yaw;
+            if (hit.normal.y < 0.7f && def != null && TryFloorBeside(def, hit, yaw, out Vector3 beside))
+                pos = beside;
         }
         else
         {
@@ -584,6 +594,31 @@ public class PlayerInteractInput : NetworkBehaviour
         // so models with a centered pivot don't sink halfway into the floor.
         if (def != null) pos += rot * Vector3.up * PlacementCheck.PivotHeightAboveBase(def);
 
+        return true;
+    }
+
+    /// <summary>The floor just in front of a side that was aimed at, far enough out for the item to fit.</summary>
+    private bool TryFloorBeside(ItemDef def, RaycastHit side, Quaternion yaw, out Vector3 floor)
+    {
+        floor = default;
+        Vector3 n = side.normal;
+        n.y = 0f;
+        if (n.sqrMagnitude < 1e-6f) return false;
+        n.Normalize();
+
+        // How far the item reaches toward the side, turned the way it'll be placed.
+        Bounds local = def.LocalBounds;
+        Vector3 scale = def.worldNetworkPrefab.transform.localScale;
+        Vector3 e = Vector3.Scale(local.extents, new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z)));
+        float reach = Mathf.Abs(Vector3.Dot(yaw * Vector3.right, n)) * e.x + Mathf.Abs(Vector3.Dot(yaw * Vector3.forward, n)) * e.z;
+        Vector3 centerOffset = yaw * Vector3.Scale(local.center, scale);
+        centerOffset.y = 0f;
+
+        Vector3 probe = side.point + n * (reach + 0.03f) + Vector3.up * 0.05f;
+        if (!Physics.Raycast(probe, Vector3.down, out RaycastHit down, 5f, placementMask, QueryTriggerInteraction.Ignore) ||
+            down.normal.y < 0.7f) return false;
+
+        floor = down.point - centerOffset; // the item's middle (not its pivot) goes out from the side
         return true;
     }
 
@@ -690,7 +725,7 @@ public class PlayerInteractInput : NetworkBehaviour
         if (ground >= 0) blocking &= ~(1 << ground);
 
         return onWall
-            ? PlacementCheck.FitsOnWall(def, position, rotation, blocking, wallMask.value != 0 ? wallMask : placementMask)
+            ? PlacementCheck.FitsOnWall(def, position, rotation, blocking, EffectiveWallMask)
             : PlacementCheck.Fits(def, position, rotation, blocking, placementMask);
     }
 }

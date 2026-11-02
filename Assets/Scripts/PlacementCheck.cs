@@ -69,24 +69,37 @@ public static class PlacementCheck
     }
 
     /// <summary>
-    /// Pose for hanging an item on a wall: its back (the side opposite its blue arrow) flat on the
-    /// wall, its middle on the hit point, upright, then turned by roll degrees around the wall's normal.
+    /// Pose for hanging an item on a wall. It stays upright (its bottom stays its bottom, as built),
+    /// and is turned so its THINNEST side (x or z, seen from above) goes against the wall, whichever
+    /// way the model was built: a painting thin along x hangs flat just like one thin along z. Its
+    /// middle goes on the hit point. flip turns it around to put its other face outward.
     /// </summary>
-    public static void WallPose(ItemDef def, Vector3 hitPoint, Vector3 wallNormal, float roll,
+    public static void WallPose(ItemDef def, Vector3 hitPoint, Vector3 wallNormal, bool flip,
                                 out Vector3 position, out Quaternion rotation)
     {
         Vector3 n = wallNormal;
         n.y = 0f;
         if (n.sqrMagnitude < 1e-6f) n = Vector3.forward;
-        rotation = Quaternion.LookRotation(n.normalized, Vector3.up) * Quaternion.Euler(0f, 0f, roll);
+        n.Normalize();
 
-        Vector3 anchor = Vector3.zero;
+        Vector3 c = Vector3.zero, e = Vector3.one * 0.05f;
         if (def != null && def.worldNetworkPrefab != null && def.LocalBounds.size != Vector3.zero)
         {
             Bounds local = def.LocalBounds;
             Vector3 scale = def.worldNetworkPrefab.transform.localScale;
-            anchor = new Vector3(local.center.x * scale.x, local.center.y * scale.y, local.min.z * scale.z);
+            c = Vector3.Scale(local.center, scale);
+            e = Vector3.Scale(local.extents, Abs(scale));
         }
+
+        // Thin along z: its blue arrow points out of the wall. Thin along x: its red arrow does.
+        bool thinX = e.x < e.z;
+        float yaw = (thinX ? -90f : 0f) + (flip ? 180f : 0f);
+        rotation = Quaternion.LookRotation(n, Vector3.up) * Quaternion.Euler(0f, yaw, 0f);
+
+        // The face touching the wall, in the item's own axes.
+        Vector3 back = Quaternion.Inverse(rotation) * -n;
+        Vector3 axis = thinX ? new Vector3(Mathf.Sign(back.x), 0f, 0f) : new Vector3(0f, 0f, Mathf.Sign(back.z));
+        Vector3 anchor = c + Vector3.Scale(axis, e);
         position = hitPoint - rotation * anchor;
     }
 
@@ -106,13 +119,22 @@ public static class PlacementCheck
         return HasWallBehind(def, position, rotation, wallMask);
     }
 
-    /// <summary>Is there a surface right behind the item's back (the side opposite its blue arrow)?</summary>
+    /// <summary>Is there a wall right against either face of the item's thinnest side (x or z)?</summary>
     public static bool HasWallBehind(ItemDef def, Vector3 position, Quaternion rotation, int wallMask)
     {
         if (!GetTestBox(def, position, rotation, out Vector3 center, out Vector3 halfExtents)) return false;
-        Vector3 forward = rotation * Vector3.forward;
-        Vector3 back = center - forward * (halfExtents.z + Skin);
-        return Physics.Raycast(back + forward * 0.05f, -forward, 0.05f + SupportProbe, wallMask, QueryTriggerInteraction.Ignore);
+        bool thinX = halfExtents.x < halfExtents.z;
+        Vector3 axis = rotation * (thinX ? Vector3.right : Vector3.forward);
+        float extent = thinX ? halfExtents.x : halfExtents.z;
+
+        for (int side = -1; side <= 1; side += 2)
+        {
+            Vector3 dir = axis * side;
+            Vector3 face = center + dir * (extent + Skin);
+            if (Physics.Raycast(face - dir * 0.05f, dir, 0.05f + SupportProbe, wallMask, QueryTriggerInteraction.Ignore))
+                return true;
+        }
+        return false;
     }
 
     private static readonly Collider[] EditHits = new Collider[32];
