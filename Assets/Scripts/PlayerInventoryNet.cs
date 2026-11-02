@@ -97,7 +97,9 @@ public class PlayerInventoryNet : NetworkBehaviour
         HeldItemId.Value = itemId;
         // A crate on the floor remembers how much is left; one from a delivery box is full.
         int perCrate = StockContainer.GetUnitsPerCrate(itemId);
-        HeldUnits.Value = perCrate == 0 ? 0 : isBox ? perCrate : pickup.Units;
+        HeldUnits.Value = perCrate == 0 ? 0
+            : isBox ? (box.ContainedUnits > 0 ? Mathf.Min(box.ContainedUnits, perCrate) : perCrate)
+            : pickup.Units;
 
         Vector3 soundPos = pickup.transform.position;
         pickupNO.Despawn(true);
@@ -172,7 +174,8 @@ public class PlayerInventoryNet : NetworkBehaviour
     }
 
     [ServerRpc]
-    public void RequestPlaceServerRpc(Vector3 position, Quaternion rotation, bool onWall, ServerRpcParams rpcParams = default)
+    public void RequestPlaceServerRpc(Vector3 position, Quaternion rotation, bool onWall, bool onCart,
+                                      ServerRpcParams rpcParams = default)
     {
         if (HeldItemId.Value == 0) return;
         int id = HeldItemId.Value;
@@ -184,16 +187,25 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (!MallManager.CanPickupOrPlace(rpcParams.Receive.SenderClientId,
                 actor.transform.position, position)) return;
 
-        // Can't park things on another store's shipment spots.
+        // Can't park things on another store's shipment spots, or anywhere at the docks (except on a cart).
         if (MallManager.IsOthersShipmentArea(rpcParams.Receive.SenderClientId, position)) return;
+        if (MallManager.IsNoPlaceZone(position)) return;
 
         if (!ItemCatalog.Instance.TryGet(id, out var def) || def.worldNetworkPrefab == null) return;
+
+        // Set down on a cart: it goes on packed in its shipment box, to save room.
+        var cartBox = onCart ? PlacementCheck.CartBoxOf(def) : null;
+        if (cartBox != null)
+        {
+            ServerPlaceBoxOnCart(def, cartBox, position, rotation, rpcParams.Receive.SenderClientId);
+            return;
+        }
 
         // Server re-runs the same fit test the client used, so a client can't place into
         // walls/other items, and two players can't drop things into the same spot at once.
         // Only wall items go on walls, and wall-only items only on walls.
         var mounting = PlacementCheck.GetMounting(def);
-        if (onWall ? mounting == ItemPickupNet.Mounting.Floor : mounting == ItemPickupNet.Mounting.Wall) return;
+        if (onWall ? mounting == ItemPickupNet.Mounting.Floor : mounting == ItemPickupNet.Mounting.Wall && !onCart) return;
 
         if (interact == null || !interact.FitsAt(id, position, rotation, onWall)) return;
 
@@ -215,6 +227,30 @@ public class PlayerInventoryNet : NetworkBehaviour
         HeldItemId.Value = 0;
         HeldUnits.Value = 0;
 
+        PlayItemSoundClientRpc(id, position, true);
+    }
+
+    private void ServerPlaceBoxOnCart(ItemDef def, NetworkObject boxPrefab, Vector3 position, Quaternion rotation, ulong sender)
+    {
+        var cart = CartNet.FindCartAt(PlacementCheck.PrefabCenter(boxPrefab.gameObject, position, rotation));
+        if (cart == null || !cart.CanUse(sender)) return;
+        if (interact == null || !interact.FitsBoxAt(boxPrefab.gameObject, position, rotation)) return;
+
+        int id = def.id;
+        var spawned = Instantiate(boxPrefab, position, rotation);
+        if (spawned.TryGetComponent<ShipmentPackage>(out var box))
+        {
+            box.ServerSetContents(id);
+            if (HeldUnits.Value > 0) box.ServerSetUnits(HeldUnits.Value); // a part-used crate stays part-used
+        }
+        else Debug.LogWarning($"[PlayerInventoryNet] Shipment prefab '{boxPrefab.name}' has no ShipmentPackage, so " +
+                              "picking it up won't give the item inside.", boxPrefab);
+        if (spawned.TryGetComponent<ItemPickupNet>(out var pickup)) pickup.ServerPrepareFrozen(carried: true);
+        spawned.Spawn(true);
+        cart.ServerLoad(spawned);
+
+        HeldItemId.Value = 0;
+        HeldUnits.Value = 0;
         PlayItemSoundClientRpc(id, position, true);
     }
 

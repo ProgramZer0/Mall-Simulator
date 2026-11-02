@@ -1,3 +1,4 @@
+using Unity.Netcode;
 using UnityEngine;
 
 /// <summary>
@@ -38,6 +39,48 @@ public static class PlacementCheck
         return Physics.Raycast(baseCenter + up * 0.05f, -up, 0.05f + SupportProbe,
                                supportMask, QueryTriggerInteraction.Ignore);
     }
+
+    /* ========================= BOXES ON CARTS ========================= */
+
+    /// <summary>
+    /// What an item turns into when it's set down on a cart: its shipment box (or the catalog's
+    /// default box), so it takes less room. Null if it has no box (it goes on as itself).
+    /// </summary>
+    public static NetworkObject CartBoxOf(ItemDef def)
+    {
+        if (def == null) return null;
+        var box = def.GetShipmentPrefab();
+        return box != null && box != def.worldNetworkPrefab ? box : null;
+    }
+
+    /// <summary>Distance from a prefab's pivot up to its lowest point (like PivotHeightAboveBase, for any prefab).</summary>
+    public static float PivotHeightAboveBase(GameObject prefab)
+    {
+        var box = ShipmentPacker.GetBox(prefab);
+        return box.half.y - box.pivotOffset.y;
+    }
+
+    /// <summary>Fit test for any prefab (e.g. a shipment box): nothing in the way and something under it.</summary>
+    public static bool FitsPrefab(GameObject prefab, Vector3 position, Quaternion rotation,
+                                  LayerMask blockingMask, LayerMask supportMask)
+    {
+        if (prefab == null) return false;
+        var box = ShipmentPacker.GetBox(prefab);
+        Vector3 half = new(Mathf.Max(0.001f, box.half.x - Skin), Mathf.Max(0.001f, box.half.y - Skin),
+                           Mathf.Max(0.001f, box.half.z - Skin));
+        Vector3 center = position + rotation * box.pivotOffset;
+
+        if (Physics.OverlapBoxNonAlloc(center, half, Hits, rotation, blockingMask, QueryTriggerInteraction.Ignore) > 0)
+            return false;
+
+        Vector3 up = rotation * Vector3.up;
+        Vector3 baseCenter = center - up * (half.y + Skin);
+        return Physics.Raycast(baseCenter + up * 0.05f, -up, 0.05f + SupportProbe, supportMask, QueryTriggerInteraction.Ignore);
+    }
+
+    /// <summary>The middle of a prefab's model at a pose.</summary>
+    public static Vector3 PrefabCenter(GameObject prefab, Vector3 position, Quaternion rotation) =>
+        prefab == null ? position : position + rotation * ShipmentPacker.GetBox(prefab).pivotOffset;
 
     /* ========================= WALL ITEMS ========================= */
 
