@@ -41,6 +41,10 @@ public class StoreEditController : NetworkBehaviour
     [SerializeField] private KeyCode wallToolKey = KeyCode.B;
     [Tooltip("Wall tool: switch between full-height and half-height walls.")]
     [SerializeField] private KeyCode wallHeightKey = KeyCode.H;
+    [Tooltip("Wall items dragged onto a wall from the floor view hang this high (their middle), in meters above the floor.")]
+    [SerializeField] private float wallHangHeight = 1.5f;
+    [Tooltip("Dragging a wall item: the mouse within this many meters of a wall (on the floor) snaps it onto the wall.")]
+    [SerializeField] private float wallSnapDistance = 0.6f;
 
     private enum RightDrag { Orbit, Pan }
 
@@ -740,7 +744,13 @@ public class StoreEditController : NetworkBehaviour
         Quaternion rot;
         if (PlacementCheck.IsWallNormal(hit.normal) && PlacementCheck.IsWallLayer(hit.collider, WallMask()))
         {
-            PlacementCheck.WallPose(def, hit.point, hit.normal, 0f, out pos, out rot);
+            PlacementCheck.WallPose(def, hit.point, hit.normal, false, out pos, out rot);
+        }
+        else if (TryNearbyWall(def, hit.point, out Vector3 wallPoint, out Vector3 wallNormal))
+        {
+            // From above you mostly see floor, so a wall near the mouse counts: the item stays on it
+            // (at its current height) instead of dropping to the floor the moment the mouse slips off.
+            PlacementCheck.WallPose(def, wallPoint, wallNormal, false, out pos, out rot);
         }
         else if (mounting == ItemPickupNet.Mounting.FloorOrWall && hit.normal.y > 0.7f)
         {
@@ -754,6 +764,37 @@ public class StoreEditController : NetworkBehaviour
         if (editPlot.ContainsItem(def, pos, rot) && PlacementCheck.IsClear(def, pos, rot, EditMask(), selected.transform))
             selected.SetPose(pos, rot);
         return true;
+    }
+
+    private static readonly Vector3[] SnapDirs =
+    {
+        new(1, 0, 0), new(-1, 0, 0), new(0, 0, 1), new(0, 0, -1),
+        new(0.7071f, 0, 0.7071f), new(-0.7071f, 0, 0.7071f), new(0.7071f, 0, -0.7071f), new(-0.7071f, 0, -0.7071f),
+    };
+
+    /// <summary>
+    /// A wall within Wall Snap Distance of a floor point, found at hanging height: the selected item's
+    /// current middle if it's already on a wall, otherwise Wall Hang Height above the floor.
+    /// </summary>
+    private bool TryNearbyWall(ItemDef def, Vector3 floorPoint, out Vector3 wallPoint, out Vector3 wallNormal)
+    {
+        wallPoint = wallNormal = default;
+        float hangY = editPlot.FloorHeight + wallHangHeight;
+        if (PlacementCheck.HasWallBehind(def, selected.transform.position, selected.transform.rotation, WallMask()) &&
+            PlacementCheck.GetTestBox(def, selected.transform.position, selected.transform.rotation, out Vector3 c, out _))
+            hangY = c.y;
+
+        Vector3 from = new(floorPoint.x, hangY, floorPoint.z);
+        float best = float.MaxValue;
+        foreach (var dir in SnapDirs)
+        {
+            if (!Physics.Raycast(from, dir, out RaycastHit h, wallSnapDistance, WallMask(), QueryTriggerInteraction.Ignore)) continue;
+            if (!PlacementCheck.IsWallNormal(h.normal) || h.collider.transform.IsChildOf(selected.transform) || h.distance >= best) continue;
+            best = h.distance;
+            wallPoint = h.point;
+            wallNormal = h.normal;
+        }
+        return best < float.MaxValue;
     }
 
     /// <summary>Move the selected item by delta, stopping at the first thing it touches.</summary>
@@ -1208,7 +1249,7 @@ public class StoreEditController : NetworkBehaviour
 
     /* ========================= HELPERS ========================= */
 
-    private int WallMask() => interact != null ? interact.WallMask.value : PlacementCheck.DefaultWallMask;
+    private int WallMask() => interact != null ? interact.EffectiveWallMask : PlacementCheck.DefaultWallMask;
 
     /// <summary>Layers that stop an item: the placement blocking layers plus the floor.</summary>
     private int EditMask()
