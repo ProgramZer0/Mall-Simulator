@@ -827,10 +827,11 @@ public class StorePlot : NetworkBehaviour
     /// otherwise it goes back to where it was before editing.
     /// </summary>
     public void ServerEndEdit(Vector3[] positions, Quaternion[] rotations,
-                              Func<ItemDef, Vector3, Quaternion, bool> isValid)
+                              Func<ItemDef, Vector3, Quaternion, bool> isValid, bool log = false)
     {
         if (!IsServer || !IsRenovating) return;
 
+        int moved = 0, unchanged = 0, rejected = 0, noPose = 0;
         var catalog = ItemCatalog.Instance;
         for (int i = 0; i < editSession.Count; i++)
         {
@@ -849,13 +850,22 @@ public class StorePlot : NetworkBehaviour
                 {
                     r = r.normalized;
                     Physics.SyncTransforms(); // see the items respawned earlier in this loop
-                    if (ContainsItem(def, p, r) && (isValid == null || isValid(def, p, r)))
+                    bool samePlace = (p - pos).sqrMagnitude < 1e-6f && Quaternion.Angle(r, rot) < 0.1f;
+                    bool inside = ContainsItem(def, p, r);
+                    if (!inside && log)
+                        Debug.LogWarning($"[StorePlot] '{def.displayName}' was moved outside '{displayName}' " +
+                                         $"(to {p}); it goes back to where it was.", this);
+                    if (inside && (isValid == null || isValid(def, p, r)))
                     {
+                        if (samePlace) unchanged++; else moved++;
                         pos = p;
                         rot = r;
                     }
+                    else rejected++;
                 }
+                else noPose++;
             }
+            else noPose++;
 
             var spawned = Instantiate(def.worldNetworkPrefab, pos, rot);
             // Edit mode already let the player choose whether it falls, so it comes back exactly as left.
@@ -871,6 +881,10 @@ public class StorePlot : NetworkBehaviour
                 container.ServerPrepareStock(entry.stock);
             spawned.Spawn(true);
         }
+
+        if (log)
+            Debug.Log($"[StorePlot] Edit of '{displayName}' saved: {moved} moved, {unchanged} unchanged, " +
+                      $"{rejected} put back (see warnings above), {noPose} with no position from the editor.", this);
 
         editSession.Clear();
         editorClientId.Value = NoOwner;
