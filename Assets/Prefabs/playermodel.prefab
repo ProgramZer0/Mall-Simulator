@@ -386,6 +386,9 @@ MonoBehaviour:
   placementBlockingMask:
     serializedVersion: 2
     m_Bits: 7624
+  wallMask:
+    serializedVersion: 2
+    m_Bits: 4096
   fineRotateSpeed: 45
   placeResponseTimeout: 0.5
   invalidTintStrength: 0.35
@@ -395,6 +398,8 @@ MonoBehaviour:
   debugPlacement: 0
   stockPreviewAlpha: 0.37
   putBackKey: 103
+  stockTurnKey: 114
+  stockLayKey: 116
 --- !u!143 &2986661850691434819
 CharacterController:
   m_ObjectHideFlags: 0
@@ -487,6 +492,8 @@ MonoBehaviour:
   toggleKey: 48
   toolKey: 120
   gravityKey: 103
+  wallToolKey: 98
+  wallHeightKey: 104
   pitch: 55
   rightDrag: 0
   orbitSensitivity: 0.25

@@ -5186,6 +5186,7 @@ GameObject:
   - component: {fileID: 451575848}
   - component: {fileID: 451575850}
   - component: {fileID: 451575851}
+  - component: {fileID: 451575852}
   m_Layer: 0
   m_Name: Managers
   m_TagString: Untagged
@@ -5295,6 +5296,26 @@ MonoBehaviour:
   devDeliverySeconds: 10
   devMoneyAmount: 1000
   showDebugHud: 1
+--- !u!114 &451575852
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 451575846}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 22c152a7c0d00c64199177208ae502fc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BuiltWallSettings
+  wallPrefab: {fileID: 3756940047382866070, guid: 40f753db4fa66ac418acc60bdfadb923, type: 3}
+  thickness: 0.41
+  halfHeight: 1.1
+  gridSize: 0.5
+  minLength: 0.5
+  maxWallsPerStore: 64
+  costPerMeter: 50
+  refundFraction: 0.5
 --- !u!1 &451926993
 GameObject:
   m_ObjectHideFlags: 0
@@ -16387,6 +16408,18 @@ MonoBehaviour:
     category: Clothing
     price: 10
     deliverySeconds: 300
+    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
+  - id: 13
+    displayName: Test Painting
+    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
+    worldNetworkPrefab: {fileID: 5976144729851372552, guid: 8da3b69830e0af64fbf5e08640760dc2, type: 3}
+    showInShop: 1
+    icon: {fileID: 0}
+    category: Clothing
+    price: 230
+    deliverySeconds: 200
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
