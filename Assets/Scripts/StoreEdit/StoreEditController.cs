@@ -41,6 +41,8 @@ public class StoreEditController : NetworkBehaviour
     [SerializeField] private KeyCode wallToolKey = KeyCode.B;
     [Tooltip("Wall tool: switch between full-height and half-height walls.")]
     [SerializeField] private KeyCode wallHeightKey = KeyCode.H;
+    [Tooltip("Log (on the host) which items couldn't keep their new spot when edit mode is saved, and why.")]
+    [SerializeField] private bool logEditSave = true;
     [Tooltip("Wall items dragged onto a wall from the floor view hang this high (their middle), in meters above the floor.")]
     [SerializeField] private float wallHangHeight = 1.5f;
     [Tooltip("Dragging a wall item: the mouse within this many meters of a wall (on the floor) snaps it onto the wall.")]
@@ -1427,8 +1429,15 @@ public class StoreEditController : NetworkBehaviour
         if (!ServerTryGetSession(rpcParams, sessionId, out var plot)) return;
 
         int mask = EditMask();
-        plot.ServerEndEdit(pendingPositions, pendingRotations,
-            (def, pos, rot) => PlacementCheck.IsClear(def, pos, rot, mask, null));
+        plot.ServerEndEdit(pendingPositions, pendingRotations, (def, pos, rot) =>
+        {
+            var blocker = PlacementCheck.FindBlockerIgnoringEditCopies(def, pos, rot, mask);
+            if (blocker != null && logEditSave)
+                Debug.LogWarning($"[StoreEdit] '{def.displayName}' can't stay where it was moved: it overlaps " +
+                                 $"'{blocker.name}' (root '{blocker.transform.root.name}', layer " +
+                                 $"'{LayerMask.LayerToName(blocker.gameObject.layer)}'). It goes back to where it was.", blocker);
+            return blocker == null;
+        }, logEditSave);
 
         pendingPositions = null;
         pendingRotations = null;

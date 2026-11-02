@@ -157,6 +157,28 @@ public static class PlacementCheck
     }
 
     /// <summary>
+    /// Saving an edit session: the first thing (if any) in the way of the item at this pose,
+    /// ignoring the editor's local edit-mode copies. On the host those copies are still in the
+    /// scene while the real items respawn, so without this every item "hits" its own copy and
+    /// goes back to where it was before editing.
+    /// </summary>
+    public static Collider FindBlockerIgnoringEditCopies(ItemDef def, Vector3 position, Quaternion rotation, int blockingMask)
+    {
+        if (!GetTestBox(def, position, rotation, out Vector3 center, out Vector3 half)) return null;
+
+        int count = Physics.OverlapBoxNonAlloc(center, half, EditHits, rotation,
+                                               blockingMask, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+        {
+            var c = EditHits[i];
+            if (c.GetComponentInParent<EditLocalItem>() != null) continue;      // an edit-mode copy
+            if (c.GetComponentInParent<StockVisualFollower>() != null) continue; // stock models on shelves
+            return c;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Edit mode: how far the item can slide from this pose along a direction before touching
     /// something (up to maxDistance). Things it already overlaps are ignored, so a stuck item
     /// can always be slid free.
