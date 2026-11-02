@@ -204,7 +204,7 @@ GameObject:
   - component: {fileID: 10674443}
   - component: {fileID: 10674442}
   - component: {fileID: 10674441}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: RennovationWall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -3165,7 +3165,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 249496652}
-  m_Layer: 8
+  m_Layer: 12
   m_Name: FrontWall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5700,7 +5700,7 @@ GameObject:
   - component: {fileID: 464905938}
   - component: {fileID: 464905937}
   - component: {fileID: 464905936}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: RennovationWall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -6703,7 +6703,7 @@ GameObject:
   - component: {fileID: 555231792}
   - component: {fileID: 555231791}
   - component: {fileID: 555231790}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: RennovationWall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -7135,7 +7135,7 @@ GameObject:
   - component: {fileID: 596268762}
   - component: {fileID: 596268761}
   - component: {fileID: 596268760}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: RennovationWall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -11562,7 +11562,7 @@ GameObject:
   - component: {fileID: 1080094476}
   - component: {fileID: 1080094475}
   - component: {fileID: 1080094474}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: RennovationWall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -15653,7 +15653,7 @@ GameObject:
   - component: {fileID: 1413278512}
   - component: {fileID: 1413278511}
   - component: {fileID: 1413278510}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: RennovationWall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -17241,7 +17241,7 @@ GameObject:
   - component: {fileID: 1513467535}
   - component: {fileID: 1513467534}
   - component: {fileID: 1513467533}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: RennovationWall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -18557,7 +18557,7 @@ GameObject:
   - component: {fileID: 1594823810}
   - component: {fileID: 1594823809}
   - component: {fileID: 1594823808}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: RennovationWall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -18753,7 +18753,7 @@ GameObject:
   - component: {fileID: 1611391609}
   - component: {fileID: 1611391608}
   - component: {fileID: 1611391607}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: RennovationWall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -19798,7 +19798,7 @@ GameObject:
   - component: {fileID: 1674855101}
   - component: {fileID: 1674855100}
   - component: {fileID: 1674855099}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: RennovationWall2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -20206,7 +20206,7 @@ GameObject:
   - component: {fileID: 1704726877}
   - component: {fileID: 1704726876}
   - component: {fileID: 1704726875}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: RennovationWall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -20404,7 +20404,7 @@ GameObject:
   - component: {fileID: 1715966279}
   - component: {fileID: 1715966278}
   - component: {fileID: 1715966277}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: RennovationWall1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -20801,7 +20801,7 @@ GameObject:
   - component: {fileID: 1743499170}
   - component: {fileID: 1743499169}
   - component: {fileID: 1743499168}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: RennovationWall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -21184,6 +21184,71 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8210e9a71076a7b43a579c5292f4edd9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WallModule
+--- !u!1001 &1813556336
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 1596268347389550911, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+      propertyPath: GlobalObjectIdHash
+      value: 2233571854
+      objectReference: {fileID: 0}
+    - target: {fileID: 1596268347389550911, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+      propertyPath: InScenePlacedSourceGlobalObjectIdHash
+      value: 967897515
+      objectReference: {fileID: 0}
+    - target: {fileID: 1848290722844266614, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -34.70749
+      objectReference: {fileID: 0}
+    - target: {fileID: 1848290722844266614, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -1.9394578
+      objectReference: {fileID: 0}
+    - target: {fileID: 1848290722844266614, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -53.49394
+      objectReference: {fileID: 0}
+    - target: {fileID: 1848290722844266614, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1848290722844266614, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1848290722844266614, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1848290722844266614, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1848290722844266614, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1848290722844266614, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1848290722844266614, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4340845169253650195, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+      propertyPath: m_Name
+      value: Bookshelf
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
 --- !u!1001 &1819105579
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -24320,7 +24385,7 @@ GameObject:
   - component: {fileID: 2121226884}
   - component: {fileID: 2121226883}
   - component: {fileID: 2121226882}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: RennovationWall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -25082,6 +25147,79 @@ Transform:
   m_Children: []
   m_Father: {fileID: 543450652556918006}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &1691531085876357105
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 387196609280674102, guid: ced738fb08c677c4cbbbe12e49ba7252, type: 3}
+      propertyPath: GlobalObjectIdHash
+      value: 770885655
+      objectReference: {fileID: 0}
+    - target: {fileID: 387196609280674102, guid: ced738fb08c677c4cbbbe12e49ba7252, type: 3}
+      propertyPath: SceneMigrationSynchronization
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 387196609280674102, guid: ced738fb08c677c4cbbbe12e49ba7252, type: 3}
+      propertyPath: InScenePlacedSourceGlobalObjectIdHash
+      value: 227702065
+      objectReference: {fileID: 0}
+    - target: {fileID: 3403308160328172657, guid: ced738fb08c677c4cbbbe12e49ba7252, type: 3}
+      propertyPath: m_Name
+      value: Cart
+      objectReference: {fileID: 0}
+    - target: {fileID: 6780775832906255596, guid: ced738fb08c677c4cbbbe12e49ba7252, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -48.22
+      objectReference: {fileID: 0}
+    - target: {fileID: 6780775832906255596, guid: ced738fb08c677c4cbbbe12e49ba7252, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -2.3107455
+      objectReference: {fileID: 0}
+    - target: {fileID: 6780775832906255596, guid: ced738fb08c677c4cbbbe12e49ba7252, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -59.14
+      objectReference: {fileID: 0}
+    - target: {fileID: 6780775832906255596, guid: ced738fb08c677c4cbbbe12e49ba7252, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.7071067
+      objectReference: {fileID: 0}
+    - target: {fileID: 6780775832906255596, guid: ced738fb08c677c4cbbbe12e49ba7252, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: 6780775832906255596, guid: ced738fb08c677c4cbbbe12e49ba7252, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6780775832906255596, guid: ced738fb08c677c4cbbbe12e49ba7252, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6780775832906255596, guid: ced738fb08c677c4cbbbe12e49ba7252, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6780775832906255596, guid: ced738fb08c677c4cbbbe12e49ba7252, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6780775832906255596, guid: ced738fb08c677c4cbbbe12e49ba7252, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6887109190138115169, guid: ced738fb08c677c4cbbbe12e49ba7252, type: 3}
+      propertyPath: homeStore
+      value: 
+      objectReference: {fileID: 391662817}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: ced738fb08c677c4cbbbe12e49ba7252, type: 3}
 --- !u!4 &1786342009084848928
 Transform:
   m_ObjectHideFlags: 0
@@ -25563,7 +25701,7 @@ GameObject:
   - component: {fileID: 8841074937490292341}
   - component: {fileID: 6501158057422286395}
   - component: {fileID: 6350759635649243803}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: RennovationWall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -26052,3 +26190,5 @@ SceneRoots:
   - {fileID: 1903083912}
   - {fileID: 137587461}
   - {fileID: 1238388135}
+  - {fileID: 1813556336}
+  - {fileID: 1691531085876357105}
