@@ -18,6 +18,8 @@ public class PlayerInteractInput : NetworkBehaviour
     public LayerMask PlacementBlockingMask => placementBlockingMask;
     /// <summary>Layers items can be picked up from. Edit mode clicks items on these.</summary>
     public LayerMask PickupMask => pickupMask;
+    /// <summary>Surfaces items are placed on (floors, shelves, walls). Edit mode hangs wall items on these.</summary>
+    public LayerMask PlacementMask => placementMask;
 
     [Header("Rotation")]
     [Tooltip("Degrees per second while holding < or > in preview.")]
@@ -449,7 +451,7 @@ public class PlayerInteractInput : NetworkBehaviour
 
             if (TryGetPlacementPose(out Vector3 pos, out Quaternion rot))
             {
-                inventory.RequestPlaceServerRpc(pos, rot);
+                inventory.RequestPlaceServerRpc(pos, rot, placingOnWall);
                 DestroyGhost();
                 previewActive = false;
                 // Stay hidden so the item doesn't flash back into the hand before the server confirms.
@@ -535,20 +537,35 @@ public class PlayerInteractInput : NetworkBehaviour
 
     /* ========================= PLACEMENT LOGIC ========================= */
 
+    // True while the preview is hung on a wall (wall items), so the fit test and the server know.
+    private bool placingOnWall;
+
     private bool TryGetPlacementPose(out Vector3 pos, out Quaternion rot)
     {
+        placingOnWall = false;
         Vector3 rayStart = cam.transform.position + cam.transform.forward * 0.5f;
 
         Quaternion yaw = Quaternion.Euler(0f, placeRotationY, 0f);
+        ItemDef def = null;
+        if (ItemCatalog.Instance != null) ItemCatalog.Instance.TryGet(inventory.HeldItemId.Value, out def);
+        var mounting = PlacementCheck.GetMounting(def);
 
         if (Physics.Raycast(rayStart, cam.transform.forward,
             out RaycastHit hit, 5f, placementMask, QueryTriggerInteraction.Ignore))
         {
+            // Wall items aimed at a wall hang on it, back flat against it. R / < > turn them around
+            // the wall's normal (e.g. a picture from landscape to portrait).
+            if (mounting != ItemPickupNet.Mounting.Floor && PlacementCheck.IsWallNormal(hit.normal))
+            {
+                PlacementCheck.WallPose(def, hit.point, hit.normal, placeRotationY, out pos, out rot);
+                placingOnWall = true;
+                return true;
+            }
+
             pos = hit.point;
 
             // Items always stand upright. Aiming at the top of something puts the item on it;
             // aiming at a side leaves it hanging in the air, so the support check turns it red.
-            // (Wall-mounted items can tilt to the surface later via a floor/wall placement type.)
             rot = yaw;
         }
         else
@@ -559,11 +576,7 @@ public class PlayerInteractInput : NetworkBehaviour
 
         // Sit the item on the surface by its measured bottom, not its pivot,
         // so models with a centered pivot don't sink halfway into the floor.
-        if (ItemCatalog.Instance != null &&
-            ItemCatalog.Instance.TryGet(inventory.HeldItemId.Value, out var def))
-        {
-            pos += rot * Vector3.up * PlacementCheck.PivotHeightAboveBase(def);
-        }
+        if (def != null) pos += rot * Vector3.up * PlacementCheck.PivotHeightAboveBase(def);
 
         return true;
     }
@@ -647,14 +660,20 @@ public class PlayerInteractInput : NetworkBehaviour
         if (MallManager.IsOthersShipmentArea(OwnerClientId, ghost.transform.position))
             return false;
 
-        return FitsAt(inventory.HeldItemId.Value, ghost.transform.position, ghost.transform.rotation);
+        // A wall-only item has to be aimed at a wall.
+        if (!placingOnWall && ItemCatalog.Instance != null &&
+            ItemCatalog.Instance.TryGet(inventory.HeldItemId.Value, out var def) &&
+            PlacementCheck.GetMounting(def) == ItemPickupNet.Mounting.Wall)
+            return false;
+
+        return FitsAt(inventory.HeldItemId.Value, ghost.transform.position, ghost.transform.rotation, placingOnWall);
     }
 
     /// <summary>
     /// Fit test using this player's placement layers. Called on the owner for the preview
     /// and on the server before spawning (see PlayerInventoryNet.RequestPlaceServerRpc).
     /// </summary>
-    public bool FitsAt(int itemId, Vector3 position, Quaternion rotation)
+    public bool FitsAt(int itemId, Vector3 position, Quaternion rotation, bool onWall = false)
     {
         if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemId, out var def))
             return false;
@@ -664,6 +683,8 @@ public class PlayerInteractInput : NetworkBehaviour
         int blocking = placementBlockingMask.value;
         if (ground >= 0) blocking &= ~(1 << ground);
 
-        return PlacementCheck.Fits(def, position, rotation, blocking, placementMask);
+        return onWall
+            ? PlacementCheck.FitsOnWall(def, position, rotation, blocking, placementMask)
+            : PlacementCheck.Fits(def, position, rotation, blocking, placementMask);
     }
 }

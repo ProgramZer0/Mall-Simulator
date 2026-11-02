@@ -39,6 +39,67 @@ public static class PlacementCheck
                                supportMask, QueryTriggerInteraction.Ignore);
     }
 
+    /* ========================= WALL ITEMS ========================= */
+
+    /// <summary>A surface counts as a wall if it's within this much of vertical (normal.y between -x and x).</summary>
+    public const float WallNormalMaxY = 0.3f;
+
+    public static bool IsWallNormal(Vector3 normal) => Mathf.Abs(normal.y) < WallNormalMaxY;
+
+    /// <summary>How an item may be placed (from its ItemPickupNet; Floor if it has none).</summary>
+    public static ItemPickupNet.Mounting GetMounting(ItemDef def)
+    {
+        var pickup = def != null && def.worldNetworkPrefab != null ? def.worldNetworkPrefab.GetComponent<ItemPickupNet>() : null;
+        return pickup != null ? pickup.MountingType : ItemPickupNet.Mounting.Floor;
+    }
+
+    /// <summary>
+    /// Pose for hanging an item on a wall: its back (the side opposite its blue arrow) flat on the
+    /// wall, its middle on the hit point, upright, then turned by roll degrees around the wall's normal.
+    /// </summary>
+    public static void WallPose(ItemDef def, Vector3 hitPoint, Vector3 wallNormal, float roll,
+                                out Vector3 position, out Quaternion rotation)
+    {
+        Vector3 n = wallNormal;
+        n.y = 0f;
+        if (n.sqrMagnitude < 1e-6f) n = Vector3.forward;
+        rotation = Quaternion.LookRotation(n.normalized, Vector3.up) * Quaternion.Euler(0f, 0f, roll);
+
+        Vector3 anchor = Vector3.zero;
+        if (def != null && def.worldNetworkPrefab != null && def.LocalBounds.size != Vector3.zero)
+        {
+            Bounds local = def.LocalBounds;
+            Vector3 scale = def.worldNetworkPrefab.transform.localScale;
+            anchor = new Vector3(local.center.x * scale.x, local.center.y * scale.y, local.min.z * scale.z);
+        }
+        position = hitPoint - rotation * anchor;
+    }
+
+    /// <summary>
+    /// Fit test for an item hung on a wall: nothing in the way, and a wall right behind it
+    /// (instead of a floor underneath).
+    /// </summary>
+    public static bool FitsOnWall(ItemDef def, Vector3 position, Quaternion rotation,
+                                  LayerMask blockingMask, LayerMask wallMask)
+    {
+        if (def == null || def.worldNetworkPrefab == null) return false;
+        if (!GetTestBox(def, position, rotation, out Vector3 center, out Vector3 halfExtents)) return true;
+
+        if (Physics.OverlapBoxNonAlloc(center, halfExtents, Hits, rotation, blockingMask, QueryTriggerInteraction.Ignore) > 0)
+            return false;
+
+        return HasWallBehind(def, position, rotation, wallMask);
+    }
+
+    /// <summary>Is there a surface right behind the item's back (the side opposite its blue arrow)?</summary>
+    public static bool HasWallBehind(ItemDef def, Vector3 position, Quaternion rotation, int wallMask)
+    {
+        if (!GetTestBox(def, position, rotation, out Vector3 center, out Vector3 halfExtents)) return false;
+        Vector3 forward = rotation * Vector3.forward;
+        Vector3 back = center - forward * (halfExtents.z + Skin);
+        return Physics.Raycast(back + forward * 0.05f, -forward, 0.05f + SupportProbe, wallMask, QueryTriggerInteraction.Ignore);
+    }
+
     private static readonly Collider[] EditHits = new Collider[32];
     private static readonly RaycastHit[] EditCastHits = new RaycastHit[32];
 
