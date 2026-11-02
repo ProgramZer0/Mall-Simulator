@@ -68,7 +68,10 @@ public class CartNet : NetworkBehaviour
         if (loadArea != null) loadArea.isTrigger = true; // so it isn't counted as part of the body
         bodyBounds = PlacementCheck.ComputeLocalBounds(gameObject);
         if (bodyBounds.size == Vector3.zero) bodyBounds = new Bounds(Vector3.up * 0.5f, new Vector3(0.8f, 1f, 1.2f));
-        pivotAboveBase = -bodyBounds.min.y * transform.localScale.y;
+
+        // Measured in the world, so a model imported lying down (e.g. from Blender, turned -90 on x)
+        // still sits on its wheels.
+        pivotAboveBase = transform.position.y - WorldBodyBounds(transform.rotation).min.y;
 
         if (loadArea != null) loadArea.enabled = false; // only its shape is used
     }
@@ -176,8 +179,31 @@ public class CartNet : NetworkBehaviour
         if (current == NetworkManager.LocalClientId)
         {
             var player = NetworkManager.LocalClient?.PlayerObject;
-            if (player != null) lastPlayerPos = player.transform.position;
+            if (player != null)
+            {
+                lastPlayerPos = player.transform.position;
+                // Turn the cart only by how much the player turns from here, so its own tilt (a model
+                // imported lying down) and which way it faced when grabbed are kept.
+                grabPlayerYaw = player.transform.eulerAngles.y;
+                grabCartRotation = transform.rotation;
+            }
         }
+    }
+
+    private float grabPlayerYaw;
+    private Quaternion grabCartRotation = Quaternion.identity;
+
+    // The cart body's box in the world at a rotation, around its pivot at the origin.
+    private Bounds WorldBodyBounds(Quaternion rot)
+    {
+        Vector3 scale = transform.localScale;
+        Vector3 c = transform.position + rot * Vector3.Scale(bodyBounds.center, scale);
+        Vector3 e = Vector3.Scale(bodyBounds.extents, scale);
+        Vector3 x = rot * new Vector3(e.x, 0f, 0f), y = rot * new Vector3(0f, e.y, 0f), z = rot * new Vector3(0f, 0f, e.z);
+        Vector3 ext = new(Mathf.Abs(x.x) + Mathf.Abs(y.x) + Mathf.Abs(z.x),
+                          Mathf.Abs(x.y) + Mathf.Abs(y.y) + Mathf.Abs(z.y),
+                          Mathf.Abs(x.z) + Mathf.Abs(y.z) + Mathf.Abs(z.z));
+        return new Bounds(c, ext * 2f);
     }
 
     /* ========================= LOADING (SERVER) ========================= */
@@ -213,9 +239,14 @@ public class CartNet : NetworkBehaviour
         if (fwd.sqrMagnitude < 1e-6f) return;
         fwd.Normalize();
 
-        Quaternion targetRot = Quaternion.LookRotation(fwd, Vector3.up);
-        Vector3 targetPos = player.transform.position + fwd * pushDistance;
-        targetPos.y = FloorHeightAt(targetPos, player.transform) + pivotAboveBase;
+        float turned = Mathf.DeltaAngle(grabPlayerYaw, player.transform.eulerAngles.y);
+        Quaternion targetRot = Quaternion.Euler(0f, turned, 0f) * grabCartRotation;
+
+        // The cart's middle (not its pivot, which may be anywhere) goes Push Distance in front.
+        Vector3 centerOffset = targetRot * Vector3.Scale(bodyBounds.center, transform.localScale);
+        centerOffset.y = 0f;
+        Vector3 targetPos = player.transform.position + fwd * pushDistance - centerOffset;
+        targetPos.y = FloorHeightAt(targetPos + centerOffset, player.transform) + pivotAboveBase;
 
         int mask = BlockingMask(player);
         if (IsClearAt(targetPos, targetRot, mask, player.transform))
