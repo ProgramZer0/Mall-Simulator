@@ -12,8 +12,9 @@ using UnityEngine.Rendering.Universal;
 /// Click      select an item in your store; click and drag an item to slide it across the floor
 ///            click a storefront wall section, then pick a module (wall, window, doorway, ...)
 /// X          cycle Move (arrows) -> Rotate (rings) -> no handles
+/// R          straight to Rotate (rings) for the selected item; again to hide them
 /// Drag       an arrow to slide along that axis (stops on contact), a ring to rotate
-///            (hold Ctrl to snap to 15 degrees)
+///            (snaps to 15 degrees; hold Ctrl to turn freely)
 /// G          toggle gravity for the selected item (everything hangs in place otherwise)
 /// Esc        cancel the current drag / deselect
 ///
@@ -100,7 +101,10 @@ public class StoreEditController : NetworkBehaviour
     [Tooltip("Clicks this many times the grab radius from a handle are ignored instead of deselecting.")]
     [SerializeField] private float nearMissFactor = 2.5f;
     [SerializeField] private float rotateDegreesPerPixel = 0.5f;
+    [Tooltip("Rotating with the rings snaps to this many degrees (hold Ctrl to turn freely). 0 = never snap.")]
     [SerializeField] private float snapAngle = 15f;
+    [Tooltip("Selected item: jump straight to the rotate rings.")]
+    [SerializeField] private KeyCode rotateKey = KeyCode.R;
     [Tooltip("Line thickness per meter of camera distance.")]
     [SerializeField] private float lineWidth = 0.006f;
 
@@ -529,6 +533,8 @@ public class StoreEditController : NetworkBehaviour
         {
             if (Input.GetKeyDown(toolKey))
                 tool = tool == Tool.None ? Tool.Move : tool == Tool.Move ? Tool.Rotate : Tool.None; // None -> Move -> Rotate -> None
+            if (Input.GetKeyDown(rotateKey))
+                tool = tool == Tool.Rotate ? Tool.None : Tool.Rotate;
 
             if (Input.GetKeyDown(gravityKey))
                 selected.SetGravity(!selected.Gravity);
@@ -900,7 +906,7 @@ public class StoreEditController : NetworkBehaviour
         else
         {
             rotateRaw += Vector2.Dot(mouse - lastMouse, dragTangent) * rotateDegreesPerPixel;
-            bool snap = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            bool snap = !(Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)); // Ctrl = free
             float angle = snap && snapAngle > 0f ? Mathf.Round(rotateRaw / snapAngle) * snapAngle : rotateRaw;
 
             Quaternion q = Quaternion.AngleAxis(angle, axis);
@@ -1242,7 +1248,7 @@ public class StoreEditController : NetworkBehaviour
         GUI.Label(new Rect(20, 16, 400, 20), finishing ? "STORE EDIT MODE - saving..." : "STORE EDIT MODE   (0 = save & exit)");
         GUI.Label(new Rect(20, 36, 400, 20), $"Selected: {itemName}");
         GUI.Label(new Rect(20, 56, 400, 20), $"Tool: {toolName}     Gravity: {gravity}");
-        GUI.Label(new Rect(20, 76, 400, 20), "X: move > rotate > hide   G: gravity   Ctrl: snap   Esc: deselect");
+        GUI.Label(new Rect(20, 76, 400, 20), $"X: move > rotate > hide   {rotateKey}: rotate   G: gravity   Ctrl: no snap   Esc: deselect");
         GUI.Label(new Rect(20, 96, 400, 20), "Drag item: slide   RMB drag: camera   RMB click: deselect");
         GUI.Label(new Rect(20, 116, 400, 20), $"Click a storefront wall section to change it   {wallToolKey}: build walls");
 
