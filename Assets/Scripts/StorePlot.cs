@@ -767,7 +767,10 @@ public class StorePlot : NetworkBehaviour
             // Edit mode already let the player choose whether it falls, so it comes back exactly as left.
             if (spawned.TryGetComponent<ItemPickupNet>(out var item))
             {
-                item.ServerPrepareFrozen();
+                // Hung on a wall in edit mode? Then it stays up even if what's below it is picked up.
+                bool onWall = item.MountingType != ItemPickupNet.Mounting.Floor &&
+                              PlacementCheck.HasWallBehind(def, pos, rot, Physics.DefaultRaycastLayers);
+                item.ServerPrepareFrozen(onWall);
                 if (entry.units > 0) item.ServerSetUnits(entry.units);
             }
             if (entry.stock != null && spawned.TryGetComponent<StockContainer>(out var container))

@@ -674,6 +674,9 @@ public class StoreEditController : NetworkBehaviour
             return;
         }
 
+        // Wall items follow the mouse onto walls (and FloorOrWall items onto floors too).
+        if (DragOnSurfaces(ray)) return;
+
         if (!freePlane.Raycast(ray, out float enter)) return;
 
         Vector3 pos = selected.transform.position;
@@ -691,6 +694,53 @@ public class StoreEditController : NetworkBehaviour
 
         if ((reached - pos).sqrMagnitude > 1e-10f)
             selected.SetPose(reached, selected.transform.rotation);
+    }
+
+    private static readonly RaycastHit[] SurfaceHits = new RaycastHit[16];
+
+    /// <summary>
+    /// For items that can hang on walls: put the item where the mouse points. On a wall it hangs
+    /// there (back flat on the wall, upright); on a floor or shelf top it stands there if it's a
+    /// FloorOrWall item. Spots that overlap something or leave the store are skipped. Returns false
+    /// for ordinary floor items, which slide as before.
+    /// </summary>
+    private bool DragOnSurfaces(Ray ray)
+    {
+        var def = selected.Def;
+        var mounting = PlacementCheck.GetMounting(def);
+        if (mounting == ItemPickupNet.Mounting.Floor) return false;
+
+        int mask = interact != null ? interact.PlacementMask.value : Physics.DefaultRaycastLayers;
+        int n = Physics.RaycastNonAlloc(ray, SurfaceHits, 500f, mask, QueryTriggerInteraction.Ignore);
+
+        // Nearest hit that isn't the item itself.
+        int best = -1;
+        for (int i = 0; i < n; i++)
+        {
+            if (SurfaceHits[i].collider.transform.IsChildOf(selected.transform)) continue;
+            if (best < 0 || SurfaceHits[i].distance < SurfaceHits[best].distance) best = i;
+        }
+        if (best < 0) return true;
+        var hit = SurfaceHits[best];
+
+        Vector3 pos;
+        Quaternion rot;
+        if (PlacementCheck.IsWallNormal(hit.normal))
+        {
+            PlacementCheck.WallPose(def, hit.point, hit.normal, 0f, out pos, out rot);
+        }
+        else if (mounting == ItemPickupNet.Mounting.FloorOrWall && hit.normal.y > 0.7f)
+        {
+            Vector3 fwd = selected.transform.forward;
+            fwd.y = 0f;
+            rot = fwd.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(fwd.normalized, Vector3.up) : Quaternion.identity;
+            pos = hit.point + Vector3.up * PlacementCheck.PivotHeightAboveBase(def);
+        }
+        else return true; // wall-only item over a floor: stay where it is
+
+        if (editPlot.ContainsItem(def, pos, rot) && PlacementCheck.IsClear(def, pos, rot, EditMask(), selected.transform))
+            selected.SetPose(pos, rot);
+        return true;
     }
 
     /// <summary>Move the selected item by delta, stopping at the first thing it touches.</summary>

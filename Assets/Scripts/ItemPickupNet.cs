@@ -16,7 +16,13 @@ public class ItemPickupNet : NetworkBehaviour
         AlwaysSimulate,
     }
 
+    /// <summary>Where an item may be placed.</summary>
+    public enum Mounting { Floor, Wall, FloorOrWall }
+
     [SerializeField] public int itemId;
+    [Tooltip("Floor: stands on floors and shelves. Wall: hangs on walls (pictures, signs). FloorOrWall: either.\n" +
+             "Wall items hang by their back, the side opposite their blue arrow, and never fall.")]
+    [SerializeField] private Mounting mounting = Mounting.Floor;
     [Tooltip("Can't be picked up in normal play, only moved in store edit mode (e.g. the shop monitor).")]
     [SerializeField] private bool editModeOnly;
 
@@ -55,6 +61,10 @@ public class ItemPickupNet : NetworkBehaviour
     [SerializeField] private float stillSpeed = 0.05f;
 
     public bool EditModeOnly => editModeOnly;
+    public Mounting MountingType => mounting;
+
+    // Wall-only items never fall (nothing to land on).
+    private bool Falls => physicsMode == PhysicsMode.FallThenFreeze && mounting != Mounting.Wall;
     public bool IsStockCrate => isStockCrate;
     /// <summary>The main shelf model (the first in the list); sets the shelf layout.</summary>
     public GameObject ShelfPrefab => FirstOf(shelfPrefabs);
@@ -128,6 +138,7 @@ public class ItemPickupNet : NetworkBehaviour
     private struct FreezeState : INetworkSerializeByMemcpy
     {
         public bool frozen;
+        public bool onWall;
         public Vector3 position;
         public Quaternion rotation;
     }
@@ -158,9 +169,9 @@ public class ItemPickupNet : NetworkBehaviour
     /// Server: spawn this item already frozen where it stands (e.g. coming back from edit mode, where
     /// the player already chose whether it falls). Call after Instantiate, before Spawn.
     /// </summary>
-    public void ServerPrepareFrozen()
+    public void ServerPrepareFrozen(bool onWall = false)
     {
-        freeze.Value = new FreezeState { frozen = true, position = transform.position, rotation = transform.rotation };
+        freeze.Value = new FreezeState { frozen = true, onWall = onWall, position = transform.position, rotation = transform.rotation };
     }
 
     public override void OnNetworkSpawn()
@@ -168,7 +179,7 @@ public class ItemPickupNet : NetworkBehaviour
         All.Add(this);
         freeze.OnValueChanged += OnFreezeChanged;
 
-        if (physicsMode != PhysicsMode.FallThenFreeze || rb == null) return;
+        if (!Falls || rb == null) return;
         if (freeze.Value.frozen) ApplyFrozen(freeze.Value);
         else StartFalling();
     }
@@ -184,7 +195,7 @@ public class ItemPickupNet : NetworkBehaviour
 
     private void OnFreezeChanged(FreezeState previous, FreezeState current)
     {
-        if (physicsMode != PhysicsMode.FallThenFreeze || rb == null) return;
+        if (!Falls || rb == null) return;
         if (current.frozen) ApplyFrozen(current);
         else if (!falling) StartFalling();
     }
@@ -266,7 +277,8 @@ public class ItemPickupNet : NetworkBehaviour
     /// <summary>Server: unfreeze this item so it falls and settles again.</summary>
     public void ServerWake()
     {
-        if (!IsServer || physicsMode != PhysicsMode.FallThenFreeze || rb == null || !freeze.Value.frozen) return;
+        // Things hung on a wall stay put when what's below them is picked up.
+        if (!IsServer || !Falls || rb == null || !freeze.Value.frozen || freeze.Value.onWall) return;
         freeze.Value = default;
         StartFalling();
     }

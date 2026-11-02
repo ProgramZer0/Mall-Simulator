@@ -172,7 +172,7 @@ public class PlayerInventoryNet : NetworkBehaviour
     }
 
     [ServerRpc]
-    public void RequestPlaceServerRpc(Vector3 position, Quaternion rotation, ServerRpcParams rpcParams = default)
+    public void RequestPlaceServerRpc(Vector3 position, Quaternion rotation, bool onWall, ServerRpcParams rpcParams = default)
     {
         if (HeldItemId.Value == 0) return;
         int id = HeldItemId.Value;
@@ -191,9 +191,15 @@ public class PlayerInventoryNet : NetworkBehaviour
 
         // Server re-runs the same fit test the client used, so a client can't place into
         // walls/other items, and two players can't drop things into the same spot at once.
-        if (interact == null || !interact.FitsAt(id, position, rotation)) return;
+        // Only wall items go on walls, and wall-only items only on walls.
+        var mounting = PlacementCheck.GetMounting(def);
+        if (onWall ? mounting == ItemPickupNet.Mounting.Floor : mounting == ItemPickupNet.Mounting.Wall) return;
+
+        if (interact == null || !interact.FitsAt(id, position, rotation, onWall)) return;
 
         var spawned = Instantiate(def.worldNetworkPrefab, position, rotation);
+        if (onWall && spawned.TryGetComponent<ItemPickupNet>(out var hung))
+            hung.ServerPrepareFrozen(onWall: true); // hangs there; never falls
         if (HeldUnits.Value > 0 && spawned.TryGetComponent<ItemPickupNet>(out var crate))
             crate.ServerSetUnits(HeldUnits.Value); // a part-used crate stays part-used
         spawned.Spawn(true);
