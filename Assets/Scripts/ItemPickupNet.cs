@@ -36,9 +36,6 @@ public class ItemPickupNet : NetworkBehaviour
     [SerializeField] private bool randomVariants;
 
     // Older single-model fields; moved into the lists above automatically.
-    [FormerlySerializedAs("stockedPrefab")]
-    [SerializeField, HideInInspector] private GameObject shelfPrefab;
-    [SerializeField, HideInInspector] private GameObject hangPrefab;
     [Tooltip("How many products a full crate holds.")]
     [Min(1)] [SerializeField] private int unitsPerCrate = 1;
 
@@ -60,9 +57,9 @@ public class ItemPickupNet : NetworkBehaviour
     public bool EditModeOnly => editModeOnly;
     public bool IsStockCrate => isStockCrate;
     /// <summary>The main shelf model (the first in the list); sets the shelf layout.</summary>
-    public GameObject ShelfPrefab => FirstOf(shelfPrefabs) ?? (shelfPrefab != null ? shelfPrefab : null);
+    public GameObject ShelfPrefab => FirstOf(shelfPrefabs);
     /// <summary>The main hanging model (the first in the list); sets the rail layout.</summary>
-    public GameObject HangPrefab => FirstOf(hangPrefabs) ?? (hangPrefab != null ? hangPrefab : null);
+    public GameObject HangPrefab => FirstOf(hangPrefabs);
 
     /// <summary>
     /// The model for one stocked product. With Random Variants on, a pick from the list that's the
@@ -109,8 +106,6 @@ public class ItemPickupNet : NetworkBehaviour
     {
         // Move models set before variants existed into the lists.
         bool changed = false;
-        if (shelfPrefab != null) { if (FirstOf(shelfPrefabs) == null) shelfPrefabs.Add(shelfPrefab); shelfPrefab = null; changed = true; }
-        if (hangPrefab != null) { if (FirstOf(hangPrefabs) == null) hangPrefabs.Add(hangPrefab); hangPrefab = null; changed = true; }
         if (changed) UnityEditor.EditorUtility.SetDirty(this);
     }
 #endif

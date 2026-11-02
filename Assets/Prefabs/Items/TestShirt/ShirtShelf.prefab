@@ -156,9 +156,10 @@ MonoBehaviour:
   itemId: 8
   editModeOnly: 0
   isStockCrate: 0
-  stockedPrefab: {fileID: 0}
+  shelfPrefabs: []
+  hangPrefabs: []
+  randomVariants: 0
   unitsPerCrate: 1
-  stockStyle: 2
   physicsMode: 1
   stillSeconds: 4
   maxFallSeconds: 20

@@ -156,8 +156,11 @@ MonoBehaviour:
   itemId: 7
   editModeOnly: 0
   isStockCrate: 1
-  shelfPrefab: {fileID: 1306133706262369954, guid: 0758e6d846664854fbfd8ffbd1e839d4, type: 3}
-  hangPrefab: {fileID: 1306133706262369954, guid: d74abc845def03c4a8b478d79273ef19, type: 3}
+  shelfPrefabs:
+  - {fileID: 1306133706262369954, guid: 0758e6d846664854fbfd8ffbd1e839d4, type: 3}
+  hangPrefabs:
+  - {fileID: 1306133706262369954, guid: d74abc845def03c4a8b478d79273ef19, type: 3}
+  randomVariants: 0
   unitsPerCrate: 20
   physicsMode: 1
   stillSeconds: 4
