@@ -56,6 +56,9 @@ public class CartNet : NetworkBehaviour
     private static readonly RaycastHit[] DownHits = new RaycastHit[16];
 
     public StorePlot HomeStore => homeStore;
+
+    /// <summary>The middle of the cart's body in the world (its pivot may be somewhere else).</summary>
+    public Vector3 BodyCenter => transform.position + transform.rotation * Vector3.Scale(bodyBounds.center, transform.localScale);
     public ulong Pusher => pusher.Value;
     public bool IsPushed => pusher.Value != NoPusher;
 
@@ -74,6 +77,11 @@ public class CartNet : NetworkBehaviour
         pivotAboveBase = transform.position.y - WorldBodyBounds(transform.rotation).min.y;
 
         if (loadArea != null) loadArea.enabled = false; // only its shape is used
+
+        float offset = Vector3.Scale(bodyBounds.center, transform.localScale).magnitude;
+        if (offset > 2f)
+            Debug.LogWarning($"[CartNet] '{name}': the cart's model is {offset:0.0} m from the cart object's position. " +
+                             "Set the mesh child's (and Load Area's) local position near 0,0,0 and move the cart object instead.", this);
     }
 
     public override void OnNetworkSpawn()
@@ -134,9 +142,19 @@ public class CartNet : NetworkBehaviour
     public void RequestPushRpc(RpcParams rpcParams = default)
     {
         ulong sender = rpcParams.Receive.SenderClientId;
-        if (IsPushed || !CanUse(sender) || GetPushedBy(sender) != null) return;
+        if (IsPushed || !CanUse(sender) || GetPushedBy(sender) != null)
+        {
+            Debug.LogWarning($"[CartNet] {sender} can't push '{name}': " +
+                             (IsPushed ? "someone is already pushing it" : !CanUse(sender) ? "it isn't their store's cart" : "they're pushing another cart"), this);
+            return;
+        }
         if (!NetworkManager.ConnectedClients.TryGetValue(sender, out var client) || client.PlayerObject == null) return;
-        if (Vector3.Distance(client.PlayerObject.transform.position, transform.position) > grabRange + 1f) return;
+        // Measured to the cart's body, not its pivot (a model's pivot can be far from the model).
+        if (Vector3.Distance(client.PlayerObject.transform.position, BodyCenter) > grabRange + 1f)
+        {
+            Debug.LogWarning($"[CartNet] {sender} is too far from '{name}' to push it.", this);
+            return;
+        }
 
         pusher.Value = sender;
         NetworkObject.ChangeOwnership(sender);
