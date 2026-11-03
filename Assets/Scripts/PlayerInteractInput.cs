@@ -134,7 +134,8 @@ public class PlayerInteractInput : NetworkBehaviour
             // A cart's body (not something riding on it), with empty hands.
             var cart = hit.collider.GetComponentInParent<CartNet>();
             if (cart != null && pushedCart == null && inventory.HeldItemId.Value == 0 && cart.CanUse(OwnerClientId) &&
-                !cart.IsPushed && hit.collider.GetComponentInParent<ItemPickupNet>() == null)
+                !cart.IsPushed && hit.collider.GetComponentInParent<ItemPickupNet>() == null &&
+                cart.InGrabRange(transform.position)) // close enough to its handle
                 lookedAtCart = cart;
 
             var sign = hit.collider.GetComponentInParent<ForSaleSign>();
