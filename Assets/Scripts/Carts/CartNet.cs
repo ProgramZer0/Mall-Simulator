@@ -51,6 +51,8 @@ public class CartNet : NetworkBehaviour
     [SerializeField] private float maxSpeed = 6f;
     [Tooltip("Fastest the cart turns, in degrees per second.")]
     [SerializeField] private float maxTurnSpeed = 240f;
+    [Tooltip("Extra pull down while pushed, in m/s² on top of gravity, so the wheels stay on the floor.")]
+    [SerializeField] private float extraGravity = 15f;
     [Tooltip("If the handle ends up this far from where your hands are (the cart is stuck), you let go, in meters.")]
     [SerializeField] private float breakDistance = 1.5f;
     [Tooltip("Furthest a player can be from the Handle (or the cart's middle, without one) to start pushing, in meters.")]
@@ -376,6 +378,11 @@ public class CartNet : NetworkBehaviour
         float yawError = Mathf.DeltaAngle(cartYaw, FlatYaw(fwd));
         float turn = Mathf.Clamp(yawError * turnStrength, -maxTurnSpeed, maxTurnSpeed) * Mathf.Deg2Rad;
         rb.angularVelocity = new Vector3(0f, turn, 0f);
+
+        // Stay flat: keep only the cart's turn (yaw), whatever a bump or the model's own axes tried to
+        // tilt, and press it onto the floor. Its own lean as built (pushRelative) is kept.
+        rb.rotation = Quaternion.Euler(0f, cartYaw, 0f) * pushRelative;
+        rb.AddForce(Vector3.down * extraGravity, ForceMode.Acceleration);
     }
 
     // Loaded items are separate (kinematic) bodies riding on the cart. Touching the cart, they'd push
