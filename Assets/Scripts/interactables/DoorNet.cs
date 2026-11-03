@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -28,6 +29,9 @@ public class DoorNet : NetworkBehaviour
     [SerializeField] private StorePlot ownerStore;
     [SerializeField] private bool startOpen;
     [SerializeField] private bool startLocked;
+    [Tooltip("Doors that open, close, lock and unlock together with this one (e.g. the other half of a double " +
+             "door). Link them both ways or just one way; opening any linked door opens the whole group.")]
+    [SerializeField] private DoorNet[] linkedDoors;
     [Tooltip("Furthest a player can be to open or lock it with F / L, in meters.")]
     [SerializeField] private float useRange = 3.5f;
 
@@ -43,6 +47,9 @@ public class DoorNet : NetworkBehaviour
         new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private readonly NetworkVariable<bool> locked =
         new(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    /// <summary>Every spawned networked door on this machine.</summary>
+    public static readonly List<DoorNet> All = new();
 
     private DoorMotion motion;
     private float nextSense;
@@ -65,9 +72,14 @@ public class DoorNet : NetworkBehaviour
         }
         state.OnValueChanged += OnStateChanged;
         motion.SetOpen(state.Value != 0, state.Value, instant: true);
+        All.Add(this);
     }
 
-    public override void OnNetworkDespawn() => state.OnValueChanged -= OnStateChanged;
+    public override void OnNetworkDespawn()
+    {
+        state.OnValueChanged -= OnStateChanged;
+        All.Remove(this);
+    }
 
     private void OnStateChanged(sbyte previous, sbyte current) => motion.SetOpen(current != 0, current);
 
@@ -95,8 +107,8 @@ public class DoorNet : NetworkBehaviour
         ulong sender = rpcParams.Receive.SenderClientId;
         if (trigger != Trigger.Manual || !InUseRange(sender, out Vector3 pos)) return;
 
-        if (IsOpen) state.Value = 0; // anyone can close it
-        else if (CanOpen(sender)) state.Value = (sbyte)(motion.SideAwayFrom(pos) > 0f ? 1 : -1);
+        if (IsOpen) ServerSetGroupOpen(false, pos); // anyone can close it
+        else if (CanOpen(sender)) ServerSetGroupOpen(true, pos);
     }
 
     [Rpc(SendTo.Server, RequireOwnership = false)]
@@ -104,20 +116,56 @@ public class DoorNet : NetworkBehaviour
     {
         ulong sender = rpcParams.Receive.SenderClientId;
         if (!CanLock(sender) || !InUseRange(sender, out _)) return;
-        locked.Value = !locked.Value;
+        ServerSetGroupLocked(!locked.Value);
     }
 
-    /// <summary>Server: open or close it (e.g. from a button or a script).</summary>
-    public void ServerSetOpen(bool open, float side = 1f)
+    /// <summary>Server: open or close it and its linked doors (e.g. from a button or a script).</summary>
+    public void ServerSetOpen(bool open) => ServerSetGroupOpen(open, null);
+
+    /// <summary>Server: lock or unlock it and its linked doors.</summary>
+    public void ServerSetLocked(bool value) => ServerSetGroupLocked(value);
+
+    /* ========================= LINKED DOORS (SERVER) ========================= */
+
+    private static readonly List<DoorNet> Group = new();
+
+    /// <summary>This door plus every door linked to it (either way, and their links in turn).</summary>
+    private List<DoorNet> CollectGroup()
+    {
+        Group.Clear();
+        Group.Add(this);
+        for (int i = 0; i < Group.Count; i++)
+        {
+            var d = Group[i];
+            if (d.linkedDoors != null)
+                foreach (var other in d.linkedDoors)
+                    if (other != null && !Group.Contains(other)) Group.Add(other);
+            // Links made only on the other door count too.
+            foreach (var other in All)
+                if (other != null && !Group.Contains(other) && other.linkedDoors != null &&
+                    System.Array.IndexOf(other.linkedDoors, d) >= 0) Group.Add(other);
+        }
+        return Group;
+    }
+
+    // Each door swings away from whoever opened it (or its default way with no opener).
+    private void ServerSetGroupOpen(bool open, Vector3? from)
     {
         if (!IsServer) return;
-        state.Value = open ? (sbyte)(side < 0f ? -1 : 1) : (sbyte)0;
+        foreach (var d in CollectGroup())
+        {
+            if (!d.IsSpawned) continue;
+            d.state.Value = !open ? (sbyte)0
+                : from.HasValue ? (sbyte)(d.motion.SideAwayFrom(from.Value) > 0f ? 1 : -1) : (sbyte)1;
+            d.clearSince = -1f;
+        }
     }
 
-    /// <summary>Server: lock or unlock it.</summary>
-    public void ServerSetLocked(bool value)
+    private void ServerSetGroupLocked(bool value)
     {
-        if (IsServer) locked.Value = value;
+        if (!IsServer) return;
+        foreach (var d in CollectGroup())
+            if (d.IsSpawned) d.locked.Value = value;
     }
 
     /* ========================= AUTOMATIC (SERVER) ========================= */
@@ -144,17 +192,31 @@ public class DoorNet : NetworkBehaviour
         if (who.HasValue)
         {
             clearSince = -1f;
-            if (!IsOpen) state.Value = (sbyte)(motion.SideAwayFrom(who.Value) > 0f ? 1 : -1);
+            if (!IsOpen) ServerSetGroupOpen(true, who.Value);
         }
         else if (IsOpen)
         {
             if (clearSince < 0f) clearSince = Time.time;
-            else if (Time.time - clearSince >= closeDelay) state.Value = 0;
+            else if (Time.time - clearSince >= closeDelay && !GroupSensesSomeone()) ServerSetGroupOpen(false, null);
         }
+    }
+
+    // An automatic door in the group that still has someone in front of it keeps them all open.
+    private bool GroupSensesSomeone()
+    {
+        foreach (var d in CollectGroup())
+            if (d != this && d.trigger == Trigger.Automatic && d.clearSince < 0f && d.IsOpen) return true;
+        return false;
     }
 
     private void OnDrawGizmosSelected()
     {
+        if (linkedDoors != null)
+        {
+            Gizmos.color = new Color(1f, 0.9f, 0.3f, 0.8f);
+            foreach (var d in linkedDoors)
+                if (d != null) Gizmos.DrawLine(transform.position, d.transform.position);
+        }
         if (trigger != Trigger.Automatic) return;
         Gizmos.color = new Color(0.3f, 0.8f, 1f, 0.3f);
         Gizmos.DrawWireSphere(transform.position, sensorRange);
