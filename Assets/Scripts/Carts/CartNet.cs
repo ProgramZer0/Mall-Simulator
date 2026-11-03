@@ -7,15 +7,21 @@ using UnityEngine;
 /// A push cart that belongs to a store. Look at it with empty hands and press F to push it; F again
 /// lets go. Anything placed inside its Load Area rides along with it.
 ///
-/// Prefab / scene setup: NetworkObject + NetworkTransform (Authority Mode: Owner, so the person
-/// pushing moves it smoothly) + a kinematic Rigidbody + its colliders + this. Add a child BoxCollider
-/// for the Load Area: a flat box over the cart's bed, a bit taller than what you want to stack.
-/// Put the cart's own colliders on a layer in the player's Placement Mask so items can be set on it.
-/// Place carts in the scene (at the docks), set Home Store, and optionally a Home Spot to recall to.
+/// Prefab / scene setup: NetworkObject + NetworkTransform (Authority Mode: Owner) + Rigidbody + its
+/// colliders + this. The colliders on a moving physics body must be convex: tick Convex on a
+/// MeshCollider, or (smoother along walls) use a few BoxColliders. Add a child BoxCollider for the
+/// Load Area: a box over the cart's bed, as tall as you'll stack. Put the cart's colliders on a layer
+/// in the player's Placement Mask so items can be set on it. A Physic Material on the colliders sets
+/// how much it bounces off walls (Bounciness) and how it scrapes along them (Friction).
 ///
-/// Only the home store's team can push it, load it or unload it. While it's being pushed, the
-/// pusher owns it (so its NetworkTransform follows them without lag); letting go hands it back to
-/// the host. Items on it are parented to it on the host, so they move with it for everyone.
+/// Pushing is physics: while you push, the cart is a real physics body on your machine, driven
+/// toward a spot in front of your hands like a stiff spring. Walls, shelves and other players stop
+/// it, it slides along them and can bounce, and you're never moved by it. Pull too far away from it
+/// (it's wedged) and you let go. Everyone else sees it through its NetworkTransform; when nobody is
+/// pushing it, it's kinematic and can't be shoved around.
+///
+/// Only the home store's team can push it, load it or unload it. Items on it are parented to it on
+/// the host, so they move with it for everyone.
 /// </summary>
 public class CartNet : NetworkBehaviour
 {
@@ -37,8 +43,16 @@ public class CartNet : NetworkBehaviour
     [SerializeField] private float handleReach = 0.45f;
     [Tooltip("Without a Handle: how far in front of the pusher the cart's middle sits, in meters.")]
     [SerializeField] private float pushDistance = 1.1f;
-    [Tooltip("Layers that stop the cart (walls, shelves, items, other carts). Empty = the pusher's Placement Blocking Mask.")]
-    [SerializeField] private LayerMask blockingMask;
+    [Tooltip("How hard the cart chases the spot in front of your hands (higher = tighter, lower = floatier).")]
+    [SerializeField] private float followStrength = 12f;
+    [Tooltip("How hard the cart turns to face the way you face.")]
+    [SerializeField] private float turnStrength = 10f;
+    [Tooltip("Fastest the cart moves, in meters per second.")]
+    [SerializeField] private float maxSpeed = 6f;
+    [Tooltip("Fastest the cart turns, in degrees per second.")]
+    [SerializeField] private float maxTurnSpeed = 240f;
+    [Tooltip("If the handle ends up this far from where your hands are (the cart is stuck), you let go, in meters.")]
+    [SerializeField] private float breakDistance = 1.5f;
     [Tooltip("Furthest a player can be from the Handle (or the cart's middle, without one) to start pushing, in meters.")]
     [SerializeField] private float grabRange = 1.5f;
 
@@ -49,16 +63,18 @@ public class CartNet : NetworkBehaviour
         new(NoPusher, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     private NetworkTransform netTransform;
+    private Rigidbody rb;
     private Bounds bodyBounds;       // the cart's own colliders, local space (before anything is loaded)
-    private float pivotAboveBase;    // pivot height above the cart's lowest point
+    private readonly List<Collider> bodyColliders = new(); // the cart's own colliders (not what's loaded)
+    private bool simulating;         // this machine is running the cart's physics (it's the pusher)
+    private bool releaseRequested;
     private Vector3 startPos;
     private Quaternion startRot;
 
     // Pushing (owner side)
     private readonly HashSet<Collider> ignoredWithPusher = new();
     private int ignoredChildCount = -1;
-    private static readonly Collider[] Hits = new Collider[32];
-    private static readonly RaycastHit[] DownHits = new RaycastHit[16];
+    private int loadIgnoreCount = -1;
 
     public StorePlot HomeStore => homeStore;
 
@@ -81,16 +97,22 @@ public class CartNet : NetworkBehaviour
     private void Awake()
     {
         netTransform = GetComponent<NetworkTransform>();
-        var rb = GetComponent<Rigidbody>();
-        if (rb != null) rb.isKinematic = true;
+        rb = GetComponent<Rigidbody>();
+        if (rb == null) Debug.LogWarning($"[CartNet] '{name}' needs a Rigidbody to be pushed.", this);
+        else rb.isKinematic = true; // until someone pushes it
 
         if (loadArea != null) loadArea.isTrigger = true; // so it isn't counted as part of the body
         bodyBounds = PlacementCheck.ComputeLocalBounds(gameObject);
         if (bodyBounds.size == Vector3.zero) bodyBounds = new Bounds(Vector3.up * 0.5f, new Vector3(0.8f, 1f, 1.2f));
 
-        // Measured in the world, so a model imported lying down (e.g. from Blender, turned -90 on x)
-        // still sits on its wheels.
-        pivotAboveBase = transform.position.y - WorldBodyBounds(transform.rotation).min.y;
+        foreach (var c in GetComponentsInChildren<Collider>(true))
+        {
+            if (c.isTrigger) continue;
+            bodyColliders.Add(c);
+            if (c is MeshCollider mc && !mc.convex)
+                Debug.LogWarning($"[CartNet] '{c.name}' is a non-convex MeshCollider; a pushed cart needs convex " +
+                                 "colliders. Tick Convex, or use BoxColliders.", c);
+        }
 
         if (loadArea != null) loadArea.enabled = false; // only its shape is used
 
@@ -218,6 +240,7 @@ public class CartNet : NetworkBehaviour
 
     private void OnPusherChanged(ulong previous, ulong current)
     {
+        releaseRequested = false;
         if (previous == NetworkManager.LocalClientId) RestorePusherCollisions();
         if (current == NetworkManager.LocalClientId)
         {
@@ -257,28 +280,6 @@ public class CartNet : NetworkBehaviour
     private Vector3 AnchorLocal => handle != null ? handleOffset : Vector3.Scale(bodyBounds.center, transform.localScale);
     private float Reach => handle != null ? handleReach : pushDistance;
 
-    // Where the pusher stands for the cart at this pose.
-    private Vector3 PusherSpot(Vector3 pos, Quaternion rot)
-    {
-        Vector3 dir = rot * Quaternion.Inverse(pushRelative) * Vector3.forward;
-        dir.y = 0f;
-        dir.Normalize();
-        return pos + rot * AnchorLocal - dir * Reach;
-    }
-
-    // The cart body's box in the world at a rotation, around its pivot at the origin.
-    private Bounds WorldBodyBounds(Quaternion rot)
-    {
-        Vector3 scale = transform.localScale;
-        Vector3 c = transform.position + rot * Vector3.Scale(bodyBounds.center, scale);
-        Vector3 e = Vector3.Scale(bodyBounds.extents, scale);
-        Vector3 x = rot * new Vector3(e.x, 0f, 0f), y = rot * new Vector3(0f, e.y, 0f), z = rot * new Vector3(0f, 0f, e.z);
-        Vector3 ext = new(Mathf.Abs(x.x) + Mathf.Abs(y.x) + Mathf.Abs(z.x),
-                          Mathf.Abs(x.y) + Mathf.Abs(y.y) + Mathf.Abs(z.y),
-                          Mathf.Abs(x.z) + Mathf.Abs(y.z) + Mathf.Abs(z.z));
-        return new Bounds(c, ext * 2f);
-    }
-
     /* ========================= LOADING (SERVER) ========================= */
 
     /// <summary>Server: put a spawned item on the cart so it rides along.</summary>
@@ -290,117 +291,107 @@ public class CartNet : NetworkBehaviour
 
     /* ========================= PUSHING (PUSHER'S MACHINE) ========================= */
 
-    private void LateUpdate()
+    private void Update()
     {
-        if (!IsSpawned || pusher.Value != NetworkManager.LocalClientId || !IsOwner) return;
+        if (!IsSpawned) return;
+
+        // Physics runs only on the pusher's machine, and only while they own it.
+        bool want = rb != null && IsOwner && pusher.Value == NetworkManager.LocalClientId;
+        if (want != simulating) SetSimulating(want);
+        if (!simulating) return;
 
         var player = NetworkManager.LocalClient?.PlayerObject;
         if (player == null) return;
 
         // Edit mode or an open menu: let go.
         var edit = player.GetComponent<StoreEditController>();
-        if ((edit != null && edit.IsEditing) || UIState.IsMenuOpen)
+        if ((edit != null && edit.IsEditing) || UIState.IsMenuOpen) Release();
+    }
+
+    private void SetSimulating(bool on)
+    {
+        simulating = on;
+        if (on)
         {
-            RequestReleaseRpc();
-            return;
+            rb.isKinematic = false;
+            rb.useGravity = true;
+            rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ; // never tips
+            rb.interpolation = RigidbodyInterpolation.Interpolate;
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            loadIgnoreCount = -1;
         }
+        else
+        {
+            if (!rb.isKinematic)
+            {
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+            }
+            rb.isKinematic = true;
+            rb.interpolation = RigidbodyInterpolation.None;
+        }
+    }
+
+    private void Release()
+    {
+        if (releaseRequested) return;
+        releaseRequested = true;
+        RequestReleaseRpc();
+    }
+
+    private void FixedUpdate()
+    {
+        if (!simulating) return;
+        var player = NetworkManager.LocalClient?.PlayerObject;
+        if (player == null) return;
 
         IgnorePusherCollisions(player);
+        IgnoreLoadCollisions();
 
         Vector3 fwd = player.transform.forward;
         fwd.y = 0f;
         if (fwd.sqrMagnitude < 1e-6f) return;
         fwd.Normalize();
 
-        // Where the cart wants to be: its handle (or middle) Reach in front of the player, facing with them.
-        Quaternion targetRot = Quaternion.Euler(0f, FlatYaw(fwd), 0f) * pushRelative;
-        Quaternion curRot = transform.rotation;
-        Vector3 anchor = player.transform.position + fwd * Reach;
-        Vector3 bodyAt = anchor - targetRot * AnchorLocal + targetRot * Vector3.Scale(bodyBounds.center, transform.localScale);
-        float y = FloorHeightAt(bodyAt, player.transform) + pivotAboveBase;
+        // How far the handle (or middle) is from the spot in front of the player's hands.
+        Vector3 anchorNow = rb.position + rb.rotation * AnchorLocal;
+        Vector3 anchorWant = player.transform.position + fwd * Reach;
+        Vector3 error = anchorWant - anchorNow;
+        error.y = 0f;
 
-        Vector3 PosFor(Quaternion r) { var p = anchor - r * AnchorLocal; p.y = y; return p; }
-
-        // Try the full move; then without turning; then sliding along whichever way is free (so it
-        // scrapes along a wall instead of stopping dead).
-        Vector3 cur = transform.position;
-        int mask = BlockingMask(player);
-        bool found = false;
-        Vector3 bestPos = cur;
-        Quaternion bestRot = curRot;
-
-        void Try(Vector3 p, Quaternion r)
+        // Wedged and the player kept walking: they lose their grip.
+        if (error.magnitude > breakDistance)
         {
-            if (found || !IsClearAt(p, r, mask, player.transform)) return;
-            found = true;
-            bestPos = p;
-            bestRot = r;
+            Release();
+            return;
         }
 
-        Vector3 full = PosFor(targetRot);
-        Try(full, targetRot);
-        Try(PosFor(curRot), curRot);
-        Vector3 d = full - cur;
-        Try(new Vector3(cur.x + d.x, y, cur.z), targetRot);
-        Try(new Vector3(cur.x, y, cur.z + d.z), targetRot);
-        Try(new Vector3(cur.x + d.x, y, cur.z), curRot);
-        Try(new Vector3(cur.x, y, cur.z + d.z), curRot);
+        // Drive it like a stiff spring: velocity toward the spot, turning toward the player's facing.
+        // Physics does the rest (walls stop it, it slides along them, it bounces per its Physic Material).
+        Vector3 v = Vector3.ClampMagnitude(error * followStrength, maxSpeed);
+        rb.linearVelocity = new Vector3(v.x, rb.linearVelocity.y, v.z);
 
-        if (found) transform.SetPositionAndRotation(bestPos, bestRot);
-
-        // Keep the pusher at the handle of wherever the cart actually ended up: they slide along with
-        // it, or are held back when it's stuck. CharacterController.Move keeps them out of walls.
-        Vector3 spot = PusherSpot(transform.position, transform.rotation);
-        Vector3 correction = spot - player.transform.position;
-        correction.y = 0f;
-        if (correction.sqrMagnitude > 1e-6f)
-        {
-            var cc = player.GetComponent<CharacterController>();
-            if (cc != null && cc.enabled) cc.Move(correction);
-        }
+        float cartYaw = FlatYaw(rb.rotation * Quaternion.Inverse(pushRelative) * Vector3.forward);
+        float yawError = Mathf.DeltaAngle(cartYaw, FlatYaw(fwd));
+        float turn = Mathf.Clamp(yawError * turnStrength, -maxTurnSpeed, maxTurnSpeed) * Mathf.Deg2Rad;
+        rb.angularVelocity = new Vector3(0f, turn, 0f);
     }
 
-    private int BlockingMask(NetworkObject player)
+    // Loaded items are separate (kinematic) bodies riding on the cart. Touching the cart, they'd push
+    // it around, so they don't collide with it.
+    private void IgnoreLoadCollisions()
     {
-        if (blockingMask.value != 0) return blockingMask.value;
-        var interact = player.GetComponent<PlayerInteractInput>();
-        return interact != null ? interact.PlacementBlockingMask.value : Physics.DefaultRaycastLayers;
-    }
+        int count = transform.hierarchyCount;
+        if (count == loadIgnoreCount) return;
+        loadIgnoreCount = count;
 
-    // Would the cart's body fit here? Its own colliders, what's on it and the pusher don't count.
-    private bool IsClearAt(Vector3 pos, Quaternion rot, int mask, Transform pushingPlayer)
-    {
-        Vector3 scale = transform.localScale;
-        Vector3 half = Vector3.Scale(bodyBounds.extents, scale) - Vector3.one * 0.02f;
-        half = Vector3.Max(half, Vector3.one * 0.01f);
-        Vector3 center = pos + rot * Vector3.Scale(bodyBounds.center, scale) + Vector3.up * 0.03f; // just off the floor
-
-        int n = Physics.OverlapBoxNonAlloc(center, half, Hits, rot, mask, QueryTriggerInteraction.Ignore);
-        for (int i = 0; i < n; i++)
+        foreach (var c in GetComponentsInChildren<Collider>())
         {
-            var t = Hits[i].transform;
-            if (t.IsChildOf(transform) || t.IsChildOf(pushingPlayer)) continue;
-            int ground = LayerMask.NameToLayer("Ground");
-            if (ground >= 0 && Hits[i].gameObject.layer == ground) continue;
-            return false;
+            if (c == null || c.isTrigger || bodyColliders.Contains(c)) continue;
+            foreach (var body in bodyColliders)
+                if (body != null) Physics.IgnoreCollision(c, body, true);
         }
-        return true;
-    }
-
-    private float FloorHeightAt(Vector3 pos, Transform pushingPlayer)
-    {
-        int n = Physics.RaycastNonAlloc(pos + Vector3.up * 1f, Vector3.down, DownHits, 3f,
-                                        Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
-        float best = float.NegativeInfinity;
-        for (int i = 0; i < n; i++)
-        {
-            var t = DownHits[i].transform;
-            if (t.IsChildOf(transform) || t.IsChildOf(pushingPlayer) || DownHits[i].normal.y < 0.7f) continue;
-            // The highest floor below the cart's bed (so it doesn't climb onto things it bumps).
-            float y = DownHits[i].point.y;
-            if (y <= pos.y + 0.35f && y > best) best = y;
-        }
-        return float.IsNegativeInfinity(best) ? transform.position.y - pivotAboveBase : best;
     }
 
     // The pusher's capsule would bump into the cart (and what's on it) every frame otherwise.
