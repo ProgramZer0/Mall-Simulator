@@ -36,6 +36,15 @@ public class PlayerController3D : NetworkBehaviour
     {
         controller = GetComponent<CharacterController>();
         storeEdit = GetComponent<StoreEditController>();
+
+        // The CharacterController moves the player. A Rigidbody here would also pull every player down
+        // with gravity on everyone else's machine, fighting the NetworkTransform (players sinking through
+        // the floor and snapping back), so it's only kept as a kinematic body for triggers.
+        if (TryGetComponent<Rigidbody>(out var body))
+        {
+            body.isKinematic = true;
+            body.useGravity = false;
+        }
         if (cameraRoot == null)
         {
             cameraRoot = transform.Find("CameraRoot");
