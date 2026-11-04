@@ -182,6 +182,55 @@ public class ItemPickupNet : NetworkBehaviour
     /// <summary>Is this item riding on a cart?</summary>
     public bool IsOnCart => transform.parent != null && transform.parent.GetComponent<CartNet>() != null;
 
+    private static readonly Collider[] TopHits = new Collider[16];
+
+    /// <summary>
+    /// On a cart: is something else on the cart resting on top of this? Then it has to come off first,
+    /// so nothing is left floating.
+    /// </summary>
+    public bool HasItemOnTopOnCart()
+    {
+        if (!IsOnCart || !TryGetLocalShape(out Bounds local)) return false;
+
+        Vector3 scale = transform.lossyScale;
+        Vector3 half = Vector3.Scale(local.extents, new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z)));
+        Vector3 up = transform.up;
+        Vector3 top = transform.TransformPoint(local.center) + up * half.y;
+
+        // A thin slab just above the top, a bit smaller than the footprint (so neighbours beside it
+        // don't count, only things sitting on it).
+        Vector3 slabCenter = top + up * 0.06f;
+        Vector3 slabHalf = new(half.x * 0.85f, 0.04f, half.z * 0.85f);
+        int n = Physics.OverlapBoxNonAlloc(slabCenter, slabHalf, TopHits, transform.rotation, ~0, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < n; i++)
+        {
+            var other = TopHits[i].GetComponentInParent<ItemPickupNet>();
+            if (other != null && other != this && other.transform.parent == transform.parent) return true;
+        }
+        return false;
+    }
+
+    // The item's colliders as a box in its own local space (unscaled).
+    private bool TryGetLocalShape(out Bounds local)
+    {
+        local = default;
+        bool any = false;
+        foreach (var c in GetComponentsInChildren<Collider>())
+        {
+            if (!c.enabled || c.isTrigger) continue;
+            Bounds w = c.bounds;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 corner = w.center + Vector3.Scale(w.extents,
+                    new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+                Vector3 p = transform.InverseTransformPoint(corner);
+                if (!any) { local = new Bounds(p, Vector3.zero); any = true; }
+                else local.Encapsulate(p);
+            }
+        }
+        return any;
+    }
+
     public override void OnNetworkSpawn()
     {
         All.Add(this);
