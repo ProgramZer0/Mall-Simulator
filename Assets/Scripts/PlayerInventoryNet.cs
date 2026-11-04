@@ -83,6 +83,9 @@ public class PlayerInventoryNet : NetworkBehaviour
                 actor.transform.position, pickup.transform.position)) return;
 
         // Deliveries are held for the team that ordered them for a while.
+        // Stacked on a cart: the things on top come off first (nothing is left floating).
+        if (pickup.HasItemOnTopOnCart()) return;
+
         // A shelf with stock on it has to be emptied first.
         if (pickupNO.TryGetComponent<StockContainer>(out var container) && container.HasStock) return;
 

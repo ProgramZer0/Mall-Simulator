@@ -129,6 +129,7 @@ public class PlayerController3D : NetworkBehaviour
         transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, facing.eulerAngles.y, 0f));
         yaw = facing.eulerAngles.y;
         pitch = 0f;
+        freeLookYaw = 0f;
         velocity = Vector3.zero;
         if (cameraRoot != null) cameraRoot.localRotation = Quaternion.identity;
 
@@ -171,19 +172,35 @@ public class PlayerController3D : NetworkBehaviour
 
     private bool wasMenuOpen;
 
+    [Header("Free Look (pushing a cart)")]
+    [Tooltip("While pushing a cart, hold this mouse button to look around without turning (0 left, 1 right, 2 middle).")]
+    [SerializeField] private int freeLookButton = 1;
+    [Tooltip("How far you can look to either side, in degrees.")]
+    [SerializeField] private float freeLookMaxAngle = 150f;
+    [Tooltip("How fast the view swings back to straight ahead when you let go, in degrees per second.")]
+    [SerializeField] private float freeLookReturnSpeed = 540f;
+    private float freeLookYaw;
+
     private void HandleLook()
     {
         float mouseX = Input.GetAxis("Mouse X") * 100f * mouseSensitivity * Time.deltaTime;
         float mouseY = Input.GetAxis("Mouse Y") * 100f * mouseSensitivity * Time.deltaTime;
 
-        yaw += mouseX;
+        // Pushing a cart and holding the button: turn only the head, so the body (and the cart) keep going straight.
+        bool freeLook = Input.GetMouseButton(freeLookButton) && CartNet.GetPushedBy(OwnerClientId) != null;
+        if (freeLook) freeLookYaw = Mathf.Clamp(freeLookYaw + mouseX, -freeLookMaxAngle, freeLookMaxAngle);
+        else
+        {
+            yaw += mouseX;
+            freeLookYaw = Mathf.MoveTowards(freeLookYaw, 0f, freeLookReturnSpeed * Time.deltaTime);
+        }
         pitch -= mouseY;
         pitch = Mathf.Clamp(pitch, minPitch, maxPitch);
 
         transform.rotation = Quaternion.Euler(0f, yaw, 0f);
         if (cameraRoot != null)
         {
-            cameraRoot.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+            cameraRoot.localRotation = Quaternion.Euler(pitch, freeLookYaw, 0f);
         }
     }
 
