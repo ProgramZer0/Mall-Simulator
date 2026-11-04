@@ -11,6 +11,26 @@ public class PlayerController3D : NetworkBehaviour
     [SerializeField] private float gravity = -20f;
     [SerializeField] private float airControl = 0.5f;
 
+    [Header("Crouch")]
+    [Tooltip("Hold to crouch.")]
+    [SerializeField] private KeyCode crouchKey = KeyCode.LeftControl;
+    [Tooltip("Height of the CharacterController while crouched (standing height is whatever it's set to).")]
+    [SerializeField] private float crouchHeight = 1.1f;
+    [SerializeField] private float crouchSpeed = 2.2f;
+    [Tooltip("How fast you go down / up, in meters per second.")]
+    [SerializeField] private float crouchTransitionSpeed = 6f;
+    [Tooltip("Optional: the body model, squashed down while crouched so other players see it.")]
+    [SerializeField] private Transform crouchVisual;
+
+    // Synced so other players see you crouch (and bump into a shorter you).
+    private readonly NetworkVariable<bool> crouching =
+        new(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    private float standHeight;
+    private Vector3 standCenter;
+    private Vector3 cameraStandPos;
+    private Vector3 visualStandScale;
+    private float crouchAmount; // 0 standing .. 1 crouched
+
     [Header("Mouse Look")]
     [SerializeField] private float mouseSensitivity = 1.2f;
     [SerializeField] private float minPitch = -80f;
@@ -36,6 +56,12 @@ public class PlayerController3D : NetworkBehaviour
     {
         controller = GetComponent<CharacterController>();
         storeEdit = GetComponent<StoreEditController>();
+        if (controller != null)
+        {
+            standHeight = controller.height;
+            standCenter = controller.center;
+        }
+        if (crouchVisual != null) visualStandScale = crouchVisual.localScale;
 
         // The CharacterController moves the player. A Rigidbody here would also pull every player down
         // with gravity on everyone else's machine, fighting the NetworkTransform (players sinking through
@@ -53,6 +79,7 @@ public class PlayerController3D : NetworkBehaviour
         if (cameraRoot != null)
         {
             playerCamera = cameraRoot.GetComponentInChildren<Camera>(true);
+            cameraStandPos = cameraRoot.localPosition;
         }
     }
 
@@ -62,6 +89,11 @@ public class PlayerController3D : NetworkBehaviour
 
         if (!IsOwner)
         {
+            // This component switches itself off for other players, so their crouch is applied from
+            // the synced flag instead.
+            crouching.OnValueChanged += OnRemoteCrouchChanged;
+            OnRemoteCrouchChanged(false, crouching.Value);
+
             if (playerCamera != null) playerCamera.enabled = false;
             var listener = playerCamera != null ? playerCamera.GetComponent<AudioListener>() : null;
             if (listener != null) listener.enabled = false;
@@ -213,6 +245,66 @@ public class PlayerController3D : NetworkBehaviour
         }
     }
 
+    /* ========================= CROUCH ========================= */
+
+    private void OnRemoteCrouchChanged(bool previous, bool current)
+    {
+        if (controller == null) return;
+        crouchAmount = current ? 1f : 0f;
+        ApplyCrouch();
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        crouching.OnValueChanged -= OnRemoteCrouchChanged;
+        base.OnNetworkDespawn();
+    }
+
+    // Everyone runs this (Update returns early for other players, so it's driven from LateUpdate):
+    // the owner decides, the rest follow the synced flag.
+    private void LateUpdate()
+    {
+        if (controller == null || !IsSpawned) return;
+
+        if (IsOwner)
+        {
+            bool wants = Input.GetKey(crouchKey) && !UIState.IsMenuOpen && !(storeEdit != null && storeEdit.IsEditing);
+            // Standing back up needs headroom.
+            if (!wants && crouching.Value && !HasHeadroom()) wants = true;
+            if (crouching.Value != wants) crouching.Value = wants;
+        }
+
+        float target = crouching.Value ? 1f : 0f;
+        if (Mathf.Approximately(crouchAmount, target)) return;
+        float range = Mathf.Max(0.01f, standHeight - crouchHeight);
+        crouchAmount = Mathf.MoveTowards(crouchAmount, target, crouchTransitionSpeed / range * Time.deltaTime);
+        ApplyCrouch();
+    }
+
+    private void ApplyCrouch()
+    {
+        float drop = (standHeight - crouchHeight) * crouchAmount;
+        // Shorter capsule with the feet where they were.
+        controller.height = standHeight - drop;
+        controller.center = standCenter - Vector3.up * (drop * 0.5f);
+        if (cameraRoot != null) cameraRoot.localPosition = cameraStandPos - Vector3.up * drop;
+        if (crouchVisual != null)
+        {
+            float k = controller.height / Mathf.Max(0.01f, standHeight);
+            crouchVisual.localScale = new Vector3(visualStandScale.x, visualStandScale.y * k, visualStandScale.z);
+        }
+    }
+
+    // Room above to stand all the way up?
+    private bool HasHeadroom()
+    {
+        float r = controller.radius * 0.95f;
+        Vector3 feet = transform.position + controller.center - Vector3.up * (controller.height * 0.5f - controller.radius);
+        Vector3 standingTop = transform.position + standCenter + Vector3.up * (standHeight * 0.5f - controller.radius);
+        return !Physics.CheckCapsule(feet + Vector3.up * 0.05f, standingTop, r, Physics.DefaultRaycastLayers & ~(1 << gameObject.layer),
+                                     QueryTriggerInteraction.Ignore);
+    }
+
     private void HandleMove(bool allowInput = true)
     {
         bool grounded = controller.isGrounded;
@@ -224,7 +316,10 @@ public class PlayerController3D : NetworkBehaviour
 
         Vector3 moveDir = transform.TransformDirection(inputDir);
 
-        float targetSpeed = allowInput && Input.GetKey(KeyCode.LeftShift) ? sprintSpeed : walkSpeed;
+        bool crouched = crouching.Value;
+        bool pushingCart = CartNet.GetPushedBy(OwnerClientId) != null;
+        float targetSpeed = crouched ? crouchSpeed
+                          : allowInput && Input.GetKey(KeyCode.LeftShift) ? sprintSpeed : walkSpeed;
 
         Vector3 horizontalVel = new Vector3(velocity.x, 0f, velocity.z);
         Vector3 targetHorizontal = moveDir * targetSpeed;
@@ -232,7 +327,8 @@ public class PlayerController3D : NetworkBehaviour
         if (grounded)
         {
             horizontalVel = targetHorizontal;
-            if (allowInput && Input.GetKeyDown(KeyCode.Space))
+            // No jumping while crouched or pushing a cart.
+            if (allowInput && !crouched && !pushingCart && Input.GetKeyDown(KeyCode.Space))
             {
                 velocity.y = Mathf.Sqrt(-2f * gravity * jumpHeight);
             }
