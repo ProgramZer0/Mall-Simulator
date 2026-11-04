@@ -386,10 +386,11 @@ MonoBehaviour:
   handle: {fileID: 4559673929791244499}
   handleReach: 0.27
   pushDistance: 1.1
-  followStrength: 12
-  turnStrength: 10
-  maxSpeed: 6
-  maxTurnSpeed: 240
+  followStrength: 50
+  turnStrength: 30
+  maxSpeed: 20
+  maxTurnSpeed: 360
+  extraGravity: 15
   breakDistance: 1.5
   grabRange: 1.6
 --- !u!1 &6550152973711632455
