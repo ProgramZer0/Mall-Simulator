@@ -162,6 +162,7 @@ public class PriceScanner : NetworkBehaviour
         int current = stock ? targetContainer.GetZone(targetZone).price : targetItem.Price;
         int cost = CostEach(targetProduct, stock);
         string title = NameOf(targetProduct);
+        if (!stock && StockContainer.IsStockCrate(targetProduct)) title += " (whole crate)"; // priced apart from one on the shelf
 
         // Remember the target now; the player can look away while typing.
         var container = targetContainer;
@@ -262,7 +263,7 @@ public class PriceScanner : NetworkBehaviour
         int product = container.GetZoneProduct(zone);
         if (!Sellable.IsSellable(product)) return;
 
-        if (all) ServerPriceAll(plot, product, cents);
+        if (all) ServerPriceAllOnShelves(plot, product, cents);
         else container.ServerSetPrice(zone, cents);
     }
 
@@ -273,7 +274,7 @@ public class PriceScanner : NetworkBehaviour
         if (!itemRef.TryGet(out NetworkObject no) || !no.TryGetComponent(out Sellable item) || !item.SellWhenLoose) return;
         if (!ServerCanPrice(item.transform.position, out StorePlot plot)) return;
 
-        if (all) ServerPriceAll(plot, item.ItemId, cents);
+        if (all) ServerPriceAllLoose(plot, item.ItemId, cents);
         else item.ServerSetPrice(cents);
     }
 
@@ -285,8 +286,11 @@ public class PriceScanner : NetworkBehaviour
         return Vector3.Distance(transform.position, target) <= range + 2f;
     }
 
-    // Every shelf zone holding (or priced for) this product, and every loose one, in the store.
-    private static void ServerPriceAll(StorePlot plot, int product, int cents)
+    // "Set for all" stays on its own side: a shelf price is per product, a loose item's price is for the
+    // whole thing (a full crate costs more than one shirt), so one never overwrites the other.
+
+    // Every shelf zone and rack holding (or priced for) this product, in the store.
+    private static void ServerPriceAllOnShelves(StorePlot plot, int product, int cents)
     {
         foreach (var c in StockContainer.All)
         {
@@ -294,8 +298,13 @@ public class PriceScanner : NetworkBehaviour
             for (int z = 0; z < c.ZoneCount; z++)
                 if (c.GetZoneProduct(z) == product && plot.Contains(c.GetZoneCenter(z))) c.ServerSetPrice(z, cents);
         }
+    }
+
+    // Every loose one of this item (e.g. every whole crate of it), in the store.
+    private static void ServerPriceAllLoose(StorePlot plot, int itemId, int cents)
+    {
         foreach (var s in Sellable.All)
-            if (s != null && s.SellWhenLoose && s.ItemId == product && plot.Contains(s.transform.position))
+            if (s != null && s.SellWhenLoose && s.ItemId == itemId && plot.Contains(s.transform.position))
                 s.ServerSetPrice(cents);
     }
 }
