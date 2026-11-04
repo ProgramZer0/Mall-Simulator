@@ -660,6 +660,10 @@ public class PlayerInteractInput : NetworkBehaviour
             if (cart != null && cart.CanUse(OwnerClientId) && hit.normal.y >= 0.7f)
             {
                 placingOnCart = true;
+                // Square to the cart: its sides line up with the cart's, and R turns it in quarter turns
+                // from there (fine < > turning is ignored on a cart).
+                float quarter = Mathf.Round(placeRotationY / 90f) * 90f;
+                yaw = Quaternion.Euler(0f, cart.Yaw + quarter, 0f);
                 var box = PlacementCheck.CartBoxOf(def);
                 if (box != null)
                 {

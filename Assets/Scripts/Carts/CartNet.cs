@@ -86,6 +86,9 @@ public class CartNet : NetworkBehaviour
 
     public StorePlot HomeStore => homeStore;
 
+    /// <summary>Which way the cart faces (degrees around up), for lining things up with it.</summary>
+    public float Yaw => FlatYaw(transform.forward);
+
     /// <summary>Where a player has to be near to grab the cart: the Handle, or the body's middle.</summary>
     public Vector3 GrabPoint => handle != null ? handle.position : BodyCenter;
 
