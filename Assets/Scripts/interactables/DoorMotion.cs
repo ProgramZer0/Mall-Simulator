@@ -23,7 +23,8 @@ public class DoorMotion : MonoBehaviour
     {
         [Tooltip("The moving part (an empty at the hinge, with the door mesh under it, works best).")]
         public Transform part;
-        [Tooltip("1 or -1: which way this leaf opens (flip it for the second leaf of a double door).")]
+        [Tooltip("1 or -1: which way this leaf opens (flip it for the second leaf of a double door). " +
+             "Swing doors with Swing Away From User work it out themselves and ignore this.")]
         public float direction = 1f;
     }
 
@@ -42,7 +43,13 @@ public class DoorMotion : MonoBehaviour
     private Quaternion[] closedRot;
     private float amount;      // 0 closed .. 1 open (what's shown)
     private float target;      // where it's heading
-    private float side = 1f;   // swing direction from the opener (1 or -1)
+    private float side = 1f;   // which side of the door the opener stood on (1 or -1, see SideAwayFrom)
+
+    // Swing geometry, in this object's local space (worked out from the models, so it doesn't matter
+    // which way the axes point or which edge the hinge is on).
+    private Vector3[] swingDir;   // per leaf: which way its middle moves for a positive turn
+    private Vector3 doorNormal;   // the first leaf's swing direction: the door's "front"
+    private Vector3 doorCenter;   // middle of all leaves
 
     public bool IsOpen => target > 0.5f;
     public Motion Type => motion;
@@ -52,12 +59,38 @@ public class DoorMotion : MonoBehaviour
         int n = leaves != null ? leaves.Length : 0;
         closedPos = new Vector3[n];
         closedRot = new Quaternion[n];
+        swingDir = new Vector3[n];
+        Vector3 centerSum = Vector3.zero;
+        int centers = 0;
         for (int i = 0; i < n; i++)
         {
-            if (leaves[i]?.part == null) continue;
-            closedPos[i] = leaves[i].part.localPosition;
-            closedRot[i] = leaves[i].part.localRotation;
+            var part = leaves[i]?.part;
+            if (part == null) continue;
+            closedPos[i] = part.localPosition;
+            closedRot[i] = part.localRotation;
+
+            // The leaf's middle (from what you see under it) moves around the hinge's up axis.
+            Vector3 mid = LeafMiddle(part);
+            Vector3 dir = Vector3.Cross(part.up, mid - part.position);
+            swingDir[i] = dir.sqrMagnitude > 1e-8f ? transform.InverseTransformDirection(dir.normalized) : Vector3.zero;
+            if (doorNormal == Vector3.zero && swingDir[i] != Vector3.zero) doorNormal = swingDir[i];
+            centerSum += transform.InverseTransformPoint(mid);
+            centers++;
         }
+        doorCenter = centers > 0 ? centerSum / centers : Vector3.zero;
+        if (doorNormal == Vector3.zero) doorNormal = Vector3.forward;
+    }
+
+    private static Vector3 LeafMiddle(Transform part)
+    {
+        bool any = false;
+        Bounds b = default;
+        foreach (var r in part.GetComponentsInChildren<Renderer>(true))
+        {
+            if (!any) { b = r.bounds; any = true; }
+            else b.Encapsulate(r.bounds);
+        }
+        return any ? b.center : part.position + part.forward * 0.5f;
     }
 
     /// <summary>
@@ -75,12 +108,14 @@ public class DoorMotion : MonoBehaviour
         }
     }
 
-    /// <summary>Which way a swing door should open to swing away from someone standing here (1 or -1).</summary>
+    /// <summary>
+    /// Which side of the door someone standing here is on (1 or -1). Pass it to SetOpen and swing
+    /// doors open away from them.
+    /// </summary>
     public float SideAwayFrom(Vector3 position)
     {
-        // The door's front is its forward (blue) axis; standing in front means swing toward the back.
-        Vector3 local = transform.InverseTransformPoint(position);
-        return local.z >= 0f ? -1f : 1f;
+        Vector3 local = transform.InverseTransformPoint(position) - doorCenter;
+        return Vector3.Dot(local, doorNormal) >= 0f ? 1f : -1f;
     }
 
     private void Update()
@@ -104,7 +139,12 @@ public class DoorMotion : MonoBehaviour
             switch (motion)
             {
                 case Motion.Swing:
-                    leaf.part.localRotation = closedRot[i] * Quaternion.Euler(0f, openAngle * t * dir * side, 0f);
+                    // Away from the opener: turn each leaf so its middle moves to the other side of the
+                    // door from them (works for either hinge edge and double doors). Otherwise Direction.
+                    float sign = dir;
+                    if (swingAwayFromUser && swingDir != null && i < swingDir.Length && swingDir[i] != Vector3.zero)
+                        sign = -side * Mathf.Sign(Vector3.Dot(swingDir[i], doorNormal));
+                    leaf.part.localRotation = closedRot[i] * Quaternion.Euler(0f, openAngle * t * sign, 0f);
                     break;
                 case Motion.Slide:
                     leaf.part.localPosition = closedPos[i] + closedRot[i] * Vector3.right * (distance * t * dir);
