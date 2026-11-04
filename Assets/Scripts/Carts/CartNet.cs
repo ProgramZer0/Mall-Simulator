@@ -53,6 +53,10 @@ public class CartNet : NetworkBehaviour
     [SerializeField] private float maxTurnSpeed = 240f;
     [Tooltip("Extra pull down while pushed, in m/s² on top of gravity, so the wheels stay on the floor.")]
     [SerializeField] private float extraGravity = 15f;
+    [Tooltip("How far you can get ahead of where the cart's handle really is before the cart holds you " +
+             "back, in meters. A little gives the loose, grabbed feel when turning; you can't walk through the " +
+             "cart when it's stopped by a wall.")]
+    [SerializeField] private float playerSlack = 0.3f;
     [Tooltip("If the handle ends up this far from where your hands are (the cart is stuck), you let go, in meters.")]
     [SerializeField] private float breakDistance = 1.5f;
     [Tooltip("Furthest a player can be from the Handle (or the cart's middle, without one) to start pushing, in meters.")]
@@ -348,6 +352,33 @@ public class CartNet : NetworkBehaviour
             rb.isKinematic = true;
             rb.interpolation = RigidbodyInterpolation.None;
         }
+    }
+
+    // After the player has moved this frame: if they've walked more than Player Slack forward past
+    // where they should stand to hold the cart (it's stopped against something), hold them back.
+    private void LateUpdate()
+    {
+        if (!simulating) return;
+        var player = NetworkManager.LocalClient?.PlayerObject;
+        if (player == null) return;
+        var cc = player.GetComponent<CharacterController>();
+        if (cc == null || !cc.enabled) return;
+
+        Vector3 fwd = player.transform.forward;
+        fwd.y = 0f;
+        if (fwd.sqrMagnitude < 1e-6f) return;
+        fwd.Normalize();
+
+        // Where the player would stand to hold the handle where it actually is.
+        Vector3 anchorNow = transform.position + transform.rotation * AnchorLocal;
+        Vector3 spot = anchorNow - fwd * Reach;
+        Vector3 offset = player.transform.position - spot;
+        offset.y = 0f;
+
+        // Only walking forward into the cart is held back. Sideways (turning) and falling behind are
+        // left to the spring, so turning keeps its loose, grabbed feel.
+        float over = Vector3.Dot(offset, fwd) - playerSlack;
+        if (over > 0.001f) cc.Move(-fwd * over);
     }
 
     private void Release()
