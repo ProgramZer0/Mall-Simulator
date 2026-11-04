@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 5976144729851372552}
   - component: {fileID: 323429474624334279}
   - component: {fileID: 7971765392998675163}
+  - component: {fileID: -3402318972424277051}
   m_Layer: 3
   m_Name: test
   m_TagString: Untagged
@@ -127,7 +128,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 3732315969
+  GlobalObjectIdHash: 1621756589
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -154,6 +155,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
   itemId: 1
+  mounting: 0
+  editModeOnly: 0
+  isStockCrate: 0
+  shelfPrefabs: []
+  hangPrefabs: []
+  randomVariants: 0
+  unitsPerCrate: 1
+  physicsMode: 1
+  stillSeconds: 4
+  maxFallSeconds: 20
+  lostFallDistance: 30
+  stillSpeed: 0.05
 --- !u!54 &7971765392998675163
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -181,3 +194,17 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
+--- !u!114 &-3402318972424277051
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1306133706262369954}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8028e5d34a457954d9b326e1b499f1b0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Sellable
+  ShowTopMostFoldoutHeaderGroup: 1
+  sellWhenLoose: 1

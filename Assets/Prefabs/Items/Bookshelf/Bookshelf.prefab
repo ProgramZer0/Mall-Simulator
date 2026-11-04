@@ -228,6 +228,7 @@ GameObject:
   - component: {fileID: 2127167339478188754}
   - component: {fileID: 7011072592594228015}
   - component: {fileID: 2819460001675562495}
+  - component: {fileID: 6733609797009061143}
   m_Layer: 3
   m_Name: Bookshelf
   m_TagString: Untagged
@@ -373,9 +374,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
   itemId: 2
+  mounting: 0
   editModeOnly: 0
   isStockCrate: 0
-  stockedPrefab: {fileID: 0}
+  shelfPrefabs: []
+  hangPrefabs: []
+  randomVariants: 0
   unitsPerCrate: 1
   physicsMode: 1
   stillSeconds: 4
@@ -428,8 +432,24 @@ MonoBehaviour:
   - {fileID: 2727325827882994181}
   - {fileID: 1962689562239219129}
   - {fileID: 4468003881256422278}
+  hangRails: []
   spacing: 0.01
+  hangSpacing: 0
   maxPerZone: 100
+--- !u!114 &6733609797009061143
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4340845169253650195}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8028e5d34a457954d9b326e1b499f1b0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Sellable
+  ShowTopMostFoldoutHeaderGroup: 1
+  sellWhenLoose: 1
 --- !u!1 &6296336975505314970
 GameObject:
   m_ObjectHideFlags: 0

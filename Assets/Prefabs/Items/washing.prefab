@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 8605269008475586885}
   - component: {fileID: 3279461360851579719}
   - component: {fileID: 7720008476236679494}
+  - component: {fileID: 6260578444024174849}
   m_Layer: 3
   m_Name: washing
   m_TagString: Untagged
@@ -133,9 +134,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
   itemId: 3
+  mounting: 0
   editModeOnly: 0
   isStockCrate: 0
-  stockedPrefab: {fileID: 0}
+  shelfPrefabs: []
+  hangPrefabs: []
+  randomVariants: 0
   unitsPerCrate: 1
   physicsMode: 1
   stillSeconds: 4
@@ -190,3 +194,17 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.59851336, y: 0.8566773, z: 0.5288832}
   m_Center: {x: -0.0000018626451, y: 0.42833853, z: 0.011400297}
+--- !u!114 &6260578444024174849
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8111841602143186489}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8028e5d34a457954d9b326e1b499f1b0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Sellable
+  ShowTopMostFoldoutHeaderGroup: 1
+  sellWhenLoose: 1
