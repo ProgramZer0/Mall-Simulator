@@ -97,6 +97,7 @@ public class PlayerInteractInput : NetworkBehaviour
             lookedAtSign = null;
             lookedAtMonitor = null;
             lookedAtCart = null;
+            lookedAtDoor = null;
             ClearStockTarget();
             if (previewActive || ghostPreview != null)
             {
@@ -118,6 +119,9 @@ public class PlayerInteractInput : NetworkBehaviour
 
     private ForSaleSign lookedAtSign;
     private CartNet lookedAtCart; // a cart you could start pushing
+    private DoorNet lookedAtDoor; // a door you can open/close with F (and maybe lock with L)
+    [Tooltip("Lock / unlock a door your store owns.")]
+    [SerializeField] private KeyCode doorLockKey = KeyCode.L;
     private CartNet pushedCart;   // the cart you're pushing
     private ShopMonitor lookedAtMonitor;
 
@@ -127,6 +131,7 @@ public class PlayerInteractInput : NetworkBehaviour
         lookedAtSign = null;
         lookedAtMonitor = null;
         lookedAtCart = null;
+        lookedAtDoor = null;
         pushedCart = CartNet.GetPushedBy(OwnerClientId);
         if (Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit,
                 interactRange, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
@@ -137,6 +142,9 @@ public class PlayerInteractInput : NetworkBehaviour
                 !cart.IsPushed && hit.collider.GetComponentInParent<ItemPickupNet>() == null &&
                 cart.InGrabRange(transform.position)) // close enough to its handle
                 lookedAtCart = cart;
+
+            var door = hit.collider.GetComponentInParent<DoorNet>();
+            if (door != null && door.IsSpawned && door.IsManual) lookedAtDoor = door;
 
             var sign = hit.collider.GetComponentInParent<ForSaleSign>();
             if (sign != null && sign.Plot != null && sign.Plot.IsForSale) lookedAtSign = sign;
@@ -258,11 +266,12 @@ public class PlayerInteractInput : NetworkBehaviour
     private void OnGUI()
     {
         if (!IsOwner || (lookedAtSign == null && lookedAtMonitor == null && stockTarget == null &&
-                         lookedAtCart == null && pushedCart == null) ||
+                         lookedAtCart == null && pushedCart == null && lookedAtDoor == null) ||
             (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return;
 
         string text = pushedCart != null ? "F: Let go of cart"
                     : lookedAtCart != null ? "F: Push cart"
+                    : lookedAtDoor != null ? DoorPrompt()
                     : lookedAtMonitor != null ? "F: Shop monitor"
                     : lookedAtSign != null ? $"F: Buy {lookedAtSign.Plot.DisplayName} ({lookedAtSign.Plot.Price})"
                     : StockPrompt();
@@ -326,6 +335,15 @@ public class PlayerInteractInput : NetworkBehaviour
         stockOrient = next; // remember it for the next empty spot too
     }
 
+    private string DoorPrompt()
+    {
+        string text = lookedAtDoor.IsOpen ? "F: Close door"
+                    : lookedAtDoor.CanOpen(OwnerClientId) ? "F: Open door" : "Locked";
+        if (lookedAtDoor.CanLock(OwnerClientId))
+            text += $"   {doorLockKey}: {(lookedAtDoor.IsLocked ? "Unlock" : "Lock")}";
+        return text;
+    }
+
     private static string ItemName(int itemId) =>
         ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(itemId, out var def) ? def.displayName : "item";
 
@@ -340,6 +358,13 @@ public class PlayerInteractInput : NetworkBehaviour
 
         HandleStockOrientation();
 
+        // L: lock or unlock a door your store owns.
+        if (Input.GetKeyDown(doorLockKey) && lookedAtDoor != null && lookedAtDoor.CanLock(OwnerClientId))
+        {
+            lookedAtDoor.RequestLockRpc();
+            return;
+        }
+
         if (!Input.GetKeyDown(KeyCode.F)) return;
 
         // Carts: F lets go of the one you're pushing (and does nothing else), or starts pushing one.
@@ -351,6 +376,13 @@ public class PlayerInteractInput : NetworkBehaviour
         if (lookedAtCart != null)
         {
             lookedAtCart.RequestPushRpc();
+            return;
+        }
+
+        // Doors: F opens or closes (works with or without something in your hands).
+        if (lookedAtDoor != null)
+        {
+            lookedAtDoor.RequestToggleRpc();
             return;
         }
 

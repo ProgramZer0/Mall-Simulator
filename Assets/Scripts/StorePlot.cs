@@ -67,8 +67,9 @@ public class StorePlot : NetworkBehaviour
     [SerializeField] private BoxCollider[] shipmentZones;
 
     [Header("Doors")]
-    [Tooltip("Door objects for this store (e.g. the door inside each doorway). Shown while the store " +
-             "is closed, for sale or being renovated; hidden while it's open. Doors of doorway modules " +
+    [Tooltip("Door objects for this store (e.g. the door inside each doorway). With a DoorMotion they " +
+             "swing/slide/lift open while the store is open and close while it's closed, for sale or being " +
+             "renovated; without one they're shown while closed and hidden while open. Doors of doorway modules " +
              "in Front Walls (WallModule > Door) are included automatically. A door can also be in " +
              "For Sale Walls; this rule wins.")]
     [SerializeField] private GameObject[] doors;
@@ -470,13 +471,27 @@ public class StorePlot : NetworkBehaviour
         }
     }
 
-    /// <summary>Doors show while the store is for sale, closed or being renovated; hidden while open.</summary>
+    /// <summary>
+    /// Doors are shut while the store is for sale, closed or being renovated, and open while it's
+    /// open. Doors with a DoorMotion animate open and shut; plain ones are shown (shut) or hidden (open).
+    /// </summary>
     private void ApplyDoors()
     {
-        bool show = !HasOwner || closedByOwner.Value || IsRenovating;
+        bool shut = !HasOwner || closedByOwner.Value || IsRenovating;
+        bool instant = !doorsApplied; // the first time (e.g. joining late), no animation
+        doorsApplied = true;
         foreach (var d in AllDoors())
-            d.SetActive(show);
+        {
+            if (d.TryGetComponent<DoorMotion>(out var motion))
+            {
+                d.SetActive(true);
+                motion.SetOpen(!shut, 1f, instant);
+            }
+            else d.SetActive(shut);
+        }
     }
+
+    private bool doorsApplied;
 
     /// <summary>Is this position within range of one of the store's doors?</summary>
     public bool IsNearDoor(Vector3 position, float range)
