@@ -373,13 +373,34 @@ public class MallManager : NetworkBehaviour
     /// Server: put the store the player is standing in into edit mode, with them as the editor.
     /// Fails if it isn't their store or someone else is already editing it.
     /// </summary>
-    public bool ServerTryStartEdit(ulong clientId, Vector3 playerPosition)
+    public bool ServerTryStartEdit(ulong clientId, Vector3 playerPosition) =>
+        ServerTryStartEdit(clientId, playerPosition, out _);
+
+    /// <summary>Server: start editing the store this player stands in. reason says why not, if it fails.</summary>
+    public bool ServerTryStartEdit(ulong clientId, Vector3 playerPosition, out string reason)
     {
+        reason = null;
         if (!IsServer) return false;
 
         var plot = GetPlotAt(playerPosition);
-        if (plot == null || !plot.IsAuthorized(clientId)) return false;
-        if (plot.IsRenovating) return plot.EditorClientId == clientId;
+        if (plot == null || !plot.IsAuthorized(clientId)) { reason = "Stand in a store you own to edit it."; return false; }
+        if (plot.IsRenovating)
+        {
+            if (plot.EditorClientId == clientId) return true;
+            reason = "Someone else is already editing this store.";
+            return false;
+        }
+
+        // Editing takes everything in the store out and walls it off, so nobody else may be inside.
+        foreach (var client in NetworkManager.ConnectedClientsList)
+        {
+            if (client.ClientId == clientId || client.PlayerObject == null) continue;
+            if (plot.Contains(client.PlayerObject.transform.position))
+            {
+                reason = "Someone is still in the store. Edit once everyone else has left.";
+                return false;
+            }
+        }
 
         ServerStopEdit(clientId); // one store at a time
         plot.ServerSetEditor(clientId);

@@ -1224,8 +1224,25 @@ public class StoreEditController : NetworkBehaviour
 
     /* ========================= HUD ========================= */
 
+    private string refusalMessage;
+    private float refusalUntil;
+
+    /// <summary>The host said no to edit mode; show why for a few seconds.</summary>
+    [Rpc(SendTo.Owner)]
+    private void EditRefusedRpc(string reason)
+    {
+        refusalMessage = reason;
+        refusalUntil = Time.time + 4f;
+    }
+
     private void OnGUI()
     {
+        if (IsOwner && !IsEditing && Time.time < refusalUntil && !string.IsNullOrEmpty(refusalMessage))
+        {
+            var r = new Rect(Screen.width * 0.5f - 260f, Screen.height * 0.35f, 520f, 30f);
+            GUI.Box(r, refusalMessage);
+        }
+
         if (!showHud || !IsOwner || !IsEditing) return;
 
         if (wallTool)
@@ -1325,7 +1342,12 @@ public class StoreEditController : NetworkBehaviour
         if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
 
         var mall = MallManager.Instance;
-        if (mall == null || !mall.ServerTryStartEdit(OwnerClientId, transform.position)) return;
+        if (mall == null) return;
+        if (!mall.ServerTryStartEdit(OwnerClientId, transform.position, out string reason))
+        {
+            if (!string.IsNullOrEmpty(reason)) EditRefusedRpc(reason);
+            return;
+        }
 
         var plot = mall.GetPlotEditedBy(OwnerClientId);
         if (plot == null) return;
