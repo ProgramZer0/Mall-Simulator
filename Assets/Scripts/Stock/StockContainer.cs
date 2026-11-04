@@ -35,11 +35,17 @@ public class StockContainer : NetworkBehaviour
         public int count;
         public int orient; // see Orientation
         public int seed;   // picks the variant (colour) of each product; new each time the zone is restocked from empty
+        public int price;      // sale price in cents (0 = not for sale); kept while the zone is empty
+        public int pricedItem; // the product the price was set for (restocking with something else clears it)
+
+        /// <summary>Is what's in this zone for sale? (Stocked, priced, and the product has a Sellable.)</summary>
+        public bool IsForSale => count > 0 && price > 0 && pricedItem == itemId && Sellable.IsSellable(itemId);
 
         public bool Equals(ZoneStock other) =>
-            itemId == other.itemId && count == other.count && orient == other.orient && seed == other.seed;
+            itemId == other.itemId && count == other.count && orient == other.orient && seed == other.seed &&
+            price == other.price && pricedItem == other.pricedItem;
         public override bool Equals(object obj) => obj is ZoneStock other && Equals(other);
-        public override int GetHashCode() => ((itemId * 397 ^ count) * 31 + orient) * 31 + seed;
+        public override int GetHashCode() => (((itemId * 397 ^ count) * 31 + orient) * 31 + seed) * 31 + price;
     }
 
     /// <summary>
@@ -304,12 +310,15 @@ public class StockContainer : NetworkBehaviour
         if (!IsServer || zone < 0 || zone >= zones.Count || !HasRoomFor(zone, itemId, orient)) return false;
         var z = zones[zone];
         bool same = z.count > 0 && z.itemId == itemId;
+        bool keepPrice = z.pricedItem == itemId; // the shelf's price tag stays for the same product
         zones[zone] = new ZoneStock
         {
             itemId = itemId,
             count = (same ? z.count : 0) + 1,
             orient = OrientFor(zone, itemId, orient),
             seed = same ? z.seed : UnityEngine.Random.Range(1, int.MaxValue),
+            price = keepPrice ? z.price : 0,
+            pricedItem = keepPrice ? z.pricedItem : 0,
         };
         return true;
     }
@@ -321,7 +330,8 @@ public class StockContainer : NetworkBehaviour
         var z = zones[zone];
         if (z.count <= 0) return false;
         if (!TryGetLayout(zone, z.itemId, orient, out var layout) || layout.capacity < z.count) return false;
-        zones[zone] = new ZoneStock { itemId = z.itemId, count = z.count, orient = orient, seed = z.seed };
+        z.orient = orient;
+        zones[zone] = z;
         return true;
     }
 
@@ -334,9 +344,49 @@ public class StockContainer : NetworkBehaviour
         if (!IsServer || zone < 0 || zone >= zones.Count) return 0;
         var z = zones[zone];
         if (z.count <= 0) return 0;
-        zones[zone] = z.count == 1 ? default
-            : new ZoneStock { itemId = z.itemId, count = z.count - 1, orient = z.orient, seed = z.seed };
-        return z.itemId;
+        int taken = z.itemId;
+        zones[zone] = z.count == 1
+            ? new ZoneStock { price = z.price, pricedItem = z.pricedItem } // empty, but keeps its price tag
+            : new ZoneStock { itemId = z.itemId, count = z.count - 1, orient = z.orient, seed = z.seed,
+                              price = z.price, pricedItem = z.pricedItem };
+        return taken;
+    }
+
+    /// <summary>
+    /// Server: set the price tag of one zone, in cents (0 = not for sale). It's for the product in it
+    /// now (or the one it was priced for, if it's empty). Returns false if there's nothing to price.
+    /// </summary>
+    public bool ServerSetPrice(int zone, int cents)
+    {
+        if (!IsServer || zone < 0 || zone >= zones.Count) return false;
+        var z = zones[zone];
+        int product = z.count > 0 ? z.itemId : z.pricedItem;
+        if (product == 0) return false;
+        z.pricedItem = product;
+        z.price = Mathf.Max(0, cents);
+        zones[zone] = z;
+        return true;
+    }
+
+    /// <summary>The product a zone holds, or was priced for while it's empty (0 = neither).</summary>
+    public int GetZoneProduct(int zone)
+    {
+        var z = GetZone(zone);
+        return z.count > 0 ? z.itemId : z.pricedItem;
+    }
+
+    /// <summary>The zone nearest a point that holds a product or a price tag, or -1.</summary>
+    public int FindNearestPriceableZone(Vector3 near)
+    {
+        int best = -1;
+        float bestDist = float.MaxValue;
+        for (int i = 0; i < ZoneCount; i++)
+        {
+            if (GetBox(i) == null || GetZoneProduct(i) == 0) continue;
+            float d = DistanceToZone(i, near);
+            if (d < bestDist) { bestDist = d; best = i; }
+        }
+        return best;
     }
 
     /// <summary>Server: a copy of every zone (for edit mode).</summary>

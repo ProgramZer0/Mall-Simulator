@@ -6,6 +6,9 @@ public class PlayerInventoryNet : NetworkBehaviour
 {
     [SerializeField] private Transform handAnchor;
 
+    /// <summary>Where held things show in the hand (the price scanner uses it too).</summary>
+    public Transform HandAnchor => handAnchor;
+
     public NetworkVariable<int> HeldItemId = new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     /// <summary>Products left in the held stock crate (0 when not holding one).</summary>
