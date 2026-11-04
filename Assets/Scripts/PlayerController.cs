@@ -317,7 +317,7 @@ public class PlayerController3D : NetworkBehaviour
         Vector3 moveDir = transform.TransformDirection(inputDir);
 
         bool crouched = crouching.Value;
-        bool pushingCart = CartNet.GetPushedBy(OwnerClientId) != null;
+        var pushedCart = CartNet.GetPushedBy(OwnerClientId);
         float targetSpeed = crouched ? crouchSpeed
                           : allowInput && Input.GetKey(KeyCode.LeftShift) ? sprintSpeed : walkSpeed;
 
@@ -327,9 +327,10 @@ public class PlayerController3D : NetworkBehaviour
         if (grounded)
         {
             horizontalVel = targetHorizontal;
-            // No jumping while crouched or pushing a cart.
-            if (allowInput && !crouched && !pushingCart && Input.GetKeyDown(KeyCode.Space))
+            // No jumping while crouched. Jumping while pushing a cart lets go of it first.
+            if (allowInput && !crouched && Input.GetKeyDown(KeyCode.Space))
             {
+                if (pushedCart != null) pushedCart.RequestReleaseRpc();
                 velocity.y = Mathf.Sqrt(-2f * gravity * jumpHeight);
             }
             else if (velocity.y < 0f)
