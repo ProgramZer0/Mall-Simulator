@@ -69,6 +69,8 @@ public class CartNet : NetworkBehaviour
     private Bounds bodyBounds;       // the cart's own colliders, local space (before anything is loaded)
     private readonly List<Collider> bodyColliders = new(); // the cart's own colliders (not what's loaded)
     private bool simulating;         // this machine is running the cart's physics (it's the pusher)
+    private float wheelBottom;       // the model's lowest point (the wheels) relative to the pivot, in meters
+    private static readonly RaycastHit[] FloorHits = new RaycastHit[16];
     private bool releaseRequested;
     private Vector3 startPos;
     private Quaternion startRot;
@@ -106,6 +108,18 @@ public class CartNet : NetworkBehaviour
         if (loadArea != null) loadArea.isTrigger = true; // so it isn't counted as part of the body
         bodyBounds = PlacementCheck.ComputeLocalBounds(gameObject);
         if (bodyBounds.size == Vector3.zero) bodyBounds = new Bounds(Vector3.up * 0.5f, new Vector3(0.8f, 1f, 1.2f));
+
+        // Where the wheels are: the bottom of what you see, not of the colliders (which may only cover
+        // the cart's deck). Pushing keeps this on the floor.
+        bool anyRenderer = false;
+        float minY = 0f;
+        foreach (var r in GetComponentsInChildren<Renderer>(true))
+        {
+            if (r is ParticleSystemRenderer) continue;
+            if (!anyRenderer || r.bounds.min.y < minY) minY = r.bounds.min.y;
+            anyRenderer = true;
+        }
+        wheelBottom = anyRenderer ? minY - transform.position.y : bodyBounds.min.y * transform.localScale.y;
 
         foreach (var c in GetComponentsInChildren<Collider>(true))
         {
@@ -319,6 +333,7 @@ public class CartNet : NetworkBehaviour
             rb.useGravity = true;
             rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ; // never tips
             rb.interpolation = RigidbodyInterpolation.Interpolate;
+            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative; // no tunneling through thin floors
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
             loadIgnoreCount = -1;
@@ -382,7 +397,39 @@ public class CartNet : NetworkBehaviour
         // Stay flat: keep only the cart's turn (yaw), whatever a bump or the model's own axes tried to
         // tilt, and press it onto the floor. Its own lean as built (pushRelative) is kept.
         rb.rotation = Quaternion.Euler(0f, cartYaw, 0f) * pushRelative;
-        rb.AddForce(Vector3.down * extraGravity, ForceMode.Acceleration);
+        KeepWheelsOnFloor(player.transform);
+    }
+
+    // The colliders may only cover the deck, which would let the wheels sink until the deck hits the
+    // floor (or fall through a thin floor). So the floor under the cart is found with a ray and the
+    // wheels are held on it: no gravity while they're on the floor, normal gravity plus Extra Gravity
+    // when there's a drop.
+    private void KeepWheelsOnFloor(Transform pushingPlayer)
+    {
+        Vector3 center = rb.position + rb.rotation * Vector3.Scale(bodyBounds.center, transform.localScale);
+        float bottom = rb.position.y + wheelBottom;
+
+        int n = Physics.RaycastNonAlloc(new Vector3(center.x, Mathf.Max(bottom + 0.6f, center.y), center.z), Vector3.down, FloorHits, 5f,
+                                        Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        float floor = float.NegativeInfinity;
+        for (int i = 0; i < n; i++)
+        {
+            var t = FloorHits[i].transform;
+            if (t.IsChildOf(transform) || t.IsChildOf(pushingPlayer) || FloorHits[i].normal.y < 0.7f) continue;
+            if (FloorHits[i].point.y > floor) floor = FloorHits[i].point.y;
+        }
+
+        bool grounded = !float.IsNegativeInfinity(floor) && bottom <= floor + 0.03f;
+        rb.useGravity = !grounded;
+        if (grounded)
+        {
+            Vector3 p = rb.position;
+            p.y = floor - wheelBottom;
+            rb.position = p;
+            Vector3 v = rb.linearVelocity;
+            if (v.y < 0f) rb.linearVelocity = new Vector3(v.x, 0f, v.z);
+        }
+        else rb.AddForce(Vector3.down * extraGravity, ForceMode.Acceleration);
     }
 
     // Loaded items are separate (kinematic) bodies riding on the cart. Touching the cart, they'd push
