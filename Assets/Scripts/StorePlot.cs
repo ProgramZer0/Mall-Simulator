@@ -779,6 +779,7 @@ public class StorePlot : NetworkBehaviour
         public Quaternion rotation;
         public StockContainer.ZoneStock[] stock; // what was in its StockContainer, if it has one
         public int units;   // products left, if it's a stock crate
+        public int price;   // its price tag (cents), if it's a loose Sellable
     }
 
     private readonly List<EditEntry> editSession = new();
@@ -829,7 +830,8 @@ public class StorePlot : NetworkBehaviour
                 position = item.transform.position,
                 rotation = item.transform.rotation,
                 stock = item.TryGetComponent<StockContainer>(out var container) ? container.ServerCopyStock() : null,
-                units = item.IsStockCrate ? item.Units : 0
+                units = item.IsStockCrate ? item.Units : 0,
+                price = item.TryGetComponent<Sellable>(out var sellable) ? sellable.Price : 0
             });
             item.NetworkObject.Despawn(true);
         }
@@ -892,6 +894,7 @@ public class StorePlot : NetworkBehaviour
                               PlacementCheck.HasWallBehind(def, pos, rot, PlacementCheck.DefaultWallMask);
                 item.ServerPrepareFrozen(onWall);
                 if (entry.units > 0) item.ServerSetUnits(entry.units);
+                if (entry.price > 0 && spawned.TryGetComponent<Sellable>(out var sellable)) sellable.ServerSetPrice(entry.price);
             }
             if (entry.stock != null && spawned.TryGetComponent<StockContainer>(out var container))
                 container.ServerPrepareStock(entry.stock);
