@@ -497,6 +497,84 @@ public class StorePlot : NetworkBehaviour
         return false;
     }
 
+    public bool TryGetBuiltWallById(int id, out BuiltWall wall)
+    {
+        foreach (var w in builtWalls)
+            if (w.id == id) { wall = w; return true; }
+        wall = default;
+        return false;
+    }
+
+    /// <summary>A stretch of one built wall, in meters from its start (a).</summary>
+    public struct WallSpan
+    {
+        public BuiltWall wall;
+        public float from, to;
+
+        public Vector3 Dir => Flat(wall.b - wall.a);
+        public Vector3 From => wall.a + Dir * from;
+        public Vector3 To => wall.a + Dir * to;
+        public float Length => to - from;
+        /// <summary>The whole wall.</summary>
+        public static WallSpan Whole(BuiltWall w) => new() { wall = w, from = 0f, to = w.Length };
+    }
+
+    /// <summary>
+    /// The parts of built walls that lie along the line from a to b (same direction, on the same line),
+    /// i.e. what erasing along that line takes away. A leftover shorter than the shortest wall allowed
+    /// goes too.
+    /// </summary>
+    public void GetEraseSpans(Vector3 a, Vector3 b, List<WallSpan> into)
+    {
+        into.Clear();
+        var settings = BuiltWallSettings.Instance;
+        if (settings == null) return;
+        Vector3 e = Flat(b - a);
+        if (e == Vector3.zero) return;
+        static float Cross2(Vector3 x, Vector3 y) => x.x * y.z - x.z * y.x;
+
+        foreach (var w in builtWalls)
+        {
+            Vector3 d = Flat(w.b - w.a);
+            if (d == Vector3.zero || Mathf.Abs(Cross2(d, e)) > 0.01f) continue;          // not parallel
+            if (Mathf.Abs(Cross2(d, Flat(a - w.a, false))) > settings.Thickness * 0.5f + 0.01f) continue; // not on its line
+
+            float length = w.Length;
+            float t1 = Vector3.Dot(Flat(a - w.a, false), d), t2 = Vector3.Dot(Flat(b - w.a, false), d);
+            float from = Mathf.Max(0f, Mathf.Min(t1, t2)), to = Mathf.Min(length, Mathf.Max(t1, t2));
+            if (to - from < 0.01f) continue;
+            if (from < settings.MinLength) from = 0f;
+            if (length - to < settings.MinLength) to = length;
+            into.Add(new WallSpan { wall = w, from = from, to = to });
+        }
+    }
+
+    /// <summary>
+    /// Server: take away the parts of built walls along a to b (see GetEraseSpans); what's left of each
+    /// wall stays as shorter walls. Returns the meters taken away and the refund owed.
+    /// </summary>
+    public float ServerEraseWalls(Vector3 a, Vector3 b, out int refund)
+    {
+        refund = 0;
+        var settings = BuiltWallSettings.Instance;
+        if (!IsServer || settings == null) return 0f;
+
+        var spans = new List<WallSpan>();
+        GetEraseSpans(a, b, spans);
+        float meters = 0f;
+        foreach (var span in spans)
+        {
+            if (!ServerRemoveWall(span.wall.id, out var w)) continue;
+            bool half = w.height < FullWallHeight - 0.01f;
+            Vector3 d = Flat(w.b - w.a);
+            if (span.from > 0f) ServerAddWall(w.a, w.a + d * span.from, w.height);
+            if (span.to < w.Length) ServerAddWall(w.a + d * span.to, w.b, w.height);
+            meters += span.Length;
+            refund += settings.GetRefund(span.Length, half);
+        }
+        return meters;
+    }
+
     private void OnBuiltWallsChanged(NetworkListEvent<BuiltWall> change) => RebuildBuiltWalls();
 
     // Every machine builds the wall objects itself from the list. They go under an unscaled holder
@@ -504,15 +582,29 @@ public class StorePlot : NetworkBehaviour
     private void RebuildBuiltWalls()
     {
         if (builtWallRoot != null)
-            for (int i = builtWallRoot.childCount - 1; i >= 0; i--) Destroy(builtWallRoot.GetChild(i).gameObject);
+            for (int i = builtWallRoot.childCount - 1; i >= 0; i--)
+            {
+                // Switched off first: Destroy waits for the end of the frame, and until then the old wall
+                // would still count as holding the windows and doors that were in it.
+                var old = builtWallRoot.GetChild(i).gameObject;
+                old.SetActive(false);
+                Destroy(old);
+            }
 
         var settings = BuiltWallSettings.Instance;
         if (builtWalls.Count == 0 || settings == null || settings.WallPrefab == null) return;
         if (builtWallRoot == null) builtWallRoot = new GameObject($"[Built Walls] {displayName}").transform;
 
+        float half = settings.Thickness * 0.5f;
         foreach (var w in builtWalls)
         {
-            settings.GetWallPose(w.a, w.b, w.height, out Vector3 pos, out Quaternion rot, out Vector3 scale);
+            // Where exactly one other wall of the same height meets an end, both are cut at an angle so
+            // the corner is clean on both sides. Elsewhere the end reaches half a thickness past its
+            // point, which closes T-joins and straight corners.
+            bool mitreA = TryGetMitre(w, true, out float slopeA);
+            bool mitreB = TryGetMitre(w, false, out float slopeB);
+            settings.GetWallPose(w.a, w.b, w.height, mitreA ? 0f : half, mitreB ? 0f : half,
+                                 out Vector3 pos, out Quaternion rot, out Vector3 scale);
             var go = Instantiate(settings.WallPrefab, pos, rot, builtWallRoot);
             go.transform.localScale = scale;
             go.name = $"Built Wall {w.id}";
@@ -522,7 +614,55 @@ public class StorePlot : NetworkBehaviour
             // Windows and doors can go in built walls too.
             if (!go.TryGetComponent<CuttableWall>(out var cuttable)) cuttable = go.AddComponent<CuttableWall>();
             cuttable.Plot = this;
+            cuttable.SetEndSlopes(mitreA ? slopeA : 0f, mitreB ? slopeB : 0f);
         }
+    }
+
+    /// <summary>
+    /// Built walls: should this end be cut at an angle to meet the wall joined to it? Only when exactly
+    /// one other wall of the same height ends at the same point. Slope: how far along the wall the end
+    /// moves per meter across it (across = the wall's right side, Cross(up, a to b)).
+    /// </summary>
+    private bool TryGetMitre(BuiltWall w, bool atStart, out float slope)
+    {
+        slope = 0f;
+        Vector3 p = atStart ? w.a : w.b;
+        Vector3 dir = Flat(w.b - w.a);
+        if (dir == Vector3.zero) return false;
+
+        Vector3 into = Vector3.zero;
+        int found = 0;
+        foreach (var o in builtWalls)
+        {
+            if (o.id == w.id) continue;
+            bool atA = Flat(o.a - p, false).sqrMagnitude < 0.0004f;
+            bool atB = !atA && Flat(o.b - p, false).sqrMagnitude < 0.0004f;
+            if (!atA && !atB) continue;
+            found++;
+            if (Mathf.Abs(o.height - w.height) > 0.01f) return false;
+            into = Flat(atA ? o.b - o.a : o.a - o.b);
+        }
+        if (found != 1 || into == Vector3.zero) return false;
+
+        Vector3 dA = atStart ? dir : -dir;          // from the corner into this wall
+        Vector3 across = new(dir.z, 0f, -dir.x);    // Cross(up, dir)
+        Vector3 sum = dA + into;
+        if (sum.sqrMagnitude < 1e-6f) return true;  // straight on: flat ends meet flush
+
+        Vector3 bis = sum.normalized;
+        static float Cross2(Vector3 x, Vector3 y) => x.x * y.z - x.z * y.x;
+        float denom = Cross2(bis, dA);
+        if (Mathf.Abs(denom) < 1e-4f) return false; // folds back on itself
+        // A point "w" across this wall meets the other wall on the line that halves the corner.
+        float along = -Cross2(bis, across) / denom;
+        slope = Mathf.Clamp(atStart ? along : -along, -3f, 3f);
+        return true;
+    }
+
+    private static Vector3 Flat(Vector3 v, bool normalize = true)
+    {
+        v.y = 0f;
+        return normalize ? (v.sqrMagnitude > 1e-8f ? v.normalized : Vector3.zero) : v;
     }
 
     /* ========================= DOORS ========================= */
@@ -1056,6 +1196,22 @@ public class StorePlot : NetworkBehaviour
                 else noPose++;
             }
             else noPose++;
+
+            // A window or door whose wall is gone (and nowhere valid to go) is sold back, not left floating.
+            if (WallOpening.IsOpening(def))
+            {
+                Physics.SyncTransforms();
+                if (!CanPlaceOpening(def, pos, rot, out string why))
+                {
+                    if (log) Debug.LogWarning($"[StorePlot] '{def.displayName}' has no wall to sit in ({why}); sold back.", this);
+                    // Refunds go to the store's team even when the editor dropped out (no Team given).
+                    ulong refundTeam = team != NoOwner ? team : ownerTeamId.Value;
+                    var econ2 = EconomyManager.Instance;
+                    if (econ2 != null && econ2.IsSpawned && refundTeam != NoOwner) econ2.ServerAddMoney(refundTeam, RemovalRefund(def));
+                    sold++;
+                    continue;
+                }
+            }
 
             SpawnEditItem(def, pos, rot, entry.units, entry.price, entry.stock);
         }

@@ -84,6 +84,7 @@ public class CuttableWall : MonoBehaviour
     private void OnDestroy()
     {
         if (mesh != null) Destroy(mesh);
+        foreach (var m in mitredMeshes) if (m != null) Destroy(m);
     }
 
     private void LateUpdate()
@@ -352,18 +353,68 @@ public class CuttableWall : MonoBehaviour
         mesh.RecalculateBounds();
         mesh.RecalculateTangents();
 
-        // One box collider per solid part.
+        // One collider per solid part: a box, or for a part at a mitred end, a convex mesh with the
+        // same slanted end as the drawn wall (so items can't poke through the corner).
         while (colliders.Count < boxes.Count) colliders.Add(cut.AddComponent<BoxCollider>());
+        int mitred = 0;
         for (int i = 0; i < colliders.Count; i++)
         {
             bool on = i < boxes.Count;
-            colliders[i].enabled = on;
+            colliders[i].enabled = false;
             if (!on) continue;
             Rect r = boxes[i];
+            bool slanted = (r.xMin < Eps && startSlope != 0f) || (r.xMax > Length - Eps && endSlope != 0f);
+            if (slanted)
+            {
+                SetMitredCollider(mitred++, r, t);
+                continue;
+            }
+            colliders[i].enabled = true;
             Vector3 a = LocalOf(r.xMin, r.yMin, -t), b = LocalOf(r.xMax, r.yMax, t);
             colliders[i].center = (a + b) * 0.5f;
             colliders[i].size = new Vector3(Mathf.Abs(b.x - a.x), Mathf.Abs(b.y - a.y), Mathf.Abs(b.z - a.z));
         }
+        for (int i = mitred; i < mitredColliders.Count; i++) mitredColliders[i].enabled = false;
+    }
+
+    private readonly List<MeshCollider> mitredColliders = new();
+    private readonly List<Mesh> mitredMeshes = new();
+
+    // A convex collider for one solid part whose end(s) are cut at an angle.
+    private void SetMitredCollider(int index, Rect r, float t)
+    {
+        while (mitredColliders.Count <= index)
+        {
+            var mc = cut.AddComponent<MeshCollider>();
+            mc.convex = true;
+            var m = new Mesh { name = $"{name} (mitred collider)" };
+            mitredColliders.Add(mc);
+            mitredMeshes.Add(m);
+        }
+
+        var corners = new Vector3[8];
+        int k = 0;
+        foreach (float w in new[] { -t, t })
+            foreach (float v in new[] { r.yMin, r.yMax })
+                foreach (float u in new[] { r.xMin, r.xMax })
+                    corners[k++] = LocalOf(EndU(u, w), v, w);
+
+        // Box faces (winding doesn't matter for a convex hull).
+        int[] tris =
+        {
+            0, 1, 3, 0, 3, 2,  4, 6, 7, 4, 7, 5,  0, 4, 5, 0, 5, 1,
+            2, 3, 7, 2, 7, 6,  0, 2, 6, 0, 6, 4,  1, 5, 7, 1, 7, 3,
+        };
+        var mesh = mitredMeshes[index];
+        mesh.Clear();
+        mesh.vertices = corners;
+        mesh.triangles = tris;
+        mesh.RecalculateBounds();
+
+        var collider = mitredColliders[index];
+        collider.sharedMesh = null; // re-cook
+        collider.sharedMesh = mesh;
+        collider.enabled = true;
     }
 
     /// <summary>The wall minus its holes, as rectangles (wall space).</summary>
@@ -433,6 +484,32 @@ public class CuttableWall : MonoBehaviour
         return true;
     }
 
+    // How much the end faces lean: u moves by w × slope at the wall's start (u = 0) and end (u = Length).
+    private float startSlope, endSlope;
+
+    /// <summary>
+    /// Cut the wall's ends at an angle so two walls meeting at a corner join cleanly (built walls set
+    /// this from their neighbours). Slope: how far along the wall the end moves per meter across it.
+    /// </summary>
+    public void SetEndSlopes(float start, float end)
+    {
+        startSlope = start;
+        endSlope = end;
+        built = false; // redraw
+        seenVersion = -1;
+    }
+
+    private float EndU(float u, float w)
+    {
+        if (Mathf.Abs(u) < Eps) return u + w * startSlope;
+        if (Mathf.Abs(u - Length) < Eps) return u + w * endSlope;
+        return u;
+    }
+
+    // Wall space (u, v, w) maps to local (length axis, y, thickness axis). With length along z and
+    // thickness along x that swap flips handedness, so the winding test flips with it.
+    private float Handedness => lengthAxis == 2 ? -1f : 1f;
+
     // A box from (u0, v0, w0) to (u1, v1, w1) in wall space, with all six faces.
     private void AddBox(Rect r, float w0, float w1, List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> tris)
     {
@@ -450,22 +527,39 @@ public class CuttableWall : MonoBehaviour
 
         void Face(Vector3 a, Vector3 b, Vector3 c, Vector3 d, int axis, int sign, int su, int sv)
         {
-            // Outward direction in the wall's local space.
-            Vector3 n = Vector3.zero;
+            // Outward direction in meters, laid out on the wall's local axes.
+            Vector3 nm = Vector3.zero;
             int local = axis == 0 ? lengthAxis : axis == 1 ? 1 : thickAxis;
-            n[local] = sign;
+            nm[local] = sign;
+
+            // The wall's own ends can be cut at an angle (mitred corners): the end face leans.
+            if (axis == 0)
+            {
+                float u = a.x;
+                if (sign < 0 && Mathf.Abs(u) < Eps && startSlope != 0f) nm[thickAxis] = startSlope;
+                else if (sign > 0 && Mathf.Abs(u - Length) < Eps && endSlope != 0f) nm[thickAxis] = -endSlope;
+            }
+            // Normals in local space (the wall may be scaled unevenly).
+            Vector3 n = Vector3.Scale(nm, scale).normalized;
 
             int start = verts.Count;
+            Vector3 m0 = default, m1 = default, m2 = default;
+            int k = 0;
             foreach (var p in new[] { a, b, c, d })
             {
-                verts.Add(LocalOf(p.x, p.y, p.z));
+                float u = EndU(p.x, p.z);
+                verts.Add(LocalOf(u, p.y, p.z));
                 normals.Add(n);
-                uvs.Add(new Vector2(p[su], p[sv]) / tm);
+                uvs.Add(new Vector2(su == 0 ? u : p[su], sv == 0 ? u : p[sv]) / tm);
+                var m = new Vector3(u, p.y, p.z);
+                if (k == 0) m0 = m; else if (k == 1) m1 = m; else if (k == 2) m2 = m;
+                k++;
             }
 
-            // Wind so the face points along n (Unity: Cross(b - a, c - a) points out of a front face).
-            Vector3 la = verts[start], lb = verts[start + 1], lc = verts[start + 2];
-            bool keepOrder = Vector3.Dot(Vector3.Cross(Vector3.Scale(lb - la, scale), Vector3.Scale(lc - la, scale)), n) > 0f;
+            // Wind so the face points along its outward direction (Unity: Cross(b - a, c - a) points out
+            // of a front face). Worked out in wall space (u, v, w): outward there is (nu, nv, nw).
+            Vector3 outward = new(nm[lengthAxis], nm.y, nm[thickAxis]);
+            bool keepOrder = Vector3.Dot(Vector3.Cross(m1 - m0, m2 - m0), outward) * Handedness > 0f;
             if (keepOrder)
             {
                 tris.Add(start); tris.Add(start + 1); tris.Add(start + 2);
