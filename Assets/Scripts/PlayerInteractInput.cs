@@ -326,6 +326,24 @@ public class PlayerInteractInput : NetworkBehaviour
     /// <summary>The spot R / T act on: the one being stocked (or taken from), else the put-back one.</summary>
     private int OrientZone() => stockTarget == null ? -1 : stockZone >= 0 ? stockZone : putBackZone;
 
+    [Tooltip("Holding F / G: wait this long after the first one before repeating, in seconds.")]
+    [SerializeField] private float stockRepeatDelay = 0.4f;
+    [Tooltip("Holding F / G: seconds between each one after that.")]
+    [SerializeField] private float stockRepeatInterval = 0.2f;
+
+    private float fNextRepeat = -1f, gNextRepeat = -1f;
+    private bool fRepeatTakes; // what holding F started doing: taking off (true) or stocking (false)
+
+    // True on the press, then again every interval while the key is held (after the first delay).
+    private bool Repeating(KeyCode key, ref float next)
+    {
+        if (Input.GetKeyDown(key)) { next = Time.time + stockRepeatDelay; return true; }
+        if (!Input.GetKey(key)) { next = -1f; return false; }
+        if (next < 0f || Time.time < next) return false;
+        next = Time.time + stockRepeatInterval;
+        return true;
+    }
+
     /// <summary>
     /// R / T: a spot that already has products is changed for everyone (if they all still fit that
     /// way); an empty spot just changes how the next product will go in.
@@ -354,15 +372,46 @@ public class PlayerInteractInput : NetworkBehaviour
         return text;
     }
 
+    private void DoStockAction()
+    {
+        if (stockTargetIsTake) inventory.RequestUnstockServerRpc(stockTarget.NetworkObject, stockZone);
+        else
+        {
+            inventory.RequestStockServerRpc(stockTarget.NetworkObject, stockZone, stockOrient);
+            // Last product: the crate empties and goes away, so hide it until the server answers.
+            if (inventory.HeldUnits.Value <= 1)
+            {
+                inventory.SetHandVisualHidden(true);
+                placePendingUntil = Time.time + placeResponseTimeout;
+                DestroyStockPreview();
+            }
+        }
+    }
+
     private static string ItemName(int itemId) =>
         ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(itemId, out var def) ? def.displayName : "item";
 
     private void HandleInteract()
     {
-        // Put a product back into the held crate.
-        if (Input.GetKeyDown(putBackKey) && stockTarget != null && putBackZone >= 0)
+        // Put a product back into the held crate (hold G to keep going).
+        bool g = Repeating(putBackKey, ref gNextRepeat);
+        if (g && stockTarget != null && putBackZone >= 0)
         {
             inventory.RequestUnstockServerRpc(stockTarget.NetworkObject, putBackZone);
+            return;
+        }
+
+        // Holding F keeps stocking (or taking off), a bit at a time, but only the same thing it
+        // started doing: running out of crate doesn't turn into taking things back off.
+        bool fPressed = Input.GetKeyDown(KeyCode.F);
+        bool fRepeat = Repeating(KeyCode.F, ref fNextRepeat) && !fPressed;
+        if (fPressed) fRepeatTakes = stockTargetIsTake;
+        if (fRepeat)
+        {
+            if (stockTarget != null && stockZone >= 0 && stockTargetIsTake == fRepeatTakes &&
+                pushedCart == null && lookedAtCart == null && lookedAtDoor == null &&
+                lookedAtMonitor == null && lookedAtSign == null)
+                DoStockAction();
             return;
         }
 
@@ -415,18 +464,7 @@ public class PlayerInteractInput : NetworkBehaviour
         // Stocking a shelf, or taking stock off it. (An empty shelf is picked up as usual below.)
         if (stockTarget != null && stockZone >= 0)
         {
-            if (stockTargetIsTake) inventory.RequestUnstockServerRpc(stockTarget.NetworkObject, stockZone);
-            else
-            {
-                inventory.RequestStockServerRpc(stockTarget.NetworkObject, stockZone, stockOrient);
-                // Last product: the crate empties and goes away, so hide it until the server answers.
-                if (inventory.HeldUnits.Value <= 1)
-                {
-                    inventory.SetHandVisualHidden(true);
-                    placePendingUntil = Time.time + placeResponseTimeout;
-                    DestroyStockPreview();
-                }
-            }
+            DoStockAction();
             return;
         }
 
