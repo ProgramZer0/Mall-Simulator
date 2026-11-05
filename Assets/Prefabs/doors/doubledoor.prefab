@@ -209,9 +209,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DoorNet
   ShowTopMostFoldoutHeaderGroup: 1
   trigger: 0
+  isPublic: 0
   ownerStore: {fileID: 0}
   startOpen: 0
-  startLocked: 0
+  startLocked: 1
   linkedDoors: []
   useRange: 3.5
   sensorMask:
