@@ -34,6 +34,10 @@ public class DoorNet : NetworkBehaviour
     [Tooltip("Starts locked. Nobody can open or unlock it until its Owner Store is owned; then only that team can. " +
              "When the store goes back on sale, the door locks again.")]
     [SerializeField] private bool startLocked;
+    [Tooltip("Optional: the Owner Store's segment this door is behind (e.g. a dock door behind an expansion wall), " +
+             "as its index in the store's Segments list. Until that segment is bought the door is shut for everyone; " +
+             "once it's bought the door starts out locked, for the team to unlock. -1 = none.")]
+    [SerializeField] private int ownerSegment = -1;
     [Tooltip("Doors that open, close, lock and unlock together with this one (e.g. the other half of a double " +
              "door). Link them both ways or just one way; opening any linked door opens the whole group.")]
     [SerializeField] private DoorNet[] linkedDoors;
@@ -62,7 +66,15 @@ public class DoorNet : NetworkBehaviour
     private static readonly Collider[] SensorHits = new Collider[16];
 
     public bool IsOpen => state.Value != 0;
-    public bool IsLocked => locked.Value && !isPublic;
+    public bool IsLocked => (locked.Value && !isPublic) || IsShutByStore;
+
+    /// <summary>
+    /// The store has it shut, whatever its lock says: the store is being edited (renovation), or the
+    /// door is behind a segment that hasn't been bought. Nobody can open, lock or unlock it then.
+    /// </summary>
+    public bool IsShutByStore =>
+        ownerStore != null && (ownerStore.IsRenovating ||
+                               (ownerSegment >= 0 && !ownerStore.IsSegmentPurchased(ownerSegment)));
     public bool IsPublic => isPublic;
     public bool IsManual => trigger == Trigger.Manual;
     private bool StoreIsOwned => ownerStore != null && ownerStore.HasOwner;
@@ -78,6 +90,8 @@ public class DoorNet : NetworkBehaviour
             if (ownerStore != null)
             {
                 wasOwned = ownerStore.HasOwner;
+                wasSegmentBought = SegmentBought;
+                if (IsShutByStore) state.Value = 0;
                 ownerStore.Changed += OnStoreChanged;
             }
         }
@@ -98,6 +112,17 @@ public class DoorNet : NetworkBehaviour
     // Server: when the store goes back on sale, its doors go back to how they started (locked ones lock and shut).
     private void OnStoreChanged(StorePlot plot)
     {
+        // Edit mode started, or the door is behind a wall again: shut it.
+        if (IsShutByStore && state.Value != 0) state.Value = 0;
+
+        // Its segment was just bought: it starts out locked, for the team to unlock.
+        bool bought = SegmentBought;
+        if (bought != wasSegmentBought)
+        {
+            wasSegmentBought = bought;
+            if (bought && !isPublic) locked.Value = true;
+        }
+
         bool owned = plot.HasOwner;
         if (owned == wasOwned) return;
         wasOwned = owned;
@@ -108,6 +133,9 @@ public class DoorNet : NetworkBehaviour
         }
     }
 
+    private bool wasSegmentBought;
+    private bool SegmentBought => ownerStore != null && ownerSegment >= 0 && ownerStore.IsSegmentPurchased(ownerSegment);
+
     private void OnStateChanged(sbyte previous, sbyte current) => motion.SetOpen(current != 0, current);
 
     /* ========================= RULES ========================= */
@@ -116,10 +144,12 @@ public class DoorNet : NetworkBehaviour
     /// Can this player open it? Unlocked: anyone. Locked: only the owning store's team (so a door locked
     /// while its store is for sale stays shut for everyone until someone buys the store).
     /// </summary>
-    public bool CanOpen(ulong clientId) => !IsLocked || (StoreIsOwned && ownerStore.IsAuthorized(clientId));
+    public bool CanOpen(ulong clientId) =>
+        !IsShutByStore && (!IsLocked || (StoreIsOwned && ownerStore.IsAuthorized(clientId)));
 
     /// <summary>Can this player lock and unlock it? The owning store's team, and never on a public door.</summary>
-    public bool CanLock(ulong clientId) => !isPublic && StoreIsOwned && ownerStore.IsAuthorized(clientId);
+    public bool CanLock(ulong clientId) =>
+        !isPublic && !IsShutByStore && StoreIsOwned && ownerStore.IsAuthorized(clientId);
 
     private bool InUseRange(ulong clientId, out Vector3 playerPos)
     {
