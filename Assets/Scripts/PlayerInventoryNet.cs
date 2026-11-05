@@ -227,6 +227,10 @@ public class PlayerInventoryNet : NetworkBehaviour
             load.ServerPrepareFrozen(carried: true);
         if (HeldUnits.Value > 0 && spawned.TryGetComponent<ItemPickupNet>(out var crate))
             crate.ServerSetUnits(HeldUnits.Value); // a part-used crate stays part-used
+        // Put down in a store that priced all of these: it gets that price.
+        if (cart == null && spawned.TryGetComponent<Sellable>(out var sellable) && sellable.SellWhenLoose &&
+            StorePlot.TryGetStorePriceAt(position, id, true, out int storePrice))
+            sellable.ServerSetPrice(storePrice);
         spawned.Spawn(true);
         if (cart != null) cart.ServerLoad(spawned);
 
