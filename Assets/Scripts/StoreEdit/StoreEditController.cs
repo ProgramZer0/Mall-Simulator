@@ -1646,8 +1646,11 @@ public class StoreEditController : NetworkBehaviour
                     reach = Mathf.Max(half.x, half.z);
                 else continue;
 
+                // Windows and doors need the edge margin of wall beside them too, so one left right at the
+                // new end of a wall (barely held) goes as well.
+                float margin = item.Opening != null && BuiltWallSettings.Instance != null ? BuiltWallSettings.Instance.OpeningEdgeMargin : 0f;
                 float t = Vector3.Dot(c - span.wall.a, d); // d is flat, so height doesn't count
-                if (t + reach > span.from && t - reach < span.to) result.Add(item);
+                if (t + reach + margin > span.from && t - reach - margin < span.to) result.Add(item);
             }
         }
         return result;

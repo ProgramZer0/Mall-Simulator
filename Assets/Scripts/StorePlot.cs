@@ -582,7 +582,14 @@ public class StorePlot : NetworkBehaviour
     private void RebuildBuiltWalls()
     {
         if (builtWallRoot != null)
-            for (int i = builtWallRoot.childCount - 1; i >= 0; i--) Destroy(builtWallRoot.GetChild(i).gameObject);
+            for (int i = builtWallRoot.childCount - 1; i >= 0; i--)
+            {
+                // Switched off first: Destroy waits for the end of the frame, and until then the old wall
+                // would still count as holding the windows and doors that were in it.
+                var old = builtWallRoot.GetChild(i).gameObject;
+                old.SetActive(false);
+                Destroy(old);
+            }
 
         var settings = BuiltWallSettings.Instance;
         if (builtWalls.Count == 0 || settings == null || settings.WallPrefab == null) return;
@@ -1189,6 +1196,22 @@ public class StorePlot : NetworkBehaviour
                 else noPose++;
             }
             else noPose++;
+
+            // A window or door whose wall is gone (and nowhere valid to go) is sold back, not left floating.
+            if (WallOpening.IsOpening(def))
+            {
+                Physics.SyncTransforms();
+                if (!CanPlaceOpening(def, pos, rot, out string why))
+                {
+                    if (log) Debug.LogWarning($"[StorePlot] '{def.displayName}' has no wall to sit in ({why}); sold back.", this);
+                    // Refunds go to the store's team even when the editor dropped out (no Team given).
+                    ulong refundTeam = team != NoOwner ? team : ownerTeamId.Value;
+                    var econ2 = EconomyManager.Instance;
+                    if (econ2 != null && econ2.IsSpawned && refundTeam != NoOwner) econ2.ServerAddMoney(refundTeam, RemovalRefund(def));
+                    sold++;
+                    continue;
+                }
+            }
 
             SpawnEditItem(def, pos, rot, entry.units, entry.price, entry.stock);
         }

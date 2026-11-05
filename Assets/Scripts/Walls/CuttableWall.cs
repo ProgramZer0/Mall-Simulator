@@ -84,6 +84,7 @@ public class CuttableWall : MonoBehaviour
     private void OnDestroy()
     {
         if (mesh != null) Destroy(mesh);
+        foreach (var m in mitredMeshes) if (m != null) Destroy(m);
     }
 
     private void LateUpdate()
@@ -352,18 +353,68 @@ public class CuttableWall : MonoBehaviour
         mesh.RecalculateBounds();
         mesh.RecalculateTangents();
 
-        // One box collider per solid part.
+        // One collider per solid part: a box, or for a part at a mitred end, a convex mesh with the
+        // same slanted end as the drawn wall (so items can't poke through the corner).
         while (colliders.Count < boxes.Count) colliders.Add(cut.AddComponent<BoxCollider>());
+        int mitred = 0;
         for (int i = 0; i < colliders.Count; i++)
         {
             bool on = i < boxes.Count;
-            colliders[i].enabled = on;
+            colliders[i].enabled = false;
             if (!on) continue;
             Rect r = boxes[i];
+            bool slanted = (r.xMin < Eps && startSlope != 0f) || (r.xMax > Length - Eps && endSlope != 0f);
+            if (slanted)
+            {
+                SetMitredCollider(mitred++, r, t);
+                continue;
+            }
+            colliders[i].enabled = true;
             Vector3 a = LocalOf(r.xMin, r.yMin, -t), b = LocalOf(r.xMax, r.yMax, t);
             colliders[i].center = (a + b) * 0.5f;
             colliders[i].size = new Vector3(Mathf.Abs(b.x - a.x), Mathf.Abs(b.y - a.y), Mathf.Abs(b.z - a.z));
         }
+        for (int i = mitred; i < mitredColliders.Count; i++) mitredColliders[i].enabled = false;
+    }
+
+    private readonly List<MeshCollider> mitredColliders = new();
+    private readonly List<Mesh> mitredMeshes = new();
+
+    // A convex collider for one solid part whose end(s) are cut at an angle.
+    private void SetMitredCollider(int index, Rect r, float t)
+    {
+        while (mitredColliders.Count <= index)
+        {
+            var mc = cut.AddComponent<MeshCollider>();
+            mc.convex = true;
+            var m = new Mesh { name = $"{name} (mitred collider)" };
+            mitredColliders.Add(mc);
+            mitredMeshes.Add(m);
+        }
+
+        var corners = new Vector3[8];
+        int k = 0;
+        foreach (float w in new[] { -t, t })
+            foreach (float v in new[] { r.yMin, r.yMax })
+                foreach (float u in new[] { r.xMin, r.xMax })
+                    corners[k++] = LocalOf(EndU(u, w), v, w);
+
+        // Box faces (winding doesn't matter for a convex hull).
+        int[] tris =
+        {
+            0, 1, 3, 0, 3, 2,  4, 6, 7, 4, 7, 5,  0, 4, 5, 0, 5, 1,
+            2, 3, 7, 2, 7, 6,  0, 2, 6, 0, 6, 4,  1, 5, 7, 1, 7, 3,
+        };
+        var mesh = mitredMeshes[index];
+        mesh.Clear();
+        mesh.vertices = corners;
+        mesh.triangles = tris;
+        mesh.RecalculateBounds();
+
+        var collider = mitredColliders[index];
+        collider.sharedMesh = null; // re-cook
+        collider.sharedMesh = mesh;
+        collider.enabled = true;
     }
 
     /// <summary>The wall minus its holes, as rectangles (wall space).</summary>
