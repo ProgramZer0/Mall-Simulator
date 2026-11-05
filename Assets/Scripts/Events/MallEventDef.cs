@@ -22,7 +22,7 @@ public class MallEventDef : ScriptableObject
         Manual,
         /// <summary>Once, Start At seconds into the session.</summary>
         AtTime,
-        /// <summary>Every Interval seconds (first at Start At). Good for seasons.</summary>
+        /// <summary>Every Interval seconds (first at Start At). (For seasons, use the manager's Seasons list instead.)</summary>
         Repeating,
         /// <summary>Each Check Every seconds, with Chance (0-1) of starting.</summary>
         Random,
@@ -164,7 +164,7 @@ public class MallEventDef : ScriptableObject
     public float checkEvery = 60f;
     [Tooltip("Random: chance of starting on each roll (0-1).")]
     [Range(0f, 1f)] public float chance = 0.05f;
-    [Tooltip("How long it lasts once started, in seconds.")]
+    [Tooltip("How long it lasts once started, in seconds. For a season, this is the season's length.")]
     public float duration = 300f;
 
     [Header("What it does")]

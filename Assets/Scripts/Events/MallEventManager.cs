@@ -11,6 +11,13 @@ using UnityEngine;
 /// the event assets, so each one works out the effects itself (see MarketModifiers).
 ///
 /// Times are seconds of play (the host's network clock).
+///
+/// Seasons: drag Mall Event assets into Seasons and they run one after another in a loop, each for its
+/// own Duration (their trigger settings are ignored). Exactly one season is always running.
+///
+/// Caps: each entry in Caps limits how far events can push one stat, as a percent of the item's normal
+/// value (e.g. Order Cost -75 to +300 = never under a quarter or over 4x the catalog price). Stats with no
+/// entry aren't capped.
 /// </summary>
 public class MallEventManager : NetworkBehaviour
 {
@@ -25,16 +32,52 @@ public class MallEventManager : NetworkBehaviour
         public override int GetHashCode() => eventIndex * 397 ^ startTime.GetHashCode();
     }
 
+    /// <summary>Limits on how far events can move one stat (percent of its normal value).</summary>
+    [Serializable]
+    public class StatCap
+    {
+        public MallEventDef.Stat stat;
+        [Tooltip("Lowest it can go, as a percent change. -75 = never below a quarter of normal. -100 = can reach 0.")]
+        public float minPercent = -75f;
+        [Tooltip("Highest it can go, as a percent change. 300 = never above 4x normal.")]
+        public float maxPercent = 300f;
+
+        public StatCap() { }
+        public StatCap(MallEventDef.Stat stat, float min, float max) { this.stat = stat; minPercent = min; maxPercent = max; }
+    }
+
     public static MallEventManager Instance { get; private set; }
 
     [Tooltip("Every event that can happen. Their order matters once a game is running (it's how they're synced).")]
     [SerializeField] private List<MallEventDef> events = new();
+
+    [Header("Seasons")]
+    [Tooltip("Run the seasons below in a loop.")]
+    [SerializeField] private bool seasonsEnabled = true;
+    [Tooltip("Season events in order (Spring, Summer...). Each lasts its own Duration, then the next starts. Don't also put them in Events (it's fine if you do).")]
+    [SerializeField] private List<MallEventDef> seasons = new();
+    [Tooltip("Which season a new game starts in (0 = first).")]
+    [SerializeField] private int startSeason;
+
+    [Header("Caps")]
+    [Tooltip("How far events can push each stat, all events together. Stats not listed have no cap (e.g. Demand, Attractiveness).")]
+    [SerializeField] private List<StatCap> caps = new()
+    {
+        new StatCap(MallEventDef.Stat.OrderCost, -75f, 300f),
+        new StatCap(MallEventDef.Stat.DeliveryCost, 0f, 100f),
+        new StatCap(MallEventDef.Stat.DeliveryTime, -75f, 300f),
+        new StatCap(MallEventDef.Stat.MarketPrice, -75f, 300f),
+    };
+
+    [Header("Testing")]
     [Tooltip("Show running events in a corner of the screen (for testing).")]
     [SerializeField] private bool showDebugHud = true;
-    [Tooltip("Dev: F7 starts the next event in the list, F8 stops them all (host only).")]
+    [Tooltip("Dev (host only): F7 starts the next event in the list, F8 stops them all (not the season), F9 skips to the next season.")]
     [SerializeField] private bool devHotkeys = true;
 
     private NetworkList<ActiveEvent> active;
+    private readonly NetworkVariable<int> currentSeason = new(-1);
+    private bool seasonRunning;    // server: the current season has been started at least once
     private double[] nextRoll;     // server: Random triggers
     private bool[] firedOnce;      // server: AtTime triggers
     private double[] nextRepeat;   // server: Repeating triggers
@@ -46,21 +89,64 @@ public class MallEventManager : NetworkBehaviour
     public static event Action Changed;
 
     public IReadOnlyList<MallEventDef> Events => events;
+    public IReadOnlyList<MallEventDef> Seasons => seasons;
+
+    /// <summary>The season running now (null if seasons are off or none are set).</summary>
+    public MallEventDef CurrentSeason
+    {
+        get
+        {
+            int i = IsSpawned ? currentSeason.Value : -1;
+            return i >= 0 && i < seasons.Count ? seasons[i] : null;
+        }
+    }
+
+    /// <summary>Seconds until the next season starts.</summary>
+    public float SecondsLeftInSeason => CurrentSeason != null ? SecondsLeft(CurrentSeason) : 0f;
+
+    /// <summary>The cap for a stat, if it has one (percent change limits).</summary>
+    public bool TryGetCap(MallEventDef.Stat stat, out float minPercent, out float maxPercent)
+    {
+        foreach (var c in caps)
+            if (c != null && c.stat == stat)
+            {
+                minPercent = Mathf.Min(c.minPercent, c.maxPercent);
+                maxPercent = Mathf.Max(c.minPercent, c.maxPercent);
+                return true;
+            }
+        minPercent = maxPercent = 0f;
+        return false;
+    }
 
     private void Awake()
     {
         active = new NetworkList<ActiveEvent>(null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+        // Seasons sync like any other event, so they need a place in Events. Done the same way on every
+        // machine, so the indexes match.
+        seasons.RemoveAll(x => x == null);
+        foreach (var s in seasons)
+            if (!events.Contains(s)) events.Add(s);
     }
+
+    private void OnValidate() => MarketModifiers.Invalidate();
 
     public override void OnNetworkSpawn()
     {
         if (Instance != null && Instance != this) Debug.LogWarning("[MallEventManager] More than one; using the newest.", this);
         Instance = this;
         active.OnListChanged += OnActiveChanged;
+        currentSeason.OnValueChanged += OnSeasonChanged;
         MarketModifiers.Invalidate();
 
         if (IsServer)
         {
+            if (seasonsEnabled && seasons.Count > 0)
+            {
+                currentSeason.Value = Mathf.Clamp(startSeason, 0, seasons.Count - 1);
+                seasonRunning = false;
+                ServerTickSeason();
+            }
             sessionStart = NetworkManager.ServerTime.Time;
             nextRoll = new double[events.Count];
             firedOnce = new bool[events.Count];
@@ -79,6 +165,7 @@ public class MallEventManager : NetworkBehaviour
     public override void OnNetworkDespawn()
     {
         active.OnListChanged -= OnActiveChanged;
+        currentSeason.OnValueChanged -= OnSeasonChanged;
         if (Instance == this) Instance = null;
         MarketModifiers.Invalidate();
         Changed?.Invoke();
@@ -90,6 +177,10 @@ public class MallEventManager : NetworkBehaviour
         StoreListing.MarkAllDirty();
         Changed?.Invoke();
     }
+
+    private void OnSeasonChanged(int before, int now) => Changed?.Invoke();
+
+    private bool IsSeason(MallEventDef def) => def != null && seasons.Contains(def);
 
     /* ========================= QUERIES ========================= */
 
@@ -151,10 +242,52 @@ public class MallEventManager : NetworkBehaviour
             if (active[i].eventIndex == index) active.RemoveAt(i);
     }
 
-    /// <summary>Host: end every event.</summary>
+    /// <summary>Host: end every event (the season keeps running).</summary>
     public void ServerStopAll()
     {
-        if (IsServer) active.Clear();
+        if (!IsServer) return;
+        for (int i = active.Count - 1; i >= 0; i--)
+        {
+            int index = active[i].eventIndex;
+            if (index >= 0 && index < events.Count && IsSeason(events[index])) continue;
+            active.RemoveAt(i);
+        }
+    }
+
+    /// <summary>Host: end the current season now and start the next.</summary>
+    public void ServerNextSeason()
+    {
+        if (!IsServer || seasons.Count == 0) return;
+        var now = CurrentSeason;
+        if (now != null) ServerStop(now); // the season tick moves on to the next one
+        ServerTickSeason();
+    }
+
+    /// <summary>Host: jump to a season (by its place in Seasons); its timer starts from full.</summary>
+    public void ServerSetSeason(int index)
+    {
+        if (!IsServer || index < 0 || index >= seasons.Count) return;
+        var now = CurrentSeason;
+        if (now != null) ServerStop(now);
+        currentSeason.Value = index;
+        seasonRunning = true;
+        ServerStart(seasons[index]);
+    }
+
+    // Keeps one season running: when the current one ends, the next one starts.
+    private void ServerTickSeason()
+    {
+        if (!seasonsEnabled || seasons.Count == 0) return;
+        var season = CurrentSeason;
+        if (season != null && IsActive(season)) return;
+
+        int next;
+        if (season == null) next = Mathf.Clamp(startSeason, 0, seasons.Count - 1); // not set yet
+        else if (seasonRunning) next = (currentSeason.Value + 1) % seasons.Count; // it ended: move on
+        else next = currentSeason.Value;                                          // first start
+        currentSeason.Value = next;
+        seasonRunning = true;
+        ServerStart(seasons[currentSeason.Value]);
     }
 
     private void Update()
@@ -166,9 +299,10 @@ public class MallEventManager : NetworkBehaviour
             if (Input.GetKeyDown(KeyCode.F7) && events.Count > 0)
             {
                 var def = events[devNext++ % events.Count];
-                if (def != null && ServerStart(def)) Debug.Log($"[MallEventManager] Dev: started '{def.displayName}'.", this);
+                if (def != null && !IsSeason(def) && ServerStart(def)) Debug.Log($"[MallEventManager] Dev: started '{def.displayName}'.", this);
             }
             if (Input.GetKeyDown(KeyCode.F8)) ServerStopAll();
+            if (Input.GetKeyDown(KeyCode.F9)) ServerNextSeason();
         }
 
         if (!IsServer || Time.time < nextCheck) return;
@@ -179,11 +313,13 @@ public class MallEventManager : NetworkBehaviour
         for (int i = active.Count - 1; i >= 0; i--)
             if (now >= active[i].endTime) active.RemoveAt(i);
 
+        ServerTickSeason();
+
         // Start what's due.
         for (int i = 0; i < events.Count; i++)
         {
             var e = events[i];
-            if (e == null) continue;
+            if (e == null || IsSeason(e)) continue; // seasons run on the cycle, not their own trigger
             switch (e.trigger)
             {
                 case MallEventDef.TriggerType.AtTime:
@@ -215,9 +351,11 @@ public class MallEventManager : NetworkBehaviour
     {
         if (!showDebugHud || !Debug.isDebugBuild || !IsSpawned || active.Count == 0) return;
         GetActive(hudList);
+        var season = CurrentSeason;
+        if (season != null) { hudList.Remove(season); hudList.Insert(0, season); } // season on top
         var r = new Rect(10f, Screen.height - 30f - hudList.Count * 20f, 340f, 10f + hudList.Count * 20f);
         GUI.Box(r, GUIContent.none);
         for (int i = 0; i < hudList.Count; i++)
-            GUI.Label(new Rect(r.x + 8, r.y + 4 + i * 20, 330, 20), $"{hudList[i].displayName}: {SecondsLeft(hudList[i]):0}s left");
+            GUI.Label(new Rect(r.x + 8, r.y + 4 + i * 20, 330, 20), $"{(hudList[i] == season ? "Season: " : "")}{hudList[i].displayName}: {SecondsLeft(hudList[i]):0}s left");
     }
 }
