@@ -11,8 +11,9 @@ using UnityEngine;
 /// door's colliders should be on a layer the player's interact raycast hits (any but Ignore Raycast).
 ///
 /// Owner Store (optional): while that store is owned, its team can lock and unlock the door (L) and
-/// always open it; other players can only open it while it's unlocked. With no Owner Store, or while
-/// the store is for sale, anyone can open it and it can't be locked.
+/// always open it; other players can only open it while it's unlocked. A door that's locked while its
+/// store has no owner (Start Locked) stays shut for everyone until the store is bought and that team
+/// unlocks it. Public doors can never be locked.
 ///
 /// Storefront doors don't need this: give them just a DoorMotion and the store opens them while
 /// it's open and closes them while it's closed, for sale or being renovated.
@@ -25,9 +26,13 @@ public class DoorNet : NetworkBehaviour
 
     [Tooltip("Manual: F opens and closes it. Automatic: opens when someone is near, closes after they leave.")]
     [SerializeField] private Trigger trigger = Trigger.Manual;
-    [Tooltip("Optional. While this store is owned, its team can lock the door and other players can't open it locked.")]
+    [Tooltip("Public doors can never be locked: anyone can always open them (hallways, restrooms, mall entrances).")]
+    [SerializeField] private bool isPublic;
+    [Tooltip("Optional. While this store is owned, its team can lock and unlock the door and always open it.")]
     [SerializeField] private StorePlot ownerStore;
     [SerializeField] private bool startOpen;
+    [Tooltip("Starts locked. Nobody can open or unlock it until its Owner Store is owned; then only that team can. " +
+             "When the store goes back on sale, the door locks again.")]
     [SerializeField] private bool startLocked;
     [Tooltip("Doors that open, close, lock and unlock together with this one (e.g. the other half of a double " +
              "door). Link them both ways or just one way; opening any linked door opens the whole group.")]
@@ -57,7 +62,8 @@ public class DoorNet : NetworkBehaviour
     private static readonly Collider[] SensorHits = new Collider[16];
 
     public bool IsOpen => state.Value != 0;
-    public bool IsLocked => locked.Value && StoreIsOwned;
+    public bool IsLocked => locked.Value && !isPublic;
+    public bool IsPublic => isPublic;
     public bool IsManual => trigger == Trigger.Manual;
     private bool StoreIsOwned => ownerStore != null && ownerStore.HasOwner;
 
@@ -67,8 +73,13 @@ public class DoorNet : NetworkBehaviour
     {
         if (IsServer)
         {
-            if (startOpen) state.Value = 1;
-            locked.Value = startLocked;
+            if (startOpen && !(startLocked && !isPublic)) state.Value = 1;
+            locked.Value = startLocked && !isPublic;
+            if (ownerStore != null)
+            {
+                wasOwned = ownerStore.HasOwner;
+                ownerStore.Changed += OnStoreChanged;
+            }
         }
         state.OnValueChanged += OnStateChanged;
         motion.SetOpen(state.Value != 0, state.Value, instant: true);
@@ -78,18 +89,37 @@ public class DoorNet : NetworkBehaviour
     public override void OnNetworkDespawn()
     {
         state.OnValueChanged -= OnStateChanged;
+        if (IsServer && ownerStore != null) ownerStore.Changed -= OnStoreChanged;
         All.Remove(this);
+    }
+
+    private bool wasOwned;
+
+    // Server: when the store goes back on sale, its doors go back to how they started (locked ones lock and shut).
+    private void OnStoreChanged(StorePlot plot)
+    {
+        bool owned = plot.HasOwner;
+        if (owned == wasOwned) return;
+        wasOwned = owned;
+        if (!owned && startLocked && !isPublic)
+        {
+            locked.Value = true;
+            state.Value = 0;
+        }
     }
 
     private void OnStateChanged(sbyte previous, sbyte current) => motion.SetOpen(current != 0, current);
 
     /* ========================= RULES ========================= */
 
-    /// <summary>Can this player open it? (Unlocked, the store's team, or nobody owns the store.)</summary>
-    public bool CanOpen(ulong clientId) => !IsLocked || ownerStore.IsAuthorized(clientId);
+    /// <summary>
+    /// Can this player open it? Unlocked: anyone. Locked: only the owning store's team (so a door locked
+    /// while its store is for sale stays shut for everyone until someone buys the store).
+    /// </summary>
+    public bool CanOpen(ulong clientId) => !IsLocked || (StoreIsOwned && ownerStore.IsAuthorized(clientId));
 
-    /// <summary>Can this player lock and unlock it? (The owning store's team.)</summary>
-    public bool CanLock(ulong clientId) => StoreIsOwned && ownerStore.IsAuthorized(clientId);
+    /// <summary>Can this player lock and unlock it? The owning store's team, and never on a public door.</summary>
+    public bool CanLock(ulong clientId) => !isPublic && StoreIsOwned && ownerStore.IsAuthorized(clientId);
 
     private bool InUseRange(ulong clientId, out Vector3 playerPos)
     {
@@ -165,7 +195,7 @@ public class DoorNet : NetworkBehaviour
     {
         if (!IsServer) return;
         foreach (var d in CollectGroup())
-            if (d.IsSpawned) d.locked.Value = value;
+            if (d.IsSpawned && !d.isPublic) d.locked.Value = value; // public doors never lock
     }
 
     /* ========================= AUTOMATIC (SERVER) ========================= */

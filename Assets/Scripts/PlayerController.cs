@@ -21,6 +21,9 @@ public class PlayerController3D : NetworkBehaviour
     [SerializeField] private float crouchTransitionSpeed = 6f;
     [Tooltip("Optional: the body model, squashed down while crouched so other players see it.")]
     [SerializeField] private Transform crouchVisual;
+    [Tooltip("Other things that should drop with you when you crouch (the hand anchor is included automatically). " +
+             "Things under CameraRoot already move with the camera.")]
+    [SerializeField] private Transform[] lowerWhenCrouching;
 
     // Synced so other players see you crouch (and bump into a shorter you).
     private readonly NetworkVariable<bool> crouching =
@@ -30,6 +33,8 @@ public class PlayerController3D : NetworkBehaviour
     private Vector3 cameraStandPos;
     private Vector3 visualStandScale;
     private float crouchAmount; // 0 standing .. 1 crouched
+    private Transform[] lowered;        // what drops with the camera (hand anchor + Lower When Crouching)
+    private Vector3[] loweredStandPos;
 
     [Header("Mouse Look")]
     [SerializeField] private float mouseSensitivity = 1.2f;
@@ -62,6 +67,19 @@ public class PlayerController3D : NetworkBehaviour
             standCenter = controller.center;
         }
         if (crouchVisual != null) visualStandScale = crouchVisual.localScale;
+
+        // The hand (held items, the scanner) and anything listed drop with the camera when crouching,
+        // unless they're already under the camera.
+        var list = new System.Collections.Generic.List<Transform>();
+        var inv = GetComponent<PlayerInventoryNet>();
+        if (inv != null && inv.HandAnchor != null) list.Add(inv.HandAnchor);
+        if (lowerWhenCrouching != null)
+            foreach (var t in lowerWhenCrouching) if (t != null && !list.Contains(t)) list.Add(t);
+        Transform camRoot = cameraRoot != null ? cameraRoot : transform.Find("CameraRoot");
+        list.RemoveAll(t => camRoot != null && t.IsChildOf(camRoot));
+        lowered = list.ToArray();
+        loweredStandPos = new Vector3[lowered.Length];
+        for (int i = 0; i < lowered.Length; i++) loweredStandPos[i] = lowered[i].localPosition;
 
         // The CharacterController moves the player. A Rigidbody here would also pull every player down
         // with gravity on everyone else's machine, fighting the NetworkTransform (players sinking through
@@ -288,6 +306,15 @@ public class PlayerController3D : NetworkBehaviour
         controller.height = standHeight - drop;
         controller.center = standCenter - Vector3.up * (drop * 0.5f);
         if (cameraRoot != null) cameraRoot.localPosition = cameraStandPos - Vector3.up * drop;
+        if (lowered != null)
+            for (int i = 0; i < lowered.Length; i++)
+                if (lowered[i] != null)
+                {
+                    // Down in the player's own space, whatever the thing's parent is.
+                    Vector3 down = lowered[i].parent != null
+                        ? lowered[i].parent.InverseTransformVector(transform.up * -drop) : Vector3.down * drop;
+                    lowered[i].localPosition = loweredStandPos[i] + down;
+                }
         if (crouchVisual != null)
         {
             float k = controller.height / Mathf.Max(0.01f, standHeight);
