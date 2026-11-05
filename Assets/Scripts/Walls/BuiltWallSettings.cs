@@ -50,7 +50,8 @@ public class BuiltWallSettings : MonoBehaviour
     [SerializeField] private float openingEdgeMargin = 0.15f;
     [Tooltip("Smallest gap between two windows or doors in the same wall, in meters.")]
     [SerializeField] private float openingGap = 0.15f;
-    [Tooltip("Share of a window's or door's price given back when it's removed in edit mode (0.5 = half).")]
+    [Tooltip("Share of a window's, door's or wall item's price given back when it's removed in edit mode, " +
+             "by itself or with the wall it's on (0.5 = half).")]
     [Range(0f, 1f)] [SerializeField] private float openingRefundFraction = 0.5f;
     [Tooltip("Windows and doors slide along walls in steps of this many meters (hold Ctrl to move freely).")]
     [SerializeField] private float openingSnap = 0.25f;

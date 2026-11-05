@@ -16,9 +16,10 @@ using UnityEngine.Rendering.Universal;
 /// Drag       an arrow to slide along that axis (stops on contact), a ring to rotate
 ///            (snaps to 15 degrees; hold Ctrl to turn freely)
 /// G          toggle gravity for the selected item (everything hangs in place otherwise)
-/// N          windows and doors: pick one to buy, then click a spot on one of your walls. Drag them
-///            along walls to move them, R turns them around, Delete takes them out (part refund).
-///            They're paid for when edit mode is saved.
+/// N          windows and doors (WallPiecesMenu, or a built-in list): pick one, then click a spot on
+///            one of your walls. Drag them along walls to move them, R turns them around, Delete
+///            takes them out (part refund). New ones are paid for when edit mode is saved.
+///            Removing a built wall (B, Shift+click) also removes everything in or on it (part refund).
 /// Esc        cancel the current drag / deselect
 ///
 /// The edit camera shows only your store: everything above it (Cutaway) and everything
@@ -172,12 +173,10 @@ public class StoreEditController : NetworkBehaviour
     private Vector3[] pendingPositions;
     private Quaternion[] pendingRotations;
     private int pendingSessionId = -1;
-    private readonly HashSet<int> pendingRemoved = new();
     private readonly List<StorePlot.NewEditItem> pendingAdded = new();
 
     // Windows and doors: bought this session, taken out this session, being placed now.
     private readonly List<EditLocalItem> addedItems = new();
-    private readonly HashSet<int> removedIndices = new();
     private EditLocalItem placing;
     private bool placingShown;
     private bool openingsPanel;
@@ -298,8 +297,6 @@ public class StoreEditController : NetworkBehaviour
         }
 
         // Windows and doors taken out or bought this session.
-        var removed = new int[removedIndices.Count];
-        removedIndices.CopyTo(removed);
         var newIds = new List<int>();
         var newPositions = new List<Vector3>();
         var newRotations = new List<Quaternion>();
@@ -310,7 +307,7 @@ public class StoreEditController : NetworkBehaviour
             newPositions.Add(item.transform.position);
             newRotations.Add(item.transform.rotation);
         }
-        SubmitEditChangesRpc(clientSessionId, removed, newIds.ToArray(), newPositions.ToArray(), newRotations.ToArray());
+        SubmitEditChangesRpc(clientSessionId, newIds.ToArray(), newPositions.ToArray(), newRotations.ToArray());
 
         FinishEditRpc(clientSessionId);
         // The local copies stay until the host's respawned items arrive (see SyncEditState).
@@ -420,10 +417,9 @@ public class StoreEditController : NetworkBehaviour
         foreach (var item in addedItems)
             if (item != null) Destroy(item.gameObject);
         addedItems.Clear();
-        removedIndices.Clear();
         if (placing != null) Destroy(placing.gameObject);
         placing = null;
-        openingsPanel = false;
+        SetOpeningsMenu(false);
         openingInfo = null;
         selected = null;
     }
@@ -577,13 +573,9 @@ public class StoreEditController : NetworkBehaviour
             return;
         }
 
-        if (Input.GetKeyDown(openingsKey))
-        {
-            openingsPanel = !openingsPanel;
-            if (openingsPanel) { SetWallTool(false); RefreshOpeningDefs(); }
-        }
+        if (Input.GetKeyDown(openingsKey)) SetOpeningsMenu(!OpeningsMenuOpen);
 
-        if (Input.GetKeyDown(wallToolKey)) { SetWallTool(!wallTool); if (wallTool) openingsPanel = false; }
+        if (Input.GetKeyDown(wallToolKey)) { SetWallTool(!wallTool); if (wallTool) SetOpeningsMenu(false); }
         if (wallTool)
         {
             UpdateWallTool(ray, mouse);
@@ -596,7 +588,7 @@ public class StoreEditController : NetworkBehaviour
             // Windows and doors stay in their wall: no arrows, rings or gravity.
             tool = Tool.None;
             if (Input.GetKeyDown(rotateKey)) FlipOpening(selected);
-            if (Input.GetKeyDown(removeKey) || Input.GetKeyDown(KeyCode.Backspace)) RemoveOpening(selected);
+            if (Input.GetKeyDown(removeKey) || Input.GetKeyDown(KeyCode.Backspace)) RemoveEditItems(new List<EditLocalItem> { selected }, null);
             else if (Input.GetKeyDown(KeyCode.Escape) || rmbClicked) Deselect();
         }
         else if (selected != null)
@@ -1108,13 +1100,31 @@ public class StoreEditController : NetworkBehaviour
 
     /* ========================= WINDOWS AND DOORS ========================= */
 
-    private void RefreshOpeningDefs()
+    private bool OpeningsMenuOpen =>
+        WallPiecesMenu.Instance != null ? WallPiecesMenu.Instance.IsOpen : openingsPanel;
+
+    /// <summary>The list of windows and doors: the Canvas menu if there is one, the built-in one otherwise.</summary>
+    private void SetOpeningsMenu(bool open)
     {
-        openingDefs.Clear();
-        var catalog = ItemCatalog.Instance;
-        if (catalog == null) return;
-        foreach (var def in catalog.Items)
-            if (def != null && WallOpening.IsOpening(def)) openingDefs.Add(def);
+        var menu = WallPiecesMenu.Instance;
+        if (open) SetWallTool(false);
+        if (menu != null)
+        {
+            if (open) menu.Open(StartPlacing, () => MoneyLeft(), PendingCost);
+            else if (menu.IsOpen) menu.Close();
+            openingsPanel = false;
+            return;
+        }
+        openingsPanel = open;
+        if (open) WallPiecesMenu.FindPieces(openingDefs);
+    }
+
+    /// <summary>Money left after paying for what's been placed this session.</summary>
+    private int MoneyLeft()
+    {
+        var econ = EconomyManager.Instance;
+        if (econ == null || !econ.IsSpawned) return int.MaxValue;
+        return econ.GetMoneyOf(OwnerClientId) - PendingCost();
     }
 
     /// <summary>What the windows and doors bought this session will cost when it's saved.</summary>
@@ -1126,8 +1136,13 @@ public class StoreEditController : NetworkBehaviour
         return cost;
     }
 
-    private bool IsMouseOverOpeningsPanel(Vector2 mouse) =>
-        openingsPanel && openingsPanelRect.Contains(new Vector2(mouse.x, Screen.height - mouse.y));
+    private bool IsMouseOverOpeningsPanel(Vector2 mouse)
+    {
+        if (WallPiecesMenu.Instance != null && WallPiecesMenu.Instance.IsOpen)
+            return UnityEngine.EventSystems.EventSystem.current != null &&
+                   UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject();
+        return openingsPanel && openingsPanelRect.Contains(new Vector2(mouse.x, Screen.height - mouse.y));
+    }
 
     private void DrawOpeningsPanel()
     {
@@ -1149,10 +1164,8 @@ public class StoreEditController : NetworkBehaviour
             return;
         }
 
-        var econ = EconomyManager.Instance;
-        int money = econ != null && econ.IsSpawned ? econ.GetMoneyOf(OwnerClientId) : int.MaxValue;
         int pending = PendingCost();
-        int left = money == int.MaxValue ? int.MaxValue : money - pending;
+        int left = MoneyLeft();
 
         var view = new Rect(0f, 0f, w - 40f, openingDefs.Count * rowHeight);
         openingsScroll = GUI.BeginScrollView(new Rect(x + 8, y + 30, w - 16, h - 60), openingsScroll, view);
@@ -1317,24 +1330,71 @@ public class StoreEditController : NetworkBehaviour
         else openingInfo = reason ?? "Something is in the way";
     }
 
-    /// <summary>Delete: take a window or door out (bought this session: just cancelled; otherwise part refund on save).</summary>
-    private void RemoveOpening(EditLocalItem item)
+    /// <summary>
+    /// Take items out of the store: ones placed this session are just cancelled; the rest are sold back
+    /// to the host straight away (part refund), then the wall (if any) comes down.
+    /// </summary>
+    private void RemoveEditItems(List<EditLocalItem> items, int? wallId)
     {
         Deselect();
-        if (addedItems.Remove(item))
+        var indices = new List<int>();
+        int refund = 0, count = 0;
+        string firstName = null;
+        foreach (var item in items)
         {
-            openingInfo = null;
+            if (item == null) continue;
+            count++;
+            firstName ??= item.Def.displayName;
+            if (!addedItems.Remove(item) && item.Index >= 0)
+            {
+                indices.Add(item.Index);
+                refund += StorePlot.RemovalRefund(item.Def);
+                if (item.Index < localItems.Count) localItems[item.Index] = null;
+            }
             Destroy(item.gameObject);
-            return;
         }
 
-        if (item.Index >= 0)
+        if (indices.Count > 0) RequestRemoveEditItemsRpc(clientSessionId, indices.ToArray());
+        if (wallId.HasValue) RequestRemoveWallRpc(wallId.Value);
+
+        openingInfo = null;
+        if (refund > 0)
+            ShowEditMessage(count == 1 && !wallId.HasValue
+                ? $"{firstName} removed: ${refund} back."
+                : $"Removed {count} item{(count == 1 ? "" : "s")}: ${refund} back.");
+    }
+
+    /// <summary>
+    /// Everything in or on a built wall: windows and doors in it, and wall items (pictures, signs) hung
+    /// on it. Things standing on the floor against it don't count.
+    /// </summary>
+    private List<EditLocalItem> ItemsOnWall(BuiltWallPiece piece)
+    {
+        var result = new List<EditLocalItem>();
+        var cuttable = piece.GetComponent<CuttableWall>();
+        float floor = editPlot.FloorHeight + 0.05f;
+
+        void Check(EditLocalItem item)
         {
-            removedIndices.Add(item.Index);
-            if (item.Index < localItems.Count) localItems[item.Index] = null;
+            if (item == null || !item.gameObject.activeInHierarchy) return;
+            if (item.Opening != null)
+            {
+                if (cuttable != null && CuttableWall.HostOf(item.Opening) == cuttable) result.Add(item);
+                return;
+            }
+            if (PlacementCheck.GetMounting(item.Def) == ItemPickupNet.Mounting.Floor) return;
+            Transform t = item.transform;
+            if (!PlacementCheck.GetTestBox(item.Def, t.position, t.rotation, out Vector3 c, out Vector3 half)) return;
+            if (c.y - half.y <= floor) return; // standing on the floor
+            // Hung items have their back (-Z) flat on the wall.
+            var hits = Physics.RaycastAll(c, -t.forward, half.z + 0.15f, WallMask(), QueryTriggerInteraction.Ignore);
+            foreach (var h in hits)
+                if (h.collider.GetComponentInParent<BuiltWallPiece>() == piece) { result.Add(item); return; }
         }
-        ShowEditMessage($"{item.Def.displayName} removed: ${StorePlot.OpeningRefund(item.Def)} back when you save.");
-        Destroy(item.gameObject);
+
+        foreach (var item in localItems) Check(item);
+        foreach (var item in addedItems) Check(item);
+        return result;
     }
 
     /// <summary>Is there a door in this store's front wall (as edited here)?</summary>
@@ -1416,14 +1476,11 @@ public class StoreEditController : NetworkBehaviour
                 piece = hit.collider.GetComponentInParent<BuiltWallPiece>();
             if (piece != null && piece.Plot == editPlot)
             {
-                var cuttable = piece.GetComponent<CuttableWall>();
-                if (cuttable != null && cuttable.OpeningCount > 0)
-                    wallInfo = "Take the windows and doors out of this wall first";
-                else
-                {
-                    wallInfo = "Click to remove this wall (part refund)";
-                    if (click) RequestRemoveWallRpc(piece.WallId);
-                }
+                var onWall = ItemsOnWall(piece);
+                wallInfo = onWall.Count == 0
+                    ? "Click to remove this wall (part refund)"
+                    : $"Click to remove this wall and the {onWall.Count} thing{(onWall.Count == 1 ? "" : "s")} on it (part refund)";
+                if (click) RemoveEditItems(onWall, piece.WallId);
             }
             else wallInfo = "Shift: click a built wall to remove it";
             return;
@@ -1803,13 +1860,10 @@ public class StoreEditController : NetworkBehaviour
 
     /// <summary>Host: the windows and doors the editor took out and bought (sent just before finishing).</summary>
     [Rpc(SendTo.Server)]
-    private void SubmitEditChangesRpc(int sessionId, int[] removed, int[] newIds, Vector3[] newPositions,
+    private void SubmitEditChangesRpc(int sessionId, int[] newIds, Vector3[] newPositions,
                                       Quaternion[] newRotations, RpcParams rpcParams = default)
     {
         if (!ServerTryGetSession(rpcParams, sessionId, out _)) return;
-
-        pendingRemoved.Clear();
-        if (removed != null) foreach (int i in removed) pendingRemoved.Add(i);
 
         pendingAdded.Clear();
         if (newIds == null || newPositions == null || newRotations == null) return;
@@ -1820,6 +1874,15 @@ public class StoreEditController : NetworkBehaviour
 
     private const int MaxNewPerSave = 64;
 
+    /// <summary>Host: sell back windows, doors and wall items the editor took out (by their place in the session).</summary>
+    [Rpc(SendTo.Server)]
+    private void RequestRemoveEditItemsRpc(int sessionId, int[] indices, RpcParams rpcParams = default)
+    {
+        if (indices == null || !ServerTryGetSession(rpcParams, sessionId, out var plot)) return;
+        ulong team = MallManager.GetTeamOf(OwnerClientId);
+        foreach (int i in indices) plot.ServerRemoveEditItem(i, team, out _);
+    }
+
     /// <summary>Host: after this save, will the store still have a door in its front wall?</summary>
     private bool ServerStorefrontHasDoor(StorePlot plot)
     {
@@ -1829,7 +1892,7 @@ public class StoreEditController : NetworkBehaviour
         var session = plot.ServerEditSession;
         for (int i = 0; i < session.Count; i++)
         {
-            if (pendingRemoved.Contains(i) || !catalog.TryGet(session[i].itemId, out var def)) continue;
+            if (session[i].removed || !catalog.TryGet(session[i].itemId, out var def)) continue;
             Vector3 pos = session[i].position;
             Quaternion rot = session[i].rotation;
             if (pendingPositions != null && i < pendingPositions.Length && float.IsFinite(pendingPositions[i].x))
@@ -1874,12 +1937,11 @@ public class StoreEditController : NetworkBehaviour
                                  $"'{blocker.name}' (root '{blocker.transform.root.name}', layer " +
                                  $"'{LayerMask.LayerToName(blocker.gameObject.layer)}'). It goes back to where it was.", blocker);
             return blocker == null;
-        }, logEditSave, pendingRemoved, pendingAdded, MallManager.GetTeamOf(OwnerClientId));
+        }, logEditSave, pendingAdded, MallManager.GetTeamOf(OwnerClientId));
 
         pendingPositions = null;
         pendingRotations = null;
         pendingSessionId = -1;
-        pendingRemoved.Clear();
         pendingAdded.Clear();
     }
 
@@ -1906,7 +1968,6 @@ public class StoreEditController : NetworkBehaviour
                 pendingRotations[i] = Quaternion.identity;
             }
             pendingSessionId = sessionId;
-            pendingRemoved.Clear();
             pendingAdded.Clear();
         }
         return true;

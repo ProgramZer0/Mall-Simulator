@@ -910,6 +910,7 @@ public class StorePlot : NetworkBehaviour
         public StockContainer.ZoneStock[] stock; // what was in its StockContainer, if it has one
         public int units;   // products left, if it's a stock crate
         public int price;   // its price tag (cents), if it's a loose Sellable
+        public bool removed; // taken out during the session (not put back)
     }
 
     private readonly List<EditEntry> editSession = new();
@@ -985,20 +986,19 @@ public class StorePlot : NetworkBehaviour
     /// position when one was given and it passes the checks (inside this store, isValid);
     /// otherwise it goes back to where it was before editing.
     ///
-    /// Windows and doors (WallOpening) can also be removed (Removed: their places in the session,
-    /// part refunded) and bought (Added: paid for here, by Team). They're checked against this
-    /// store's walls instead of its space.
+    /// Windows and doors (WallOpening) bought during the session come in Added and are paid for here,
+    /// by Team. They're checked against this store's walls instead of its space. Items taken out
+    /// during the session (ServerRemoveEditItem) aren't put back.
     /// </summary>
     public void ServerEndEdit(Vector3[] positions, Quaternion[] rotations,
                               Func<ItemDef, Vector3, Quaternion, bool> isValid, bool log = false,
-                              ICollection<int> removed = null, IList<NewEditItem> added = null, ulong team = NoOwner)
+                              IList<NewEditItem> added = null, ulong team = NoOwner)
     {
         if (!IsServer || !IsRenovating) return;
 
         int moved = 0, unchanged = 0, rejected = 0, noPose = 0, sold = 0, bought = 0, notBought = 0;
         var catalog = ItemCatalog.Instance;
         var econ = EconomyManager.Instance;
-        bool canPay = econ != null && econ.IsSpawned && team != NoOwner;
 
         bool Allowed(ItemDef def, Vector3 p, Quaternion r)
         {
@@ -1027,10 +1027,9 @@ public class StorePlot : NetworkBehaviour
             if (catalog == null || !catalog.TryGet(entry.itemId, out var def) || def.worldNetworkPrefab == null)
                 continue;
 
-            // Taken out in edit mode (windows and doors only): part of its price back.
-            if (removed != null && removed.Contains(i) && WallOpening.IsOpening(def))
+            // Taken out during the session (already refunded).
+            if (entry.removed)
             {
-                if (canPay) econ.ServerAddMoney(team, OpeningRefund(def));
                 sold++;
                 continue;
             }
@@ -1084,14 +1083,38 @@ public class StorePlot : NetworkBehaviour
         if (log)
             Debug.Log($"[StorePlot] Edit of '{displayName}' saved: {moved} moved, {unchanged} unchanged, " +
                       $"{rejected} put back (see warnings above), {noPose} with no position from the editor, " +
-                      $"{sold} windows/doors removed, {bought} bought, {notBought} not bought.", this);
+                      $"{sold} removed, {bought} windows/doors bought, {notBought} not bought.", this);
 
         editSession.Clear();
         editorClientId.Value = NoOwner;
     }
 
-    /// <summary>What removing a window or door in edit mode gives back.</summary>
-    public static int OpeningRefund(ItemDef def)
+    /// <summary>Can this item be taken out (sold back) in edit mode? Windows, doors and wall items.</summary>
+    public static bool CanRemoveInEdit(ItemDef def) =>
+        def != null && (WallOpening.IsOpening(def) || PlacementCheck.GetMounting(def) != ItemPickupNet.Mounting.Floor);
+
+    /// <summary>
+    /// Server: take an item out of the edit session for good (it won't come back on save) and give
+    /// Team part of its price back. Only windows, doors and wall items.
+    /// </summary>
+    public bool ServerRemoveEditItem(int index, ulong team, out int refund)
+    {
+        refund = 0;
+        if (!IsServer || !IsRenovating || index < 0 || index >= editSession.Count) return false;
+        var entry = editSession[index];
+        var catalog = ItemCatalog.Instance;
+        if (entry.removed || catalog == null || !catalog.TryGet(entry.itemId, out var def) || !CanRemoveInEdit(def)) return false;
+
+        entry.removed = true;
+        editSession[index] = entry;
+        refund = RemovalRefund(def);
+        var econ = EconomyManager.Instance;
+        if (econ != null && econ.IsSpawned && team != NoOwner) econ.ServerAddMoney(team, refund);
+        return true;
+    }
+
+    /// <summary>What removing a window, door or wall item in edit mode gives back.</summary>
+    public static int RemovalRefund(ItemDef def)
     {
         float share = BuiltWallSettings.Instance != null ? BuiltWallSettings.Instance.OpeningRefundFraction : 0.5f;
         // The lower of its normal and current price, so buying in a sale and selling later isn't a profit.
