@@ -159,7 +159,7 @@ public class PriceScanner : NetworkBehaviour
     {
         if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemId, out var def)) return 0;
         int units = stock ? Mathf.Max(1, StockContainer.GetUnitsPerCrate(itemId)) : 1;
-        return Mathf.RoundToInt(def.price * 100f / units);
+        return Mathf.RoundToInt(MarketModifiers.OrderCost(def) * 100f / units); // today's cost, events included
     }
 
     /* ========================= WINDOW ========================= */
