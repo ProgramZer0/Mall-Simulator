@@ -38,8 +38,21 @@ public class Sellable : NetworkBehaviour
 
     public int ItemId => TryGetComponent<ItemPickupNet>(out var p) ? p.itemId : 0;
 
-    public override void OnNetworkSpawn() => All.Add(this);
-    public override void OnNetworkDespawn() => All.Remove(this);
+    public override void OnNetworkSpawn()
+    {
+        All.Add(this);
+        priceCents.OnValueChanged += OnPriceChanged;
+        StoreListing.MarkAllDirty();
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        All.Remove(this);
+        priceCents.OnValueChanged -= OnPriceChanged;
+        StoreListing.MarkAllDirty();
+    }
+
+    private void OnPriceChanged(int previous, int current) => StoreListing.MarkAllDirty();
 
     /// <summary>Server: set the price in cents (0 = not for sale). Before Spawn works too.</summary>
     public void ServerSetPrice(int cents)
