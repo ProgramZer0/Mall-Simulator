@@ -1433,13 +1433,18 @@ public class StoreEditController : NetworkBehaviour
     {
         wallTool = on;
         hasWallStart = false;
+        erasing = false;
         wallInfo = "";
         if (on)
         {
             Deselect();
             selectedSlot = -1;
         }
-        else DestroyWallGhost();
+        else
+        {
+            DestroyWallGhost();
+            DestroyEraseGhosts();
+        }
     }
 
     /// <summary>
@@ -1459,6 +1464,13 @@ public class StoreEditController : NetworkBehaviour
         if (Input.GetKeyDown(wallHeightKey)) wallHalf = !wallHalf;
 
         bool cancel = Input.GetKeyDown(KeyCode.Escape) || rmbClicked;
+        if (erasing && cancel)
+        {
+            erasing = false; // drop the erase, stay in the tool
+            HideEraseGhosts();
+            wallInfo = "";
+            return;
+        }
         if (cancel)
         {
             if (hasWallStart) hasWallStart = false; // stop the chain
@@ -1467,24 +1479,14 @@ public class StoreEditController : NetworkBehaviour
 
         bool click = Input.GetMouseButtonDown(0) && !IsMouseOverSlotPanel(mouse);
 
-        // Remove mode: hold Shift and click a built wall.
-        if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
+        // Remove mode: hold Shift and click a built wall, or drag along walls to remove just that part.
+        if (erasing || Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
         {
             DestroyWallGhost();
-            BuiltWallPiece piece = null;
-            if (Physics.Raycast(ray, out RaycastHit hit, 500f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
-                piece = hit.collider.GetComponentInParent<BuiltWallPiece>();
-            if (piece != null && piece.Plot == editPlot)
-            {
-                var onWall = ItemsOnWall(piece);
-                wallInfo = onWall.Count == 0
-                    ? "Click to remove this wall (part refund)"
-                    : $"Click to remove this wall and the {onWall.Count} thing{(onWall.Count == 1 ? "" : "s")} on it (part refund)";
-                if (click) RemoveEditItems(onWall, piece.WallId);
-            }
-            else wallInfo = "Shift: click a built wall to remove it";
+            UpdateErase(ray, click);
             return;
         }
+        HideEraseGhosts();
 
         // The point under the mouse on the store's floor, snapped to the grid.
         float floorY = editPlot.FloorHeight;
@@ -1525,6 +1527,197 @@ public class StoreEditController : NetworkBehaviour
             RequestBuildWallRpc(wallStart, end, wallHalf);
             wallStart = end; // chain: the next wall starts here
         }
+    }
+
+    /* ---------- Removing walls ---------- */
+
+    private bool erasing;
+    private Vector3 eraseStart;
+    private BuiltWallPiece eraseClickPiece;
+    private readonly List<StorePlot.WallSpan> eraseSpans = new();
+    private readonly List<GameObject> eraseGhosts = new();
+    private readonly List<Material> eraseGhostMats = new();
+    private GameObject eraseGhostTemplate;
+
+    /// <summary>
+    /// Shift held: the wall under the mouse shows red; click removes it. Or press and drag along walls
+    /// (straight or 45 degrees, on the grid like drawing): every part of a built wall along the drag
+    /// shows red and is removed on release, leaving the rest of each wall standing. Windows, doors and
+    /// wall items on what's removed go too. Everything is part refunded.
+    /// </summary>
+    private void UpdateErase(Ray ray, bool click)
+    {
+        var settings = BuiltWallSettings.Instance;
+        float floorY = editPlot.FloorHeight;
+        bool onFloor = new Plane(Vector3.up, new Vector3(0f, floorY, 0f)).Raycast(ray, out float enter);
+        Vector3 point = onFloor ? settings.SnapToGrid(ray.GetPoint(enter)) : eraseStart;
+        point.y = floorY;
+
+        if (!erasing)
+        {
+            var piece = PieceUnderMouse(ray);
+            eraseSpans.Clear();
+            if (piece != null && editPlot.TryGetBuiltWallById(piece.WallId, out var whole))
+                eraseSpans.Add(StorePlot.WallSpan.Whole(whole));
+            ShowEraseGhosts(eraseSpans);
+            wallInfo = piece != null
+                ? "Click: remove this wall.  Or drag along walls to remove just that part"
+                : "Shift: click a wall to remove it, or drag along walls to remove part of them";
+            if (click && onFloor)
+            {
+                erasing = true;
+                eraseStart = point;
+                eraseClickPiece = piece;
+            }
+            return;
+        }
+
+        Vector3 end = settings.SnapEnd(eraseStart, point);
+        bool dragged = (end - eraseStart).sqrMagnitude > 1e-4f;
+        eraseSpans.Clear();
+        if (dragged) editPlot.GetEraseSpans(eraseStart, end, eraseSpans);
+        else if (eraseClickPiece != null && editPlot.TryGetBuiltWallById(eraseClickPiece.WallId, out var whole))
+            eraseSpans.Add(StorePlot.WallSpan.Whole(whole));
+
+        var items = ItemsInSpans(eraseSpans);
+        int refund = 0;
+        float meters = 0f;
+        foreach (var span in eraseSpans)
+        {
+            meters += span.Length;
+            refund += settings.GetRefund(span.Length, span.wall.height < editPlot.FullWallHeight - 0.01f);
+        }
+        foreach (var item in items) if (!addedItems.Contains(item)) refund += StorePlot.RemovalRefund(item.Def);
+
+        ShowEraseGhosts(eraseSpans);
+        wallInfo = eraseSpans.Count == 0
+            ? "Drag along a built wall to remove that part"
+            : $"Release to remove {meters:0.0} m of wall" +
+              (items.Count > 0 ? $" and {items.Count} thing{(items.Count == 1 ? "" : "s")} on it" : "") + $": ${refund} back";
+
+        if (Input.GetMouseButton(0)) return;
+
+        // Released: do it.
+        erasing = false;
+        HideEraseGhosts();
+        if (eraseSpans.Count == 0) return;
+        RemoveEditItems(items, null);
+        if (dragged) RequestEraseWallsRpc(eraseStart, end);
+        else RequestRemoveWallRpc(eraseSpans[0].wall.id);
+        ShowEditMessage($"Removed {meters:0.0} m of wall" +
+                        (items.Count > 0 ? $" and {items.Count} thing{(items.Count == 1 ? "" : "s")} on it" : "") + $": ${refund} back.");
+    }
+
+    private BuiltWallPiece PieceUnderMouse(Ray ray)
+    {
+        if (!Physics.Raycast(ray, out RaycastHit hit, 500f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) return null;
+        var piece = hit.collider.GetComponentInParent<BuiltWallPiece>();
+        return piece != null && piece.Plot == editPlot ? piece : null;
+    }
+
+    private BuiltWallPiece FindPiece(int wallId)
+    {
+        foreach (var w in CuttableWall.All)
+            if (w != null && w.TryGetComponent<BuiltWallPiece>(out var p) && p.Plot == editPlot && p.WallId == wallId) return p;
+        return null;
+    }
+
+    /// <summary>Windows, doors and wall items on the parts of walls about to be removed.</summary>
+    private List<EditLocalItem> ItemsInSpans(List<StorePlot.WallSpan> spans)
+    {
+        var result = new List<EditLocalItem>();
+        foreach (var span in spans)
+        {
+            var piece = FindPiece(span.wall.id);
+            if (piece == null) continue;
+            Vector3 d = span.Dir;
+            foreach (var item in ItemsOnWall(piece))
+            {
+                if (result.Contains(item)) continue;
+                Vector3 c;
+                float reach;
+                if (item.Opening != null)
+                {
+                    var shape = item.Opening.Current;
+                    c = shape.center;
+                    reach = shape.size.x * 0.5f;
+                }
+                else if (PlacementCheck.GetTestBox(item.Def, item.transform.position, item.transform.rotation, out c, out Vector3 half))
+                    reach = Mathf.Max(half.x, half.z);
+                else continue;
+
+                float t = Vector3.Dot(c - span.wall.a, d); // d is flat, so height doesn't count
+                if (t + reach > span.from && t - reach < span.to) result.Add(item);
+            }
+        }
+        return result;
+    }
+
+    private void ShowEraseGhosts(List<StorePlot.WallSpan> spans)
+    {
+        var settings = BuiltWallSettings.Instance;
+        if (settings == null || settings.WallPrefab == null) return;
+        if (eraseGhostTemplate == null) eraseGhostTemplate = GhostBuilder.BuildTemplate(settings.WallPrefab, WallGhostInvalid.a);
+
+        while (eraseGhosts.Count < spans.Count)
+        {
+            var g = Instantiate(eraseGhostTemplate);
+            g.SetActive(true);
+            foreach (var c in g.GetComponentsInChildren<Collider>()) c.enabled = false;
+            foreach (var r in g.GetComponentsInChildren<Renderer>())
+                foreach (var m in r.materials)
+                {
+                    GhostBuilder.SetColor(m, WallGhostInvalid);
+                    eraseGhostMats.Add(m);
+                }
+            eraseGhosts.Add(g);
+        }
+
+        for (int i = 0; i < eraseGhosts.Count; i++)
+        {
+            var g = eraseGhosts[i];
+            bool on = i < spans.Count;
+            g.SetActive(on);
+            if (!on) continue;
+            var span = spans[i];
+            // A touch bigger than the wall so it shows over it.
+            settings.GetWallPose(span.From, span.To, span.wall.height + 0.02f, 0.01f, 0.01f,
+                                 out Vector3 pos, out Quaternion rot, out Vector3 scale);
+            g.transform.SetPositionAndRotation(pos - Vector3.up * 0.01f, rot);
+            g.transform.localScale = new Vector3(scale.x + 0.04f, scale.y, scale.z);
+        }
+    }
+
+    private void HideEraseGhosts()
+    {
+        foreach (var g in eraseGhosts) if (g != null) g.SetActive(false);
+    }
+
+    private void DestroyEraseGhosts()
+    {
+        foreach (var m in eraseGhostMats) if (m != null) Destroy(m);
+        eraseGhostMats.Clear();
+        foreach (var g in eraseGhosts) if (g != null) Destroy(g);
+        eraseGhosts.Clear();
+    }
+
+    [Rpc(SendTo.Server)]
+    private void RequestEraseWallsRpc(Vector3 a, Vector3 b, RpcParams rpcParams = default)
+    {
+        if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+        var settings = BuiltWallSettings.Instance;
+        var plot = MallManager.Instance != null ? MallManager.Instance.GetPlotEditedBy(OwnerClientId) : null;
+        if (settings == null || plot == null) return;
+
+        // Same snapping the client used.
+        a = settings.SnapToGrid(a);
+        a.y = plot.FloorHeight;
+        b = settings.SnapEnd(a, b);
+        b.y = plot.FloorHeight;
+
+        plot.ServerEraseWalls(a, b, out int refund);
+        var econ = EconomyManager.Instance;
+        if (econ != null && refund > 0) econ.ServerAddMoney(MallManager.GetTeamOf(OwnerClientId), refund);
     }
 
     private bool CanAffordWall(int cost)
@@ -1647,7 +1840,7 @@ public class StoreEditController : NetworkBehaviour
             GUI.Label(new Rect(20, 36, 400, 20), $"Height: {(wallHalf ? "half" : "full")}   ({wallHeightKey} to switch)");
             GUI.Label(new Rect(20, 56, 400, 20), "Click: start, click again: build (keeps going from the end)");
             GUI.Label(new Rect(20, 76, 400, 20), "RMB / Esc: stop the chain (again to leave the tool)");
-            GUI.Label(new Rect(20, 96, 400, 20), "Shift + click a built wall: remove it");
+            GUI.Label(new Rect(20, 96, 400, 20), "Shift + click a wall: remove it   Shift + drag: remove part");
             GUI.Label(new Rect(20, 116, 400, 20), wallInfo);
             return;
         }

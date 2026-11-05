@@ -118,6 +118,22 @@ public class BuiltWallSettings : MonoBehaviour
         return new Vector3(start.x + dx, start.y, start.z + dz);
     }
 
+    /// <summary>
+    /// Position, rotation and scale of a wall's box that reaches Extend A past a and Extend B past b
+    /// (half a thickness closes a corner with a plain box; 0 for an end that's cut at an angle).
+    /// </summary>
+    public void GetWallPose(Vector3 a, Vector3 b, float height, float extendA, float extendB,
+                            out Vector3 position, out Quaternion rotation, out Vector3 scale)
+    {
+        Vector3 flat = b - a;
+        flat.y = 0f;
+        float length = flat.magnitude;
+        Vector3 dir = length > 1e-4f ? flat / length : Vector3.forward;
+        rotation = Quaternion.LookRotation(dir, Vector3.up);
+        scale = new Vector3(Thickness, height, length + extendA + extendB);
+        position = (a - dir * extendA + b + dir * extendB) * 0.5f + Vector3.up * height * 0.5f;
+    }
+
     /// <summary>Position, rotation and scale of a wall's box.</summary>
     public void GetWallPose(Vector3 a, Vector3 b, float height, out Vector3 position, out Quaternion rotation, out Vector3 scale)
     {
