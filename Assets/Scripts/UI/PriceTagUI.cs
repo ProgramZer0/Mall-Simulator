@@ -12,14 +12,6 @@ using UnityEngine.UI;
 /// </summary>
 public class PriceTagUI : MonoBehaviour
 {
-    [Serializable]
-    public class Markup
-    {
-        public Button button;
-        [Tooltip("Fills in cost × this (e.g. 1.5 = 50% markup).")]
-        public float multiplier = 1.5f;
-    }
-
     public static PriceTagUI Instance { get; private set; }
 
     [SerializeField] private GameObject root;
@@ -37,15 +29,17 @@ public class PriceTagUI : MonoBehaviour
     [Tooltip("Take the price off (not for sale).")]
     [SerializeField] private Button clearButton;
     [SerializeField] private Button closeButton;
-    [Tooltip("Quick buttons that fill in cost × a multiplier.")]
-    [SerializeField] private Markup[] markups;
+    [Tooltip("Fills in the default price: a safe price that makes a small profit, but rarely the best one.")]
+    [SerializeField] private Button defaultButton;
+    [Tooltip("Optional: the Default button's label, filled in with the price (e.g. \"Default $6.00\").")]
+    [SerializeField] private TMP_Text defaultLabel;
     [Tooltip("Shows problems, e.g. a price that isn't a number.")]
     [SerializeField] private TMP_Text messageText;
 
     public bool IsOpen { get; private set; }
 
     private Action<int, bool> onSet; // (cents, every one in the store)
-    private int costCents;
+    private int defaultCents;
 
     private void Awake()
     {
@@ -61,16 +55,11 @@ public class PriceTagUI : MonoBehaviour
         if (clearButton != null) clearButton.onClick.AddListener(() => { onSet?.Invoke(0, false); Close(); });
         if (closeButton != null) closeButton.onClick.AddListener(Close);
         if (priceInput != null) priceInput.onSubmit.AddListener(_ => Submit(false));
-        if (markups != null)
-            foreach (var m in markups)
+        if (defaultButton != null)
+            defaultButton.onClick.AddListener(() =>
             {
-                if (m?.button == null) continue;
-                float mult = m.multiplier;
-                m.button.onClick.AddListener(() =>
-                {
-                    if (priceInput != null) priceInput.text = (Mathf.Round(costCents * mult) / 100f).ToString("0.00");
-                });
-            }
+                if (priceInput != null) priceInput.text = (defaultCents / 100f).ToString("0.00");
+            });
 
         if (root != null) root.SetActive(false);
     }
@@ -86,11 +75,14 @@ public class PriceTagUI : MonoBehaviour
         if (IsOpen && Input.GetKeyDown(KeyCode.Escape)) Close();
     }
 
-    /// <summary>Show the window for a product. onSet gets the price in cents (0 = not for sale) and whether to price all of them.</summary>
-    public void Open(string productName, int currentCents, int cost, Action<int, bool> onSet)
+    /// <summary>
+    /// Show the window for a product. defaultPrice: the safe default (filled in if it has no price yet).
+    /// onSet gets the price in cents (0 = not for sale) and whether to price all of them.
+    /// </summary>
+    public void Open(string productName, int currentCents, int cost, int defaultPrice, Action<int, bool> onSet)
     {
         this.onSet = onSet;
-        costCents = cost;
+        defaultCents = defaultPrice;
         IsOpen = true;
         if (root != null) root.SetActive(true);
         UIState.OpenMenu(this);
@@ -99,10 +91,12 @@ public class PriceTagUI : MonoBehaviour
         if (infoText != null)
             infoText.text = $"Cost each: {Sellable.FormatPrice(cost)}\nNow: {Sellable.FormatPrice(currentCents)}";
         if (setAllLabel != null) setAllLabel.text = $"Set for all {productName}";
+        if (defaultLabel != null) defaultLabel.text = $"Default {Sellable.FormatPrice(defaultPrice)}";
         if (messageText != null) messageText.text = "";
         if (priceInput != null)
         {
-            priceInput.text = currentCents > 0 ? (currentCents / 100f).ToString("0.00") : "";
+            int shown = currentCents > 0 ? currentCents : defaultPrice;
+            priceInput.text = shown > 0 ? (shown / 100f).ToString("0.00") : "";
             priceInput.Select();
             priceInput.ActivateInputField();
         }

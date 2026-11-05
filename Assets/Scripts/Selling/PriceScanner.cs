@@ -16,6 +16,9 @@ public class PriceScanner : NetworkBehaviour
     [SerializeField] private GameObject handVisualPrefab;
     [Tooltip("How far you can scan, in meters.")]
     [SerializeField] private float range = 4f;
+    [Tooltip("The Default price is cost × this: a safe price with a small profit, but rarely the best one. " +
+             "Finding the best price (which moves with events and seasons) is up to the player.")]
+    [SerializeField] private float defaultMarkup = 1.2f;
 
     private bool active;
     private Camera cam;
@@ -35,6 +38,7 @@ public class PriceScanner : NetworkBehaviour
     private string fallbackText = "";
     private string fallbackTitle;
     private int fallbackCost;
+    private int fallbackDefault;
     private System.Action<int, bool> fallbackSet;
 
     public bool IsActive => active;
@@ -143,6 +147,10 @@ public class PriceScanner : NetworkBehaviour
         return plot != null && plot.IsAuthorized(OwnerClientId);
     }
 
+    // A safe price: a little over cost (always at least a cent of profit).
+    private int DefaultPrice(int cost) =>
+        cost <= 0 ? 0 : Mathf.Max(cost + 1, Mathf.CeilToInt(cost * Mathf.Max(1f, defaultMarkup)));
+
     private static string NameOf(int itemId) =>
         ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(itemId, out var def) ? def.displayName : "Item";
 
@@ -162,6 +170,7 @@ public class PriceScanner : NetworkBehaviour
         int current = stock ? targetContainer.GetZone(targetZone).price : targetItem.Price;
         int cost = CostEach(targetProduct, stock);
         string title = NameOf(targetProduct);
+        int suggested = DefaultPrice(cost);
         if (!stock && StockContainer.IsStockCrate(targetProduct)) title += " (whole crate)"; // priced apart from one on the shelf
 
         // Remember the target now; the player can look away while typing.
@@ -176,14 +185,16 @@ public class PriceScanner : NetworkBehaviour
 
         if (PriceTagUI.Instance != null)
         {
-            PriceTagUI.Instance.Open(title, current, cost, set);
+            PriceTagUI.Instance.Open(title, current, cost, suggested, set);
             return;
         }
 
         fallbackOpen = true;
         fallbackTitle = title;
         fallbackCost = cost;
-        fallbackText = current > 0 ? (current / 100f).ToString("0.00") : "";
+        fallbackDefault = suggested;
+        int shown = current > 0 ? current : suggested;
+        fallbackText = shown > 0 ? (shown / 100f).ToString("0.00") : "";
         fallbackSet = set;
         UIState.OpenMenu(this);
     }
@@ -216,13 +227,8 @@ public class PriceScanner : NetworkBehaviour
             fallbackText = GUI.TextField(new Rect(r.x + 15, r.y + 52, 310, 24), fallbackText);
             GUI.FocusControl("PriceField");
 
-            float bx = r.x + 15;
-            foreach (float mult in new[] { 1.25f, 1.5f, 2f })
-            {
-                if (GUI.Button(new Rect(bx, r.y + 84, 98, 24), $"Cost x{mult:0.##}"))
-                    fallbackText = (Mathf.Round(fallbackCost * mult) / 100f).ToString("0.00");
-                bx += 106;
-            }
+            if (GUI.Button(new Rect(r.x + 15, r.y + 84, 310, 24), $"Default {Sellable.FormatPrice(fallbackDefault)}"))
+                fallbackText = (fallbackDefault / 100f).ToString("0.00");
 
             bool enter = Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Return;
             if (GUI.Button(new Rect(r.x + 15, r.y + 118, 150, 28), "Set this one") || enter) SubmitFallback(false);
