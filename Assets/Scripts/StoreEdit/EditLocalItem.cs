@@ -17,10 +17,12 @@ public class EditLocalItem : MonoBehaviour
     private StockContainer stockSource; // the prefab's, if this item is a shelf
     private List<GameObject> stockModels;
 
-    /// <summary>Position of this item in the host's edit session list.</summary>
+    /// <summary>Position of this item in the host's edit session list (-1: bought during this session).</summary>
     public int Index { get; private set; }
     public ItemDef Def { get; private set; }
     public bool Gravity { get; private set; }
+    /// <summary>A window or door (it sits in a wall).</summary>
+    public WallOpening Opening => GetComponent<WallOpening>();
 
     public static EditLocalItem Create(ItemDef def, int index, Vector3 position, Quaternion rotation)
     {
@@ -45,6 +47,10 @@ public class EditLocalItem : MonoBehaviour
         if (item.stockSource != null)
             foreach (var zone in item.stockSource.FindZonesOnCopy(go.transform))
                 if (zone != null) zone.enabled = false;
+
+        // Windows and doors keep cutting their hole while being moved around.
+        if (def.worldNetworkPrefab.TryGetComponent<WallOpening>(out var opening))
+            go.AddComponent<WallOpening>().CopyFrom(opening);
 
         item.ApplyKinematic();
         return item;

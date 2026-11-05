@@ -222,6 +222,34 @@ public static class PlacementCheck
     }
 
     /// <summary>
+    /// Windows and doors: the first thing (if any) in the way of one at this pose. Walls it can be cut
+    /// into (CuttableWall), the floor (doors stand on it), the store's renovation and for-sale walls,
+    /// and Ignore Root (the one being moved) don't count. Skip Edit Copies: while saving on the host,
+    /// the editor's copies are still in the scene.
+    /// </summary>
+    public static Collider FindOpeningBlocker(ItemDef def, Vector3 position, Quaternion rotation, int blockingMask,
+                                              Transform ignoreRoot, bool skipEditCopies, StorePlot plot)
+    {
+        if (!GetTestBox(def, position, rotation, out Vector3 center, out Vector3 half)) return null;
+        int ground = LayerMask.NameToLayer("Ground");
+
+        int count = Physics.OverlapBoxNonAlloc(center, half, EditHits, rotation,
+                                               blockingMask, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+        {
+            var c = EditHits[i];
+            if (IsPartOf(c, ignoreRoot)) continue;
+            if (c.GetComponentInParent<CuttableWall>() != null) continue;
+            if (ground >= 0 && c.gameObject.layer == ground) continue;
+            if (plot != null && plot.IsStorefrontCover(c.transform)) continue;
+            if (skipEditCopies && c.GetComponentInParent<EditLocalItem>() != null) continue;
+            if (c.GetComponentInParent<StockVisualFollower>() != null) continue;
+            return c;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Edit mode: how far the item can slide from this pose along a direction before touching
     /// something (up to maxDistance). Things it already overlaps are ignored, so a stuck item
     /// can always be slid free.

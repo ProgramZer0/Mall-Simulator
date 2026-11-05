@@ -45,12 +45,27 @@ public class BuiltWallSettings : MonoBehaviour
     [Tooltip("Share of the price given back when a wall is removed (0.5 = half).")]
     [Range(0f, 1f)] [SerializeField] private float refundFraction = 0.5f;
 
+    [Header("Windows and doors (WallOpening)")]
+    [Tooltip("Closest a window or door can be to the end or top of a wall, in meters.")]
+    [SerializeField] private float openingEdgeMargin = 0.15f;
+    [Tooltip("Smallest gap between two windows or doors in the same wall, in meters.")]
+    [SerializeField] private float openingGap = 0.15f;
+    [Tooltip("Share of a window's, door's or wall item's price given back when it's removed in edit mode, " +
+             "by itself or with the wall it's on (0.5 = half).")]
+    [Range(0f, 1f)] [SerializeField] private float openingRefundFraction = 0.5f;
+    [Tooltip("Windows and doors slide along walls in steps of this many meters (hold Ctrl to move freely).")]
+    [SerializeField] private float openingSnap = 0.25f;
+
     public GameObject WallPrefab => wallPrefab;
     public float Thickness => Mathf.Max(0.01f, thickness);
     public float HalfHeight => Mathf.Max(0.1f, halfHeight);
     public float GridSize => Mathf.Max(0.05f, gridSize);
     public float MinLength => Mathf.Max(0.05f, minLength);
     public int MaxWallsPerStore => Mathf.Max(1, maxWallsPerStore);
+    public float OpeningEdgeMargin => Mathf.Max(0f, openingEdgeMargin);
+    public float OpeningGap => Mathf.Max(0f, openingGap);
+    public float OpeningRefundFraction => openingRefundFraction;
+    public float OpeningSnap => Mathf.Max(0f, openingSnap);
 
     private void Awake()
     {
