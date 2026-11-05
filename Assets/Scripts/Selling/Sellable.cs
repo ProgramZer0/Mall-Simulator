@@ -29,8 +29,12 @@ public class Sellable : NetworkBehaviour
     /// <summary>Price in cents (0 = not for sale).</summary>
     public int Price => priceCents.Value;
 
-    /// <summary>Priced and sold as a loose item?</summary>
-    public bool IsForSale => sellWhenLoose && priceCents.Value > 0;
+    /// <summary>
+    /// Priced and sold as a loose item? A shelf or rack (anything with a StockContainer) isn't for sale
+    /// while it has stock on it; it's listed again once it's emptied.
+    /// </summary>
+    public bool IsForSale =>
+        sellWhenLoose && priceCents.Value > 0 && !(TryGetComponent<StockContainer>(out var shelf) && shelf.HasStock);
 
     public int ItemId => TryGetComponent<ItemPickupNet>(out var p) ? p.itemId : 0;
 

@@ -170,6 +170,10 @@ public class StorePlot : NetworkBehaviour
     private void Awake()
     {
         // Which module each storefront section shows (0 = the one placed in the scene).
+        // Store-wide prices set with "Set for all": new stock and newly placed items pick them up.
+        storePrices = new NetworkList<StorePrice>(
+            null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
         frontOverrides = new NetworkList<byte>(
             null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
@@ -352,6 +356,7 @@ public class StorePlot : NetworkBehaviour
         closedByOwner.Value = false;
         frontOverrides.Clear(); // storefront goes back to how the scene placed it
         builtWalls.Clear();     // and built walls come down
+        storePrices.Clear();    // and the price list goes
     }
 
     /// <summary>
@@ -363,6 +368,56 @@ public class StorePlot : NetworkBehaviour
     {
         if (!IsServer) return;
         closedByOwner.Value = closed;
+    }
+
+    /* ========================= STORE PRICES ========================= */
+
+    /// <summary>A price set for every one of a product in the store.</summary>
+    public struct StorePrice : INetworkSerializeByMemcpy, IEquatable<StorePrice>
+    {
+        public int itemId;
+        public int cents;
+        public int loose; // 1 = loose items (e.g. whole crates), 0 = on shelves and racks
+
+        public bool Equals(StorePrice o) => itemId == o.itemId && cents == o.cents && loose == o.loose;
+        public override bool Equals(object obj) => obj is StorePrice o && Equals(o);
+        public override int GetHashCode() => (itemId * 397 ^ cents) * 2 + loose;
+    }
+
+    private NetworkList<StorePrice> storePrices;
+
+    /// <summary>The store-wide price for a product on shelves (loose false) or as loose items (true).</summary>
+    public bool TryGetStorePrice(int itemId, bool loose, out int cents)
+    {
+        cents = 0;
+        if (storePrices == null) return false;
+        int l = loose ? 1 : 0;
+        foreach (var p in storePrices)
+            if (p.itemId == itemId && p.loose == l) { cents = p.cents; return cents > 0; }
+        return false;
+    }
+
+    /// <summary>Server: set (or with 0, remove) the store-wide price for a product.</summary>
+    public void ServerSetStorePrice(int itemId, bool loose, int cents)
+    {
+        if (!IsServer || itemId == 0) return;
+        int l = loose ? 1 : 0;
+        for (int i = 0; i < storePrices.Count; i++)
+        {
+            if (storePrices[i].itemId != itemId || storePrices[i].loose != l) continue;
+            if (cents > 0) storePrices[i] = new StorePrice { itemId = itemId, cents = cents, loose = l };
+            else storePrices.RemoveAt(i);
+            return;
+        }
+        if (cents > 0) storePrices.Add(new StorePrice { itemId = itemId, cents = cents, loose = l });
+    }
+
+    /// <summary>The store-wide price for a product at this spot, if it's in a store that has one.</summary>
+    public static bool TryGetStorePriceAt(Vector3 point, int itemId, bool loose, out int cents)
+    {
+        cents = 0;
+        var plot = MallManager.Instance != null ? MallManager.Instance.GetPlotAt(point) : null;
+        return plot != null && plot.TryGetStorePrice(itemId, loose, out cents);
     }
 
     /* ========================= BUILT WALLS ========================= */

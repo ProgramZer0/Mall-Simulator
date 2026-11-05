@@ -298,6 +298,7 @@ public class PriceScanner : NetworkBehaviour
     // Every shelf zone and rack holding (or priced for) this product, in the store.
     private static void ServerPriceAllOnShelves(StorePlot plot, int product, int cents)
     {
+        plot.ServerSetStorePrice(product, false, cents); // new stock of it in this store gets this price too
         foreach (var c in StockContainer.All)
         {
             if (c == null) continue;
@@ -309,6 +310,7 @@ public class PriceScanner : NetworkBehaviour
     // Every loose one of this item (e.g. every whole crate of it), in the store.
     private static void ServerPriceAllLoose(StorePlot plot, int itemId, int cents)
     {
+        plot.ServerSetStorePrice(itemId, true, cents); // ones put down in this store later get this price too
         foreach (var s in Sellable.All)
             if (s != null && s.SellWhenLoose && s.ItemId == itemId && plot.Contains(s.transform.position))
                 s.ServerSetPrice(cents);
