@@ -310,15 +310,19 @@ public class StockContainer : NetworkBehaviour
         if (!IsServer || zone < 0 || zone >= zones.Count || !HasRoomFor(zone, itemId, orient)) return false;
         var z = zones[zone];
         bool same = z.count > 0 && z.itemId == itemId;
-        bool keepPrice = z.pricedItem == itemId; // the shelf's price tag stays for the same product
+        bool keepPrice = z.pricedItem == itemId && z.price > 0; // the shelf's own price tag stays for the same product
+        int price = keepPrice ? z.price : 0;
+        // No price of its own: use the store's price for this product, if "Set for all" gave it one.
+        if (price == 0 && StorePlot.TryGetStorePriceAt(GetZoneCenter(zone), itemId, false, out int storePrice))
+            price = storePrice;
         zones[zone] = new ZoneStock
         {
             itemId = itemId,
             count = (same ? z.count : 0) + 1,
             orient = OrientFor(zone, itemId, orient),
             seed = same ? z.seed : UnityEngine.Random.Range(1, int.MaxValue),
-            price = keepPrice ? z.price : 0,
-            pricedItem = keepPrice ? z.pricedItem : 0,
+            price = price,
+            pricedItem = price > 0 ? itemId : 0,
         };
         return true;
     }
