@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f9cbadb0f0560ee4aa24b51535afc71f, type: 3}
+  m_Name: July4th
+  m_EditorClassIdentifier: Assembly-CSharp::MallEventDef
+  displayName: New Event
+  description: 
+  trigger: 0
+  startAt: 600
+  interval: 1800
+  checkEvery: 60
+  chance: 0.05
+  duration: 300
+  rules: []

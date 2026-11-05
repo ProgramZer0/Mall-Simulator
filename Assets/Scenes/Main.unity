@@ -6149,6 +6149,7 @@ GameObject:
   - component: {fileID: 451575850}
   - component: {fileID: 451575851}
   - component: {fileID: 451575852}
+  - component: {fileID: 451575853}
   m_Layer: 0
   m_Name: Managers
   m_TagString: Untagged
@@ -6278,6 +6279,50 @@ MonoBehaviour:
   maxWallsPerStore: 64
   costPerMeter: 50
   refundFraction: 0.5
+--- !u!114 &451575853
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 451575846}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 80566650f3d5b004e94b0963d2aae65e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MallEventManager
+  ShowTopMostFoldoutHeaderGroup: 1
+  events:
+  - {fileID: 11400000, guid: 654eb757276ae8641b647070cf997d25, type: 2}
+  - {fileID: 11400000, guid: e2f8870e6d2ba1b42a78029fdc899d24, type: 2}
+  - {fileID: 11400000, guid: 6a80f806fc77836419a286e349099464, type: 2}
+  - {fileID: 11400000, guid: aae8f886550b6144c8cd74bc5d7537d1, type: 2}
+  - {fileID: 11400000, guid: a2832e3128130b141befd55b91f780cf, type: 2}
+  - {fileID: 11400000, guid: 9e67ea112a4d1434c921f8255dbd4caa, type: 2}
+  - {fileID: 11400000, guid: d8fbd7fac4f463146be75acc1df8fd0f, type: 2}
+  - {fileID: 11400000, guid: 8370f7150a2711845b01b145df811b2a, type: 2}
+  seasonsEnabled: 1
+  seasons:
+  - {fileID: 11400000, guid: c49ac4e9381c1474891ba908212e0f99, type: 2}
+  - {fileID: 11400000, guid: e6a3d1ad25584b243b6ce8e4fe9f3823, type: 2}
+  - {fileID: 11400000, guid: f630806c944e5db42980d588199b5d56, type: 2}
+  - {fileID: 11400000, guid: 1b781fbe7e335a345944764f6cda9f53, type: 2}
+  startSeason: 0
+  caps:
+  - stat: 0
+    minPercent: -75
+    maxPercent: 300
+  - stat: 1
+    minPercent: 0
+    maxPercent: 100
+  - stat: 2
+    minPercent: -75
+    maxPercent: 300
+  - stat: 3
+    minPercent: -75
+    maxPercent: 300
+  showDebugHud: 1
+  devHotkeys: 1
 --- !u!1 &451926993
 GameObject:
   m_ObjectHideFlags: 0
@@ -6418,7 +6463,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.72, y: 0.896854}
   m_AnchorMax: {x: 0.85875005, y: 1}
-  m_AnchoredPosition: {x: -0.55999756, y: 2.2700043}
+  m_AnchoredPosition: {x: -0.55999756, y: 2.269989}
   m_SizeDelta: {x: 5.6399994, y: -0.54100037}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &463082192
@@ -7571,7 +7616,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: -0.5000019}
+  m_AnchoredPosition: {x: 0, y: -0.5000038}
   m_SizeDelta: {x: -20, y: -13}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &553182572
@@ -10905,7 +10950,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.86300004}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 1.5632172}
+  m_AnchoredPosition: {x: 0, y: 1.5632324}
   m_SizeDelta: {x: -0.6199951, y: -2.6085052}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &893913980
@@ -12607,7 +12652,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.94624996, y: 0.919775}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 1.5096741, y: 1.3040314}
+  m_AnchoredPosition: {x: 1.5096436, y: 1.3040161}
   m_SizeDelta: {x: -3.0194092, y: -3.1679993}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1021492596
@@ -15785,7 +15830,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -0.000030517578, y: 0.00047302246}
+  m_AnchoredPosition: {x: 0, y: 0.00048828125}
   m_SizeDelta: {x: 0, y: -0.19000244}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1278557712
@@ -17010,7 +17055,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.35625002, y: 0.1694248}
   m_AnchorMax: {x: 0.65000004, y: 0.2636751}
-  m_AnchoredPosition: {x: -2.499878, y: -2.1278992}
+  m_AnchoredPosition: {x: -2.499878, y: -2.127884}
   m_SizeDelta: {x: -1.6199951, y: 5.044098}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1347137791
@@ -17688,7 +17733,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.35625002, y: 0.2636751}
   m_AnchorMax: {x: 0.65000004, y: 0.42400002}
-  m_AnchoredPosition: {x: -2.5002365, y: 0.4240036}
+  m_AnchoredPosition: {x: -2.5002441, y: 0.42401123}
   m_SizeDelta: {x: -1.6192932, y: 0.058898926}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1387105021
@@ -19161,6 +19206,7 @@ MonoBehaviour:
     icon: {fileID: 0}
     category: test
     price: 1
+    marketPrice: 0
     deliverySeconds: 30
     shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
     pickupClip: {fileID: 0}
@@ -19173,6 +19219,7 @@ MonoBehaviour:
     icon: {fileID: 0}
     category: Shelves
     price: 100
+    marketPrice: 0
     deliverySeconds: 200
     shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
     pickupClip: {fileID: 0}
@@ -19185,6 +19232,7 @@ MonoBehaviour:
     icon: {fileID: 0}
     category: Appliance
     price: 800
+    marketPrice: 0
     deliverySeconds: 500
     shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
     pickupClip: {fileID: 0}
@@ -19197,6 +19245,7 @@ MonoBehaviour:
     icon: {fileID: 0}
     category: Base
     price: 999999
+    marketPrice: 0
     deliverySeconds: 99999
     shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
     pickupClip: {fileID: 0}
@@ -19209,6 +19258,7 @@ MonoBehaviour:
     icon: {fileID: 0}
     category: Base
     price: 999999
+    marketPrice: 0
     deliverySeconds: 99999
     shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
     pickupClip: {fileID: 0}
@@ -19221,6 +19271,7 @@ MonoBehaviour:
     icon: {fileID: 0}
     category: Base
     price: 999999
+    marketPrice: 0
     deliverySeconds: 99999
     shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
     pickupClip: {fileID: 0}
@@ -19233,6 +19284,7 @@ MonoBehaviour:
     icon: {fileID: 0}
     category: Clothing
     price: 40
+    marketPrice: 0
     deliverySeconds: 300
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
     pickupClip: {fileID: 0}
@@ -19245,6 +19297,7 @@ MonoBehaviour:
     icon: {fileID: 0}
     category: Clothing
     price: 10
+    marketPrice: 0
     deliverySeconds: 300
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
     pickupClip: {fileID: 0}
@@ -19257,6 +19310,7 @@ MonoBehaviour:
     icon: {fileID: 0}
     category: Clothing
     price: 10
+    marketPrice: 0
     deliverySeconds: 300
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
     pickupClip: {fileID: 0}
@@ -19269,6 +19323,7 @@ MonoBehaviour:
     icon: {fileID: 0}
     category: Shelves
     price: 100
+    marketPrice: 0
     deliverySeconds: 200
     shipmentPrefab: {fileID: 5976144729851372552, guid: 3c680629927b20b4db25f94c7e0e28bc, type: 3}
     pickupClip: {fileID: 0}
@@ -19281,6 +19336,7 @@ MonoBehaviour:
     icon: {fileID: 0}
     category: Clothing
     price: 10
+    marketPrice: 0
     deliverySeconds: 300
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
     pickupClip: {fileID: 0}
@@ -19293,6 +19349,7 @@ MonoBehaviour:
     icon: {fileID: 0}
     category: Clothing
     price: 10
+    marketPrice: 0
     deliverySeconds: 300
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
     pickupClip: {fileID: 0}
@@ -19305,6 +19362,7 @@ MonoBehaviour:
     icon: {fileID: 0}
     category: Clothing
     price: 230
+    marketPrice: 0
     deliverySeconds: 200
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
     pickupClip: {fileID: 0}
@@ -21580,7 +21638,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.65000004, y: 0.156}
   m_AnchorMax: {x: 0.78249997, y: 0.2636751}
-  m_AnchoredPosition: {x: -0.48719788, y: 0.8699951}
+  m_AnchoredPosition: {x: -0.48721313, y: 0.8699951}
   m_SizeDelta: {x: -6.7316895, y: -0.9580002}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1612108575
@@ -24488,7 +24546,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.24625, y: 0.896854}
   m_AnchorMax: {x: 0.72, y: 1}
-  m_AnchoredPosition: {x: -1.6900024, y: 2.2700043}
+  m_AnchoredPosition: {x: -1.6900024, y: 2.269989}
   m_SizeDelta: {x: -3.380005, y: -0.54100037}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1862060318
@@ -25434,7 +25492,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.85875005, y: 0.896854}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 1.1300049, y: 1.2899933}
+  m_AnchoredPosition: {x: 1.1300049, y: 1.2900085}
   m_SizeDelta: {x: -2.2600098, y: -2.498001}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1941036283
