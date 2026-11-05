@@ -56,12 +56,19 @@ public class ItemDef
     public string category = "General";
     [Tooltip("Cost of one when ordered.")]
     public int price = 10;
+    [Tooltip("What one is really worth to customers, in dollars (cents allowed, e.g. 24.99). Not shown to the " +
+             "player: their prices are judged against it (and it'll move with events and seasons). For stock " +
+             "crates this is per product (one shirt), not the whole crate.")]
+    public float marketPrice = 0f;
     [Tooltip("Default seconds from ordering until it arrives (used when the order doesn't give its own time).")]
     public float deliverySeconds = 30f;
     [Tooltip("What arrives at the shipment area: a box (NetworkObject + ItemPickupNet + ShipmentPackage). " +
              "Picking it up gives you this item; placing it puts down the real item. Empty = the catalog's " +
              "default box (or, if that's empty too, the item itself).")]
     public NetworkObject shipmentPrefab;
+
+    /// <summary>Market value of one (one product, for stock crates), in cents. 0 = not set.</summary>
+    public int MarketPriceCents => Mathf.Max(0, Mathf.RoundToInt(marketPrice * 100f));
 
     /// <summary>The object to deliver for this item.</summary>
     public NetworkObject GetShipmentPrefab()
