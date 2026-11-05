@@ -370,7 +370,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         if (go != null) go.SetActive(true);
         if (icon != null && def.icon != null) icon.sprite = def.icon;
         if (nameText != null) nameText.text = def.displayName;
-        if (priceText != null) priceText.text = $"${def.price:N0}";
+        if (priceText != null) priceText.text = $"${MarketModifiers.OrderCost(def) + MarketModifiers.DeliveryFee(def):N0}";
         if (button != null)
         {
             button.onClick.RemoveAllListeners();
@@ -478,7 +478,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         foreach (var (itemId, quantity) in cart)
         {
             if (catalog == null || !catalog.TryGet(itemId, out var def)) continue;
-            int sub = def.price * quantity;
+            int sub = (MarketModifiers.OrderCost(def) + MarketModifiers.DeliveryFee(def)) * quantity; // with events
             total += sub;
             lines.AppendLine($"{def.displayName} x{quantity}   ${sub:N0}");
         }

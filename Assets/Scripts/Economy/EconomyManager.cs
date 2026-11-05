@@ -343,8 +343,9 @@ public class EconomyManager : NetworkBehaviour
 
             boxes += quantities[i];
             if (boxes > maxItemsPerOrder) return OrderResult.BadQuantity;
-            cost += (long)Mathf.Max(0, def.price) * quantities[i];
-            slowest = Mathf.Max(slowest, def.deliverySeconds);
+            // Running mall events can change the cost, add a delivery fee and change delivery time.
+            cost += (long)(MarketModifiers.OrderCost(def) + MarketModifiers.DeliveryFee(def)) * quantities[i];
+            slowest = Mathf.Max(slowest, MarketModifiers.DeliverySeconds(def));
         }
 
         BuildBoxes(itemIds, quantities);
