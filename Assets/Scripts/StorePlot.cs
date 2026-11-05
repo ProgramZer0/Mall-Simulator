@@ -167,8 +167,14 @@ public class StorePlot : NetworkBehaviour
     public bool HasOwner => ownerTeamId.Value != NoOwner;
     public int SegmentCount => segments?.Length ?? 0;
 
+    /// <summary>What this store is selling: products, prices, quantities (worked out locally, nothing extra synced).</summary>
+    public StoreListing Listing { get; private set; }
+
     private void Awake()
     {
+        Listing = GetComponent<StoreListing>();
+        if (Listing == null) Listing = gameObject.AddComponent<StoreListing>();
+
         // Which module each storefront section shows (0 = the one placed in the scene).
         // Store-wide prices set with "Set for all": new stock and newly placed items pick them up.
         storePrices = new NetworkList<StorePrice>(

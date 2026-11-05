@@ -126,6 +126,7 @@ public class StockContainer : NetworkBehaviour
         }
 
         zones.OnListChanged += OnZonesChanged;
+        StoreListing.MarkAllDirty();
         for (int i = 0; i < ZoneCount; i++) RefreshVisuals(i);
         All.Add(this);
     }
@@ -134,6 +135,7 @@ public class StockContainer : NetworkBehaviour
     {
         All.Remove(this);
         zones.OnListChanged -= OnZonesChanged;
+        StoreListing.MarkAllDirty();
         for (int i = 0; i < ZoneCount; i++) SetVisuals(i, default);
         if (visualRoot != null) Destroy(visualRoot.gameObject);
         visualRoot = null;
@@ -646,6 +648,7 @@ public class StockContainer : NetworkBehaviour
 
     private void OnZonesChanged(NetworkListEvent<ZoneStock> change)
     {
+        StoreListing.MarkAllDirty();
         if (change.Type == NetworkListEvent<ZoneStock>.EventType.Value) RefreshVisuals(change.Index);
         else for (int i = 0; i < ZoneCount; i++) RefreshVisuals(i);
     }
