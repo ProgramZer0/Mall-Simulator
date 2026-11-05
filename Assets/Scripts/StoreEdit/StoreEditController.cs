@@ -16,6 +16,9 @@ using UnityEngine.Rendering.Universal;
 /// Drag       an arrow to slide along that axis (stops on contact), a ring to rotate
 ///            (snaps to 15 degrees; hold Ctrl to turn freely)
 /// G          toggle gravity for the selected item (everything hangs in place otherwise)
+/// N          windows and doors: pick one to buy, then click a spot on one of your walls. Drag them
+///            along walls to move them, R turns them around, Delete takes them out (part refund).
+///            They're paid for when edit mode is saved.
 /// Esc        cancel the current drag / deselect
 ///
 /// The edit camera shows only your store: everything above it (Cutaway) and everything
@@ -42,6 +45,10 @@ public class StoreEditController : NetworkBehaviour
     [SerializeField] private KeyCode wallToolKey = KeyCode.B;
     [Tooltip("Wall tool: switch between full-height and half-height walls.")]
     [SerializeField] private KeyCode wallHeightKey = KeyCode.H;
+    [Tooltip("Opens the list of windows and doors to buy.")]
+    [SerializeField] private KeyCode openingsKey = KeyCode.N;
+    [Tooltip("Takes the selected window or door out of the store (part refund).")]
+    [SerializeField] private KeyCode removeKey = KeyCode.Delete;
     [Tooltip("Log (on the host) which items couldn't keep their new spot when edit mode is saved, and why.")]
     [SerializeField] private bool logEditSave = true;
     [Tooltip("Wall items dragged onto a wall from the floor view hang this high (their middle), in meters above the floor.")]
@@ -165,6 +172,19 @@ public class StoreEditController : NetworkBehaviour
     private Vector3[] pendingPositions;
     private Quaternion[] pendingRotations;
     private int pendingSessionId = -1;
+    private readonly HashSet<int> pendingRemoved = new();
+    private readonly List<StorePlot.NewEditItem> pendingAdded = new();
+
+    // Windows and doors: bought this session, taken out this session, being placed now.
+    private readonly List<EditLocalItem> addedItems = new();
+    private readonly HashSet<int> removedIndices = new();
+    private EditLocalItem placing;
+    private bool placingShown;
+    private bool openingsPanel;
+    private Rect openingsPanelRect;
+    private Vector2 openingsScroll;
+    private readonly List<ItemDef> openingDefs = new();
+    private string openingInfo;
 
     /// <summary>True while this player is in edit mode. PlayerController / PlayerInteractInput pause on it.</summary>
     public bool IsEditing => editPlot != null;
@@ -250,6 +270,12 @@ public class StoreEditController : NetworkBehaviour
     {
         // Pressing 0 again after a few seconds re-sends, in case the first attempt was lost.
         if (finishing && Time.time - finishStartedAt < 3f) return;
+        CancelPlacing();
+        if (editPlot != null && editPlot.HasStorefrontWalls && !LocalStorefrontHasDoor())
+        {
+            ShowEditMessage("Your storefront needs at least one door (N to buy one).");
+            return;
+        }
         finishing = true;
         finishStartedAt = Time.time;
         Deselect();
@@ -270,6 +296,21 @@ public class StoreEditController : NetworkBehaviour
             }
             SubmitEditPosesRpc(clientSessionId, start, positions, rotations);
         }
+
+        // Windows and doors taken out or bought this session.
+        var removed = new int[removedIndices.Count];
+        removedIndices.CopyTo(removed);
+        var newIds = new List<int>();
+        var newPositions = new List<Vector3>();
+        var newRotations = new List<Quaternion>();
+        foreach (var item in addedItems)
+        {
+            if (item == null) continue;
+            newIds.Add(item.Def.id);
+            newPositions.Add(item.transform.position);
+            newRotations.Add(item.transform.rotation);
+        }
+        SubmitEditChangesRpc(clientSessionId, removed, newIds.ToArray(), newPositions.ToArray(), newRotations.ToArray());
 
         FinishEditRpc(clientSessionId);
         // The local copies stay until the host's respawned items arrive (see SyncEditState).
@@ -376,6 +417,14 @@ public class StoreEditController : NetworkBehaviour
         foreach (var item in localItems)
             if (item != null) Destroy(item.gameObject);
         localItems.Clear();
+        foreach (var item in addedItems)
+            if (item != null) Destroy(item.gameObject);
+        addedItems.Clear();
+        removedIndices.Clear();
+        if (placing != null) Destroy(placing.gameObject);
+        placing = null;
+        openingsPanel = false;
+        openingInfo = null;
         selected = null;
     }
 
@@ -521,7 +570,20 @@ public class StoreEditController : NetworkBehaviour
             return;
         }
 
-        if (Input.GetKeyDown(wallToolKey)) SetWallTool(!wallTool);
+        if (placing != null)
+        {
+            UpdatePlacing(ray, mouse);
+            lastMouse = mouse;
+            return;
+        }
+
+        if (Input.GetKeyDown(openingsKey))
+        {
+            openingsPanel = !openingsPanel;
+            if (openingsPanel) { SetWallTool(false); RefreshOpeningDefs(); }
+        }
+
+        if (Input.GetKeyDown(wallToolKey)) { SetWallTool(!wallTool); if (wallTool) openingsPanel = false; }
         if (wallTool)
         {
             UpdateWallTool(ray, mouse);
@@ -529,8 +591,18 @@ public class StoreEditController : NetworkBehaviour
             return;
         }
 
-        if (selected != null)
+        if (selected != null && selected.Opening != null)
         {
+            // Windows and doors stay in their wall: no arrows, rings or gravity.
+            tool = Tool.None;
+            if (Input.GetKeyDown(rotateKey)) FlipOpening(selected);
+            if (Input.GetKeyDown(removeKey) || Input.GetKeyDown(KeyCode.Backspace)) RemoveOpening(selected);
+            else if (Input.GetKeyDown(KeyCode.Escape) || rmbClicked) Deselect();
+        }
+        else if (selected != null)
+        {
+            if (Input.GetKeyDown(removeKey))
+                ShowEditMessage("Only windows and doors can be removed here.");
             if (Input.GetKeyDown(toolKey))
                 tool = tool == Tool.None ? Tool.Move : tool == Tool.Move ? Tool.Rotate : Tool.None; // None -> Move -> Rotate -> None
             if (Input.GetKeyDown(rotateKey))
@@ -548,7 +620,7 @@ public class StoreEditController : NetworkBehaviour
         if (selectedSlot >= 0 && (Input.GetKeyDown(KeyCode.Escape) || rmbClicked))
             selectedSlot = -1;
 
-        if (Input.GetMouseButtonDown(0) && !IsMouseOverSlotPanel(mouse))
+        if (Input.GetMouseButtonDown(0) && !IsMouseOverSlotPanel(mouse) && !IsMouseOverOpeningsPanel(mouse))
         {
             if (hoverHandle != StoreEditHandles.None)
                 BeginDrag(hoverHandle, ray, mouse);
@@ -731,6 +803,12 @@ public class StoreEditController : NetworkBehaviour
     /// </summary>
     private bool DragOnSurfaces(Ray ray)
     {
+        if (selected.Opening != null)
+        {
+            DragOpening(selected, ray);
+            return true;
+        }
+
         var def = selected.Def;
         var mounting = PlacementCheck.GetMounting(def);
         if (mounting == ItemPickupNet.Mounting.Floor) return false;
@@ -1028,6 +1106,254 @@ public class StoreEditController : NetworkBehaviour
         return best;
     }
 
+    /* ========================= WINDOWS AND DOORS ========================= */
+
+    private void RefreshOpeningDefs()
+    {
+        openingDefs.Clear();
+        var catalog = ItemCatalog.Instance;
+        if (catalog == null) return;
+        foreach (var def in catalog.Items)
+            if (def != null && WallOpening.IsOpening(def)) openingDefs.Add(def);
+    }
+
+    /// <summary>What the windows and doors bought this session will cost when it's saved.</summary>
+    private int PendingCost()
+    {
+        int cost = 0;
+        foreach (var item in addedItems)
+            if (item != null) cost += MarketModifiers.OrderCost(item.Def);
+        return cost;
+    }
+
+    private bool IsMouseOverOpeningsPanel(Vector2 mouse) =>
+        openingsPanel && openingsPanelRect.Contains(new Vector2(mouse.x, Screen.height - mouse.y));
+
+    private void DrawOpeningsPanel()
+    {
+        if (!openingsPanel) return;
+
+        const float rowHeight = 34f;
+        float w = 280f;
+        float h = Mathf.Clamp(84f + openingDefs.Count * rowHeight, 110f, Mathf.Max(110f, Screen.height - 230f));
+        openingsPanelRect = new Rect(Screen.width - w - 10f, 10f, w, h);
+        float x = openingsPanelRect.x, y = openingsPanelRect.y;
+
+        GUI.Box(openingsPanelRect, GUIContent.none);
+        GUI.Label(new Rect(x + 10, y + 6, w - 20, 20), $"WINDOWS & DOORS   ({openingsKey} to close)");
+
+        if (openingDefs.Count == 0)
+        {
+            GUI.Label(new Rect(x + 10, y + 30, w - 20, 60),
+                "None in the catalog. Add a WallOpening to an item's world prefab.");
+            return;
+        }
+
+        var econ = EconomyManager.Instance;
+        int money = econ != null && econ.IsSpawned ? econ.GetMoneyOf(OwnerClientId) : int.MaxValue;
+        int pending = PendingCost();
+        int left = money == int.MaxValue ? int.MaxValue : money - pending;
+
+        var view = new Rect(0f, 0f, w - 40f, openingDefs.Count * rowHeight);
+        openingsScroll = GUI.BeginScrollView(new Rect(x + 8, y + 30, w - 16, h - 60), openingsScroll, view);
+        for (int i = 0; i < openingDefs.Count; i++)
+        {
+            var def = openingDefs[i];
+            int cost = MarketModifiers.OrderCost(def);
+            bool door = WallOpening.TryGet(def, out var o) && o.isDoor;
+            GUI.enabled = cost <= left;
+            if (GUI.Button(new Rect(0f, i * rowHeight, w - 40f, rowHeight - 4f), $"{def.displayName}{(door ? " (door)" : "")}   ${cost}"))
+                StartPlacing(def);
+            GUI.enabled = true;
+        }
+        GUI.EndScrollView();
+
+        GUI.Label(new Rect(x + 10, y + h - 26, w - 20, 20), $"Paid when you save: ${pending}");
+    }
+
+    private void StartPlacing(ItemDef def)
+    {
+        CancelPlacing();
+        Deselect();
+        selectedSlot = -1;
+        // Hidden until it's over a wall it fits in.
+        placing = EditLocalItem.Create(def, -1, new Vector3(0f, -10000f, 0f), Quaternion.identity);
+        placing.gameObject.SetActive(false);
+        openingInfo = "Point at one of your store's walls";
+    }
+
+    private void CancelPlacing()
+    {
+        if (placing != null) Destroy(placing.gameObject);
+        placing = null;
+    }
+
+    /// <summary>A window or door from the list follows the mouse along walls; click to put it there.</summary>
+    private void UpdatePlacing(Ray ray, Vector2 mouse)
+    {
+        if (Input.GetKeyDown(KeyCode.Escape) || rmbClicked)
+        {
+            CancelPlacing();
+            openingInfo = null;
+            return;
+        }
+        if (IsMouseOverOpeningsPanel(mouse)) return;
+
+        bool valid = DragOpening(placing, ray);
+        if (!Input.GetMouseButtonDown(0) || !valid || !placing.gameObject.activeSelf) return;
+
+        var item = placing;
+        placing = null;
+        addedItems.Add(item);
+        Select(item);
+        openingInfo = $"Bought for ${MarketModifiers.OrderCost(item.Def)} when you save";
+    }
+
+    /// <summary>
+    /// Move a window or door to the wall spot under the mouse, if it fits there. It keeps facing the
+    /// same way on the wall it's in; on a new wall it faces the camera (R turns it around).
+    /// </summary>
+    private bool DragOpening(EditLocalItem item, Ray ray)
+    {
+        var o = item.Opening;
+        if (!PickWallSpot(ray, item, out var wall, out float u, out float v))
+        {
+            openingInfo = "Point at one of your store's walls";
+            return false;
+        }
+
+        var settings = BuiltWallSettings.Instance;
+        float step = settings != null ? settings.OpeningSnap : 0.25f;
+        bool free = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+        if (!free && step > 0f)
+        {
+            u = Mathf.Round(u / step) * step;
+            v = Mathf.Round(v / step) * step;
+        }
+
+        bool onThisWall = item.gameObject.activeSelf && CuttableWall.HostOf(o) == wall;
+        bool flip = onThisWall
+            ? Vector3.Dot(item.transform.forward, wall.Normal) < 0f
+            : Vector3.Dot(editCam.transform.forward, wall.Normal) > 0f;
+
+        if (!wall.TryFit(o, u, v, flip, false, out Vector3 pos, out Quaternion rot, out string reason))
+        {
+            openingInfo = reason;
+            return false;
+        }
+        if (PlacementCheck.FindOpeningBlocker(item.Def, pos, rot, EditMask(), item.transform, false, editPlot) != null)
+        {
+            openingInfo = "Something is in the way";
+            return false;
+        }
+
+        if (!item.gameObject.activeSelf) item.gameObject.SetActive(true);
+        item.SetPose(pos, rot);
+        openingInfo = null;
+        return true;
+    }
+
+    /// <summary>
+    /// The spot on one of this store's walls under the mouse (u along it, v up it). From above you
+    /// mostly see floor, so a wall near the mouse on the floor counts too.
+    /// </summary>
+    private bool PickWallSpot(Ray ray, EditLocalItem item, out CuttableWall wall, out float u, out float v)
+    {
+        wall = null;
+        u = v = 0f;
+        float best = float.MaxValue;
+        foreach (var w in CuttableWall.All)
+        {
+            if (w == null || w.Plot != editPlot) continue;
+            if (w.Raycast(ray, out float wu, out float wv, out float d) && d < best)
+            {
+                best = d;
+                wall = w;
+                u = wu;
+                v = wv;
+            }
+        }
+        if (wall != null) return true;
+
+        if (!new Plane(Vector3.up, new Vector3(0f, editPlot.FloorHeight, 0f)).Raycast(ray, out float enter)) return false;
+        Vector3 floorPoint = ray.GetPoint(enter);
+        best = wallSnapDistance;
+        foreach (var w in CuttableWall.All)
+        {
+            if (w == null || w.Plot != editPlot) continue;
+            Vector3 c = w.ToWall(floorPoint);
+            if (c.x < 0f || c.x > w.Length) continue;
+            float d = Mathf.Abs(c.z) - w.Thickness * 0.5f;
+            if (d < best)
+            {
+                best = d;
+                wall = w;
+                u = c.x;
+            }
+        }
+        if (wall == null) return false;
+
+        // Keep its height if it's already in this wall; otherwise hanging height.
+        var host = item.gameObject.activeSelf ? CuttableWall.HostOf(item.Opening) : null;
+        v = host == wall ? wall.ToWall(item.Opening.Current.center).y : wall.FloorV + wallHangHeight;
+        return true;
+    }
+
+    /// <summary>R: turn a window or door to face the other side of its wall.</summary>
+    private void FlipOpening(EditLocalItem item)
+    {
+        var o = item.Opening;
+        var wall = CuttableWall.HostOf(o);
+        if (wall == null) return;
+
+        Vector3 c = wall.ToWall(o.Current.center);
+        bool flip = Vector3.Dot(item.transform.forward, wall.Normal) >= 0f; // facing out of Normal now: turn it
+        if (wall.TryFit(o, c.x, c.y, flip, false, out Vector3 pos, out Quaternion rot, out string reason) &&
+            PlacementCheck.FindOpeningBlocker(item.Def, pos, rot, EditMask(), item.transform, false, editPlot) == null)
+        {
+            item.SetPose(pos, rot);
+            openingInfo = null;
+        }
+        else openingInfo = reason ?? "Something is in the way";
+    }
+
+    /// <summary>Delete: take a window or door out (bought this session: just cancelled; otherwise part refund on save).</summary>
+    private void RemoveOpening(EditLocalItem item)
+    {
+        Deselect();
+        if (addedItems.Remove(item))
+        {
+            openingInfo = null;
+            Destroy(item.gameObject);
+            return;
+        }
+
+        if (item.Index >= 0)
+        {
+            removedIndices.Add(item.Index);
+            if (item.Index < localItems.Count) localItems[item.Index] = null;
+        }
+        ShowEditMessage($"{item.Def.displayName} removed: ${StorePlot.OpeningRefund(item.Def)} back when you save.");
+        Destroy(item.gameObject);
+    }
+
+    /// <summary>Is there a door in this store's front wall (as edited here)?</summary>
+    private bool LocalStorefrontHasDoor()
+    {
+        bool IsFrontDoor(WallOpening o)
+        {
+            if (o == null || !o.isDoor || !o.isActiveAndEnabled) return false;
+            var host = CuttableWall.HostOf(o);
+            return host != null && host.Plot == editPlot && host.IsStorefront;
+        }
+
+        foreach (var item in localItems) if (item != null && IsFrontDoor(item.Opening)) return true;
+        foreach (var item in addedItems) if (item != null && IsFrontDoor(item.Opening)) return true;
+        // Doors that weren't part of the session (the real items are gone while editing, so only these).
+        foreach (var o in WallOpening.All) if (!o.IsEditCopy && IsFrontDoor(o)) return true;
+        return false;
+    }
+
     /* ========================= WALL TOOL ========================= */
 
     private bool wallTool;
@@ -1090,8 +1416,14 @@ public class StoreEditController : NetworkBehaviour
                 piece = hit.collider.GetComponentInParent<BuiltWallPiece>();
             if (piece != null && piece.Plot == editPlot)
             {
-                wallInfo = "Click to remove this wall (part refund)";
-                if (click) RequestRemoveWallRpc(piece.WallId);
+                var cuttable = piece.GetComponent<CuttableWall>();
+                if (cuttable != null && cuttable.OpeningCount > 0)
+                    wallInfo = "Take the windows and doors out of this wall first";
+                else
+                {
+                    wallInfo = "Click to remove this wall (part refund)";
+                    if (click) RequestRemoveWallRpc(piece.WallId);
+                }
             }
             else wallInfo = "Shift: click a built wall to remove it";
             return;
@@ -1231,13 +1563,19 @@ public class StoreEditController : NetworkBehaviour
     [Rpc(SendTo.Owner)]
     private void EditRefusedRpc(string reason)
     {
-        refusalMessage = reason;
+        finishing = false; // e.g. a save the host turned down: keep editing
+        ShowEditMessage(reason);
+    }
+
+    private void ShowEditMessage(string message)
+    {
+        refusalMessage = message;
         refusalUntil = Time.time + 4f;
     }
 
     private void OnGUI()
     {
-        if (IsOwner && !IsEditing && Time.time < refusalUntil && !string.IsNullOrEmpty(refusalMessage))
+        if (IsOwner && Time.time < refusalUntil && !string.IsNullOrEmpty(refusalMessage))
         {
             var r = new Rect(Screen.width * 0.5f - 260f, Screen.height * 0.35f, 520f, 30f);
             GUI.Box(r, refusalMessage);
@@ -1267,9 +1605,22 @@ public class StoreEditController : NetworkBehaviour
         GUI.Label(new Rect(20, 56, 400, 20), $"Tool: {toolName}     Gravity: {gravity}");
         GUI.Label(new Rect(20, 76, 400, 20), $"X: move > rotate > hide   {rotateKey}: rotate   G: gravity   Ctrl: no snap   Esc: deselect");
         GUI.Label(new Rect(20, 96, 400, 20), "Drag item: slide   RMB drag: camera   RMB click: deselect");
-        GUI.Label(new Rect(20, 116, 400, 20), $"Click a storefront wall section to change it   {wallToolKey}: build walls");
+        GUI.Label(new Rect(20, 116, 400, 20), $"{openingsKey}: windows & doors   {wallToolKey}: build walls");
 
-        if (!finishing) DrawSlotPanel();
+        if (placing != null || (selected != null && selected.Opening != null))
+        {
+            GUI.Box(new Rect(10, 150, 420, 46), GUIContent.none);
+            GUI.Label(new Rect(20, 154, 400, 20), placing != null
+                ? $"Placing {placing.Def.displayName}: click one of your walls   (RMB / Esc: cancel)"
+                : $"Drag along a wall to move   {rotateKey}: turn around   {removeKey}: remove (part refund)");
+            GUI.Label(new Rect(20, 174, 400, 20), string.IsNullOrEmpty(openingInfo) ? "" : openingInfo);
+        }
+
+        if (!finishing)
+        {
+            DrawSlotPanel();
+            DrawOpeningsPanel();
+        }
     }
 
     /* ========================= HELPERS ========================= */
@@ -1450,26 +1801,86 @@ public class StoreEditController : NetworkBehaviour
         }
     }
 
+    /// <summary>Host: the windows and doors the editor took out and bought (sent just before finishing).</summary>
+    [Rpc(SendTo.Server)]
+    private void SubmitEditChangesRpc(int sessionId, int[] removed, int[] newIds, Vector3[] newPositions,
+                                      Quaternion[] newRotations, RpcParams rpcParams = default)
+    {
+        if (!ServerTryGetSession(rpcParams, sessionId, out _)) return;
+
+        pendingRemoved.Clear();
+        if (removed != null) foreach (int i in removed) pendingRemoved.Add(i);
+
+        pendingAdded.Clear();
+        if (newIds == null || newPositions == null || newRotations == null) return;
+        int n = Mathf.Min(MaxNewPerSave, Mathf.Min(newIds.Length, Mathf.Min(newPositions.Length, newRotations.Length)));
+        for (int k = 0; k < n; k++)
+            pendingAdded.Add(new StorePlot.NewEditItem { itemId = newIds[k], position = newPositions[k], rotation = newRotations[k] });
+    }
+
+    private const int MaxNewPerSave = 64;
+
+    /// <summary>Host: after this save, will the store still have a door in its front wall?</summary>
+    private bool ServerStorefrontHasDoor(StorePlot plot)
+    {
+        var catalog = ItemCatalog.Instance;
+        if (catalog == null) return true;
+
+        var session = plot.ServerEditSession;
+        for (int i = 0; i < session.Count; i++)
+        {
+            if (pendingRemoved.Contains(i) || !catalog.TryGet(session[i].itemId, out var def)) continue;
+            Vector3 pos = session[i].position;
+            Quaternion rot = session[i].rotation;
+            if (pendingPositions != null && i < pendingPositions.Length && float.IsFinite(pendingPositions[i].x))
+            {
+                pos = pendingPositions[i];
+                rot = pendingRotations[i];
+            }
+            if (plot.IsStorefrontDoor(def, pos, rot)) return true;
+        }
+        foreach (var n in pendingAdded)
+            if (catalog.TryGet(n.itemId, out var def) && plot.IsStorefrontDoor(def, n.position, n.rotation)) return true;
+        foreach (var o in WallOpening.All)
+        {
+            if (o == null || o.IsEditCopy || !o.isDoor) continue;
+            var host = CuttableWall.HostOf(o);
+            if (host != null && host.Plot == plot && host.IsStorefront) return true;
+        }
+        return false;
+    }
+
     /// <summary>Host: respawn every item, at the editor's position where it's valid.</summary>
     [Rpc(SendTo.Server)]
     private void FinishEditRpc(int sessionId, RpcParams rpcParams = default)
     {
         if (!ServerTryGetSession(rpcParams, sessionId, out var plot)) return;
 
+        if (plot.HasStorefrontWalls && !ServerStorefrontHasDoor(plot))
+        {
+            EditRefusedRpc("Your storefront needs at least one door.");
+            return;
+        }
+
         int mask = EditMask();
         plot.ServerEndEdit(pendingPositions, pendingRotations, (def, pos, rot) =>
         {
-            var blocker = PlacementCheck.FindBlockerIgnoringEditCopies(def, pos, rot, mask);
+            // Windows and doors sit inside a wall, so walls they can be cut into don't count.
+            var blocker = WallOpening.IsOpening(def)
+                ? PlacementCheck.FindOpeningBlocker(def, pos, rot, mask, null, true, plot)
+                : PlacementCheck.FindBlockerIgnoringEditCopies(def, pos, rot, mask);
             if (blocker != null && logEditSave)
                 Debug.LogWarning($"[StoreEdit] '{def.displayName}' can't stay where it was moved: it overlaps " +
                                  $"'{blocker.name}' (root '{blocker.transform.root.name}', layer " +
                                  $"'{LayerMask.LayerToName(blocker.gameObject.layer)}'). It goes back to where it was.", blocker);
             return blocker == null;
-        }, logEditSave);
+        }, logEditSave, pendingRemoved, pendingAdded, MallManager.GetTeamOf(OwnerClientId));
 
         pendingPositions = null;
         pendingRotations = null;
         pendingSessionId = -1;
+        pendingRemoved.Clear();
+        pendingAdded.Clear();
     }
 
     /// <summary>
@@ -1495,6 +1906,8 @@ public class StoreEditController : NetworkBehaviour
                 pendingRotations[i] = Quaternion.identity;
             }
             pendingSessionId = sessionId;
+            pendingRemoved.Clear();
+            pendingAdded.Clear();
         }
         return true;
     }

@@ -136,6 +136,22 @@ public class DoorNet : NetworkBehaviour
     private bool wasSegmentBought;
     private bool SegmentBought => ownerStore != null && ownerSegment >= 0 && ownerStore.IsSegmentPurchased(ownerSegment);
 
+    /// <summary>
+    /// Doors players put in a store's walls (WallOpening) belong to that store: its team can lock them.
+    /// Does nothing if the door already has an Owner Store.
+    /// </summary>
+    public void AssignStoreIfUnset(StorePlot plot)
+    {
+        if (ownerStore != null || plot == null) return;
+        ownerStore = plot;
+        if (IsSpawned && IsServer)
+        {
+            wasOwned = ownerStore.HasOwner;
+            wasSegmentBought = SegmentBought;
+            ownerStore.Changed += OnStoreChanged;
+        }
+    }
+
     private void OnStateChanged(sbyte previous, sbyte current) => motion.SetOpen(current != 0, current);
 
     /* ========================= RULES ========================= */

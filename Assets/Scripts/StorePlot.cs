@@ -58,6 +58,10 @@ public class StorePlot : NetworkBehaviour
     [Tooltip("Automatic search only: wall modules within this many meters of the store's space " +
              "belong to it. Each module goes to the closest store.")]
     [SerializeField] private float frontWallReach = 1f;
+    [Tooltip("The store's front wall(s) with a CuttableWall: players put windows and doors (WallOpening " +
+             "items) anywhere in them in edit mode. While any are set, the store needs at least one door in " +
+             "them to save edit mode.")]
+    [SerializeField] private CuttableWall[] storefrontWalls;
 
     [Header("Deliveries")]
     [Tooltip("BoxColliders marking where this store's deliveries are set down. Boxes are packed in " +
@@ -205,6 +209,14 @@ public class StorePlot : NetworkBehaviour
             foreach (var w in forSaleWalls)
                 if (w != null && !w.TryGetComponent<ForSaleSign>(out _))
                     w.AddComponent<ForSaleSign>().Init(this);
+
+        if (storefrontWalls != null)
+            foreach (var w in storefrontWalls)
+                if (w != null)
+                {
+                    w.Plot = this;
+                    w.IsStorefront = true;
+                }
 
         // Start in the "nobody owns it" look until the synced state says otherwise.
         ApplyRenovationWalls();
@@ -507,6 +519,9 @@ public class StorePlot : NetworkBehaviour
             var piece = go.AddComponent<BuiltWallPiece>();
             piece.Plot = this;
             piece.WallId = w.id;
+            // Windows and doors can go in built walls too.
+            if (!go.TryGetComponent<CuttableWall>(out var cuttable)) cuttable = go.AddComponent<CuttableWall>();
+            cuttable.Plot = this;
         }
     }
 
@@ -521,6 +536,11 @@ public class StorePlot : NetworkBehaviour
         if (doors != null)
             foreach (var d in doors)
                 if (d != null) yield return d;
+
+        // Doors players put in this store's walls that the store opens and shuts itself.
+        foreach (var o in WallOpening.All)
+            if (o != null && o.IsStoreDoor && !o.IsEditCopy && CuttableWall.HostOf(o)?.Plot == this)
+                yield return o.gameObject;
 
         if (frontSlots == null) yield break;
         foreach (var slot in frontSlots)
@@ -553,6 +573,55 @@ public class StorePlot : NetworkBehaviour
     }
 
     private bool doorsApplied;
+
+    /// <summary>A door was added to or taken out of this store: open or shut it to match the store.</summary>
+    public void RefreshDoors()
+    {
+        if (IsSpawned) ApplyDoors();
+    }
+
+    /* ========================= WINDOWS AND DOORS ========================= */
+
+    /// <summary>The store has front walls players put doors in (and so must keep one).</summary>
+    public bool HasStorefrontWalls
+    {
+        get
+        {
+            if (storefrontWalls == null) return false;
+            foreach (var w in storefrontWalls) if (w != null) return true;
+            return false;
+        }
+    }
+
+    /// <summary>Is this item (at this pose) a door in one of this store's front walls?</summary>
+    public bool IsStorefrontDoor(ItemDef def, Vector3 position, Quaternion rotation)
+    {
+        if (!WallOpening.TryGet(def, out var o) || !o.isDoor) return false;
+        var host = CuttableWall.HostOf(def, position, rotation);
+        return host != null && host.Plot == this && host.IsStorefront;
+    }
+
+    /// <summary>Is this item (at this pose) a window or door in one of this store's walls?</summary>
+    public bool IsOpeningInMyWall(ItemDef def, Vector3 position, Quaternion rotation)
+    {
+        var host = CuttableWall.HostOf(def, position, rotation);
+        return host != null && host.Plot == this;
+    }
+
+    /// <summary>
+    /// Could this window or door stay here? It must be in one of this store's walls with room around it
+    /// (the editor's copies don't count, since they're the same items).
+    /// </summary>
+    public bool CanPlaceOpening(ItemDef def, Vector3 position, Quaternion rotation, out string reason)
+    {
+        reason = "Not in one of your store's walls";
+        var host = CuttableWall.HostOf(def, position, rotation);
+        if (host == null || host.Plot != this) return false;
+        var shape = WallOpening.Measure(def, position, rotation);
+        Vector3 c = host.ToWall(shape.center);
+        var hole = new Rect(c.x - shape.size.x * 0.5f, c.y - shape.size.y * 0.5f, shape.size.x, shape.size.y);
+        return host.CanFit(hole, null, true, out reason);
+    }
 
     /// <summary>Is this position within range of one of the store's doors?</summary>
     public bool IsNearDoor(Vector3 position, float range)
@@ -873,7 +942,10 @@ public class StorePlot : NetworkBehaviour
         var catalog = ItemCatalog.Instance;
         foreach (var item in ItemPickupNet.All.ToArray())
         {
-            if (item == null || !item.IsSpawned || !Contains(item.transform.position)) continue;
+            if (item == null || !item.IsSpawned) continue;
+            // Windows and doors in this store's walls count even if they stick out of its space.
+            bool inMyWall = item.TryGetComponent<WallOpening>(out var opening) && CuttableWall.HostOf(opening)?.Plot == this;
+            if (!inMyWall && !Contains(item.transform.position)) continue;
             if (item.TryGetComponent<ShipmentPackage>(out _)) continue; // boxes stay where they are
             if (item.IsOnCart) continue;                                 // so do things riding on a cart
 
@@ -900,23 +972,68 @@ public class StorePlot : NetworkBehaviour
         editorClientId.Value = clientId;
     }
 
+    /// <summary>A window or door bought in edit mode (spawned when the session is saved).</summary>
+    public struct NewEditItem
+    {
+        public int itemId;
+        public Vector3 position;
+        public Quaternion rotation;
+    }
+
     /// <summary>
     /// Server only. Ends the edit session and respawns its items. Each item uses the editor's
     /// position when one was given and it passes the checks (inside this store, isValid);
     /// otherwise it goes back to where it was before editing.
+    ///
+    /// Windows and doors (WallOpening) can also be removed (Removed: their places in the session,
+    /// part refunded) and bought (Added: paid for here, by Team). They're checked against this
+    /// store's walls instead of its space.
     /// </summary>
     public void ServerEndEdit(Vector3[] positions, Quaternion[] rotations,
-                              Func<ItemDef, Vector3, Quaternion, bool> isValid, bool log = false)
+                              Func<ItemDef, Vector3, Quaternion, bool> isValid, bool log = false,
+                              ICollection<int> removed = null, IList<NewEditItem> added = null, ulong team = NoOwner)
     {
         if (!IsServer || !IsRenovating) return;
 
-        int moved = 0, unchanged = 0, rejected = 0, noPose = 0;
+        int moved = 0, unchanged = 0, rejected = 0, noPose = 0, sold = 0, bought = 0, notBought = 0;
         var catalog = ItemCatalog.Instance;
+        var econ = EconomyManager.Instance;
+        bool canPay = econ != null && econ.IsSpawned && team != NoOwner;
+
+        bool Allowed(ItemDef def, Vector3 p, Quaternion r)
+        {
+            if (WallOpening.IsOpening(def))
+            {
+                Physics.SyncTransforms();
+                if (!CanPlaceOpening(def, p, r, out string why))
+                {
+                    if (log) Debug.LogWarning($"[StorePlot] '{def.displayName}' can't go at {p}: {why}.", this);
+                    return false;
+                }
+            }
+            else if (!ContainsItem(def, p, r))
+            {
+                if (log) Debug.LogWarning($"[StorePlot] '{def.displayName}' was moved outside '{displayName}' " +
+                                          $"(to {p}); it goes back to where it was.", this);
+                return false;
+            }
+            Physics.SyncTransforms(); // see the items respawned earlier in this loop
+            return isValid == null || isValid(def, p, r);
+        }
+
         for (int i = 0; i < editSession.Count; i++)
         {
             var entry = editSession[i];
             if (catalog == null || !catalog.TryGet(entry.itemId, out var def) || def.worldNetworkPrefab == null)
                 continue;
+
+            // Taken out in edit mode (windows and doors only): part of its price back.
+            if (removed != null && removed.Contains(i) && WallOpening.IsOpening(def))
+            {
+                if (canPay) econ.ServerAddMoney(team, OpeningRefund(def));
+                sold++;
+                continue;
+            }
 
             Vector3 pos = entry.position;
             Quaternion rot = entry.rotation;
@@ -928,13 +1045,8 @@ public class StorePlot : NetworkBehaviour
                 if (IsFinite(p) && IsFinite(r))
                 {
                     r = r.normalized;
-                    Physics.SyncTransforms(); // see the items respawned earlier in this loop
                     bool samePlace = (p - pos).sqrMagnitude < 1e-6f && Quaternion.Angle(r, rot) < 0.1f;
-                    bool inside = ContainsItem(def, p, r);
-                    if (!inside && log)
-                        Debug.LogWarning($"[StorePlot] '{def.displayName}' was moved outside '{displayName}' " +
-                                         $"(to {p}); it goes back to where it was.", this);
-                    if (inside && (isValid == null || isValid(def, p, r)))
+                    if (Allowed(def, p, r))
                     {
                         if (samePlace) unchanged++; else moved++;
                         pos = p;
@@ -946,28 +1058,66 @@ public class StorePlot : NetworkBehaviour
             }
             else noPose++;
 
-            var spawned = Instantiate(def.worldNetworkPrefab, pos, rot);
-            // Edit mode already let the player choose whether it falls, so it comes back exactly as left.
-            if (spawned.TryGetComponent<ItemPickupNet>(out var item))
-            {
-                // Hung on a wall in edit mode? Then it stays up even if what's below it is picked up.
-                bool onWall = item.MountingType != ItemPickupNet.Mounting.Floor &&
-                              PlacementCheck.HasWallBehind(def, pos, rot, PlacementCheck.DefaultWallMask);
-                item.ServerPrepareFrozen(onWall);
-                if (entry.units > 0) item.ServerSetUnits(entry.units);
-                if (entry.price > 0 && spawned.TryGetComponent<Sellable>(out var sellable)) sellable.ServerSetPrice(entry.price);
-            }
-            if (entry.stock != null && spawned.TryGetComponent<StockContainer>(out var container))
-                container.ServerPrepareStock(entry.stock);
-            spawned.Spawn(true);
+            SpawnEditItem(def, pos, rot, entry.units, entry.price, entry.stock);
         }
+
+        // Windows and doors bought in edit mode.
+        if (added != null)
+            foreach (var n in added)
+            {
+                if (catalog == null || !catalog.TryGet(n.itemId, out var def) || def.worldNetworkPrefab == null ||
+                    !WallOpening.IsOpening(def) || !IsFinite(n.position) || !IsFinite(n.rotation))
+                { notBought++; continue; }
+
+                Quaternion r = n.rotation.normalized;
+                if (!Allowed(def, n.position, r)) { notBought++; continue; }
+                if (econ != null && econ.IsSpawned && !econ.ServerTrySpend(team, MarketModifiers.OrderCost(def)))
+                {
+                    if (log) Debug.LogWarning($"[StorePlot] Not enough money for '{def.displayName}'.", this);
+                    notBought++;
+                    continue;
+                }
+                SpawnEditItem(def, n.position, r, 0, 0, null);
+                bought++;
+            }
 
         if (log)
             Debug.Log($"[StorePlot] Edit of '{displayName}' saved: {moved} moved, {unchanged} unchanged, " +
-                      $"{rejected} put back (see warnings above), {noPose} with no position from the editor.", this);
+                      $"{rejected} put back (see warnings above), {noPose} with no position from the editor, " +
+                      $"{sold} windows/doors removed, {bought} bought, {notBought} not bought.", this);
 
         editSession.Clear();
         editorClientId.Value = NoOwner;
+    }
+
+    /// <summary>What removing a window or door in edit mode gives back.</summary>
+    public static int OpeningRefund(ItemDef def)
+    {
+        float share = BuiltWallSettings.Instance != null ? BuiltWallSettings.Instance.OpeningRefundFraction : 0.5f;
+        // The lower of its normal and current price, so buying in a sale and selling later isn't a profit.
+        return Mathf.FloorToInt(Mathf.Min(def.price, MarketModifiers.OrderCost(def)) * share);
+    }
+
+    private void SpawnEditItem(ItemDef def, Vector3 pos, Quaternion rot, int units, int price, StockContainer.ZoneStock[] stock)
+    {
+        var spawned = Instantiate(def.worldNetworkPrefab, pos, rot);
+        // Edit mode already let the player choose whether it falls, so it comes back exactly as left.
+        if (spawned.TryGetComponent<ItemPickupNet>(out var item))
+        {
+            // Hung on a wall in edit mode? Then it stays up even if what's below it is picked up.
+            // Windows and doors are always held by their wall.
+            bool onWall = WallOpening.IsOpening(def) ||
+                          (item.MountingType != ItemPickupNet.Mounting.Floor &&
+                           PlacementCheck.HasWallBehind(def, pos, rot, PlacementCheck.DefaultWallMask));
+            item.ServerPrepareFrozen(onWall);
+            if (units > 0) item.ServerSetUnits(units);
+            if (price > 0 && spawned.TryGetComponent<Sellable>(out var sellable)) sellable.ServerSetPrice(price);
+        }
+        if (stock != null && spawned.TryGetComponent<StockContainer>(out var container))
+            container.ServerPrepareStock(stock);
+        // A lockable door belongs to this store.
+        if (spawned.TryGetComponent<DoorNet>(out var door)) door.AssignStoreIfUnset(this);
+        spawned.Spawn(true);
     }
 
     /// <summary>True if the middle of the item at this pose is inside the store.</summary>
