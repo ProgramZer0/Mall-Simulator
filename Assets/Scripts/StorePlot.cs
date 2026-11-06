@@ -477,6 +477,74 @@ public class StorePlot : NetworkBehaviour
         return true;
     }
 
+    /// <summary>
+    /// Built walls: the store's edge usually isn't on the wall grid, so an end that lands within half a
+    /// grid step of it (just inside or just outside) is slid along the wall onto the edge. The wall
+    /// keeps its line, so the grid stays as predictable as before; only those ends change.
+    /// </summary>
+    public void FitWallToEdges(ref Vector3 a, ref Vector3 b)
+    {
+        var settings = BuiltWallSettings.Instance;
+        if (settings == null) return;
+        Vector3 dir = Flat(b - a);
+        if (dir == Vector3.zero) return;
+        float length = Flat(b - a, false).magnitude;
+        float reach = settings.GridSize * 0.5f + 0.01f;
+        const float inset = 0.002f; // a hair inside, so the end still counts as in the store
+
+        // Where the line through the wall is inside the store, as distances from a.
+        var spans = new List<Vector2>();
+        Vector3 origin = a + Vector3.up * 0.1f;
+        foreach (var box in baseAreas) AddLineSpan(box, origin, dir, spans);
+        for (int i = 0; i < SegmentCount; i++)
+            if (IsSegmentPurchased(i)) AddLineSpan(segments[i].area, origin, dir, spans);
+        if (spans.Count == 0) return;
+        spans.Sort((p, q) => p.x.CompareTo(q.x));
+        var merged = new List<Vector2> { spans[0] };
+        for (int i = 1; i < spans.Count; i++)
+        {
+            var last = merged[merged.Count - 1];
+            if (spans[i].x <= last.y + 0.01f) merged[merged.Count - 1] = new Vector2(last.x, Mathf.Max(last.y, spans[i].y));
+            else merged.Add(spans[i]);
+        }
+
+        // The stretch of store the wall's middle is in.
+        float mid = length * 0.5f;
+        foreach (var span in merged)
+        {
+            if (mid < span.x || mid > span.y) continue;
+            Vector3 start = a;
+            if (Mathf.Abs(span.x) < reach) a = start + dir * (span.x + inset);
+            if (Mathf.Abs(span.y - length) < reach) b = start + dir * (span.y - inset);
+            return;
+        }
+    }
+
+    // Where a flat line (origin + dir × s) is inside a box, as an s range.
+    private static void AddLineSpan(BoxCollider box, Vector3 origin, Vector3 dir, List<Vector2> into)
+    {
+        if (box == null) return;
+        Vector3 lp = box.transform.InverseTransformPoint(origin) - box.center;
+        Vector3 ld = box.transform.InverseTransformVector(dir);
+        Vector3 half = box.size * 0.5f;
+        float lo = float.NegativeInfinity, hi = float.PositiveInfinity;
+        for (int i = 0; i < 3; i++)
+        {
+            if (Mathf.Abs(ld[i]) < 1e-6f)
+            {
+                if (Mathf.Abs(lp[i]) > half[i]) return;
+                continue;
+            }
+            float t1 = (-half[i] - lp[i]) / ld[i], t2 = (half[i] - lp[i]) / ld[i];
+            lo = Mathf.Max(lo, Mathf.Min(t1, t2));
+            hi = Mathf.Min(hi, Mathf.Max(t1, t2));
+        }
+        if (lo <= hi) into.Add(new Vector2(lo, hi));
+    }
+
+    /// <summary>Is a point in the store, or within Reach meters of it?</summary>
+    public bool IsInsideOrNear(Vector3 worldPoint, float reach) => Contains(worldPoint) || DistanceToSpace(worldPoint) <= reach;
+
     /// <summary>Server: add a wall (checks done by the caller). Returns its id.</summary>
     public int ServerAddWall(Vector3 a, Vector3 b, float height)
     {

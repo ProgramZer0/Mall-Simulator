@@ -1515,8 +1515,8 @@ public class StoreEditController : NetworkBehaviour
 
         if (!hasWallStart)
         {
-            // A post where the wall will start.
-            bool inside = editPlot.Contains(point + Vector3.up * 0.1f);
+            // A post where the wall will start. Just outside the edge is fine: the wall gets slid onto it.
+            bool inside = editPlot.IsInsideOrNear(point + Vector3.up * 0.1f, settings.GridSize * 0.5f + 0.01f);
             ShowWallGhost(point, point, height, inside);
             wallInfo = inside ? $"Click to start a {heightName} wall" : "Start inside your store";
             if (click && inside)
@@ -1528,14 +1528,17 @@ public class StoreEditController : NetworkBehaviour
         }
 
         Vector3 end = settings.SnapEnd(wallStart, point);
-        float length = Vector3.Distance(wallStart, end);
+        // Ends right by the store's edge reach it (the host does the same).
+        Vector3 fitA = wallStart, fitB = end;
+        editPlot.FitWallToEdges(ref fitA, ref fitB);
+        float length = Vector3.Distance(fitA, fitB);
         int cost = settings.GetCost(length, wallHalf);
 
-        bool valid = editPlot.CanBuildWall(wallStart, end, out string reason);
+        bool valid = editPlot.CanBuildWall(fitA, fitB, out string reason);
         if (valid && !CanAffordWall(cost)) { valid = false; reason = "Not enough money"; }
-        if (valid && WallHitsEditItems(settings, wallStart, end, height)) { valid = false; reason = "An item is in the way"; }
+        if (valid && WallHitsEditItems(settings, fitA, fitB, height)) { valid = false; reason = "An item is in the way"; }
 
-        ShowWallGhost(wallStart, end, height, valid);
+        ShowWallGhost(fitA, fitB, height, valid);
         wallInfo = valid ? $"{length:0.0} m {heightName} wall: ${cost}   (click to build)" : $"{length:0.0} m: {reason}";
 
         if (click && valid)
@@ -1685,14 +1688,32 @@ public class StoreEditController : NetworkBehaviour
         dir.Normalize();
         bool diagonal = Mathf.Abs(dir.x) > 0.1f && Mathf.Abs(dir.z) > 0.1f;
         float step = settings.GridSize * (diagonal ? Mathf.Sqrt(2f) : 1f);
-        Vector3 rel = raw - wall.a;
-        rel.y = 0f;
-        float t = Vector3.Dot(rel, dir);
+        // Steps count from an end that's on the grid (an end slid onto the store's edge isn't).
+        Vector3 basePoint = OnGrid(settings, wall.a) ? wall.a : OnGrid(settings, wall.b) ? wall.b : wall.a;
+        float baseT = Vector3.Dot(Flat(basePoint - wall.a), dir);
+        float t = Vector3.Dot(Flat(raw - wall.a), dir);
         if (!line.HasValue) t = Mathf.Clamp(t, 0f, wall.Length);
-        t = Mathf.Round(t / step) * step;
+        t = baseT + Mathf.Round((t - baseT) / step) * step;
+        // The wall's own ends count as spots too.
+        float length = wall.Length;
+        float tRaw = Vector3.Dot(Flat(raw - wall.a), dir);
+        if (Mathf.Abs(tRaw) < step * 0.5f) t = 0f;
+        else if (Mathf.Abs(tRaw - length) < step * 0.5f) t = length;
         spot = wall.a + dir * t;
         spot.y = floorY;
         return true;
+    }
+
+    private static Vector3 Flat(Vector3 v)
+    {
+        v.y = 0f;
+        return v;
+    }
+
+    private static bool OnGrid(BuiltWallSettings settings, Vector3 p)
+    {
+        Vector3 g = settings.SnapToGrid(p);
+        return Mathf.Abs(g.x - p.x) < 0.005f && Mathf.Abs(g.z - p.z) < 0.005f;
     }
 
     private static float DistanceToSegmentFlat(Vector3 p, Vector3 a, Vector3 b)
@@ -1879,6 +1900,7 @@ public class StoreEditController : NetworkBehaviour
         a.y = plot.FloorHeight;
         b = settings.SnapEnd(a, b);
         b.y = plot.FloorHeight;
+        plot.FitWallToEdges(ref a, ref b);
         if (!plot.CanBuildWall(a, b, out _)) return;
 
         float height = half ? Mathf.Min(settings.HalfHeight, plot.BuiltWallFullHeight) : plot.BuiltWallFullHeight;
