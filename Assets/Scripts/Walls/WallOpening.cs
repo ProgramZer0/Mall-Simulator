@@ -31,6 +31,10 @@ public class WallOpening : MonoBehaviour
     public bool isDoor;
     [Tooltip("Size of the hole in meters (width, height). Leave at 0 to use the item's own size.")]
     public Vector2 holeSize;
+    [Tooltip("Extra turn to stand the model right in the wall, on top of the rotation its prefab root " +
+             "already has (that one is kept automatically, e.g. Blender's -90 on X). Try (0, 90, 0) if it " +
+             "sits sideways, (0, 180, 0) if it faces the wrong way.")]
+    public Vector3 modelRotation;
 
     private Bounds bounds;        // root-local, before the root's scale
     private bool hasBounds;
@@ -39,6 +43,8 @@ public class WallOpening : MonoBehaviour
     private StorePlot lastPlot;
     private DoorNet doorNet;
     private int seenWalls = -1;
+    private Quaternion fix = Quaternion.identity;
+    private bool hasFix;
 
     /// <summary>Where an opening is and how big, in world space.</summary>
     public struct Shape
@@ -85,6 +91,13 @@ public class WallOpening : MonoBehaviour
         }
         if (best == null) { Debug.LogWarning("[WallOpening] No CuttableWall in the scene.", this); return; }
 
+        // Outside Play mode there's no catalog: take the model's rotation from its prefab.
+        var source = UnityEditor.PrefabUtility.GetCorrespondingObjectFromSource(gameObject);
+        if (source != null)
+        {
+            fix = FixOf(source.transform, modelRotation);
+            hasFix = true;
+        }
         UnityEditor.Undo.RecordObject(transform, "Snap Into Wall");
         best.SnapInEditor(this);
         Debug.Log($"[WallOpening] '{name}' set into '{best.name}'.", this);
@@ -136,6 +149,8 @@ public class WallOpening : MonoBehaviour
         if (other == null) return;
         isDoor = other.isDoor;
         holeSize = other.holeSize;
+        modelRotation = other.modelRotation;
+        hasFix = false;
     }
 
     /// <summary>The store opens and shuts this door itself (it moves, but players don't work it).</summary>
@@ -145,12 +160,37 @@ public class WallOpening : MonoBehaviour
     public bool IsEditCopy => GetComponent<EditLocalItem>() != null;
 
     /// <summary>This opening as it is now.</summary>
-    public Shape Current => Measure(LocalBounds, transform.lossyScale, holeSize, transform.position, transform.rotation);
+    public Shape Current => Measure(LocalBounds, transform.lossyScale, holeSize, ModelFix, transform.position, transform.rotation);
 
     /// <summary>Hole size (width, height) in meters.</summary>
-    public Vector2 Size => Measure(LocalBounds, transform.lossyScale, holeSize, Vector3.zero, Quaternion.identity).size;
+    public Vector2 Size => Measure(LocalBounds, transform.lossyScale, holeSize, ModelFix, Vector3.zero, ModelFix).size;
 
-    /// <summary>Where the pivot goes so the hole's middle lands on center.</summary>
+    /// <summary>
+    /// How the model sits compared with a window facing +Z: its prefab root's rotation (models from
+    /// Blender often come in at -90 on X) and then Model Rotation. Placing uses wall facing × this.
+    /// </summary>
+    public Quaternion ModelFix
+    {
+        get
+        {
+            if (hasFix) return fix;
+            ItemDef def = null;
+            if (TryGetComponent<EditLocalItem>(out var copy)) def = copy.Def;
+            else if (TryGetComponent<ItemPickupNet>(out var item) && ItemCatalog.Instance != null)
+                ItemCatalog.Instance.TryGet(item.itemId, out def);
+            if (def == null || def.worldNetworkPrefab == null) return Quaternion.Euler(modelRotation); // try again later
+            fix = FixOf(def.worldNetworkPrefab.transform, modelRotation);
+            hasFix = true;
+            return fix;
+        }
+    }
+
+    private static Quaternion FixOf(Transform prefabRoot, Vector3 extra) => prefabRoot.localRotation * Quaternion.Euler(extra);
+
+    /// <summary>The item's rotation for an opening facing this way (wall facing × ModelFix).</summary>
+    public Quaternion RotationFor(Quaternion facing) => facing * ModelFix;
+
+    /// <summary>Where the pivot goes so the hole's middle lands on center (rotation: the item's).</summary>
     public Vector3 PivotFor(Vector3 center, Quaternion rotation) =>
         center - rotation * Vector3.Scale(LocalBounds.center, transform.lossyScale);
 
@@ -169,22 +209,31 @@ public class WallOpening : MonoBehaviour
     public static Shape Measure(ItemDef def, Vector3 position, Quaternion rotation)
     {
         TryGet(def, out var o);
-        return Measure(def.LocalBounds, def.worldNetworkPrefab.transform.localScale,
-                       o != null ? o.holeSize : Vector2.zero, position, rotation);
+        var root = def.worldNetworkPrefab.transform;
+        return Measure(def.LocalBounds, root.localScale, o != null ? o.holeSize : Vector2.zero,
+                       FixOf(root, o != null ? o.modelRotation : Vector3.zero), position, rotation);
     }
 
-    public static Shape Measure(Bounds local, Vector3 scale, Vector2 holeSizeOverride, Vector3 position, Quaternion rotation)
+    /// <summary>
+    /// An opening's shape. Rotation is the item's; Fix is how the model sits (ModelFix), so the
+    /// opening itself faces rotation × inverse(fix). Model rotations should be quarter turns.
+    /// </summary>
+    public static Shape Measure(Bounds local, Vector3 scale, Vector2 holeSizeOverride, Quaternion fix,
+                                Vector3 position, Quaternion rotation)
     {
         scale = new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
-        Vector2 size = new(local.size.x * scale.x, local.size.y * scale.y);
+        // The model's size seen from the opening's own axes (width X, height Y, depth Z).
+        Vector3 sized = fix * Vector3.Scale(local.size, scale);
+        Vector2 size = new(Mathf.Abs(sized.x), Mathf.Abs(sized.y));
         if (holeSizeOverride.x > 0f) size.x = holeSizeOverride.x;
         if (holeSizeOverride.y > 0f) size.y = holeSizeOverride.y;
+        Quaternion facing = rotation * Quaternion.Inverse(fix);
         return new Shape
         {
             center = position + rotation * Vector3.Scale(local.center, scale),
-            right = rotation * Vector3.right,
-            up = rotation * Vector3.up,
-            forward = rotation * Vector3.forward,
+            right = facing * Vector3.right,
+            up = facing * Vector3.up,
+            forward = facing * Vector3.forward,
             size = size,
         };
     }
