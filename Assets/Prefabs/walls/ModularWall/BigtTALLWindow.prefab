@@ -11,10 +11,10 @@ GameObject:
   - component: {fileID: 29295431960444781}
   - component: {fileID: 3630593014278104039}
   - component: {fileID: 2019622714304172178}
-  - component: {fileID: 2558712363464507482}
   - component: {fileID: 2823917773914635188}
   - component: {fileID: 6691911093833685886}
   - component: {fileID: 7166040245009018403}
+  - component: {fileID: 7934380373013050630}
   m_Layer: 0
   m_Name: BigtTALLWindow
   m_TagString: Untagged
@@ -94,28 +94,6 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!64 &2558712363464507482
-MeshCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 355272404716024676}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 5
-  m_Convex: 0
-  m_CookingOptions: 30
-  m_Mesh: {fileID: 1049928748687988745, guid: d7ef96148110ae943ae331127d87cbb7, type: 3}
 --- !u!114 &2823917773914635188
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -181,3 +159,25 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::WallOpening
   isDoor: 0
   holeSize: {x: 0, y: 0}
+  modelRotation: {x: 0, y: 0, z: 90}
+--- !u!65 &7934380373013050630
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 355272404716024676}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.5138851, y: 1.2513078, z: 3.8146021}
+  m_Center: {x: 0.0057757194, y: -0.010471105, z: -0.01926869}

@@ -181,3 +181,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::WallOpening
   isDoor: 1
   holeSize: {x: 0, y: 0}
+  modelRotation: {x: 0, y: 0, z: 90}

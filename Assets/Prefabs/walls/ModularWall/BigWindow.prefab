@@ -11,10 +11,10 @@ GameObject:
   - component: {fileID: 6788214564077974301}
   - component: {fileID: 7509520308780440924}
   - component: {fileID: 8977896553846515981}
-  - component: {fileID: 1997527790162825383}
   - component: {fileID: 6547886306711070832}
   - component: {fileID: 281985184882466234}
   - component: {fileID: 3763501566692106659}
+  - component: {fileID: -8578012429385289215}
   m_Layer: 0
   m_Name: BigWindow
   m_TagString: Untagged
@@ -94,28 +94,6 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!64 &1997527790162825383
-MeshCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4909883894473463072}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 5
-  m_Convex: 0
-  m_CookingOptions: 30
-  m_Mesh: {fileID: 1049928748687988745, guid: 1bcc4692e75cf47418d63b070fb1c78f, type: 3}
 --- !u!114 &6547886306711070832
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -181,3 +159,25 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::WallOpening
   isDoor: 0
   holeSize: {x: 0, y: 0}
+  modelRotation: {x: 0, y: 0, z: 90}
+--- !u!65 &-8578012429385289215
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4909883894473463072}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.5138851, y: 3.3111448, z: 3.7573688}
+  m_Center: {x: 0.0057757194, y: -0.026316045, z: -0.01882833}
