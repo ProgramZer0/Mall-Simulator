@@ -34,6 +34,8 @@ public class BuiltWallSettings : MonoBehaviour
     [SerializeField] private float thickness = 0.15f;
     [Tooltip("Height of a half wall (counters, dividers). Full walls go from the floor to the top of the store.")]
     [SerializeField] private float halfHeight = 1.1f;
+    [Tooltip("Height of a full wall in meters. 0 = all the way up to the store's ceiling (edit-mode cut height).")]
+    [SerializeField] private float fullHeight = 2.5f;
     [Tooltip("Wall ends snap to this grid, in meters.")]
     [SerializeField] private float gridSize = 0.5f;
     [Tooltip("Shortest wall allowed, in meters.")]
@@ -59,6 +61,10 @@ public class BuiltWallSettings : MonoBehaviour
     public GameObject WallPrefab => wallPrefab;
     public float Thickness => Mathf.Max(0.01f, thickness);
     public float HalfHeight => Mathf.Max(0.1f, halfHeight);
+
+    /// <summary>A full wall's height in this store: Full Height, but never taller than the store.</summary>
+    public float FullHeightFor(StorePlot plot) =>
+        plot == null ? Mathf.Max(0.5f, fullHeight) : fullHeight > 0f ? Mathf.Min(fullHeight, plot.FullWallHeight) : plot.FullWallHeight;
     public float GridSize => Mathf.Max(0.05f, gridSize);
     public float MinLength => Mathf.Max(0.05f, minLength);
     public int MaxWallsPerStore => Mathf.Max(1, maxWallsPerStore);

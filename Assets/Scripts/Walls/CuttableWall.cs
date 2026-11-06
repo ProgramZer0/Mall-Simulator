@@ -251,7 +251,7 @@ public class CuttableWall : MonoBehaviour
         if (!CanFit(hole, opening, skipEditCopies, out reason)) return false;
 
         Vector3 forward = flip ? -Normal : Normal;
-        rotation = Quaternion.LookRotation(forward, transform.up);
+        rotation = opening.RotationFor(Quaternion.LookRotation(forward, transform.up));
         position = opening.PivotFor(FromWall(u, v), rotation);
         return true;
     }
@@ -303,8 +303,8 @@ public class CuttableWall : MonoBehaviour
         float floor = FloorV;
         float u = Mathf.Clamp(c.x, size.x * 0.5f, Mathf.Max(size.x * 0.5f, Length - size.x * 0.5f));
         float v = o.isDoor ? floor + size.y * 0.5f : Mathf.Clamp(c.y, floor + size.y * 0.5f, Mathf.Max(floor + size.y * 0.5f, Height - size.y * 0.5f));
-        bool flip = Vector3.Dot(o.transform.forward, Normal) < 0f;
-        Quaternion rot = Quaternion.LookRotation(flip ? -Normal : Normal, transform.up);
+        bool flip = Vector3.Dot(o.Current.forward, Normal) < 0f;
+        Quaternion rot = o.RotationFor(Quaternion.LookRotation(flip ? -Normal : Normal, transform.up));
         o.transform.SetPositionAndRotation(o.PivotFor(FromWall(u, v), rot), rot);
     }
 #endif

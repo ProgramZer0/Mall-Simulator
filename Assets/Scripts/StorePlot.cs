@@ -453,6 +453,10 @@ public class StorePlot : NetworkBehaviour
     /// <summary>Height of a full wall: from the floor to the top of the store's space.</summary>
     public float FullWallHeight => Mathf.Max(0.5f, GetEditCutHeight() - FloorHeight);
 
+    /// <summary>Height of a full built wall here (BuiltWallSettings' Full Height, no taller than the store).</summary>
+    public float BuiltWallFullHeight =>
+        BuiltWallSettings.Instance != null ? BuiltWallSettings.Instance.FullHeightFor(this) : FullWallHeight;
+
     /// <summary>
     /// Can a wall go from a to b (both on the floor)? Checks the length, both ends and the middle
     /// are inside the store, and the wall limit. Doesn't check money.
@@ -565,7 +569,7 @@ public class StorePlot : NetworkBehaviour
         foreach (var span in spans)
         {
             if (!ServerRemoveWall(span.wall.id, out var w)) continue;
-            bool half = w.height < FullWallHeight - 0.01f;
+            bool half = w.height < BuiltWallFullHeight - 0.01f;
             Vector3 d = Flat(w.b - w.a);
             if (span.from > 0f) ServerAddWall(w.a, w.a + d * span.from, w.height);
             if (span.to < w.Length) ServerAddWall(w.a + d * span.to, w.b, w.height);
