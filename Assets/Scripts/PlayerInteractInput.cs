@@ -95,6 +95,7 @@ public class PlayerInteractInput : NetworkBehaviour
         if ((storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen)
         {
             lookedAtSign = null;
+            lookedAtSegment = null;
             lookedAtMonitor = null;
             lookedAtCart = null;
             lookedAtDoor = null;
@@ -118,6 +119,7 @@ public class PlayerInteractInput : NetworkBehaviour
     /* ========================= INTERACT ========================= */
 
     private ForSaleSign lookedAtSign;
+    private SegmentSign lookedAtSegment; // a segment wall of your store you could unlock with F
     private CartNet lookedAtCart; // a cart you could start pushing
     private DoorNet lookedAtDoor; // a door you can open/close with F (and maybe lock with L)
     private bool lookedAtBuriedCartItem; // something on a cart with other things stacked on it
@@ -130,6 +132,7 @@ public class PlayerInteractInput : NetworkBehaviour
     private void UpdateLookedAtSign()
     {
         lookedAtSign = null;
+        lookedAtSegment = null;
         lookedAtMonitor = null;
         lookedAtCart = null;
         lookedAtDoor = null;
@@ -156,6 +159,12 @@ public class PlayerInteractInput : NetworkBehaviour
 
             var sign = hit.collider.GetComponentInParent<ForSaleSign>();
             if (sign != null && sign.Plot != null && sign.Plot.IsForSale) lookedAtSign = sign;
+
+            var segment = hit.collider.GetComponentInParent<SegmentSign>();
+            if (segment != null && segment.Plot != null && MallManager.Instance != null &&
+                MallManager.Instance.BuySegmentsFromWalls && segment.Plot.IsAuthorized(OwnerClientId) &&
+                !segment.Plot.IsSegmentPurchased(segment.Index))
+                lookedAtSegment = segment;
 
             var monitor = hit.collider.GetComponentInParent<ShopMonitor>();
             if (monitor != null && monitor.CanUse(OwnerClientId)) lookedAtMonitor = monitor;
@@ -273,7 +282,7 @@ public class PlayerInteractInput : NetworkBehaviour
 
     private void OnGUI()
     {
-        if (!IsOwner || (lookedAtSign == null && lookedAtMonitor == null && stockTarget == null &&
+        if (!IsOwner || (lookedAtSign == null && lookedAtSegment == null && lookedAtMonitor == null && stockTarget == null &&
                          lookedAtCart == null && pushedCart == null && lookedAtDoor == null &&
                          !lookedAtBuriedCartItem) ||
             (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return;
@@ -284,6 +293,8 @@ public class PlayerInteractInput : NetworkBehaviour
                     : lookedAtBuriedCartItem ? "Take the things on top off first"
                     : lookedAtMonitor != null ? "F: Shop monitor"
                     : lookedAtSign != null ? $"F: Buy {lookedAtSign.Plot.DisplayName} ({lookedAtSign.Plot.Price})"
+                    : lookedAtSegment != null ? $"F: Unlock {lookedAtSegment.Plot.GetSegmentName(lookedAtSegment.Index)} " +
+                                                $"(${lookedAtSegment.Plot.GetSegmentPrice(lookedAtSegment.Index)})"
                     : StockPrompt();
         promptStyle ??= new GUIStyle(GUI.skin.box) { fontSize = 16, alignment = TextAnchor.MiddleCenter };
         PromptContent.text = text;
@@ -410,7 +421,7 @@ public class PlayerInteractInput : NetworkBehaviour
         {
             if (stockTarget != null && stockZone >= 0 && stockTargetIsTake == fRepeatTakes &&
                 pushedCart == null && lookedAtCart == null && lookedAtDoor == null &&
-                lookedAtMonitor == null && lookedAtSign == null)
+                lookedAtMonitor == null && lookedAtSign == null && lookedAtSegment == null)
                 DoStockAction();
             return;
         }
@@ -458,6 +469,14 @@ public class PlayerInteractInput : NetworkBehaviour
         {
             if (MallManager.Instance != null)
                 MallManager.Instance.RequestBuyFromSignServerRpc(lookedAtSign.Plot.PlotId);
+            return;
+        }
+
+        // Unlocking a segment from its wall (while the mall allows that).
+        if (lookedAtSegment != null)
+        {
+            if (MallManager.Instance != null)
+                MallManager.Instance.RequestBuySegmentFromWallServerRpc(lookedAtSegment.Plot.PlotId, lookedAtSegment.Index);
             return;
         }
 
