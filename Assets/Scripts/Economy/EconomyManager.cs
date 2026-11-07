@@ -560,7 +560,6 @@ public class EconomyManager : NetworkBehaviour
     private void RefreshHud()
     {
         hudLines.Clear();
-        hudLines.Add($"Money: ${LocalMoney:N0}");
 
         ulong team = MallManager.GetTeamOf(NetworkManager.LocalClientId);
         var mine = GetOrdersForTeam(team);
