@@ -60,7 +60,6 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     [SerializeField] private Button clearCartButton;
 
     [Header("Info")]
-    [SerializeField] private TMP_Text moneyText;
     [Tooltip("Short messages: added to cart, ordered, not enough money, ...")]
     [SerializeField] private TMP_Text statusText;
     [SerializeField] private float statusSeconds = 4f;
@@ -502,11 +501,10 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         if (clearCartButton != null) clearCartButton.interactable = cart.Count > 0;
     }
 
+    // Money itself is shown by MoneyDisplay; here it only matters for the cart's "not enough money" note.
     private void RefreshMoney()
     {
-        if (moneyText != null)
-            moneyText.text = EconomyManager.Instance != null ? $"${EconomyManager.Instance.LocalMoney:N0}" : "";
-        if (cart.Count > 0) RefreshCart(); // the "not enough money" note may have changed
+        if (cart.Count > 0) RefreshCart();
     }
 
     private void ShowStatus(string message)

@@ -14,7 +14,7 @@ using UnityEngine.UI;
 /// - Page Prefab: an empty page with a Grid Layout Group. Item Slot Prefab: one tile with a
 ///   BuyItemSlot (Assets/Prefabs/UI/ItemSlotPrefab works). Page Parent: where pages go.
 /// - Optional: page buttons and label, All / Windows / Doors / Misc filter buttons, a close button, and
-///   texts for money, what's due on save and short messages.
+///   texts for what's due on save and short messages (money itself: MoneyDisplay).
 ///
 /// Clicking a tile picks the piece; it then follows the mouse along the store's walls. Without this
 /// menu in the scene, edit mode shows a simple built-in list instead.
@@ -49,7 +49,6 @@ public class WallPiecesMenu : MonoBehaviour
 
     [Header("Info (optional)")]
     [SerializeField] private Button closeButton;
-    [SerializeField] private TMP_Text moneyText;
     [Tooltip("What the pieces placed this session will cost when edit mode is saved.")]
     [SerializeField] private TMP_Text dueText;
     [SerializeField] private TMP_Text statusText;
@@ -101,7 +100,7 @@ public class WallPiecesMenu : MonoBehaviour
             statusText.text = "";
             statusUntil = 0f;
         }
-        RefreshMoney(); // money and prices can change while it's open (other players, events)
+        RefreshMoney(); // what you can afford can change while it's open (other players, events)
     }
 
     /* ========================= OPEN / CLOSE ========================= */
@@ -265,9 +264,11 @@ public class WallPiecesMenu : MonoBehaviour
         foreach (var (def, button) in tiles)
             if (button != null) button.interactable = MarketModifiers.OrderCost(def) <= left;
 
-        var econ = EconomyManager.Instance;
-        if (moneyText != null) moneyText.text = econ != null && econ.IsSpawned ? $"${econ.LocalMoney:N0}" : "";
-        if (dueText != null) dueText.text = due != null ? $"Paid when you save: ${due():N0}" : "";
+        if (dueText != null)
+        {
+            string text = due != null ? $"Paid when you save: ${due():N0}" : "";
+            if (dueText.text != text) dueText.text = text; // TMP rebuilds on every set
+        }
     }
 
     private void Pick(ItemDef def)
