@@ -119,6 +119,8 @@ public class StoreEditController : NetworkBehaviour
     [SerializeField] private float lineWidth = 0.006f;
 
     [Header("HUD")]
+    [Tooltip("Draw the built-in (IMGUI) help box while editing. Only used when there's no StoreEditHud " +
+             "in the scene; with one, the Canvas HUD shows instead.")]
     [SerializeField] private bool showHud = true;
 
     private static readonly Color BoxColor = new(1f, 1f, 1f, 0.9f);
@@ -2037,54 +2039,114 @@ public class StoreEditController : NetworkBehaviour
     {
         refusalMessage = message;
         refusalUntil = Time.time + 4f;
+        if (StoreEditHud.Instance != null) StoreEditHud.Instance.ShowMessage(message);
     }
 
+    /* ========================= HUD ========================= */
+
+    private string hudTitle, hudStatus, hudControls, hudInfo;
+
+    // Keys in bold (TMP rich text); the built-in HUD strips the tags.
+    private static string K(KeyCode key) => $"<b>{KeyName(key)}</b>";
+    private static string K(string key) => $"<b>{key}</b>";
+
+    private static string KeyName(KeyCode key) => key switch
+    {
+        KeyCode.Alpha0 => "0", KeyCode.Alpha1 => "1", KeyCode.Alpha2 => "2", KeyCode.Alpha3 => "3",
+        KeyCode.Alpha4 => "4", KeyCode.Alpha5 => "5", KeyCode.Alpha6 => "6", KeyCode.Alpha7 => "7",
+        KeyCode.Alpha8 => "8", KeyCode.Alpha9 => "9", KeyCode.Escape => "Esc",
+        _ => key.ToString(),
+    };
+
+    /// <summary>What the HUD says right now: the mode, its state, the keys for it, and live feedback.</summary>
+    private void BuildHud()
+    {
+        if (wallTool)
+        {
+            hudTitle = eraseMode ? "WALL TOOL - REMOVING" : "WALL TOOL";
+            hudStatus = $"Height: {(wallHalf ? "half" : "full")}";
+            hudControls = eraseMode
+                ? $"{K("Click")} a spot on a wall, then a second: remove what's between\n" +
+                  $"Same spot twice: the whole wall   {K("Drag")}: works too\n" +
+                  $"{K(wallEraseKey)} / {K("Esc")}: back to building   {K(wallToolKey)}: back to items"
+                : $"{K("Click")}: start, {K("click")} again: build (keeps going from the end)\n" +
+                  $"{K("RMB")} / {K("Esc")}: stop the chain (again: leave the tool)\n" +
+                  $"{K(wallHeightKey)}: full / half height   {K(wallEraseKey)} (or hold {K("Shift")}): remove walls\n" +
+                  $"{K(wallToolKey)}: back to items";
+            hudInfo = wallInfo;
+            return;
+        }
+
+        hudTitle = finishing ? "STORE EDIT MODE - saving..." : "STORE EDIT MODE";
+
+        if (placing != null)
+        {
+            hudStatus = $"Placing: {placing.Def.displayName}";
+            hudControls = $"{K("Click")} one of your walls to put it there   {K("Ctrl")}: no snap\n" +
+                          $"{K("RMB")} / {K("Esc")}: cancel";
+            hudInfo = openingInfo;
+            return;
+        }
+
+        string itemName = selected == null ? "nothing (click an item)" : selected.Def.displayName;
+        if (selected != null && selected.Opening != null)
+        {
+            hudStatus = $"Selected: {itemName}";
+            hudControls = $"{K("Drag")} along a wall to move   {K("Ctrl")}: no snap\n" +
+                          $"{K(rotateKey)}: turn around   {K(removeKey)}: remove (part refund)   {K("Esc")}: deselect";
+            hudInfo = openingInfo;
+            return;
+        }
+
+        string toolName = selected == null ? "-" : tool == Tool.None ? "none" : tool.ToString();
+        string gravity = selected == null ? "-" : selected.Gravity ? "on" : "off";
+        hudStatus = $"Selected: {itemName}   Tool: {toolName}   Gravity: {gravity}";
+        hudControls = $"{K("Drag")} item: slide   {K("X")}: move > rotate > hide   {K(rotateKey)}: rotate   {K("G")}: gravity\n" +
+                      $"{K("Ctrl")}: no snap   {K("RMB")} drag: camera   {K("RMB")} click / {K("Esc")}: deselect\n" +
+                      $"{K(openingsKey)}: windows & doors   {K(wallToolKey)}: build walls   {K(toggleKey)}: save & exit";
+        hudInfo = openingInfo;
+    }
+
+    private void LateUpdate()
+    {
+        if (!IsOwner) return;
+        var hud = StoreEditHud.Instance;
+        if (hud == null) return;
+        bool show = IsEditing;
+        hud.SetVisible(show);
+        if (!show) return;
+        BuildHud();
+        hud.SetTexts(hudTitle, hudStatus, hudControls, hudInfo);
+    }
+
+    private static string StripTags(string s) =>
+        string.IsNullOrEmpty(s) ? "" : System.Text.RegularExpressions.Regex.Replace(s, "<.*?>", "");
+
+    /// <summary>Built-in HUD, only when there's no StoreEditHud in the scene (and Show Hud is on).</summary>
     private void OnGUI()
     {
-        if (IsOwner && Time.time < refusalUntil && !string.IsNullOrEmpty(refusalMessage))
+        bool canvasHud = StoreEditHud.Instance != null;
+        if (!canvasHud && IsOwner && Time.time < refusalUntil && !string.IsNullOrEmpty(refusalMessage))
         {
             var r = new Rect(Screen.width * 0.5f - 260f, Screen.height * 0.35f, 520f, 30f);
             GUI.Box(r, refusalMessage);
         }
 
-        if (!showHud || !IsOwner || !IsEditing) return;
+        if (!IsOwner || !IsEditing) return;
 
-        if (wallTool)
+        if (!canvasHud && showHud)
         {
-            GUI.Box(new Rect(10, 10, 420, 136), GUIContent.none);
-            GUI.Label(new Rect(20, 16, 400, 20), $"WALL TOOL   ({wallToolKey} = back to items)");
-            GUI.Label(new Rect(20, 36, 400, 20), $"Height: {(wallHalf ? "half" : "full")}   ({wallHeightKey} to switch)");
-            GUI.Label(new Rect(20, 56, 400, 20), "Click: start, click again: build (keeps going from the end)");
-            GUI.Label(new Rect(20, 76, 400, 20), "RMB / Esc: stop the chain (again to leave the tool)");
-            GUI.Label(new Rect(20, 96, 400, 20), eraseMode
-                ? $"REMOVING walls   ({wallEraseKey} or Esc: back to building)"
-                : $"{wallEraseKey} (or hold Shift): remove walls");
-            GUI.Label(new Rect(20, 116, 400, 20), wallInfo);
-            return;
+            BuildHud();
+            var lines = new List<string> { hudTitle, hudStatus };
+            lines.AddRange(StripTags(hudControls).Split('\n'));
+            if (!string.IsNullOrEmpty(hudInfo)) lines.Add(hudInfo);
+            GUI.Box(new Rect(10, 10, 470, 16 + lines.Count * 20), GUIContent.none);
+            for (int i = 0; i < lines.Count; i++)
+                GUI.Label(new Rect(20, 16 + i * 20, 450, 20), lines[i]);
         }
 
-        string toolName = selected == null ? "-" : tool == Tool.None ? "none (X for arrows)" : tool.ToString();
-        string gravity = selected == null ? "-" : selected.Gravity ? "ON" : "off";
-        string itemName = selected == null ? "nothing (click an item)" : selected.Def.displayName;
-
-        GUI.Box(new Rect(10, 10, 420, 136), GUIContent.none);
-        GUI.Label(new Rect(20, 16, 400, 20), finishing ? "STORE EDIT MODE - saving..." : "STORE EDIT MODE   (0 = save & exit)");
-        GUI.Label(new Rect(20, 36, 400, 20), $"Selected: {itemName}");
-        GUI.Label(new Rect(20, 56, 400, 20), $"Tool: {toolName}     Gravity: {gravity}");
-        GUI.Label(new Rect(20, 76, 400, 20), $"X: move > rotate > hide   {rotateKey}: rotate   G: gravity   Ctrl: no snap   Esc: deselect");
-        GUI.Label(new Rect(20, 96, 400, 20), "Drag item: slide   RMB drag: camera   RMB click: deselect");
-        GUI.Label(new Rect(20, 116, 400, 20), $"{openingsKey}: windows & doors   {wallToolKey}: build walls");
-
-        if (placing != null || (selected != null && selected.Opening != null))
-        {
-            GUI.Box(new Rect(10, 150, 420, 46), GUIContent.none);
-            GUI.Label(new Rect(20, 154, 400, 20), placing != null
-                ? $"Placing {placing.Def.displayName}: click one of your walls   (RMB / Esc: cancel)"
-                : $"Drag along a wall to move   {rotateKey}: turn around   {removeKey}: remove (part refund)");
-            GUI.Label(new Rect(20, 174, 400, 20), string.IsNullOrEmpty(openingInfo) ? "" : openingInfo);
-        }
-
-        if (!finishing)
+        // The pick lists are still built-in (the windows & doors list only without a WallPiecesMenu).
+        if (!finishing && !wallTool)
         {
             DrawSlotPanel();
             DrawOpeningsPanel();

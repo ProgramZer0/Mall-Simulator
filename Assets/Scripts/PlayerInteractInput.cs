@@ -280,14 +280,15 @@ public class PlayerInteractInput : NetworkBehaviour
     private static GUIStyle promptStyle; // made once; a new GUIStyle every OnGUI call makes garbage
     private static readonly GUIContent PromptContent = new();
 
-    private void OnGUI()
+    /// <summary>The F prompt right now (null: nothing to show).</summary>
+    private string CurrentPrompt()
     {
         if (!IsOwner || (lookedAtSign == null && lookedAtSegment == null && lookedAtMonitor == null && stockTarget == null &&
                          lookedAtCart == null && pushedCart == null && lookedAtDoor == null &&
                          !lookedAtBuriedCartItem) ||
-            (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return;
+            (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return null;
 
-        string text = pushedCart != null ? "F: Let go of cart"
+        return pushedCart != null ? "F: Let go of cart"
                     : lookedAtCart != null ? "F: Push cart"
                     : lookedAtDoor != null ? DoorPrompt()
                     : lookedAtBuriedCartItem ? "Take the things on top off first"
@@ -296,6 +297,21 @@ public class PlayerInteractInput : NetworkBehaviour
                     : lookedAtSegment != null ? $"F: Unlock {lookedAtSegment.Plot.GetSegmentName(lookedAtSegment.Index)} " +
                                                 $"(${lookedAtSegment.Plot.GetSegmentPrice(lookedAtSegment.Index)})"
                     : StockPrompt();
+    }
+
+    // The prompt goes to the Canvas (InteractPromptUI) when there is one.
+    private void LateUpdate()
+    {
+        if (!IsOwner || InteractPromptUI.Instance == null) return;
+        InteractPromptUI.Instance.Show(CurrentPrompt());
+    }
+
+    /// <summary>Built-in prompt, only when there's no InteractPromptUI in the scene.</summary>
+    private void OnGUI()
+    {
+        if (InteractPromptUI.Instance != null) return;
+        string text = CurrentPrompt();
+        if (string.IsNullOrEmpty(text)) return;
         promptStyle ??= new GUIStyle(GUI.skin.box) { fontSize = 16, alignment = TextAnchor.MiddleCenter };
         PromptContent.text = text;
         Vector2 size = promptStyle.CalcSize(PromptContent) + new Vector2(20f, 10f);
