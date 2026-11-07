@@ -30,8 +30,24 @@ public class WallOpening : MonoBehaviour
     /// <summary>Goes up whenever an opening appears, moves or goes away, so walls know to re-cut.</summary>
     public static int Version { get; private set; }
 
-    [Tooltip("A door: sits on the floor, and counts as the way into the store on a front wall.")]
-    public bool isDoor;
+    public enum Kind
+    {
+        /// <summary>A window: goes anywhere up the wall.</summary>
+        Window,
+        /// <summary>A door: sits on the floor, and counts as the way into the store on a front wall.</summary>
+        Door,
+        /// <summary>Anything else set into a wall (a vent, a display niche, a sign box...): anywhere up the wall.</summary>
+        Misc,
+    }
+
+    [Tooltip("Window: anywhere up the wall. Door: on the floor, and a front wall needs one. Misc: anything else set into a wall.")]
+    public Kind kind = Kind.Window;
+    [Tooltip("Old door tick; moved into Kind automatically.")]
+    [HideInInspector] public bool isDoor;
+
+    /// <summary>Window, Door or Misc (an old Is Door tick counts as Door).</summary>
+    public Kind PieceKind => isDoor ? Kind.Door : kind;
+    public bool IsDoor => PieceKind == Kind.Door;
     [Tooltip("Size of the hole in meters (width, height). Leave at 0 to use the item's own size.")]
     public Vector2 holeSize;
     [Tooltip("Extra turn to stand the model right in the wall, on top of the rotation its prefab root " +
@@ -83,6 +99,12 @@ public class WallOpening : MonoBehaviour
     // item. Warn while setting the prefab up.
     private void OnValidate()
     {
+        if (isDoor)
+        {
+            kind = Kind.Door; // the old tick, moved into Kind
+            isDoor = false;
+            UnityEditor.EditorUtility.SetDirty(this);
+        }
         foreach (var no in GetComponentsInChildren<NetworkObject>(true))
             if (no.gameObject != gameObject)
             {
@@ -164,6 +186,7 @@ public class WallOpening : MonoBehaviour
     public void CopyFrom(WallOpening other)
     {
         if (other == null) return;
+        kind = other.kind;
         isDoor = other.isDoor;
         holeSize = other.holeSize;
         modelRotation = other.modelRotation;
@@ -171,7 +194,7 @@ public class WallOpening : MonoBehaviour
     }
 
     /// <summary>The store opens and shuts this door itself (it moves, but players don't work it).</summary>
-    public bool IsStoreDoor => isDoor && doorNet == null && TryGetComponent<DoorMotion>(out _);
+    public bool IsStoreDoor => IsDoor && doorNet == null && TryGetComponent<DoorMotion>(out _);
 
     /// <summary>An edit-mode copy (not a real item).</summary>
     public bool IsEditCopy => GetComponent<EditLocalItem>() != null;

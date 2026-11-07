@@ -13,7 +13,7 @@ using UnityEngine.UI;
 /// - Root: the panel shown and hidden.
 /// - Page Prefab: an empty page with a Grid Layout Group. Item Slot Prefab: one tile with a
 ///   BuyItemSlot (Assets/Prefabs/UI/ItemSlotPrefab works). Page Parent: where pages go.
-/// - Optional: page buttons and label, All / Windows / Doors filter buttons, a close button, and
+/// - Optional: page buttons and label, All / Windows / Doors / Misc filter buttons, a close button, and
 ///   texts for money, what's due on save and short messages.
 ///
 /// Clicking a tile picks the piece; it then follows the mouse along the store's walls. Without this
@@ -23,7 +23,7 @@ public class WallPiecesMenu : MonoBehaviour
 {
     public static WallPiecesMenu Instance { get; private set; }
 
-    public enum Filter { All, Windows, Doors }
+    public enum Filter { All, Windows, Doors, Misc }
 
     [SerializeField] private GameObject root;
 
@@ -44,6 +44,8 @@ public class WallPiecesMenu : MonoBehaviour
     [SerializeField] private Button allButton;
     [SerializeField] private Button windowsButton;
     [SerializeField] private Button doorsButton;
+    [Tooltip("Shows wall pieces that are neither windows nor doors (Kind: Misc).")]
+    [SerializeField] private Button miscButton;
 
     [Header("Info (optional)")]
     [SerializeField] private Button closeButton;
@@ -81,6 +83,7 @@ public class WallPiecesMenu : MonoBehaviour
         if (allButton != null) allButton.onClick.AddListener(() => SetFilter(Filter.All));
         if (windowsButton != null) windowsButton.onClick.AddListener(() => SetFilter(Filter.Windows));
         if (doorsButton != null) doorsButton.onClick.AddListener(() => SetFilter(Filter.Doors));
+        if (miscButton != null) miscButton.onClick.AddListener(() => SetFilter(Filter.Misc));
         if (closeButton != null) closeButton.onClick.AddListener(Close);
         if (root != null) root.SetActive(false);
     }
@@ -138,8 +141,9 @@ public class WallPiecesMenu : MonoBehaviour
         foreach (var def in catalog.Items)
         {
             if (def == null || !WallOpening.TryGet(def, out var o)) continue;
-            if (filter == Filter.Doors && !o.isDoor) continue;
-            if (filter == Filter.Windows && o.isDoor) continue;
+            if (filter != Filter.All && o.PieceKind != (filter == Filter.Doors ? WallOpening.Kind.Door
+                                                     : filter == Filter.Windows ? WallOpening.Kind.Window
+                                                     : WallOpening.Kind.Misc)) continue;
             into.Add(def);
         }
     }
@@ -188,7 +192,7 @@ public class WallPiecesMenu : MonoBehaviour
             tile.name = $"{itemSlotPrefab.name} ({def.displayName})";
             if (tile.icon != null && def.icon != null) tile.icon.sprite = def.icon;
             if (tile.nameText != null)
-                tile.nameText.text = WallOpening.TryGet(def, out var o) && o.isDoor ? $"{def.displayName} (door)" : def.displayName;
+                tile.nameText.text = WallOpening.TryGet(def, out var o) && o.IsDoor ? $"{def.displayName} (door)" : def.displayName;
             if (tile.buyButton != null)
             {
                 var picked = def;

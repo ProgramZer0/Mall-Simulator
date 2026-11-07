@@ -243,7 +243,7 @@ public class CuttableWall : MonoBehaviour
 
         float floor = FloorV;
         u = Mathf.Clamp(u, margin + size.x * 0.5f, Mathf.Max(margin + size.x * 0.5f, Length - margin - size.x * 0.5f));
-        v = opening.isDoor
+        v = opening.IsDoor
             ? floor + size.y * 0.5f
             : Mathf.Clamp(v, floor + margin + size.y * 0.5f, Mathf.Max(floor + margin + size.y * 0.5f, Height - margin - size.y * 0.5f));
 
@@ -302,7 +302,7 @@ public class CuttableWall : MonoBehaviour
         Vector2 size = o.Size;
         float floor = FloorV;
         float u = Mathf.Clamp(c.x, size.x * 0.5f, Mathf.Max(size.x * 0.5f, Length - size.x * 0.5f));
-        float v = o.isDoor ? floor + size.y * 0.5f : Mathf.Clamp(c.y, floor + size.y * 0.5f, Mathf.Max(floor + size.y * 0.5f, Height - size.y * 0.5f));
+        float v = o.IsDoor ? floor + size.y * 0.5f : Mathf.Clamp(c.y, floor + size.y * 0.5f, Mathf.Max(floor + size.y * 0.5f, Height - size.y * 0.5f));
         bool flip = Vector3.Dot(o.Current.forward, Normal) < 0f;
         Quaternion rot = o.RotationFor(Quaternion.LookRotation(flip ? -Normal : Normal, transform.up));
         o.transform.SetPositionAndRotation(o.PivotFor(FromWall(u, v), rot), rot);

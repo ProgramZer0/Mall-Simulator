@@ -35,6 +35,22 @@ public class ItemCatalog : MonoBehaviour
 
     public bool TryGet(int id, out ItemDef def) => map.TryGetValue(id, out def);
 
+#if UNITY_EDITOR
+    // Items used to have one Category; move it into Categories so nothing set up is lost.
+    private void OnValidate()
+    {
+        if (items == null) return;
+        bool changed = false;
+        foreach (var it in items)
+        {
+            if (it == null) continue;
+            if (it.MigrateCategory()) changed = true;
+            it.CategoriesChanged();
+        }
+        if (changed) UnityEditor.EditorUtility.SetDirty(this);
+    }
+#endif
+
     /// <summary>Every item in the catalog, in the order listed (the shop shows them in this order).</summary>
     public IReadOnlyList<ItemDef> Items => items;
 }
@@ -52,8 +68,54 @@ public class ItemDef
     public bool showInShop = true;
     [Tooltip("Picture shown in the buy menu.")]
     public Sprite icon;
-    [Tooltip("Group like Shelves, Products, Decor. The buy menu search matches this as well as the name.")]
-    public string category = "General";
+    [Tooltip("Groups like Shelves, Products, Decor, Clothing. An item can be in several. Events target them, " +
+             "and the buy menu search matches them as well as the name.")]
+    public List<string> categories = new();
+    [Tooltip("Old single category; it's moved into Categories automatically.")]
+    [HideInInspector] public string category;
+
+    [System.NonSerialized] private HashSet<string> categorySet;
+
+    /// <summary>Is the item in this category (not case sensitive)? Quick: a set built once.</summary>
+    public bool HasCategory(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        if (categorySet == null)
+        {
+            categorySet = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+            foreach (var c in Categories) categorySet.Add(c);
+        }
+        return categorySet.Contains(name.Trim());
+    }
+
+    /// <summary>Every category (including an old single Category not moved over yet).</summary>
+    public IEnumerable<string> Categories
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(category)) yield return category.Trim();
+            if (categories == null) yield break;
+            foreach (var c in categories)
+                if (!string.IsNullOrWhiteSpace(c)) yield return c.Trim();
+        }
+    }
+
+    /// <summary>Forget the cached category set (after editing Categories).</summary>
+    public void CategoriesChanged() => categorySet = null;
+
+    /// <summary>Editor: move an old single Category into Categories. True if anything changed.</summary>
+    public bool MigrateCategory()
+    {
+        if (string.IsNullOrWhiteSpace(category)) return false;
+        categories ??= new List<string>();
+        bool have = false;
+        foreach (var c in categories)
+            if (string.Equals(c?.Trim(), category.Trim(), System.StringComparison.OrdinalIgnoreCase)) have = true;
+        if (!have) categories.Insert(0, category.Trim());
+        category = null;
+        categorySet = null;
+        return true;
+    }
     [Tooltip("Cost of one when ordered.")]
     public int price = 10;
     [Tooltip("What one is really worth to customers, in dollars (cents allowed, e.g. 24.99). Not shown to the " +

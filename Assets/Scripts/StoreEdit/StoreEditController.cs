@@ -1181,7 +1181,7 @@ public class StoreEditController : NetworkBehaviour
         {
             var def = openingDefs[i];
             int cost = MarketModifiers.OrderCost(def);
-            bool door = WallOpening.TryGet(def, out var o) && o.isDoor;
+            bool door = WallOpening.TryGet(def, out var o) && o.IsDoor;
             GUI.enabled = cost <= left;
             if (GUI.Button(new Rect(0f, i * rowHeight, w - 40f, rowHeight - 4f), $"{def.displayName}{(door ? " (door)" : "")}   ${cost}"))
                 StartPlacing(def);
@@ -1435,7 +1435,7 @@ public class StoreEditController : NetworkBehaviour
     {
         bool IsFrontDoor(WallOpening o)
         {
-            if (o == null || !o.isDoor || !o.isActiveAndEnabled) return false;
+            if (o == null || !o.IsDoor || !o.isActiveAndEnabled) return false;
             var host = CuttableWall.HostOf(o);
             return host != null && host.Plot == editPlot && host.IsStorefront;
         }
@@ -2379,7 +2379,7 @@ public class StoreEditController : NetworkBehaviour
             if (catalog.TryGet(n.itemId, out var def) && plot.IsStorefrontDoor(def, n.position, n.rotation)) return true;
         foreach (var o in WallOpening.All)
         {
-            if (o == null || o.IsEditCopy || !o.isDoor) continue;
+            if (o == null || o.IsEditCopy || !o.IsDoor) continue;
             var host = CuttableWall.HostOf(o);
             if (host != null && host.Plot == plot && host.IsStorefront) return true;
         }
