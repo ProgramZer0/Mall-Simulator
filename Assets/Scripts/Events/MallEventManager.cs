@@ -82,6 +82,8 @@ public class MallEventManager : NetworkBehaviour
     private bool[] firedOnce;      // server: AtTime triggers
     private double[] nextRepeat;   // server: Repeating triggers
     private double sessionStart;
+    private double seasonStart;      // server: when the current season began (session start without seasons)
+    private int[] timesThisSeason;   // server: starts of each event this season (Max Per Season)
     private float nextCheck;
     private int devNext;
 
@@ -141,22 +143,24 @@ public class MallEventManager : NetworkBehaviour
 
         if (IsServer)
         {
-            if (seasonsEnabled && seasons.Count > 0)
-            {
-                currentSeason.Value = Mathf.Clamp(startSeason, 0, seasons.Count - 1);
-                seasonRunning = false;
-                ServerTickSeason();
-            }
-            sessionStart = NetworkManager.ServerTime.Time;
+            sessionStart = seasonStart = NetworkManager.ServerTime.Time;
             nextRoll = new double[events.Count];
             firedOnce = new bool[events.Count];
             nextRepeat = new double[events.Count];
+            timesThisSeason = new int[events.Count];
             for (int i = 0; i < events.Count; i++)
             {
                 var e = events[i];
                 if (e == null) continue;
                 nextRoll[i] = sessionStart + Mathf.Max(1f, e.checkEvery);
                 nextRepeat[i] = sessionStart + Mathf.Max(0f, e.startAt);
+            }
+
+            if (seasonsEnabled && seasons.Count > 0)
+            {
+                currentSeason.Value = Mathf.Clamp(startSeason, 0, seasons.Count - 1);
+                seasonRunning = false;
+                ServerTickSeason();
             }
         }
         Changed?.Invoke();
@@ -272,6 +276,7 @@ public class MallEventManager : NetworkBehaviour
         currentSeason.Value = index;
         seasonRunning = true;
         ServerStart(seasons[index]);
+        OnServerSeasonStarted();
     }
 
     // Keeps one season running: when the current one ends, the next one starts.
@@ -288,6 +293,45 @@ public class MallEventManager : NetworkBehaviour
         currentSeason.Value = next;
         seasonRunning = true;
         ServerStart(seasons[currentSeason.Value]);
+        OnServerSeasonStarted();
+    }
+
+    // A new season began: seasonal events start their clocks and counts again, and the ones that end
+    // with the season stop.
+    private void OnServerSeasonStarted()
+    {
+        double now = NetworkManager.ServerTime.Time;
+        seasonStart = now;
+        for (int i = 0; i < events.Count; i++)
+        {
+            var e = events[i];
+            if (e == null || IsSeason(e)) continue;
+            if (timesThisSeason != null) timesThisSeason[i] = 0;
+            if (e.endsWithSeason) ServerStop(e);
+            if (e.timedFromSeasonStart)
+            {
+                if (firedOnce != null) firedOnce[i] = false;
+                if (nextRepeat != null) nextRepeat[i] = now + Mathf.Max(0f, e.startAt);
+            }
+        }
+    }
+
+    /// <summary>Can this event happen in the current season (its Only In Seasons)?</summary>
+    public bool IsInItsSeason(MallEventDef e)
+    {
+        if (e == null || e.onlyInSeasons == null || e.onlyInSeasons.Count == 0) return true;
+        var season = CurrentSeason;
+        return season != null && e.onlyInSeasons.Contains(season);
+    }
+
+    /// <summary>Seconds since the current season began (since the session began without seasons).</summary>
+    public float SecondsIntoSeason => IsServer ? (float)(NetworkManager.ServerTime.Time - seasonStart) : 0f;
+
+    // Host: start an event from its trigger (counts toward Max Per Season).
+    private void TriggerStart(int index, MallEventDef e)
+    {
+        if (e.maxPerSeason > 0 && timesThisSeason[index] >= e.maxPerSeason) return;
+        if (ServerStart(e)) timesThisSeason[index]++;
     }
 
     private void Update()
@@ -320,23 +364,25 @@ public class MallEventManager : NetworkBehaviour
         {
             var e = events[i];
             if (e == null || IsSeason(e)) continue; // seasons run on the cycle, not their own trigger
+            bool inSeason = IsInItsSeason(e);       // outside its seasons, it waits
+            double from = e.timedFromSeasonStart ? seasonStart : sessionStart;
             switch (e.trigger)
             {
                 case MallEventDef.TriggerType.AtTime:
-                    if (!firedOnce[i] && now - sessionStart >= e.startAt) { firedOnce[i] = true; ServerStart(e); }
+                    if (inSeason && !firedOnce[i] && now - from >= e.startAt) { firedOnce[i] = true; TriggerStart(i, e); }
                     break;
                 case MallEventDef.TriggerType.Repeating:
                     if (now >= nextRepeat[i])
                     {
                         nextRepeat[i] = now + Mathf.Max(1f, e.interval);
-                        ServerStart(e);
+                        if (inSeason) TriggerStart(i, e);
                     }
                     break;
                 case MallEventDef.TriggerType.Random:
                     if (now >= nextRoll[i])
                     {
                         nextRoll[i] = now + Mathf.Max(1f, e.checkEvery);
-                        if (!IsActive(e) && UnityEngine.Random.value < e.chance) ServerStart(e);
+                        if (inSeason && !IsActive(e) && UnityEngine.Random.value < e.chance) TriggerStart(i, e);
                     }
                     break;
             }

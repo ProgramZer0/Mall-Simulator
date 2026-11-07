@@ -20,7 +20,7 @@ public class MallEventDef : ScriptableObject
     {
         /// <summary>Only when started from code, a button or a vote (MallEventManager.ServerStart).</summary>
         Manual,
-        /// <summary>Once, Start At seconds into the session.</summary>
+        /// <summary>Once, Start At seconds into the session (or into each season: Timed From Season Start).</summary>
         AtTime,
         /// <summary>Every Interval seconds (first at Start At). (For seasons, use the manager's Seasons list instead.)</summary>
         Repeating,
@@ -166,6 +166,17 @@ public class MallEventDef : ScriptableObject
     [Range(0f, 1f)] public float chance = 0.05f;
     [Tooltip("How long it lasts once started, in seconds. For a season, this is the season's length.")]
     public float duration = 300f;
+
+    [Header("Seasonal (optional)")]
+    [Tooltip("Only happens during these seasons (season events from the manager's Seasons list). Empty = any time.")]
+    public List<MallEventDef> onlyInSeasons = new();
+    [Tooltip("At Time / Repeating: Start At counts from the start of each season instead of the session, " +
+             "so At Time happens once every season (e.g. 300 = five minutes into the season).")]
+    public bool timedFromSeasonStart;
+    [Tooltip("Stops when the season changes, even if its Duration isn't up.")]
+    public bool endsWithSeason;
+    [Tooltip("At most this many times per season (0 = no limit). Handy for Random: \"maybe once per winter\".")]
+    [Min(0)] public int maxPerSeason;
 
     [Header("What it does")]
     public List<Rule> rules = new();
