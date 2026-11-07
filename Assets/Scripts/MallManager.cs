@@ -30,6 +30,9 @@ public class MallManager : NetworkBehaviour
     [SerializeField] private bool releaseOnDisconnect = true;
     [Tooltip("Stores one team may own, including its free starter store.")]
     [SerializeField] private int maxStoresPerTeam = 6;
+    [Tooltip("Players can unlock a store's segments by looking at the segment's wall and pressing F. " +
+             "Untick once segments are bought from the shop's license page instead.")]
+    [SerializeField] private bool buySegmentsFromWalls = true;
     [Tooltip("Players allowed on one team. 1 = everyone plays solo (co-op off).")]
     [SerializeField] private int maxPlayersPerTeam = 1;
 
@@ -62,6 +65,9 @@ public class MallManager : NetworkBehaviour
     public event Action TeamsChanged;
 
     public int MaxStoresPerTeam => maxStoresPerTeam;
+
+    /// <summary>Can segments be unlocked by looking at their wall (F)? Set on the MallManager.</summary>
+    public bool BuySegmentsFromWalls => buySegmentsFromWalls;
 
     public IReadOnlyCollection<StorePlot> Plots => plots.Values;
 
@@ -486,10 +492,52 @@ public class MallManager : NetworkBehaviour
         ServerTryClaimPlot(rpcParams.Receive.SenderClientId, plotId);
     }
 
+    /// <summary>
+    /// Buy a segment of one of your stores from anywhere. This is the call for the shop's license /
+    /// buy menu: MallManager.Instance.RequestBuySegmentServerRpc(plot.PlotId, index). Use
+    /// GetSegmentOffers to list what can be bought.
+    /// </summary>
     [ServerRpc(RequireOwnership = false)]
     public void RequestBuySegmentServerRpc(int plotId, int segmentIndex, ServerRpcParams rpcParams = default)
     {
         ServerTryBuySegment(rpcParams.Receive.SenderClientId, plotId, segmentIndex);
+    }
+
+    /// <summary>Server: buy a segment from its wall (only while Buy Segments From Walls is on, and only standing at it).</summary>
+    public bool ServerTryBuySegmentFromWall(ulong clientId, int plotId, int segmentIndex)
+    {
+        if (!IsServer || !buySegmentsFromWalls || !plots.TryGetValue(plotId, out var plot)) return false;
+        var player = NetworkManager.ConnectedClients.TryGetValue(clientId, out var client) ? client.PlayerObject : null;
+        if (player == null || !plot.IsNearSegmentWall(segmentIndex, player.transform.position)) return false;
+        return ServerTryBuySegment(clientId, plotId, segmentIndex);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void RequestBuySegmentFromWallServerRpc(int plotId, int segmentIndex, ServerRpcParams rpcParams = default)
+    {
+        ServerTryBuySegmentFromWall(rpcParams.Receive.SenderClientId, plotId, segmentIndex);
+    }
+
+    /// <summary>One segment a player's team could buy (for the license / buy menu).</summary>
+    public struct SegmentOffer
+    {
+        public StorePlot plot;
+        public int index;
+        public string name;
+        public int price;
+    }
+
+    /// <summary>Every segment not yet bought in the stores this player's team owns (works on any machine).</summary>
+    public void GetSegmentOffers(ulong clientId, List<SegmentOffer> into)
+    {
+        into.Clear();
+        foreach (var plot in plots.Values)
+        {
+            if (plot == null || !plot.IsAuthorized(clientId)) continue;
+            for (int i = 0; i < plot.SegmentCount; i++)
+                if (!plot.IsSegmentPurchased(i))
+                    into.Add(new SegmentOffer { plot = plot, index = i, name = plot.GetSegmentName(i), price = plot.GetSegmentPrice(i) });
+        }
     }
 
     /// <summary>Dev hotkey B: segment for free (only while the host has Dev Hotkeys on).</summary>

@@ -210,6 +210,14 @@ public class StorePlot : NetworkBehaviour
                 if (w != null && !w.TryGetComponent<ForSaleSign>(out _))
                     w.AddComponent<ForSaleSign>().Init(this);
 
+        // Segment walls: looking at one offers to unlock that segment (when the mall allows it).
+        if (segments != null)
+            for (int i = 0; i < segments.Length; i++)
+                if (segments[i]?.falseWalls != null)
+                    foreach (var w in segments[i].falseWalls)
+                        if (w != null && !w.TryGetComponent<SegmentSign>(out _))
+                            w.AddComponent<SegmentSign>().Init(this, i);
+
         if (storefrontWalls != null)
             foreach (var w in storefrontWalls)
                 if (w != null)
@@ -1586,6 +1594,22 @@ public class StorePlot : NetworkBehaviour
 
     public int GetSegmentPrice(int index) =>
         index >= 0 && index < SegmentCount ? segments[index].price : 0;
+
+    public string GetSegmentName(int index) =>
+        index >= 0 && index < SegmentCount ? segments[index].name : "";
+
+    /// <summary>Server: is this position within buy range of one of a segment's walls?</summary>
+    public bool IsNearSegmentWall(int index, Vector3 position)
+    {
+        if (index < 0 || index >= SegmentCount || segments[index].falseWalls == null) return false;
+        foreach (var w in segments[index].falseWalls)
+        {
+            if (w == null || !w.activeInHierarchy) continue;
+            foreach (var col in w.GetComponentsInChildren<Collider>())
+                if (col.enabled && Vector3.Distance(col.ClosestPoint(position), position) <= buyRange) return true;
+        }
+        return false;
+    }
 
     /* ========================= WALLS ========================= */
 
