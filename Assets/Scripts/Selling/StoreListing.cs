@@ -10,10 +10,9 @@ using UnityEngine;
 /// items), so it costs no extra network traffic, and customers on any machine can read it. It's
 /// rebuilt only when stock or prices change, and only when something asks for it.
 ///
-/// Read it with plot.Listing. Customers will use: Entries, TryGetCheapest, GetSources (where to go),
-/// TotalForSale, ViewableOutside / ViewableInside
-/// (how appealing the store looks from the hallway / once inside) and Quality. Those last three are
-/// placeholders for now (#17).
+/// Read it with plot.Listing. Customers will use: Entries, TryGetCheapest, GetSources (where to go)
+/// and TotalForSale. How appealing the store is (quality, what's seen from the hallway) is in
+/// plot.Appeal (StoreAppeal).
 /// </summary>
 public class StoreListing : MonoBehaviour
 {
@@ -78,11 +77,6 @@ public class StoreListing : MonoBehaviour
             return n;
         }
     }
-
-    // #17 placeholders: how good the store looks from the hallway and from inside, and its quality.
-    public float ViewableOutside { get; set; }
-    public float ViewableInside { get; set; }
-    public float Quality { get; set; }
 
     private void Awake()
     {
