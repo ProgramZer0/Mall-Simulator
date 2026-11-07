@@ -5938,7 +5938,7 @@ MonoBehaviour:
   - stat: 5
     minPercent: -75
     maxPercent: 300
-  showDebugHud: 1
+  showDebugHud: 0
   devHotkeys: 1
 --- !u!1 &451926993
 GameObject:
