@@ -757,12 +757,14 @@ public class StoreEditController : NetworkBehaviour
         {
             freeDragging = false;
             selected.SetPose(dragStartPos, dragStartRot);
+            selected.SetFaded(false);
             selected.SetDragging(false);
             return;
         }
         if (!Input.GetMouseButton(0))
         {
             freeDragging = false;
+            SettleOpening(selected, dragStartPos, dragStartRot);
             selected.SetDragging(false);
             return;
         }
@@ -1221,6 +1223,7 @@ public class StoreEditController : NetworkBehaviour
 
         var item = placing;
         placing = null;
+        item.SetFaded(false);
         addedItems.Add(item);
         Select(item);
         openingInfo = $"Bought for ${MarketModifiers.OrderCost(item.Def)} when you save";
@@ -1236,6 +1239,7 @@ public class StoreEditController : NetworkBehaviour
         if (!PickWallSpot(ray, item, out var wall, out float u, out float v))
         {
             openingInfo = "Point at one of your store's walls";
+            item.SetFaded(true);
             return false;
         }
 
@@ -1253,21 +1257,44 @@ public class StoreEditController : NetworkBehaviour
             ? Vector3.Dot(o.Current.forward, wall.Normal) < 0f
             : Vector3.Dot(editCam.transform.forward, wall.Normal) > 0f;
 
-        if (!wall.TryFit(o, u, v, flip, false, out Vector3 pos, out Quaternion rot, out string reason))
+        bool fits = wall.TryFit(o, u, v, flip, false, out Vector3 pos, out Quaternion rot, out string reason);
+        if (fits && PlacementCheck.FindOpeningBlocker(item.Def, pos, rot, EditMask(), item.transform, false, editPlot) != null)
         {
-            openingInfo = reason;
-            return false;
-        }
-        if (PlacementCheck.FindOpeningBlocker(item.Def, pos, rot, EditMask(), item.transform, false, editPlot) != null)
-        {
-            openingInfo = "Something is in the way";
-            return false;
+            fits = false;
+            reason = "Something is in the way";
         }
 
+        // Shown where the mouse is either way; faded where it can't go. Letting go there puts it
+        // back at the last spot that worked.
         if (!item.gameObject.activeSelf) item.gameObject.SetActive(true);
         item.SetPose(pos, rot);
-        openingInfo = null;
-        return true;
+        item.SetFaded(!fits);
+        openingInfo = fits ? null : reason;
+        if (fits)
+        {
+            lastValidOpening = item;
+            lastValidOpeningPos = pos;
+            lastValidOpeningRot = rot;
+        }
+        return fits;
+    }
+
+    // The last spot that worked for the window or door being moved (to go back to if dropped where it can't go).
+    private EditLocalItem lastValidOpening;
+    private Vector3 lastValidOpeningPos;
+    private Quaternion lastValidOpeningRot;
+
+    /// <summary>A dragged window or door let go where it can't go: back to its last good spot.</summary>
+    private void SettleOpening(EditLocalItem item, Vector3 fallbackPos, Quaternion fallbackRot)
+    {
+        if (item == null || item.Opening == null) return;
+        if (item.Faded)
+        {
+            if (lastValidOpening == item) item.SetPose(lastValidOpeningPos, lastValidOpeningRot);
+            else item.SetPose(fallbackPos, fallbackRot);
+            openingInfo = "It can't go there";
+        }
+        item.SetFaded(false);
     }
 
     /// <summary>

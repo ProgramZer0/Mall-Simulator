@@ -230,7 +230,7 @@ public class CuttableWall : MonoBehaviour
     /// <summary>
     /// Fit an opening with its middle at (u, v) on this wall: kept inside the wall (doors go down to
     /// the floor), facing out of the wall's Normal side (or the other side if flip). Fails if there's
-    /// no room. Pose is for the opening's pivot.
+    /// no room, but still gives the pose. Pose is for the opening's pivot.
     /// </summary>
     public bool TryFit(WallOpening opening, float u, float v, bool flip, bool skipEditCopies,
                        out Vector3 position, out Quaternion rotation, out string reason)
@@ -247,13 +247,13 @@ public class CuttableWall : MonoBehaviour
             ? floor + size.y * 0.5f
             : Mathf.Clamp(v, floor + margin + size.y * 0.5f, Mathf.Max(floor + margin + size.y * 0.5f, Height - margin - size.y * 0.5f));
 
-        var hole = new Rect(u - size.x * 0.5f, v - size.y * 0.5f, size.x, size.y);
-        if (!CanFit(hole, opening, skipEditCopies, out reason)) return false;
-
+        // The pose is filled in even when it doesn't fit, so it can be shown (faded) there.
         Vector3 forward = flip ? -Normal : Normal;
         rotation = opening.RotationFor(Quaternion.LookRotation(forward, transform.up));
         position = opening.PivotFor(FromWall(u, v), rotation);
-        return true;
+
+        var hole = new Rect(u - size.x * 0.5f, v - size.y * 0.5f, size.x, size.y);
+        return CanFit(hole, opening, skipEditCopies, out reason);
     }
 
     /// <summary>
