@@ -122,6 +122,8 @@ public class PlayerInteractInput : NetworkBehaviour
     private SegmentSign lookedAtSegment; // a segment wall of your store you could unlock with F
     private CartNet lookedAtCart; // a cart you could start pushing
     private DoorNet lookedAtDoor; // a door you can open/close with F (and maybe lock with L)
+    private CheckoutCounter lookedAtCounter;        // your store's checkout counter
+    private CheckoutClickable lookedAtCheckoutPart; // a part of it to click: something on the belt, a key, the drawer...
     private bool lookedAtBuriedCartItem; // something on a cart with other things stacked on it
     [Tooltip("Lock / unlock a door your store owns.")]
     [SerializeField] private KeyCode doorLockKey = KeyCode.L;
@@ -136,6 +138,8 @@ public class PlayerInteractInput : NetworkBehaviour
         lookedAtMonitor = null;
         lookedAtCart = null;
         lookedAtDoor = null;
+        lookedAtCounter = null;
+        lookedAtCheckoutPart = null;
         lookedAtBuriedCartItem = false;
         pushedCart = CartNet.GetPushedBy(OwnerClientId);
         if (Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit,
@@ -156,6 +160,15 @@ public class PlayerInteractInput : NetworkBehaviour
 
             var door = hit.collider.GetComponentInParent<DoorNet>();
             if (door != null && door.IsSpawned && door.IsManual) lookedAtDoor = door;
+
+            // Checkout: a clickable part (belt items and the customer's money aren't children of the counter).
+            var part = hit.collider.GetComponentInParent<CheckoutClickable>();
+            var counter = part != null ? part.Counter : hit.collider.GetComponentInParent<CheckoutCounter>();
+            if (counter != null && counter.IsSpawned && counter.CanUse(OwnerClientId))
+            {
+                lookedAtCounter = counter;
+                lookedAtCheckoutPart = part;
+            }
 
             var sign = hit.collider.GetComponentInParent<ForSaleSign>();
             if (sign != null && sign.Plot != null && sign.Plot.IsForSale) lookedAtSign = sign;
@@ -285,12 +298,15 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         if (!IsOwner || (lookedAtSign == null && lookedAtSegment == null && lookedAtMonitor == null && stockTarget == null &&
                          lookedAtCart == null && pushedCart == null && lookedAtDoor == null &&
-                         !lookedAtBuriedCartItem) ||
+                         lookedAtCounter == null && !lookedAtBuriedCartItem) ||
             (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return null;
 
         return pushedCart != null ? "F: Let go of cart"
                     : lookedAtCart != null ? "F: Push cart"
                     : lookedAtDoor != null ? DoorPrompt()
+                    : lookedAtCounter != null ? (lookedAtCheckoutPart != null
+                        ? lookedAtCheckoutPart.Counter.PromptFor(lookedAtCheckoutPart, OwnerClientId) ?? lookedAtCounter.StatusFor(OwnerClientId)
+                        : lookedAtCounter.StatusFor(OwnerClientId))
                     : lookedAtBuriedCartItem ? "Take the things on top off first"
                     : lookedAtMonitor != null ? "F: Shop monitor"
                     : lookedAtSign != null ? $"F: Buy {lookedAtSign.Plot.DisplayName} ({lookedAtSign.Plot.Price})"
@@ -435,10 +451,19 @@ public class PlayerInteractInput : NetworkBehaviour
         if (fPressed) fRepeatTakes = stockTargetIsTake;
         if (fRepeat)
         {
+            if (lookedAtCounter != null) return;
             if (stockTarget != null && stockZone >= 0 && stockTargetIsTake == fRepeatTakes &&
                 pushedCart == null && lookedAtCart == null && lookedAtDoor == null &&
                 lookedAtMonitor == null && lookedAtSign == null && lookedAtSegment == null)
                 DoStockAction();
+            return;
+        }
+
+        // Checkout: click (or F) the part you're looking at, with empty hands.
+        if (lookedAtCheckoutPart != null && inventory.HeldItemId.Value == 0 &&
+            (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.F)))
+        {
+            lookedAtCheckoutPart.Counter.Click(lookedAtCheckoutPart);
             return;
         }
 
@@ -471,6 +496,9 @@ public class PlayerInteractInput : NetworkBehaviour
             lookedAtDoor.RequestToggleRpc();
             return;
         }
+
+        // Checkout: F on the counter itself does nothing (its parts are clicked).
+        if (lookedAtCounter != null) return;
 
         // The shop monitor opens the shop GUI for its store (local only; orders go through the host).
         if (lookedAtMonitor != null)

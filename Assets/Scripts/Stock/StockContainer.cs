@@ -696,7 +696,7 @@ public class StockContainer : NetworkBehaviour
     private static Transform builder;
 
     /// <summary>A plain copy of the prefab: looks and colliders only, no scripts, physics or networking.</summary>
-    private static GameObject MakeVisual(GameObject prefab, Vector3 position, Quaternion rotation, Transform parent)
+    public static GameObject MakeVisual(GameObject prefab, Vector3 position, Quaternion rotation, Transform parent)
     {
         if (builder == null)
         {
