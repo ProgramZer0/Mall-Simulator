@@ -466,8 +466,6 @@ public class StorePlot : NetworkBehaviour
         reason = null;
         var settings = BuiltWallSettings.Instance;
         if (settings == null || settings.WallPrefab == null) { reason = "No wall prefab set"; return false; }
-        if (BuiltWallCount >= settings.MaxWallsPerStore) { reason = "Too many walls"; return false; }
-
         Vector3 flat = b - a;
         flat.y = 0f;
         if (flat.magnitude < settings.MinLength - 1e-3f) { reason = "Too short"; return false; }
@@ -476,6 +474,150 @@ public class StorePlot : NetworkBehaviour
         if (!Contains(a + up) || !Contains(b + up) || !Contains((a + b) * 0.5f + up)) { reason = "Outside the store"; return false; }
         return true;
     }
+
+    /// <summary>What building a wall from a to b will really do (see PlanWall).</summary>
+    public struct WallPlan
+    {
+        public Vector3 a, b;        // the wall that will stand: the new one joined with walls it runs into
+        public float addedLength;   // the new part (what's paid for)
+        public List<int> joins;     // existing walls it takes in (replaced by the joined wall)
+    }
+
+    /// <summary>
+    /// Built walls never overlap. A new wall drawn along the same line as existing walls (over them,
+    /// through them, or carrying one on) joins them into one wall; only the new length is paid for.
+    /// Fails if it would lie over a wall of another height, or squeeze alongside one (parallel, closer
+    /// than a wall's thickness), or adds nothing. Walls crossing at an angle are fine.
+    /// </summary>
+    public bool PlanWall(Vector3 a, Vector3 b, float height, out WallPlan plan, out string reason)
+    {
+        plan = new WallPlan { a = a, b = b, joins = new List<int>() };
+        reason = null;
+        var settings = BuiltWallSettings.Instance;
+        if (settings == null) { reason = "No wall settings"; return false; }
+
+        Vector3 dir = Flat(b - a);
+        if (dir == Vector3.zero) { reason = "Too short"; return false; }
+        float length = Flat(b - a, false).magnitude;
+        static float Cross2(Vector3 x, Vector3 y) => x.x * y.z - x.z * y.x;
+        const float tol = 0.01f;
+
+        float lo = 0f, hi = length, covered = 0f;
+        foreach (var w in builtWalls)
+        {
+            Vector3 d = Flat(w.b - w.a);
+            if (d == Vector3.zero || Mathf.Abs(Cross2(d, dir)) > 0.01f) continue; // crossing: fine
+
+            float t1 = Vector3.Dot(Flat(w.a - a, false), dir), t2 = Vector3.Dot(Flat(w.b - a, false), dir);
+            float wlo = Mathf.Min(t1, t2), whi = Mathf.Max(t1, t2);
+            bool overlaps = whi > tol && wlo < length - tol; // shares some length
+            bool touches = whi > -tol && wlo < length + tol; // or meets end to end
+            float offset = Mathf.Abs(Cross2(dir, Flat(w.a - a, false)));
+
+            if (offset > 0.01f)
+            {
+                if (overlaps && offset < settings.Thickness - 0.005f) { reason = "Too close to another wall"; return false; }
+                continue;
+            }
+            if (!touches) continue;
+            if (Mathf.Abs(w.height - height) > 0.01f)
+            {
+                if (overlaps) { reason = "A wall of another height is already there"; return false; }
+                continue; // different heights meeting end to end stay separate walls
+            }
+
+            plan.joins.Add(w.id);
+            lo = Mathf.Min(lo, wlo);
+            hi = Mathf.Max(hi, whi);
+            covered += Mathf.Max(0f, Mathf.Min(length, whi) - Mathf.Max(0f, wlo));
+        }
+
+        plan.addedLength = Mathf.Max(0f, length - covered);
+        if (plan.addedLength < 0.01f) { reason = "There's already a wall here"; return false; }
+        if (BuiltWallCount - plan.joins.Count + 1 > settings.MaxWallsPerStore) { reason = "Too many walls"; return false; }
+
+        plan.a = a + dir * lo;
+        plan.b = a + dir * hi;
+        plan.a.y = a.y;
+        plan.b.y = a.y;
+        return true;
+    }
+
+    /// <summary>Server: build a planned wall, taking in the walls it joins. Returns the new wall's id.</summary>
+    public int ServerBuildPlannedWall(WallPlan plan, float height)
+    {
+        if (!IsServer) return 0;
+        foreach (int id in plan.joins) ServerRemoveWall(id, out _);
+        return ServerAddWall(plan.a, plan.b, height);
+    }
+
+    /// <summary>
+    /// Built walls: the store's edge usually isn't on the wall grid, so an end that lands within half a
+    /// grid step of it (just inside or just outside) is slid along the wall onto the edge. The wall
+    /// keeps its line, so the grid stays as predictable as before; only those ends change.
+    /// </summary>
+    public void FitWallToEdges(ref Vector3 a, ref Vector3 b)
+    {
+        var settings = BuiltWallSettings.Instance;
+        if (settings == null) return;
+        Vector3 dir = Flat(b - a);
+        if (dir == Vector3.zero) return;
+        float length = Flat(b - a, false).magnitude;
+        float reach = settings.GridSize * 0.5f + 0.01f;
+        const float inset = 0.002f; // a hair inside, so the end still counts as in the store
+
+        // Where the line through the wall is inside the store, as distances from a.
+        var spans = new List<Vector2>();
+        Vector3 origin = a + Vector3.up * 0.1f;
+        foreach (var box in baseAreas) AddLineSpan(box, origin, dir, spans);
+        for (int i = 0; i < SegmentCount; i++)
+            if (IsSegmentPurchased(i)) AddLineSpan(segments[i].area, origin, dir, spans);
+        if (spans.Count == 0) return;
+        spans.Sort((p, q) => p.x.CompareTo(q.x));
+        var merged = new List<Vector2> { spans[0] };
+        for (int i = 1; i < spans.Count; i++)
+        {
+            var last = merged[merged.Count - 1];
+            if (spans[i].x <= last.y + 0.01f) merged[merged.Count - 1] = new Vector2(last.x, Mathf.Max(last.y, spans[i].y));
+            else merged.Add(spans[i]);
+        }
+
+        // The stretch of store the wall's middle is in.
+        float mid = length * 0.5f;
+        foreach (var span in merged)
+        {
+            if (mid < span.x || mid > span.y) continue;
+            Vector3 start = a;
+            if (Mathf.Abs(span.x) < reach) a = start + dir * (span.x + inset);
+            if (Mathf.Abs(span.y - length) < reach) b = start + dir * (span.y - inset);
+            return;
+        }
+    }
+
+    // Where a flat line (origin + dir × s) is inside a box, as an s range.
+    private static void AddLineSpan(BoxCollider box, Vector3 origin, Vector3 dir, List<Vector2> into)
+    {
+        if (box == null) return;
+        Vector3 lp = box.transform.InverseTransformPoint(origin) - box.center;
+        Vector3 ld = box.transform.InverseTransformVector(dir);
+        Vector3 half = box.size * 0.5f;
+        float lo = float.NegativeInfinity, hi = float.PositiveInfinity;
+        for (int i = 0; i < 3; i++)
+        {
+            if (Mathf.Abs(ld[i]) < 1e-6f)
+            {
+                if (Mathf.Abs(lp[i]) > half[i]) return;
+                continue;
+            }
+            float t1 = (-half[i] - lp[i]) / ld[i], t2 = (half[i] - lp[i]) / ld[i];
+            lo = Mathf.Max(lo, Mathf.Min(t1, t2));
+            hi = Mathf.Min(hi, Mathf.Max(t1, t2));
+        }
+        if (lo <= hi) into.Add(new Vector2(lo, hi));
+    }
+
+    /// <summary>Is a point in the store, or within Reach meters of it?</summary>
+    public bool IsInsideOrNear(Vector3 worldPoint, float reach) => Contains(worldPoint) || DistanceToSpace(worldPoint) <= reach;
 
     /// <summary>Server: add a wall (checks done by the caller). Returns its id.</summary>
     public int ServerAddWall(Vector3 a, Vector3 b, float height)

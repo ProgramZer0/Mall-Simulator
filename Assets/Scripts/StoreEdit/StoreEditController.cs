@@ -237,6 +237,7 @@ public class StoreEditController : NetworkBehaviour
             UpdateCamera();
             if (!finishing) UpdateTools();
         }
+        if (!finishing) CheckOpeningsAfterWallChange();
         DrawHandles();
     }
 
@@ -328,6 +329,7 @@ public class StoreEditController : NetworkBehaviour
     private void EnterView(StorePlot plot)
     {
         editPlot = plot;
+        checkedWallVersion = seenWallVersion = CuttableWall.Version; // only check after walls change during this session
         finishing = false;
         if (editCam == null) CreateEditCamera();
         if (handles == null) handles = StoreEditHandles.Create();
@@ -1515,8 +1517,8 @@ public class StoreEditController : NetworkBehaviour
 
         if (!hasWallStart)
         {
-            // A post where the wall will start.
-            bool inside = editPlot.Contains(point + Vector3.up * 0.1f);
+            // A post where the wall will start. Just outside the edge is fine: the wall gets slid onto it.
+            bool inside = editPlot.IsInsideOrNear(point + Vector3.up * 0.1f, settings.GridSize * 0.5f + 0.01f);
             ShowWallGhost(point, point, height, inside);
             wallInfo = inside ? $"Click to start a {heightName} wall" : "Start inside your store";
             if (click && inside)
@@ -1528,15 +1530,28 @@ public class StoreEditController : NetworkBehaviour
         }
 
         Vector3 end = settings.SnapEnd(wallStart, point);
-        float length = Vector3.Distance(wallStart, end);
-        int cost = settings.GetCost(length, wallHalf);
+        // Ends right by the store's edge reach it (the host does the same).
+        Vector3 fitA = wallStart, fitB = end;
+        editPlot.FitWallToEdges(ref fitA, ref fitB);
+        float length = Vector3.Distance(fitA, fitB);
 
-        bool valid = editPlot.CanBuildWall(wallStart, end, out string reason);
+        // Drawn over or into walls on the same line: they join into one wall (only new length is paid).
+        bool valid = editPlot.CanBuildWall(fitA, fitB, out string reason);
+        StorePlot.WallPlan plan = default;
+        if (valid) valid = editPlot.PlanWall(fitA, fitB, height, out plan, out reason);
+        int cost = valid ? settings.GetCost(plan.addedLength, wallHalf) : settings.GetCost(length, wallHalf);
         if (valid && !CanAffordWall(cost)) { valid = false; reason = "Not enough money"; }
-        if (valid && WallHitsEditItems(settings, wallStart, end, height)) { valid = false; reason = "An item is in the way"; }
+        if (valid && WallHitsEditItems(settings, fitA, fitB, height, plan.joins)) { valid = false; reason = "An item is in the way"; }
 
-        ShowWallGhost(wallStart, end, height, valid);
-        wallInfo = valid ? $"{length:0.0} m {heightName} wall: ${cost}   (click to build)" : $"{length:0.0} m: {reason}";
+        // Show the whole wall it'll make.
+        if (valid) ShowWallGhost(plan.a, plan.b, height, true);
+        else ShowWallGhost(fitA, fitB, height, false);
+        string joins = valid && plan.joins.Count > 0
+            ? $", joins {plan.joins.Count} wall{(plan.joins.Count == 1 ? "" : "s")}"
+            : "";
+        wallInfo = valid
+            ? $"{plan.addedLength:0.0} m {heightName} wall{joins}: ${cost}   (click to build)"
+            : $"{length:0.0} m: {reason}";
 
         if (click && valid)
         {
@@ -1685,14 +1700,32 @@ public class StoreEditController : NetworkBehaviour
         dir.Normalize();
         bool diagonal = Mathf.Abs(dir.x) > 0.1f && Mathf.Abs(dir.z) > 0.1f;
         float step = settings.GridSize * (diagonal ? Mathf.Sqrt(2f) : 1f);
-        Vector3 rel = raw - wall.a;
-        rel.y = 0f;
-        float t = Vector3.Dot(rel, dir);
+        // Steps count from an end that's on the grid (an end slid onto the store's edge isn't).
+        Vector3 basePoint = OnGrid(settings, wall.a) ? wall.a : OnGrid(settings, wall.b) ? wall.b : wall.a;
+        float baseT = Vector3.Dot(Flat(basePoint - wall.a), dir);
+        float t = Vector3.Dot(Flat(raw - wall.a), dir);
         if (!line.HasValue) t = Mathf.Clamp(t, 0f, wall.Length);
-        t = Mathf.Round(t / step) * step;
+        t = baseT + Mathf.Round((t - baseT) / step) * step;
+        // The wall's own ends count as spots too.
+        float length = wall.Length;
+        float tRaw = Vector3.Dot(Flat(raw - wall.a), dir);
+        if (Mathf.Abs(tRaw) < step * 0.5f) t = 0f;
+        else if (Mathf.Abs(tRaw - length) < step * 0.5f) t = length;
         spot = wall.a + dir * t;
         spot.y = floorY;
         return true;
+    }
+
+    private static Vector3 Flat(Vector3 v)
+    {
+        v.y = 0f;
+        return v;
+    }
+
+    private static bool OnGrid(BuiltWallSettings settings, Vector3 p)
+    {
+        Vector3 g = settings.SnapToGrid(p);
+        return Mathf.Abs(g.x - p.x) < 0.005f && Mathf.Abs(g.z - p.z) < 0.005f;
     }
 
     private static float DistanceToSegmentFlat(Vector3 p, Vector3 a, Vector3 b)
@@ -1825,14 +1858,70 @@ public class StoreEditController : NetworkBehaviour
     }
 
     // The store's items are local copies while editing, so only this machine can check them.
-    private bool WallHitsEditItems(BuiltWallSettings settings, Vector3 a, Vector3 b, float height)
+    /// <summary>
+    /// Would a wall from a to b go through an item? Windows and doors already in a wall it joins
+    /// (Joins: wall ids) don't count; they stay in the joined wall.
+    /// </summary>
+    private bool WallHitsEditItems(BuiltWallSettings settings, Vector3 a, Vector3 b, float height, List<int> joins = null)
     {
         settings.GetWallPose(a, b, height, out Vector3 pos, out Quaternion rot, out Vector3 scale);
         Vector3 half = Vector3.Max(scale * 0.5f - Vector3.one * 0.02f, Vector3.one * 0.001f);
         int n = Physics.OverlapBoxNonAlloc(pos, half, WallHits, rot, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
         for (int i = 0; i < n; i++)
-            if (WallHits[i].GetComponentInParent<EditLocalItem>() != null) return true;
+        {
+            var item = WallHits[i].GetComponentInParent<EditLocalItem>();
+            if (item == null) continue;
+            if (joins != null && item.Opening != null)
+            {
+                var host = CuttableWall.HostOf(item.Opening);
+                var piece = host != null ? host.GetComponent<BuiltWallPiece>() : null;
+                if (piece != null && joins.Contains(piece.WallId)) continue;
+            }
+            return true;
+        }
         return false;
+    }
+
+    /* ---------- Keeping windows and doors valid ---------- */
+
+    private int checkedWallVersion = -1;
+    private int seenWallVersion = -1;
+    private float wallsChangedAt;
+
+    /// <summary>
+    /// When walls are rebuilt (built, joined, cut or removed), every window and door being edited must
+    /// still sit in one of this store's walls with room around it. Any that don't are taken out and
+    /// refunded rather than left floating.
+    /// </summary>
+    private void CheckOpeningsAfterWallChange()
+    {
+        // Wait until the walls have settled (one change can arrive as several: old walls out, new in).
+        if (seenWallVersion != CuttableWall.Version)
+        {
+            seenWallVersion = CuttableWall.Version;
+            wallsChangedAt = Time.time;
+        }
+        if (checkedWallVersion == CuttableWall.Version || Time.time - wallsChangedAt < 0.3f) return;
+        checkedWallVersion = CuttableWall.Version;
+
+        var bad = new List<EditLocalItem>();
+        void Check(EditLocalItem item)
+        {
+            if (item == null || item.Opening == null || !item.gameObject.activeInHierarchy) return;
+            var o = item.Opening;
+            var host = CuttableWall.HostOf(o);
+            if (host == null || host.Plot != editPlot) { bad.Add(item); return; }
+            var shape = o.Current;
+            Vector3 c = host.ToWall(shape.center);
+            var hole = new Rect(c.x - shape.size.x * 0.5f, c.y - shape.size.y * 0.5f, shape.size.x, shape.size.y);
+            if (!host.CanFit(hole, o, false, out _)) bad.Add(item);
+        }
+        foreach (var item in localItems) Check(item);
+        foreach (var item in addedItems) Check(item);
+        if (bad.Count == 0) return;
+
+        RemoveEditItems(bad, null);
+        ShowEditMessage($"{bad.Count} window{(bad.Count == 1 ? "" : "s")}/door{(bad.Count == 1 ? "" : "s")} had no room in the changed walls: removed and refunded.");
     }
 
     private void ShowWallGhost(Vector3 a, Vector3 b, float height, bool valid)
@@ -1879,14 +1968,16 @@ public class StoreEditController : NetworkBehaviour
         a.y = plot.FloorHeight;
         b = settings.SnapEnd(a, b);
         b.y = plot.FloorHeight;
+        plot.FitWallToEdges(ref a, ref b);
         if (!plot.CanBuildWall(a, b, out _)) return;
 
         float height = half ? Mathf.Min(settings.HalfHeight, plot.BuiltWallFullHeight) : plot.BuiltWallFullHeight;
-        int cost = settings.GetCost(Vector3.Distance(a, b), half);
+        if (!plot.PlanWall(a, b, height, out var plan, out _)) return;
+        int cost = settings.GetCost(plan.addedLength, half);
         var econ = EconomyManager.Instance;
         if (econ != null && !econ.ServerTrySpend(MallManager.GetTeamOf(OwnerClientId), cost)) return;
 
-        plot.ServerAddWall(a, b, height);
+        plot.ServerBuildPlannedWall(plan, height);
     }
 
     [Rpc(SendTo.Server)]
