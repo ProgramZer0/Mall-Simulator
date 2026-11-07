@@ -1456,9 +1456,30 @@ public class StorePlot : NetworkBehaviour
         return Mathf.FloorToInt(Mathf.Min(def.price, MarketModifiers.OrderCost(def)) * share);
     }
 
+    private static readonly HashSet<int> WarnedNested = new();
+
+    /// <summary>
+    /// NGO can't spawn a prefab with a NetworkObject inside another one (only scene objects can), so a
+    /// child's DoorNet would silently not work. Says how to fix the prefab, once per item.
+    /// </summary>
+    public static void WarnIfNestedNetworkObjects(ItemDef def, GameObject instance)
+    {
+        if (def == null || WarnedNested.Contains(def.id)) return;
+        var all = instance.GetComponentsInChildren<NetworkObject>(true);
+        if (all.Length <= 1) return;
+        WarnedNested.Add(def.id);
+        var names = new List<string>();
+        foreach (var no in all) if (no.gameObject != instance) names.Add(no.name);
+        Debug.LogError($"[StorePlot] '{def.displayName}' has a NetworkObject inside it ({string.Join(", ", names)}). " +
+                       "Spawned items can only have one, on the root. Fix the prefab: remove the NetworkObject (and " +
+                       "DoorNet) from the child, and put DoorMotion + DoorNet on the item's root instead, with the " +
+                       "child's hinge as the DoorMotion leaf.", def.worldNetworkPrefab);
+    }
+
     private void SpawnEditItem(ItemDef def, Vector3 pos, Quaternion rot, int units, int price, StockContainer.ZoneStock[] stock)
     {
         var spawned = Instantiate(def.worldNetworkPrefab, pos, rot);
+        WarnIfNestedNetworkObjects(def, spawned.gameObject);
         // Edit mode already let the player choose whether it falls, so it comes back exactly as left.
         if (spawned.TryGetComponent<ItemPickupNet>(out var item))
         {
