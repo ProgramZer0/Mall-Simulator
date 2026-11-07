@@ -5954,7 +5954,31 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StoreAppealSettings
   personalities: []
-  categoryNeeds: []
+  halfPriceScoreAtSensitivity0: 1.5
+  halfPriceScoreAtSensitivity2: 2
+  rarityScores:
+  - rarity: 0
+    atLove0: 1
+    atLove1: 1
+    atLove2: 0.1
+  - rarity: 1
+    atLove0: 1
+    atLove1: 1.33
+    atLove2: 0.3
+  - rarity: 2
+    atLove0: 1
+    atLove1: 1.67
+    atLove2: 2.33
+  - rarity: 3
+    atLove0: 1
+    atLove1: 2
+    atLove2: 3
+  competitionPerStore: 0.1
+  minCompetition: 0.5
+  categoryNeeds:
+  - category: 
+    needs: []
+  decorReach: 8
   neutralQuality: 0.5
   windowFeature: Window
   outsideSaturation: 10
