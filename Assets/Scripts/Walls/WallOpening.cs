@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 
 /// <summary>
@@ -13,6 +14,8 @@ using UnityEngine;
 ///     a plain doorway: no extra scripts.
 ///     a door the store opens and shuts (open while the store is open): add DoorMotion.
 ///     a door players open with F (or automatically) and can lock: add DoorMotion and DoorNet.
+///   Both go on this ROOT (the one NetworkObject); the door model can be a child, with its hinge as the
+///   DoorMotion leaf. A child must not have its own NetworkObject: NGO can't spawn those inside an item.
 ///   The store is filled in on DoorNet by itself.
 ///
 /// Players buy these in store edit mode (N) and drag them along walls. Tick Edit Mode Only on the
@@ -76,6 +79,20 @@ public class WallOpening : MonoBehaviour
     }
 
 #if UNITY_EDITOR
+    // A door prefab dropped in as a child brings its own NetworkObject, which NGO can't spawn inside an
+    // item. Warn while setting the prefab up.
+    private void OnValidate()
+    {
+        foreach (var no in GetComponentsInChildren<NetworkObject>(true))
+            if (no.gameObject != gameObject)
+            {
+                Debug.LogWarning($"[WallOpening] '{name}': the child '{no.name}' has a NetworkObject. Spawned items " +
+                                 "can only have one, on the root, so remove it (and its DoorNet) from the child and put " +
+                                 "DoorMotion + DoorNet on this root instead, with the child's hinge as the leaf.", this);
+                break;
+            }
+    }
+
     /// <summary>Editor: set this opening into the nearest CuttableWall (for doors placed in the scene).</summary>
     [ContextMenu("Snap Into Nearest Wall")]
     private void SnapIntoNearestWall()
