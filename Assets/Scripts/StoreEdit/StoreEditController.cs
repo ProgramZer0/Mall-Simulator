@@ -46,6 +46,9 @@ public class StoreEditController : NetworkBehaviour
     [SerializeField] private KeyCode wallToolKey = KeyCode.B;
     [Tooltip("Wall tool: switch between full-height and half-height walls.")]
     [SerializeField] private KeyCode wallHeightKey = KeyCode.H;
+    [Tooltip("Hides / shows the key list in the edit HUD (remembered between games). If it's the same key " +
+             "as Wall Height Key, it does nothing in the wall tool (there it switches the height).")]
+    [SerializeField] private KeyCode controlsKey = KeyCode.H;
     [Tooltip("Wall tool: switch between building and removing walls (holding Shift also removes).")]
     [SerializeField] private KeyCode wallEraseKey = KeyCode.E;
     [Tooltip("Opens the list of windows and doors to buy.")]
@@ -237,6 +240,8 @@ public class StoreEditController : NetworkBehaviour
         if (!menuOpen)
         {
             UpdateCamera();
+            if (!finishing && Input.GetKeyDown(controlsKey) && !(wallTool && controlsKey == wallHeightKey))
+                ControlsHidden = !ControlsHidden;
             if (!finishing) UpdateTools();
         }
         if (!finishing) CheckOpeningsAfterWallChange();
@@ -2059,7 +2064,29 @@ public class StoreEditController : NetworkBehaviour
     };
 
     /// <summary>What the HUD says right now: the mode, its state, the keys for it, and live feedback.</summary>
+    private const string ControlsHiddenPref = "MallSim.EditControlsHidden";
+
+    /// <summary>Is the key list hidden (only a small "show controls" hint)? Remembered on this computer.</summary>
+    public bool ControlsHidden
+    {
+        get => PlayerPrefs.GetInt(ControlsHiddenPref, 0) == 1;
+        set => PlayerPrefs.SetInt(ControlsHiddenPref, value ? 1 : 0);
+    }
+
     private void BuildHud()
+    {
+        BuildHudTexts();
+        string key = K(controlsKey);
+        bool keyTaken = wallTool && controlsKey == wallHeightKey; // in the wall tool that key switches the height
+        if (ControlsHidden)
+            hudControls = keyTaken
+                ? $"<size=60%>Controls hidden ({key} outside the wall tool to show them)</size>"
+                : $"<size=60%>{key}: show controls</size>";
+        else if (!keyTaken)
+            hudControls += $"\n<size=70%>{key}: hide controls</size>";
+    }
+
+    private void BuildHudTexts()
     {
         if (wallTool)
         {
