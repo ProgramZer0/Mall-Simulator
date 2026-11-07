@@ -12,12 +12,61 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f9cbadb0f0560ee4aa24b51535afc71f, type: 3}
   m_Name: Christmas
   m_EditorClassIdentifier: Assembly-CSharp::MallEventDef
-  displayName: New Event
+  displayName: Christmas
   description: 
-  trigger: 0
+  trigger: 1
   startAt: 600
   interval: 1800
   checkEvery: 60
   chance: 0.05
   duration: 300
-  rules: []
+  onlyInSeasons:
+  - {fileID: 11400000, guid: e6a3d1ad25584b243b6ce8e4fe9f3823, type: 2}
+  timedFromSeasonStart: 1
+  endsWithSeason: 1
+  maxPerSeason: 1
+  rules:
+  - note: Toys
+    targets:
+      everything: 0
+      match: 1
+      itemIds: 
+      categories: []
+      nameContains:
+      - toy
+      usePriceRange: 0
+      priceRangeUsesMarketPrice: 0
+      minPrice: 0
+      maxPrice: 0
+      useDeliveryRange: 0
+      minDeliverySeconds: 0
+      maxDeliverySeconds: 0
+    effects:
+    - stat: 4
+      mode: 0
+      amount: 100
+    - stat: 5
+      mode: 0
+      amount: 40
+  - note: electrnoics
+    targets:
+      everything: 0
+      match: 1
+      itemIds: 
+      categories:
+      - Electronics
+      nameContains: []
+      usePriceRange: 0
+      priceRangeUsesMarketPrice: 0
+      minPrice: 0
+      maxPrice: 0
+      useDeliveryRange: 0
+      minDeliverySeconds: 0
+      maxDeliverySeconds: 0
+    effects:
+    - stat: 4
+      mode: 0
+      amount: 100
+    - stat: 5
+      mode: 0
+      amount: 40

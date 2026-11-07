@@ -12,23 +12,29 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f9cbadb0f0560ee4aa24b51535afc71f, type: 3}
   m_Name: heatwave
   m_EditorClassIdentifier: Assembly-CSharp::MallEventDef
-  displayName: Test2
+  displayName: HeatWave
   description: 
-  trigger: 0
+  trigger: 3
   startAt: 600
   interval: 1800
   checkEvery: 60
   chance: 0.05
   duration: 300
+  onlyInSeasons:
+  - {fileID: 11400000, guid: e6a3d1ad25584b243b6ce8e4fe9f3823, type: 2}
+  timedFromSeasonStart: 1
+  endsWithSeason: 0
+  maxPerSeason: 0
   rules:
-  - note: test
+  - note: cooling
     targets:
       everything: 0
-      match: 0
+      match: 1
       itemIds: 
       categories:
       - test
-      nameContains: []
+      nameContains:
+      - Ice
       usePriceRange: 0
       priceRangeUsesMarketPrice: 0
       minPrice: 0
@@ -37,6 +43,6 @@ MonoBehaviour:
       minDeliverySeconds: 0
       maxDeliverySeconds: 0
     effects:
-    - stat: 0
+    - stat: 4
       mode: 1
-      amount: 100
+      amount: 20

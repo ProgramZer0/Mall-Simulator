@@ -12,23 +12,28 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f9cbadb0f0560ee4aa24b51535afc71f, type: 3}
   m_Name: snowstorm
   m_EditorClassIdentifier: Assembly-CSharp::MallEventDef
-  displayName: Test2
+  displayName: snowstorm
   description: 
-  trigger: 0
+  trigger: 3
   startAt: 600
   interval: 1800
   checkEvery: 60
   chance: 0.05
   duration: 300
+  onlyInSeasons:
+  - {fileID: 11400000, guid: 1b781fbe7e335a345944764f6cda9f53, type: 2}
+  timedFromSeasonStart: 1
+  endsWithSeason: 0
+  maxPerSeason: 0
   rules:
   - note: test
     targets:
       everything: 0
-      match: 0
+      match: 1
       itemIds: 
-      categories:
-      - test
-      nameContains: []
+      categories: []
+      nameContains:
+      - coats
       usePriceRange: 0
       priceRangeUsesMarketPrice: 0
       minPrice: 0
@@ -37,6 +42,6 @@ MonoBehaviour:
       minDeliverySeconds: 0
       maxDeliverySeconds: 0
     effects:
-    - stat: 0
-      mode: 1
-      amount: 100
+    - stat: 4
+      mode: 0
+      amount: 60

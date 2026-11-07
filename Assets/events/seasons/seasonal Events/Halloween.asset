@@ -12,12 +12,36 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f9cbadb0f0560ee4aa24b51535afc71f, type: 3}
   m_Name: Halloween
   m_EditorClassIdentifier: Assembly-CSharp::MallEventDef
-  displayName: New Event
+  displayName: Halloween
   description: 
-  trigger: 0
-  startAt: 600
+  trigger: 1
+  startAt: 1000
   interval: 1800
   checkEvery: 60
   chance: 0.05
   duration: 300
-  rules: []
+  onlyInSeasons:
+  - {fileID: 11400000, guid: f630806c944e5db42980d588199b5d56, type: 2}
+  timedFromSeasonStart: 1
+  endsWithSeason: 1
+  maxPerSeason: 1
+  rules:
+  - note: costumes
+    targets:
+      everything: 0
+      match: 1
+      itemIds: 
+      categories: []
+      nameContains:
+      - costume
+      usePriceRange: 0
+      priceRangeUsesMarketPrice: 0
+      minPrice: 0
+      maxPrice: 0
+      useDeliveryRange: 0
+      minDeliverySeconds: 0
+      maxDeliverySeconds: 0
+    effects:
+    - stat: 4
+      mode: 0
+      amount: 100

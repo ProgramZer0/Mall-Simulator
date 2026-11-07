@@ -15,17 +15,22 @@ MonoBehaviour:
   displayName: Back To School
   description: Kids are going back to school! Sounds like parents are looking for
     things for them
-  trigger: 1
-  startAt: 4000
+  trigger: 3
+  startAt: 100
   interval: 5800
   checkEvery: 60
   chance: 0.06
   duration: 300
+  onlyInSeasons:
+  - {fileID: 11400000, guid: f630806c944e5db42980d588199b5d56, type: 2}
+  timedFromSeasonStart: 1
+  endsWithSeason: 1
+  maxPerSeason: 1
   rules:
   - note: backpacks
     targets:
       everything: 0
-      match: 0
+      match: 1
       itemIds: 
       categories: []
       nameContains:

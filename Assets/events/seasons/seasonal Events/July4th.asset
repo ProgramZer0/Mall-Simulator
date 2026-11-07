@@ -14,10 +14,34 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MallEventDef
   displayName: New Event
   description: 
-  trigger: 0
-  startAt: 600
+  trigger: 1
+  startAt: 1000
   interval: 1800
   checkEvery: 60
   chance: 0.05
   duration: 300
-  rules: []
+  onlyInSeasons:
+  - {fileID: 11400000, guid: e6a3d1ad25584b243b6ce8e4fe9f3823, type: 2}
+  timedFromSeasonStart: 1
+  endsWithSeason: 1
+  maxPerSeason: 1
+  rules:
+  - note: 
+    targets:
+      everything: 0
+      match: 1
+      itemIds: 
+      categories: []
+      nameContains:
+      - Patriot
+      usePriceRange: 0
+      priceRangeUsesMarketPrice: 0
+      minPrice: 0
+      maxPrice: 0
+      useDeliveryRange: 0
+      minDeliverySeconds: 0
+      maxDeliverySeconds: 0
+    effects:
+    - stat: 4
+      mode: 0
+      amount: 15

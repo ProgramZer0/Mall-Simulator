@@ -5607,14 +5607,17 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MallEventManager
   ShowTopMostFoldoutHeaderGroup: 1
   events:
-  - {fileID: 11400000, guid: 654eb757276ae8641b647070cf997d25, type: 2}
   - {fileID: 11400000, guid: e2f8870e6d2ba1b42a78029fdc899d24, type: 2}
+  - {fileID: 11400000, guid: 04bb62385e9c0354aa73cb2a4a9c0354, type: 2}
+  - {fileID: 11400000, guid: 8370f7150a2711845b01b145df811b2a, type: 2}
+  - {fileID: 11400000, guid: 654eb757276ae8641b647070cf997d25, type: 2}
   - {fileID: 11400000, guid: 6a80f806fc77836419a286e349099464, type: 2}
   - {fileID: 11400000, guid: aae8f886550b6144c8cd74bc5d7537d1, type: 2}
   - {fileID: 11400000, guid: a2832e3128130b141befd55b91f780cf, type: 2}
+  - {fileID: 11400000, guid: 60d5175470c995d4db1b6b2a98fb798d, type: 2}
   - {fileID: 11400000, guid: 9e67ea112a4d1434c921f8255dbd4caa, type: 2}
   - {fileID: 11400000, guid: d8fbd7fac4f463146be75acc1df8fd0f, type: 2}
-  - {fileID: 11400000, guid: 8370f7150a2711845b01b145df811b2a, type: 2}
+  - {fileID: 11400000, guid: df227ce61acb15745acbbe2fb6fd2712, type: 2}
   seasonsEnabled: 1
   seasons:
   - {fileID: 11400000, guid: c49ac4e9381c1474891ba908212e0f99, type: 2}
