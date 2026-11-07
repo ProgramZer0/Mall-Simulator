@@ -256,6 +256,20 @@ public class EconomyManager : NetworkBehaviour
         money.Add(new TeamMoney { teamId = teamId, money = amount });
     }
 
+    // Sales are in cents but money is in whole dollars: the cents left over wait here until they add up.
+    private readonly Dictionary<ulong, int> centsLeftOver = new();
+
+    /// <summary>Server: add money in cents (a sale). Whole dollars go in now; the cents carry over.</summary>
+    public void ServerAddCents(ulong teamId, int cents)
+    {
+        if (!IsServer || cents <= 0) return;
+        centsLeftOver.TryGetValue(teamId, out int left);
+        left += cents;
+        int dollars = left / 100;
+        centsLeftOver[teamId] = left % 100;
+        if (dollars > 0) ServerAddMoney(teamId, dollars);
+    }
+
     /// <summary>Server: take money if the team has enough. Free (0 or less) always succeeds.</summary>
     public bool ServerTrySpend(ulong teamId, int amount)
     {

@@ -122,6 +122,7 @@ public class PlayerInteractInput : NetworkBehaviour
     private SegmentSign lookedAtSegment; // a segment wall of your store you could unlock with F
     private CartNet lookedAtCart; // a cart you could start pushing
     private DoorNet lookedAtDoor; // a door you can open/close with F (and maybe lock with L)
+    private CheckoutCounter lookedAtCounter; // your store's checkout: F scans / takes payment
     private bool lookedAtBuriedCartItem; // something on a cart with other things stacked on it
     [Tooltip("Lock / unlock a door your store owns.")]
     [SerializeField] private KeyCode doorLockKey = KeyCode.L;
@@ -136,6 +137,7 @@ public class PlayerInteractInput : NetworkBehaviour
         lookedAtMonitor = null;
         lookedAtCart = null;
         lookedAtDoor = null;
+        lookedAtCounter = null;
         lookedAtBuriedCartItem = false;
         pushedCart = CartNet.GetPushedBy(OwnerClientId);
         if (Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit,
@@ -156,6 +158,9 @@ public class PlayerInteractInput : NetworkBehaviour
 
             var door = hit.collider.GetComponentInParent<DoorNet>();
             if (door != null && door.IsSpawned && door.IsManual) lookedAtDoor = door;
+
+            var counter = hit.collider.GetComponentInParent<CheckoutCounter>();
+            if (counter != null && counter.IsSpawned && counter.CanUse(OwnerClientId)) lookedAtCounter = counter;
 
             var sign = hit.collider.GetComponentInParent<ForSaleSign>();
             if (sign != null && sign.Plot != null && sign.Plot.IsForSale) lookedAtSign = sign;
@@ -285,12 +290,13 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         if (!IsOwner || (lookedAtSign == null && lookedAtSegment == null && lookedAtMonitor == null && stockTarget == null &&
                          lookedAtCart == null && pushedCart == null && lookedAtDoor == null &&
-                         !lookedAtBuriedCartItem) ||
+                         lookedAtCounter == null && !lookedAtBuriedCartItem) ||
             (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return null;
 
         return pushedCart != null ? "F: Let go of cart"
                     : lookedAtCart != null ? "F: Push cart"
                     : lookedAtDoor != null ? DoorPrompt()
+                    : lookedAtCounter != null ? lookedAtCounter.PromptFor(OwnerClientId)
                     : lookedAtBuriedCartItem ? "Take the things on top off first"
                     : lookedAtMonitor != null ? "F: Shop monitor"
                     : lookedAtSign != null ? $"F: Buy {lookedAtSign.Plot.DisplayName} ({lookedAtSign.Plot.Price})"
@@ -435,6 +441,13 @@ public class PlayerInteractInput : NetworkBehaviour
         if (fPressed) fRepeatTakes = stockTargetIsTake;
         if (fRepeat)
         {
+            // Holding F at a checkout keeps scanning (it stops at the payment).
+            if (lookedAtCounter != null)
+            {
+                if (lookedAtCounter.Current.phase == CheckoutCounter.Phase.Scanning && lookedAtCounter.ItemCount > 0)
+                    lookedAtCounter.RequestScanRpc();
+                return;
+            }
             if (stockTarget != null && stockZone >= 0 && stockTargetIsTake == fRepeatTakes &&
                 pushedCart == null && lookedAtCart == null && lookedAtDoor == null &&
                 lookedAtMonitor == null && lookedAtSign == null && lookedAtSegment == null)
@@ -469,6 +482,13 @@ public class PlayerInteractInput : NetworkBehaviour
         if (lookedAtDoor != null)
         {
             lookedAtDoor.RequestToggleRpc();
+            return;
+        }
+
+        // Checkout: F scans the next thing on the belt, or takes the payment.
+        if (lookedAtCounter != null)
+        {
+            lookedAtCounter.Interact();
             return;
         }
 

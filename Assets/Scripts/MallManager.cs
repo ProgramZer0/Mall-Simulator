@@ -408,6 +408,14 @@ public class MallManager : NetworkBehaviour
             }
         }
 
+        // Editing takes the counters away too, so customers at a checkout are served first.
+        foreach (var counter in CheckoutCounter.All)
+            if (counter != null && counter.IsBusy && counter.Plot == plot)
+            {
+                reason = "A customer is still at checkout. Finish serving them first.";
+                return false;
+            }
+
         ServerStopEdit(clientId); // one store at a time
         plot.ServerSetEditor(clientId);
         return true;
