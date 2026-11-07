@@ -118,6 +118,10 @@ public class ItemDef
     }
     [Tooltip("Cost of one when ordered.")]
     public int price = 10;
+    [Tooltip("How rare it is. Customers who love exotic things are drawn to rarer items.")]
+    public Rarity rarity = Rarity.Common;
+
+    public enum Rarity { Common, Uncommon, Rare, Exotic }
     [Tooltip("What one is really worth to customers, in dollars (cents allowed, e.g. 24.99). Not shown to the " +
              "player: their prices are judged against it (and it'll move with events and seasons). For stock " +
              "crates this is per product (one shirt), not the whole crate.")]

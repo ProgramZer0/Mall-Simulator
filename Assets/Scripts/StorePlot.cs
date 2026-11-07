@@ -195,10 +195,15 @@ public class StorePlot : NetworkBehaviour
     /// <summary>What this store is selling: products, prices, quantities (worked out locally, nothing extra synced).</summary>
     public StoreListing Listing { get; private set; }
 
+    /// <summary>How appealing the store is: quality, what's seen from outside, each personality's view.</summary>
+    public StoreAppeal Appeal { get; private set; }
+
     private void Awake()
     {
         Listing = GetComponent<StoreListing>();
         if (Listing == null) Listing = gameObject.AddComponent<StoreListing>();
+        Appeal = GetComponent<StoreAppeal>();
+        if (Appeal == null) Appeal = gameObject.AddComponent<StoreAppeal>();
 
         // Which module each storefront section shows (0 = the one placed in the scene).
         // Store-wide prices set with "Set for all": new stock and newly placed items pick them up.
