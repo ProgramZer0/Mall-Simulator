@@ -913,7 +913,7 @@ public class StorePlot : NetworkBehaviour
     /// <summary>Is this item (at this pose) a door in one of this store's front walls?</summary>
     public bool IsStorefrontDoor(ItemDef def, Vector3 position, Quaternion rotation)
     {
-        if (!WallOpening.TryGet(def, out var o) || !o.isDoor) return false;
+        if (!WallOpening.TryGet(def, out var o) || !o.IsDoor) return false;
         var host = CuttableWall.HostOf(def, position, rotation);
         return host != null && host.Plot == this && host.IsStorefront;
     }

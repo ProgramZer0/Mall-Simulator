@@ -210,7 +210,10 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         if (filterText.Length == 0) return true;
         const StringComparison ignoreCase = StringComparison.OrdinalIgnoreCase;
         if (!string.IsNullOrEmpty(def.displayName) && def.displayName.IndexOf(filterText, ignoreCase) >= 0) return true;
-        return searchCategory && !string.IsNullOrEmpty(def.category) && def.category.IndexOf(filterText, ignoreCase) >= 0;
+        if (!searchCategory) return false;
+        foreach (var c in def.Categories)
+            if (c.IndexOf(filterText, ignoreCase) >= 0) return true;
+        return false;
     }
 
     private void ChangePage(int delta)

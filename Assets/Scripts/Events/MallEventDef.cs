@@ -117,8 +117,7 @@ public class MallEventDef : ScriptableObject
             Check(categories != null && categories.Count > 0, () =>
             {
                 foreach (var c in categories)
-                    if (!string.IsNullOrEmpty(c) && string.Equals(c.Trim(), def.category?.Trim(), StringComparison.OrdinalIgnoreCase))
-                        return true;
+                    if (def.HasCategory(c)) return true;
                 return false;
             });
             Check(nameContains != null && nameContains.Count > 0, () =>
