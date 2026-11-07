@@ -20,7 +20,7 @@ public class NetworkTestingButtons : MonoBehaviour
         else
         {
             // Top-right, out of the way of the store edit panel in the top-left.
-            GUILayout.BeginArea(new Rect(Screen.width - 160, 10, 150, 80));
+            /*GUILayout.BeginArea(new Rect(Screen.width - 160, 10, 150, 80));
             string mode = nm.IsHost ? "Host" : nm.IsServer ? "Server" : "Client";
             GUILayout.Label($"Running as {mode}");
             if (GUILayout.Button("Shutdown"))
@@ -29,6 +29,7 @@ public class NetworkTestingButtons : MonoBehaviour
                 nm.Shutdown();
             }
             GUILayout.EndArea();
+            */
         }
     }
 }
