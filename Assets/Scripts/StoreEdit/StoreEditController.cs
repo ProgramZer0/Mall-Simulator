@@ -430,6 +430,7 @@ public class StoreEditController : NetworkBehaviour
         addedItems.Clear();
         if (placing != null) Destroy(placing.gameObject);
         placing = null;
+        reopenOpeningsMenu = false;
         SetOpeningsMenu(false);
         openingInfo = null;
         selected = null;
@@ -1197,8 +1198,21 @@ public class StoreEditController : NetworkBehaviour
         GUI.Label(new Rect(x + 10, y + h - 26, w - 20, 20), $"Paid when you save: ${pending}");
     }
 
+    // The windows & doors list was open when placing started: it comes back when placing stops.
+    private bool reopenOpeningsMenu;
+
+    /// <summary>
+    /// A piece was picked from the list: the list hides and that piece follows the mouse along the walls.
+    /// Every click places one and the next one is ready straight away; RMB or Esc stops and brings the
+    /// list back.
+    /// </summary>
     private void StartPlacing(ItemDef def)
     {
+        if (OpeningsMenuOpen)
+        {
+            reopenOpeningsMenu = true;
+            SetOpeningsMenu(false);
+        }
         CancelPlacing();
         Deselect();
         selectedSlot = -1;
@@ -1219,21 +1233,39 @@ public class StoreEditController : NetworkBehaviour
     {
         if (Input.GetKeyDown(KeyCode.Escape) || rmbClicked)
         {
-            CancelPlacing();
-            openingInfo = null;
+            StopPlacing(null);
             return;
         }
-        if (IsMouseOverOpeningsPanel(mouse)) return;
 
         bool valid = DragOpening(placing, ray);
         if (!Input.GetMouseButtonDown(0) || !valid || !placing.gameObject.activeSelf) return;
 
+        // Placed: it's bought on save. The next one of the same piece is ready right away.
         var item = placing;
         placing = null;
         item.SetFaded(false);
         addedItems.Add(item);
-        Select(item);
-        openingInfo = $"Bought for ${MarketModifiers.OrderCost(item.Def)} when you save";
+        var def = item.Def;
+        int cost = MarketModifiers.OrderCost(def);
+        if (MoneyLeft() >= cost)
+        {
+            StartPlacing(def);
+            openingInfo = $"Placed (${cost} on save). Click to place another, RMB / Esc to stop";
+        }
+        else StopPlacing("Not enough money for another");
+    }
+
+    /// <summary>Stop placing (RMB / Esc, or out of money) and bring the list back if it was open.</summary>
+    private void StopPlacing(string message)
+    {
+        CancelPlacing();
+        openingInfo = null;
+        if (!string.IsNullOrEmpty(message)) ShowEditMessage(message);
+        if (reopenOpeningsMenu)
+        {
+            reopenOpeningsMenu = false;
+            SetOpeningsMenu(true);
+        }
     }
 
     /// <summary>
@@ -2109,8 +2141,8 @@ public class StoreEditController : NetworkBehaviour
         if (placing != null)
         {
             hudStatus = $"Placing: {placing.Def.displayName}";
-            hudControls = $"{K("Click")} one of your walls to put it there   {K("Ctrl")}: no snap\n" +
-                          $"{K("RMB")} / {K("Esc")}: cancel";
+            hudControls = $"{K("Click")} a wall to place one (keeps placing)   {K("Ctrl")}: no snap\n" +
+                          $"{K("RMB")} / {K("Esc")}: stop placing (back to the list)";
             hudInfo = openingInfo;
             return;
         }
