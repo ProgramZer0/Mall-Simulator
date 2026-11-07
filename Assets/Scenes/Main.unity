@@ -5756,6 +5756,7 @@ GameObject:
   - component: {fileID: 451575851}
   - component: {fileID: 451575852}
   - component: {fileID: 451575853}
+  - component: {fileID: 451575854}
   m_Layer: 0
   m_Name: Managers
   m_TagString: Untagged
@@ -5940,6 +5941,26 @@ MonoBehaviour:
     maxPercent: 300
   showDebugHud: 0
   devHotkeys: 1
+--- !u!114 &451575854
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 451575846}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: af254f6042dfdce498bab654a64f1cb0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StoreAppealSettings
+  personalities: []
+  categoryNeeds: []
+  neutralQuality: 0.5
+  windowFeature: Window
+  outsideSaturation: 10
+  insideSaturation: 30
+  viewerDistance: 2
+  viewerHeight: 1.6
 --- !u!1 &451926993
 GameObject:
   m_ObjectHideFlags: 0
@@ -20537,6 +20558,7 @@ MonoBehaviour:
     - test
     category: 
     price: 1
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 30
     shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
@@ -20552,6 +20574,7 @@ MonoBehaviour:
     - Shelves
     category: 
     price: 100
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 200
     shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
@@ -20567,6 +20590,7 @@ MonoBehaviour:
     - Appliance
     category: 
     price: 800
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 500
     shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
@@ -20582,6 +20606,7 @@ MonoBehaviour:
     - Base
     category: 
     price: 999999
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 99999
     shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
@@ -20597,6 +20622,7 @@ MonoBehaviour:
     - Base
     category: 
     price: 999999
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 99999
     shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
@@ -20612,6 +20638,7 @@ MonoBehaviour:
     - Base
     category: 
     price: 999999
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 99999
     shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
@@ -20627,6 +20654,7 @@ MonoBehaviour:
     - Clothing
     category: 
     price: 40
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 300
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
@@ -20642,6 +20670,7 @@ MonoBehaviour:
     - Clothing
     category: 
     price: 10
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 300
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
@@ -20657,6 +20686,7 @@ MonoBehaviour:
     - Clothing
     category: 
     price: 10
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 300
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
@@ -20672,6 +20702,7 @@ MonoBehaviour:
     - Shelves
     category: 
     price: 100
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 200
     shipmentPrefab: {fileID: 5976144729851372552, guid: 3c680629927b20b4db25f94c7e0e28bc, type: 3}
@@ -20687,6 +20718,7 @@ MonoBehaviour:
     - Clothing
     category: 
     price: 10
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 300
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
@@ -20702,6 +20734,7 @@ MonoBehaviour:
     - Clothing
     category: 
     price: 10
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 300
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
@@ -20717,6 +20750,7 @@ MonoBehaviour:
     - Clothing
     category: 
     price: 230
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 200
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
@@ -20732,6 +20766,7 @@ MonoBehaviour:
     - Window
     category: 
     price: 0
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 0
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
@@ -20747,6 +20782,7 @@ MonoBehaviour:
     - Window
     category: 
     price: 0
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 0
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
@@ -20762,6 +20798,7 @@ MonoBehaviour:
     - Window
     category: 
     price: 0
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 0
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
@@ -20777,6 +20814,7 @@ MonoBehaviour:
     - Window
     category: 
     price: 0
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 0
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
@@ -20792,6 +20830,7 @@ MonoBehaviour:
     - Window
     category: 
     price: 0
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 0
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
@@ -20807,6 +20846,7 @@ MonoBehaviour:
     - Window
     category: 
     price: 0
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 0
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
@@ -20822,6 +20862,7 @@ MonoBehaviour:
     - Window
     category: 
     price: 0
+    rarity: 0
     marketPrice: 0
     deliverySeconds: 0
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
