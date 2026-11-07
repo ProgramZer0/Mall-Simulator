@@ -237,6 +237,7 @@ public class StoreEditController : NetworkBehaviour
             UpdateCamera();
             if (!finishing) UpdateTools();
         }
+        if (!finishing) CheckOpeningsAfterWallChange();
         DrawHandles();
     }
 
@@ -328,6 +329,7 @@ public class StoreEditController : NetworkBehaviour
     private void EnterView(StorePlot plot)
     {
         editPlot = plot;
+        checkedWallVersion = seenWallVersion = CuttableWall.Version; // only check after walls change during this session
         finishing = false;
         if (editCam == null) CreateEditCamera();
         if (handles == null) handles = StoreEditHandles.Create();
@@ -1532,14 +1534,24 @@ public class StoreEditController : NetworkBehaviour
         Vector3 fitA = wallStart, fitB = end;
         editPlot.FitWallToEdges(ref fitA, ref fitB);
         float length = Vector3.Distance(fitA, fitB);
-        int cost = settings.GetCost(length, wallHalf);
 
+        // Drawn over or into walls on the same line: they join into one wall (only new length is paid).
         bool valid = editPlot.CanBuildWall(fitA, fitB, out string reason);
+        StorePlot.WallPlan plan = default;
+        if (valid) valid = editPlot.PlanWall(fitA, fitB, height, out plan, out reason);
+        int cost = valid ? settings.GetCost(plan.addedLength, wallHalf) : settings.GetCost(length, wallHalf);
         if (valid && !CanAffordWall(cost)) { valid = false; reason = "Not enough money"; }
-        if (valid && WallHitsEditItems(settings, fitA, fitB, height)) { valid = false; reason = "An item is in the way"; }
+        if (valid && WallHitsEditItems(settings, fitA, fitB, height, plan.joins)) { valid = false; reason = "An item is in the way"; }
 
-        ShowWallGhost(fitA, fitB, height, valid);
-        wallInfo = valid ? $"{length:0.0} m {heightName} wall: ${cost}   (click to build)" : $"{length:0.0} m: {reason}";
+        // Show the whole wall it'll make.
+        if (valid) ShowWallGhost(plan.a, plan.b, height, true);
+        else ShowWallGhost(fitA, fitB, height, false);
+        string joins = valid && plan.joins.Count > 0
+            ? $", joins {plan.joins.Count} wall{(plan.joins.Count == 1 ? "" : "s")}"
+            : "";
+        wallInfo = valid
+            ? $"{plan.addedLength:0.0} m {heightName} wall{joins}: ${cost}   (click to build)"
+            : $"{length:0.0} m: {reason}";
 
         if (click && valid)
         {
@@ -1846,14 +1858,70 @@ public class StoreEditController : NetworkBehaviour
     }
 
     // The store's items are local copies while editing, so only this machine can check them.
-    private bool WallHitsEditItems(BuiltWallSettings settings, Vector3 a, Vector3 b, float height)
+    /// <summary>
+    /// Would a wall from a to b go through an item? Windows and doors already in a wall it joins
+    /// (Joins: wall ids) don't count; they stay in the joined wall.
+    /// </summary>
+    private bool WallHitsEditItems(BuiltWallSettings settings, Vector3 a, Vector3 b, float height, List<int> joins = null)
     {
         settings.GetWallPose(a, b, height, out Vector3 pos, out Quaternion rot, out Vector3 scale);
         Vector3 half = Vector3.Max(scale * 0.5f - Vector3.one * 0.02f, Vector3.one * 0.001f);
         int n = Physics.OverlapBoxNonAlloc(pos, half, WallHits, rot, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
         for (int i = 0; i < n; i++)
-            if (WallHits[i].GetComponentInParent<EditLocalItem>() != null) return true;
+        {
+            var item = WallHits[i].GetComponentInParent<EditLocalItem>();
+            if (item == null) continue;
+            if (joins != null && item.Opening != null)
+            {
+                var host = CuttableWall.HostOf(item.Opening);
+                var piece = host != null ? host.GetComponent<BuiltWallPiece>() : null;
+                if (piece != null && joins.Contains(piece.WallId)) continue;
+            }
+            return true;
+        }
         return false;
+    }
+
+    /* ---------- Keeping windows and doors valid ---------- */
+
+    private int checkedWallVersion = -1;
+    private int seenWallVersion = -1;
+    private float wallsChangedAt;
+
+    /// <summary>
+    /// When walls are rebuilt (built, joined, cut or removed), every window and door being edited must
+    /// still sit in one of this store's walls with room around it. Any that don't are taken out and
+    /// refunded rather than left floating.
+    /// </summary>
+    private void CheckOpeningsAfterWallChange()
+    {
+        // Wait until the walls have settled (one change can arrive as several: old walls out, new in).
+        if (seenWallVersion != CuttableWall.Version)
+        {
+            seenWallVersion = CuttableWall.Version;
+            wallsChangedAt = Time.time;
+        }
+        if (checkedWallVersion == CuttableWall.Version || Time.time - wallsChangedAt < 0.3f) return;
+        checkedWallVersion = CuttableWall.Version;
+
+        var bad = new List<EditLocalItem>();
+        void Check(EditLocalItem item)
+        {
+            if (item == null || item.Opening == null || !item.gameObject.activeInHierarchy) return;
+            var o = item.Opening;
+            var host = CuttableWall.HostOf(o);
+            if (host == null || host.Plot != editPlot) { bad.Add(item); return; }
+            var shape = o.Current;
+            Vector3 c = host.ToWall(shape.center);
+            var hole = new Rect(c.x - shape.size.x * 0.5f, c.y - shape.size.y * 0.5f, shape.size.x, shape.size.y);
+            if (!host.CanFit(hole, o, false, out _)) bad.Add(item);
+        }
+        foreach (var item in localItems) Check(item);
+        foreach (var item in addedItems) Check(item);
+        if (bad.Count == 0) return;
+
+        RemoveEditItems(bad, null);
+        ShowEditMessage($"{bad.Count} window{(bad.Count == 1 ? "" : "s")}/door{(bad.Count == 1 ? "" : "s")} had no room in the changed walls: removed and refunded.");
     }
 
     private void ShowWallGhost(Vector3 a, Vector3 b, float height, bool valid)
@@ -1904,11 +1972,12 @@ public class StoreEditController : NetworkBehaviour
         if (!plot.CanBuildWall(a, b, out _)) return;
 
         float height = half ? Mathf.Min(settings.HalfHeight, plot.BuiltWallFullHeight) : plot.BuiltWallFullHeight;
-        int cost = settings.GetCost(Vector3.Distance(a, b), half);
+        if (!plot.PlanWall(a, b, height, out var plan, out _)) return;
+        int cost = settings.GetCost(plan.addedLength, half);
         var econ = EconomyManager.Instance;
         if (econ != null && !econ.ServerTrySpend(MallManager.GetTeamOf(OwnerClientId), cost)) return;
 
-        plot.ServerAddWall(a, b, height);
+        plot.ServerBuildPlannedWall(plan, height);
     }
 
     [Rpc(SendTo.Server)]

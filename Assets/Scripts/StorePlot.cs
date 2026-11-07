@@ -466,8 +466,6 @@ public class StorePlot : NetworkBehaviour
         reason = null;
         var settings = BuiltWallSettings.Instance;
         if (settings == null || settings.WallPrefab == null) { reason = "No wall prefab set"; return false; }
-        if (BuiltWallCount >= settings.MaxWallsPerStore) { reason = "Too many walls"; return false; }
-
         Vector3 flat = b - a;
         flat.y = 0f;
         if (flat.magnitude < settings.MinLength - 1e-3f) { reason = "Too short"; return false; }
@@ -475,6 +473,82 @@ public class StorePlot : NetworkBehaviour
         Vector3 up = Vector3.up * 0.1f; // just above the floor, so floor-level points count as inside
         if (!Contains(a + up) || !Contains(b + up) || !Contains((a + b) * 0.5f + up)) { reason = "Outside the store"; return false; }
         return true;
+    }
+
+    /// <summary>What building a wall from a to b will really do (see PlanWall).</summary>
+    public struct WallPlan
+    {
+        public Vector3 a, b;        // the wall that will stand: the new one joined with walls it runs into
+        public float addedLength;   // the new part (what's paid for)
+        public List<int> joins;     // existing walls it takes in (replaced by the joined wall)
+    }
+
+    /// <summary>
+    /// Built walls never overlap. A new wall drawn along the same line as existing walls (over them,
+    /// through them, or carrying one on) joins them into one wall; only the new length is paid for.
+    /// Fails if it would lie over a wall of another height, or squeeze alongside one (parallel, closer
+    /// than a wall's thickness), or adds nothing. Walls crossing at an angle are fine.
+    /// </summary>
+    public bool PlanWall(Vector3 a, Vector3 b, float height, out WallPlan plan, out string reason)
+    {
+        plan = new WallPlan { a = a, b = b, joins = new List<int>() };
+        reason = null;
+        var settings = BuiltWallSettings.Instance;
+        if (settings == null) { reason = "No wall settings"; return false; }
+
+        Vector3 dir = Flat(b - a);
+        if (dir == Vector3.zero) { reason = "Too short"; return false; }
+        float length = Flat(b - a, false).magnitude;
+        static float Cross2(Vector3 x, Vector3 y) => x.x * y.z - x.z * y.x;
+        const float tol = 0.01f;
+
+        float lo = 0f, hi = length, covered = 0f;
+        foreach (var w in builtWalls)
+        {
+            Vector3 d = Flat(w.b - w.a);
+            if (d == Vector3.zero || Mathf.Abs(Cross2(d, dir)) > 0.01f) continue; // crossing: fine
+
+            float t1 = Vector3.Dot(Flat(w.a - a, false), dir), t2 = Vector3.Dot(Flat(w.b - a, false), dir);
+            float wlo = Mathf.Min(t1, t2), whi = Mathf.Max(t1, t2);
+            bool overlaps = whi > tol && wlo < length - tol; // shares some length
+            bool touches = whi > -tol && wlo < length + tol; // or meets end to end
+            float offset = Mathf.Abs(Cross2(dir, Flat(w.a - a, false)));
+
+            if (offset > 0.01f)
+            {
+                if (overlaps && offset < settings.Thickness - 0.005f) { reason = "Too close to another wall"; return false; }
+                continue;
+            }
+            if (!touches) continue;
+            if (Mathf.Abs(w.height - height) > 0.01f)
+            {
+                if (overlaps) { reason = "A wall of another height is already there"; return false; }
+                continue; // different heights meeting end to end stay separate walls
+            }
+
+            plan.joins.Add(w.id);
+            lo = Mathf.Min(lo, wlo);
+            hi = Mathf.Max(hi, whi);
+            covered += Mathf.Max(0f, Mathf.Min(length, whi) - Mathf.Max(0f, wlo));
+        }
+
+        plan.addedLength = Mathf.Max(0f, length - covered);
+        if (plan.addedLength < 0.01f) { reason = "There's already a wall here"; return false; }
+        if (BuiltWallCount - plan.joins.Count + 1 > settings.MaxWallsPerStore) { reason = "Too many walls"; return false; }
+
+        plan.a = a + dir * lo;
+        plan.b = a + dir * hi;
+        plan.a.y = a.y;
+        plan.b.y = a.y;
+        return true;
+    }
+
+    /// <summary>Server: build a planned wall, taking in the walls it joins. Returns the new wall's id.</summary>
+    public int ServerBuildPlannedWall(WallPlan plan, float height)
+    {
+        if (!IsServer) return 0;
+        foreach (int id in plan.joins) ServerRemoveWall(id, out _);
+        return ServerAddWall(plan.a, plan.b, height);
     }
 
     /// <summary>
