@@ -97,6 +97,49 @@ public class EditLocalItem : MonoBehaviour
         }
     }
 
+    /// <summary>See-through (e.g. a window or door where it can't go).</summary>
+    public bool Faded { get; private set; }
+
+    private Renderer[] fadeRenderers;
+    private Material[][] fadeOriginal;
+    private Material[][] fadeMaterials;
+
+    /// <summary>Show the item see-through, or back to normal.</summary>
+    public void SetFaded(bool on, float alpha = 0.3f)
+    {
+        if (on == Faded) return;
+        Faded = on;
+
+        if (fadeRenderers == null)
+        {
+            fadeRenderers = GetComponentsInChildren<Renderer>(true);
+            fadeOriginal = new Material[fadeRenderers.Length][];
+            for (int i = 0; i < fadeRenderers.Length; i++) fadeOriginal[i] = fadeRenderers[i].sharedMaterials;
+        }
+        if (on && fadeMaterials == null)
+        {
+            fadeMaterials = new Material[fadeRenderers.Length][];
+            for (int i = 0; i < fadeRenderers.Length; i++)
+            {
+                var src = fadeOriginal[i];
+                fadeMaterials[i] = new Material[src.Length];
+                for (int k = 0; k < src.Length; k++)
+                    fadeMaterials[i][k] = src[k] != null ? GhostBuilder.MakeTransparent(src[k], alpha) : null;
+            }
+        }
+
+        for (int i = 0; i < fadeRenderers.Length; i++)
+            if (fadeRenderers[i] != null) fadeRenderers[i].sharedMaterials = on ? fadeMaterials[i] : fadeOriginal[i];
+    }
+
+    private void OnDestroy()
+    {
+        if (fadeMaterials == null) return;
+        foreach (var set in fadeMaterials)
+            foreach (var m in set)
+                if (m != null) Destroy(m);
+    }
+
     /// <summary>Gravity on: falls and settles. Off: hangs exactly where it's put.</summary>
     public void SetGravity(bool on)
     {
