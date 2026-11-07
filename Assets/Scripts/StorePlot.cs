@@ -26,11 +26,32 @@ public class StorePlot : NetworkBehaviour
     public class Segment
     {
         public string name = "Expansion";
-        [Tooltip("Floor space this segment adds once bought.")]
-        public BoxCollider area;
+        [Tooltip("Floor space this segment adds once bought: one or more boxes (for L shapes, side rooms...).")]
+        public BoxCollider[] areas;
+        [Tooltip("Old single area; it's moved into Areas automatically.")]
+        [HideInInspector] public BoxCollider area;
         [Tooltip("Walls removed when this segment is bought.")]
         public GameObject[] falseWalls;
         public int price = 1000;
+
+        /// <summary>Every box of this segment (including an old single Area not moved over yet).</summary>
+        public IEnumerable<BoxCollider> Areas
+        {
+            get
+            {
+                if (area != null) yield return area;
+                if (areas == null) yield break;
+                foreach (var box in areas)
+                    if (box != null && box != area) yield return box;
+            }
+        }
+
+        public bool Contains(Vector3 worldPoint)
+        {
+            foreach (var box in Areas)
+                if (BoxContains(box, worldPoint)) return true;
+            return false;
+        }
     }
 
     [Header("Identity")]
@@ -196,7 +217,8 @@ public class StorePlot : NetworkBehaviour
             if (box != null) box.enabled = false;
         if (segments != null)
             foreach (var seg in segments)
-                if (seg?.area != null) seg.area.enabled = false;
+                if (seg != null)
+                    foreach (var box in seg.Areas) box.enabled = false;
         if (shipmentZones != null)
             foreach (var z in shipmentZones)
                 if (z != null) z.enabled = false;
@@ -340,7 +362,7 @@ public class StorePlot : NetworkBehaviour
             if (BoxContains(box, worldPoint)) return true;
 
         for (int i = 0; i < SegmentCount; i++)
-            if (IsSegmentPurchased(i) && BoxContains(segments[i].area, worldPoint)) return true;
+            if (IsSegmentPurchased(i) && segments[i].Contains(worldPoint)) return true;
 
         return false;
     }
@@ -350,7 +372,7 @@ public class StorePlot : NetworkBehaviour
     {
         if (Contains(worldPoint)) return true;
         for (int i = 0; i < SegmentCount; i++)
-            if (BoxContains(segments[i].area, worldPoint)) return true;
+            if (segments[i].Contains(worldPoint)) return true;
         return false;
     }
 
@@ -579,7 +601,8 @@ public class StorePlot : NetworkBehaviour
         Vector3 origin = a + Vector3.up * 0.1f;
         foreach (var box in baseAreas) AddLineSpan(box, origin, dir, spans);
         for (int i = 0; i < SegmentCount; i++)
-            if (IsSegmentPurchased(i)) AddLineSpan(segments[i].area, origin, dir, spans);
+            if (IsSegmentPurchased(i))
+                foreach (var box in segments[i].Areas) AddLineSpan(box, origin, dir, spans);
         if (spans.Count == 0) return;
         spans.Sort((p, q) => p.x.CompareTo(q.x));
         var merged = new List<Vector2> { spans[0] };
@@ -1027,7 +1050,9 @@ public class StorePlot : NetworkBehaviour
         float best = float.MaxValue;
         foreach (var box in baseAreas) best = Mathf.Min(best, DistanceToBox(box, worldPoint));
         if (segments != null)
-            foreach (var seg in segments) best = Mathf.Min(best, DistanceToBox(seg?.area, worldPoint));
+            foreach (var seg in segments)
+                if (seg != null)
+                    foreach (var box in seg.Areas) best = Mathf.Min(best, DistanceToBox(box, worldPoint));
         return best;
     }
 
@@ -1482,7 +1507,8 @@ public class StorePlot : NetworkBehaviour
         foreach (var box in baseAreas)
             if (box != null) into.Add(BoxWorldBounds(box));
         for (int i = 0; i < SegmentCount; i++)
-            if (IsSegmentPurchased(i) && segments[i].area != null) into.Add(BoxWorldBounds(segments[i].area));
+            if (IsSegmentPurchased(i))
+                foreach (var box in segments[i].Areas) into.Add(BoxWorldBounds(box));
     }
 
     /// <summary>Adds the store's space boxes (base areas plus purchased segments) to the list.</summary>
@@ -1491,7 +1517,8 @@ public class StorePlot : NetworkBehaviour
         foreach (var box in baseAreas)
             if (box != null) into.Add(box);
         for (int i = 0; i < SegmentCount; i++)
-            if (IsSegmentPurchased(i) && segments[i].area != null) into.Add(segments[i].area);
+            if (IsSegmentPurchased(i))
+                foreach (var box in segments[i].Areas) into.Add(box);
     }
 
     private static Bounds BoxWorldBounds(BoxCollider box)
@@ -1581,7 +1608,8 @@ public class StorePlot : NetworkBehaviour
 
         foreach (var box in baseAreas) Add(box);
         for (int i = 0; i < SegmentCount; i++)
-            if (IsSegmentPurchased(i)) Add(segments[i].area);
+            if (IsSegmentPurchased(i))
+                foreach (var box in segments[i].Areas) Add(box);
 
         return any ? result : new Bounds(transform.position, Vector3.one);
     }
@@ -1725,7 +1753,8 @@ public class StorePlot : NetworkBehaviour
                 Gizmos.color = playing && IsSegmentPurchased(i)
                     ? new Color(0.2f, 0.9f, 0.3f, 0.6f)
                     : new Color(1f, 0.8f, 0.1f, 0.6f);
-                DrawBox(segments[i]?.area);
+                if (segments[i] != null)
+                    foreach (var box in segments[i].Areas) DrawBox(box);
             }
         }
 
@@ -1744,6 +1773,27 @@ public class StorePlot : NetworkBehaviour
         UnityEditor.Handles.Label(top + Vector3.up * 0.5f, $"{displayName} (#{plotId})\n{BuildStatus()}", style);
 #endif
     }
+
+#if UNITY_EDITOR
+    // Segments used to have one Area; move it into the Areas list so nothing set up is lost.
+    private void OnValidate()
+    {
+        if (segments == null) return;
+        bool changed = false;
+        foreach (var seg in segments)
+        {
+            if (seg?.area == null) continue;
+            if (seg.areas == null || Array.IndexOf(seg.areas, seg.area) < 0)
+            {
+                var list = new List<BoxCollider>(seg.areas ?? Array.Empty<BoxCollider>()) { seg.area };
+                seg.areas = list.ToArray();
+            }
+            seg.area = null;
+            changed = true;
+        }
+        if (changed) UnityEditor.EditorUtility.SetDirty(this);
+    }
+#endif
 
     private void OnDrawGizmosSelected()
     {
