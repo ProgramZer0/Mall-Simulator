@@ -17,8 +17,9 @@ using UnityEngine;
 /// - For(personality): how likely that kind of customer is to come in, and how much they'll want what's
 ///   inside. Customer AI uses this.
 ///
-/// The maths (all tunable):
-///   item value  = like × price score × rarity × attractiveness × demand (see CustomerPersonality)
+/// The maths (all tunable, see StoreAppealSettings and the Store Appeal Tuning Guide):
+///   item value  = like × price score × rarity × attractiveness × demand × competition
+///                 (competition: other open stores selling the same item lower it)
 ///   draw        = 1 - e^(-total value / saturation), so more on display helps, less and less
 ///   quality     × (1 + Looks Matter × (Quality - 0.5)): good stores up to +50%, bad ones down to -50%
 ///   enter       = (Curiosity + (1 - Curiosity) × outside draw) × quality, 0 if the store is closed
@@ -43,6 +44,16 @@ public class StoreAppeal : MonoBehaviour
         public int marketCents;  // for the same amount (a whole crate sold loose is many products)
         public int quantity;
         public bool seenFromOutside;
+        public Vector3 position;
+        public float competition; // 1 = nobody else sells it
+    }
+
+    // One bit of decor (or a window) and where it is.
+    private struct DecorPiece
+    {
+        public string feature;
+        public float amount;
+        public Vector3 position;
     }
 
     private static readonly List<StoreAppeal> AllAppeals = new();
@@ -58,6 +69,7 @@ public class StoreAppeal : MonoBehaviour
     private readonly Dictionary<string, float> features = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, float> categoryShare = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> hints = new();
+    private readonly List<DecorPiece> decor = new();
     private bool dirty = true;
     private float nextAllowed;
     private int seenOpenings = -1, seenWalls = -1, seenDecor = -1;
@@ -85,6 +97,14 @@ public class StoreAppeal : MonoBehaviour
         AllAppeals.Add(this);
         StoreListing.StockOrPricesChanged += MarkDirty;
         MallEventManager.Changed += MarkDirty;
+        // Opening, closing or changing hands changes who competes with whom: everyone re-checks.
+        if (plot != null) plot.Changed += OnPlotChanged;
+    }
+
+    private static void OnPlotChanged(StorePlot _)
+    {
+        Competition.MarkDirty();
+        MarkAllDirty();
     }
 
     private void OnDestroy()
@@ -92,6 +112,7 @@ public class StoreAppeal : MonoBehaviour
         AllAppeals.Remove(this);
         StoreListing.StockOrPricesChanged -= MarkDirty;
         MallEventManager.Changed -= MarkDirty;
+        if (plot != null) plot.Changed -= OnPlotChanged;
     }
 
     private void MarkDirty() => dirty = true;
@@ -131,22 +152,63 @@ public class StoreAppeal : MonoBehaviour
     {
         float like = p.LikeOf(o.def);
         if (like <= 0f) return 0f;
+        var settings = StoreAppealSettings.Instance;
 
-        // Cheaper than it's worth is a plus, dearer a minus; how much depends on the customer.
+        // Cheaper than it's worth is a plus for everyone, dearer a minus; how much depends on the customer.
         float ratio = o.marketCents > 0 ? (float)o.priceCents / o.marketCents : 1f;
-        float priceScore = Mathf.Clamp(1f - p.priceSensitivity * (ratio - 1f), 0f, 2f);
+        float priceScore = settings != null
+            ? settings.PriceScore(ratio, p.priceSensitivity)
+            : Mathf.Clamp(1f - p.priceSensitivity * (ratio - 1f), 0f, 2f);
 
-        float rarity = 1f + p.exoticLove * RarityValue(o.def.rarity);
-        return like * priceScore * rarity * MarketModifiers.Attractiveness(o.def) * MarketModifiers.Demand(o.def);
+        float rarity = settings != null ? settings.RarityMultiplier(o.def.rarity, p.exoticLove) : 1f;
+        return like * priceScore * rarity * MarketModifiers.Attractiveness(o.def) * MarketModifiers.Demand(o.def) * o.competition;
     }
 
-    public static float RarityValue(ItemDef.Rarity rarity) => rarity switch
+    /* ========================= COMPETITION ========================= */
+
+    /// <summary>Which items each open store sells, mall-wide (for "everyone sells it, so it's worth less").</summary>
+    private static class Competition
     {
-        ItemDef.Rarity.Uncommon => 1f / 3f,
-        ItemDef.Rarity.Rare => 2f / 3f,
-        ItemDef.Rarity.Exotic => 1f,
-        _ => 0f,
-    };
+        private static readonly Dictionary<int, int> StoresSelling = new();
+        private static bool dirty = true;
+        private static float builtAt = -10f;
+
+        public static void MarkDirty() => dirty = true;
+
+        /// <summary>How many open stores other than this one sell this item.</summary>
+        public static int Others(int itemId, StorePlot self)
+        {
+            Build();
+            StoresSelling.TryGetValue(itemId, out int n);
+            if (self != null && self.IsOpen && self.Listing.Sells(itemId)) n--;
+            return Mathf.Max(0, n);
+        }
+
+        private static void Build()
+        {
+            if (!dirty && Time.unscaledTime - builtAt < 2f) return;
+            if (Time.unscaledTime - builtAt < 0.25f) return; // many stores asking in the same moment
+            dirty = false;
+            builtAt = Time.unscaledTime;
+            StoresSelling.Clear();
+            var mall = MallManager.Instance;
+            if (mall == null) return;
+            var seen = new HashSet<int>();
+            foreach (var plot in mall.Plots)
+            {
+                if (plot == null || !plot.IsOpen) continue;
+                seen.Clear();
+                foreach (var e in plot.Listing.Entries)
+                    if (seen.Add(e.itemId))
+                    {
+                        StoresSelling.TryGetValue(e.itemId, out int n);
+                        StoresSelling[e.itemId] = n + 1;
+                    }
+            }
+        }
+
+        static Competition() => StoreListing.StockOrPricesChanged += MarkDirty;
+    }
 
     /* ========================= WORKING IT OUT ========================= */
 
@@ -190,6 +252,7 @@ public class StoreAppeal : MonoBehaviour
                 products = pickup.Units;
 
             bool seen = viewers.Count > 0 && IsSeen(s, viewers);
+            var settings = StoreAppealSettings.Instance;
             offers.Add(new Offer
             {
                 def = def,
@@ -197,6 +260,8 @@ public class StoreAppeal : MonoBehaviour
                 marketCents = MarketModifiers.MarketPriceCents(def) * products,
                 quantity = s.quantity,
                 seenFromOutside = seen,
+                position = s.Position,
+                competition = settings != null ? settings.CompetitionFactor(Competition.Others(itemId, plot)) : 1f,
             });
             forSale += s.quantity;
             if (seen) seenOutside += s.quantity;
@@ -258,6 +323,7 @@ public class StoreAppeal : MonoBehaviour
     private void BuildFeatures()
     {
         features.Clear();
+        decor.Clear();
         var settings = StoreAppealSettings.Instance;
         string window = settings != null ? settings.windowFeature : "Window";
 
@@ -265,7 +331,8 @@ public class StoreAppeal : MonoBehaviour
         {
             if (d == null || !InThisStore(d.gameObject)) continue;
             foreach (var f in d.features)
-                if (f != null && !string.IsNullOrWhiteSpace(f.name)) AddFeature(f.name.Trim(), f.amount);
+                if (f != null && !string.IsNullOrWhiteSpace(f.name))
+                    AddDecor(f.name.Trim(), f.amount, d.transform.position);
         }
 
         // Windows in the store's walls (unless they say something else with their own Decor).
@@ -273,8 +340,34 @@ public class StoreAppeal : MonoBehaviour
         {
             if (o == null || o.IsEditCopy || o.PieceKind != WallOpening.Kind.Window || o.GetComponent<Decor>() != null) continue;
             var host = CuttableWall.HostOf(o);
-            if (host != null && host.Plot == plot) AddFeature(window, 1f);
+            if (host != null && host.Plot == plot) AddDecor(window, 1f, o.Current.center);
         }
+    }
+
+    private void AddDecor(string feature, float amount, Vector3 position)
+    {
+        decor.Add(new DecorPiece { feature = feature, amount = amount, position = position });
+        AddFeature(feature, amount);
+    }
+
+    // How much of a feature is close enough to help a category: within Decor Reach (across the floor) of
+    // something for sale in that category.
+    private float FeatureNear(string feature, string category, float reach)
+    {
+        float have = 0f, reach2 = reach * reach;
+        foreach (var d in decor)
+        {
+            if (!string.Equals(d.feature, feature, StringComparison.OrdinalIgnoreCase)) continue;
+            foreach (var o in offers)
+            {
+                if (!o.def.HasCategory(category)) continue;
+                float dx = d.position.x - o.position.x, dz = d.position.z - o.position.z;
+                if (dx * dx + dz * dz > reach2) continue;
+                have += d.amount;
+                break;
+            }
+        }
+        return have;
     }
 
     private bool InThisStore(GameObject go)
@@ -324,14 +417,14 @@ public class StoreAppeal : MonoBehaviour
             foreach (var need in needs.needs)
             {
                 if (need == null || string.IsNullOrWhiteSpace(need.feature)) continue;
-                features.TryGetValue(need.feature.Trim(), out float have);
+                float have = FeatureNear(need.feature.Trim(), kv.Key, settings.decorReach);
                 float part = Mathf.Clamp01(have / need.wanted);
                 covered += part * need.importance;
                 importance += need.importance;
                 if (part < 1f)
                 {
                     int missing = Mathf.CeilToInt(need.wanted - have);
-                    gaps.Add((share * need.importance * (1f - part), $"{needs.category}: add {missing} {need.feature}"));
+                    gaps.Add((share * need.importance * (1f - part), $"{needs.category}: add {missing} {need.feature} near it"));
                 }
             }
             if (importance <= 0f) continue;
