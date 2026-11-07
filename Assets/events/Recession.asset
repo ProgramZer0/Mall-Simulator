@@ -10,18 +10,18 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f9cbadb0f0560ee4aa24b51535afc71f, type: 3}
-  m_Name: Test1
+  m_Name: Recession
   m_EditorClassIdentifier: Assembly-CSharp::MallEventDef
-  displayName: Test1
-  description: test1
+  displayName: Recession
+  description: 
   trigger: 3
   startAt: 600
-  interval: 1800
+  interval: 4500
   checkEvery: 60
-  chance: 0.05
-  duration: 300
+  chance: 0.03
+  duration: 600
   rules:
-  - note: hot sale
+  - note: poor
     targets:
       everything: 1
       match: 0
@@ -36,6 +36,6 @@ MonoBehaviour:
       minDeliverySeconds: 0
       maxDeliverySeconds: 0
     effects:
-    - stat: 1
+    - stat: 3
       mode: 0
       amount: -50

@@ -10,25 +10,25 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f9cbadb0f0560ee4aa24b51535afc71f, type: 3}
-  m_Name: Test2
+  m_Name: TP Shortage
   m_EditorClassIdentifier: Assembly-CSharp::MallEventDef
-  displayName: Test2
-  description: 
-  trigger: 0
+  displayName: Toilet paper shortage
+  description: Toilet paper shortage
+  trigger: 3
   startAt: 600
-  interval: 1800
+  interval: 4500
   checkEvery: 60
-  chance: 0.05
-  duration: 300
+  chance: 0.11
+  duration: 600
   rules:
-  - note: test
+  - note: Toilet paper shortage
     targets:
       everything: 0
-      match: 0
+      match: 1
       itemIds: 
-      categories:
-      - test
-      nameContains: []
+      categories: []
+      nameContains:
+      - Toilet paper
       usePriceRange: 0
       priceRangeUsesMarketPrice: 0
       minPrice: 0
@@ -38,5 +38,14 @@ MonoBehaviour:
       maxDeliverySeconds: 0
     effects:
     - stat: 0
-      mode: 1
+      mode: 0
       amount: 100
+    - stat: 2
+      mode: 0
+      amount: 100
+    - stat: 3
+      mode: 0
+      amount: 10
+    - stat: 4
+      mode: 0
+      amount: 60

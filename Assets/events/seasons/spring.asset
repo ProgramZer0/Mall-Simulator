@@ -12,12 +12,61 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f9cbadb0f0560ee4aa24b51535afc71f, type: 3}
   m_Name: spring
   m_EditorClassIdentifier: Assembly-CSharp::MallEventDef
-  displayName: New Event
-  description: 
+  displayName: Spring
+  description: Its a season
   trigger: 0
   startAt: 600
   interval: 1800
   checkEvery: 60
   chance: 0.05
-  duration: 300
-  rules: []
+  duration: 3600
+  rules:
+  - note: Spring items
+    targets:
+      everything: 0
+      match: 1
+      itemIds: 
+      categories:
+      - Farm
+      - Gardening
+      - spring
+      nameContains:
+      - Flowers
+      usePriceRange: 0
+      priceRangeUsesMarketPrice: 0
+      minPrice: 0
+      maxPrice: 0
+      useDeliveryRange: 0
+      minDeliverySeconds: 0
+      maxDeliverySeconds: 0
+    effects:
+    - stat: 4
+      mode: 0
+      amount: 15
+    - stat: 5
+      mode: 0
+      amount: 20
+  - note: Winter items
+    targets:
+      everything: 0
+      match: 1
+      itemIds: 
+      categories:
+      - Winter
+      nameContains:
+      - Coat
+      - Winter
+      usePriceRange: 0
+      priceRangeUsesMarketPrice: 0
+      minPrice: 0
+      maxPrice: 0
+      useDeliveryRange: 0
+      minDeliverySeconds: 0
+      maxDeliverySeconds: 0
+    effects:
+    - stat: 4
+      mode: 0
+      amount: -15
+    - stat: 5
+      mode: 0
+      amount: -30

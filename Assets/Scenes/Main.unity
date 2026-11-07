@@ -5567,7 +5567,7 @@ MonoBehaviour:
   devOrderQuantity: 1
   devDeliverySeconds: 10
   devMoneyAmount: 1000
-  showDebugHud: 1
+  showDebugHud: 0
 --- !u!114 &451575852
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5582,16 +5582,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BuiltWallSettings
   wallPrefab: {fileID: 3756940047382866070, guid: 40f753db4fa66ac418acc60bdfadb923, type: 3}
   thickness: 0.41
-  halfHeight: 1.1
+  halfHeight: 1.7
   fullHeight: 4.25
   gridSize: 0.5
   minLength: 0.5
   maxWallsPerStore: 64
   costPerMeter: 50
-  refundFraction: 0.5
+  refundFraction: 0.79
   openingEdgeMargin: 0.15
   openingGap: 0.15
-  openingRefundFraction: 0.5
+  openingRefundFraction: 0.79
   openingSnap: 0.25
 --- !u!114 &451575853
 MonoBehaviour:
@@ -5624,15 +5624,21 @@ MonoBehaviour:
   startSeason: 0
   caps:
   - stat: 0
-    minPercent: -75
+    minPercent: -90
     maxPercent: 300
   - stat: 1
-    minPercent: 0
+    minPercent: -75
     maxPercent: 100
   - stat: 2
     minPercent: -75
     maxPercent: 300
   - stat: 3
+    minPercent: -75
+    maxPercent: 300
+  - stat: 4
+    minPercent: -75
+    maxPercent: 300
+  - stat: 5
     minPercent: -75
     maxPercent: 300
   showDebugHud: 1
