@@ -20516,7 +20516,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.8175, y: 0.91367}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0.34506226, y: 0.22369385}
+  m_AnchoredPosition: {x: 0.34503174, y: 0.22369385}
   m_SizeDelta: {x: -0.69000244, y: -0.44885254}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1419451457
@@ -20566,7 +20566,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 34.35
+  m_fontSize: 34.3
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -21119,6 +21119,21 @@ MonoBehaviour:
     icon: {fileID: 0}
     categories:
     - Window
+    category: 
+    price: 0
+    rarity: 0
+    marketPrice: 0
+    deliverySeconds: 0
+    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
+  - id: 14
+    displayName: Checkout counter
+    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
+    worldNetworkPrefab: {fileID: 9029950602112234995, guid: 8af42cf235b76e54ca878f0bd3fe903f, type: 3}
+    showInShop: 1
+    icon: {fileID: 0}
+    categories: []
     category: 
     price: 0
     rarity: 0
