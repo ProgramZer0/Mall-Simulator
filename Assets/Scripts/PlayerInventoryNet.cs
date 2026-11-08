@@ -79,7 +79,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (pickup == null || pickup.EditModeOnly) return; // e.g. the shop monitor: edit mode only
 
         var actor = NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject;
-        if (Vector3.Distance(actor.transform.position, pickup.transform.position) > 3.0f) return;
+        if (DistanceTo(pickupNO.gameObject, actor.transform.position) > 3.0f) return;
 
         // Store rules: only from inside your own store, only items inside your own store.
         if (!MallManager.CanPickupOrPlace(rpcParams.Receive.SenderClientId,
@@ -251,6 +251,23 @@ public class PlayerInventoryNet : NetworkBehaviour
         PlayItemSoundClientRpc(id, position, true);
     }
 
+    /// <summary>
+    /// How far a player is from the nearest part of a thing (its colliders), not from its pivot: a long
+    /// counter can be reached from either end.
+    /// </summary>
+    private static float DistanceTo(GameObject target, Vector3 from)
+    {
+        float best = Vector3.Distance(from, target.transform.position);
+        foreach (var col in target.GetComponentsInChildren<Collider>())
+        {
+            if (!col.enabled || col.isTrigger) continue;
+            // ClosestPoint only works on convex shapes; a plain mesh collider uses its bounds.
+            Vector3 p = col is MeshCollider mesh && !mesh.convex ? col.bounds.ClosestPoint(from) : col.ClosestPoint(from);
+            best = Mathf.Min(best, Vector3.Distance(from, p));
+        }
+        return best;
+    }
+
     private static readonly Collider[] BelowHits = new Collider[16];
 
     // Server: freeze any still-settling items just under where this one is being put.
@@ -313,7 +330,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (interactable == null) return;
 
         var actor = NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject;
-        if (Vector3.Distance(actor.transform.position, targetNO.transform.position) > 4.0f) return;
+        if (DistanceTo(targetNO.gameObject, actor.transform.position) > 4.0f) return;
 
         // Store rules: never inside another player's store; carts etc. only in your own store or a dock.
         if (!MallManager.CanInteract(rpcParams.Receive.SenderClientId, targetNO.transform.position,
