@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -71,7 +72,28 @@ public class PriceScanner : NetworkBehaviour
         if (!active || ourWindowOpen) return;
 
         FindTarget();
+        UpdateOutline();
         if (Input.GetMouseButtonDown(0) && targetProduct != 0 && hint == null) OpenWindow();
+    }
+
+    [Tooltip("Outline colour for what the scanner would price.")]
+    [SerializeField] private Color outlineColor = new(0.4f, 1f, 0.4f, 1f);
+    private readonly List<GameObject> outlineModels = new();
+
+    // Box what a click would price: every product in the shelf space (they share a price), or the item.
+    private void UpdateOutline()
+    {
+        var outline = TargetOutline.For(this);
+        if (targetItem != null) { outline.ShowObject(targetItem.gameObject, outlineColor); return; }
+        if (targetContainer != null && targetZone >= 0)
+        {
+            outlineModels.Clear();
+            foreach (var m in targetContainer.GetZoneModels(targetZone)) if (m != null) outlineModels.Add(m);
+            if (outlineModels.Count > 0) { outline.ShowObjects(outlineModels, outlineColor); return; }
+            if (targetContainer.TryGetZoneBox(targetZone, out Vector3 c, out Quaternion r, out Vector3 s))
+            { outline.ShowBox(c, r, s, outlineColor); return; }
+        }
+        outline.Hide();
     }
 
     private void SetActive(bool on)
@@ -88,7 +110,11 @@ public class PriceScanner : NetworkBehaviour
             Destroy(handVisual);
             handVisual = null;
         }
-        if (!on) ClearTarget();
+        if (!on)
+        {
+            ClearTarget();
+            TargetOutline.For(this).Hide();
+        }
     }
 
     private void ClearTarget()
@@ -215,6 +241,7 @@ public class PriceScanner : NetworkBehaviour
     public override void OnDestroy()
     {
         UIState.CloseMenu(this);
+        TargetOutline.Release(this);
         base.OnDestroy();
     }
 

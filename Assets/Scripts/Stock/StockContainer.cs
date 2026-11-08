@@ -98,6 +98,31 @@ public class StockContainer : NetworkBehaviour
     /// <summary>Is this zone a hang rail (not a shelf space)?</summary>
     public bool IsHangRail(int zone) => zone >= ShelfCount && zone < ZoneCount;
 
+    /// <summary>The product models in a zone, in the order they went in (local; for outlines and the like).</summary>
+    public IReadOnlyList<GameObject> GetZoneModels(int zone) =>
+        visuals != null && zone >= 0 && zone < visuals.Length ? visuals[zone] : System.Array.Empty<GameObject>();
+
+    /// <summary>The model that taking one out of this zone removes (the last one in), or null.</summary>
+    public GameObject GetTakeModel(int zone)
+    {
+        var list = GetZoneModels(zone);
+        for (int i = list.Count - 1; i >= 0; i--) if (list[i] != null) return list[i];
+        return null;
+    }
+
+    /// <summary>A zone's box in world space (centre, rotation, full size).</summary>
+    public bool TryGetZoneBox(int zone, out Vector3 center, out Quaternion rotation, out Vector3 size)
+    {
+        var box = GetBox(zone);
+        center = default; rotation = default; size = default;
+        if (box == null) return false;
+        center = box.transform.TransformPoint(box.center);
+        rotation = box.transform.rotation;
+        Vector3 s = box.transform.lossyScale;
+        size = Vector3.Scale(box.size, new Vector3(Mathf.Abs(s.x), Mathf.Abs(s.y), Mathf.Abs(s.z)));
+        return true;
+    }
+
     private BoxCollider GetBox(int zone) =>
         zone < 0 ? null : zone < ShelfCount ? stockZones[zone] : zone < ZoneCount ? hangRails[zone - ShelfCount] : null;
 
