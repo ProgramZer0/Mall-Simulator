@@ -9,7 +9,8 @@ using UnityEngine;
 /// Actions:
 ///   Keypad Digit (Value 0-9), Keypad Double Zero, Keypad Clear, Keypad Enter: the register keypad.
 ///     Typing is in cents like a real till: 2 5 0 0 = $25.00. Enter shows the change due.
-///   Drawer (Value = cents, e.g. 2000 for $20, 25 for a quarter): takes one out as change.
+///   Drawer (Value = cents, e.g. 2000 for $20, 25 for a quarter): takes one out as change (drawer open).
+///   Drawer Toggle: opens or closes the cash drawer (a button, or the drawer's front).
 ///   Clear Change: puts the change counted so far back in the drawer.
 ///   Confirm: finishes a cash sale.
 ///   Card Reader: swipe the customer's card (after taking it).
@@ -26,6 +27,7 @@ public class CheckoutClickable : MonoBehaviour
         ClearChange,
         Confirm,
         CardReader,
+        DrawerToggle,
         /// <summary>Added by the counter: a thing on the belt (Value = its key).</summary>
         ScanItem,
         /// <summary>Added by the counter: the customer's cash or card.</summary>

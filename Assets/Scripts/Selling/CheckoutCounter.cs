@@ -10,9 +10,11 @@ using UnityEngine;
 /// the running total. Then the customer pays:
 /// - Card: they put their card on the counter. Click it to take it, then click the card reader.
 /// - Cash: they put cash on the counter. Click it to take it (it's laid out so you can count it).
+///   The cash drawer pops open when you take the cash or press Enter (or click Drawer Toggle).
 ///   Optionally type what they gave on the keypad (2 5 0 0 = $25.00) and press Enter: the screen
 ///   shows the change due. Click the drawer's bills and coins to count out the change (it's laid
-///   out on the counter), then press Confirm. Too little change and they wait; too much is lost.
+///   out on the counter), then press Confirm (the drawer shuts). Too little change and they wait;
+///   too much is lost.
 /// The money goes to the store's team. Everyone sees the same screen, belt, cash and change.
 ///
 /// Things too big for the belt go on as a price tag; things that fit but have no room yet wait.
@@ -21,7 +23,11 @@ using UnityEngine;
 /// - NetworkObject + ItemPickupNet (Edit Mode Only, Physics Mode Frozen) + this, with colliders.
 /// - Belt: child BoxCollider over the belt surface, blue arrow (+Z) toward the scanner end.
 /// - Clickable parts: child objects with colliders and a CheckoutClickable: keypad keys (0-9, 00,
-///   Clear, Enter), drawer slots (one per bill/coin, Value in cents), Clear Change, Confirm, Card Reader.
+///   Clear, Enter), drawer slots (one per bill/coin, Value in cents), Clear Change, Confirm, Card Reader,
+///   and Drawer Toggle (a button or the drawer's front). Put the drawer slots on the drawer itself
+///   so they move with it.
+/// - Drawer Motion (optional): a DoorMotion set to Slide whose leaf is the drawer; it opens and
+///   shuts with the drawer state.
 /// - Screen: a world-space Canvas on the register with TMP texts for Items, Total and Info.
 /// - Spots (empty Transforms on the counter top): Customer Spot (where they put their cash or card),
 ///   Counting Spot (cash you've taken), Change Spot (change you're counting out).
@@ -68,6 +74,7 @@ public class CheckoutCounter : NetworkBehaviour
         public PayMethod method;
         public byte moneyTaken;    // the cashier picked up the card or cash
         public byte keypadEntered; // Enter pressed: the screen shows the change
+        public byte drawerOpen;
         public int customer;
         public int totalCents;
         public int tenderedCents;  // cash handed over
@@ -77,7 +84,7 @@ public class CheckoutCounter : NetworkBehaviour
         public int ChangeDueCents => Mathf.Max(0, tenderedCents - totalCents);
 
         public bool Equals(State o) => phase == o.phase && method == o.method && moneyTaken == o.moneyTaken &&
-                                       keypadEntered == o.keypadEntered && customer == o.customer && totalCents == o.totalCents &&
+                                       keypadEntered == o.keypadEntered && drawerOpen == o.drawerOpen && customer == o.customer && totalCents == o.totalCents &&
                                        tenderedCents == o.tenderedCents && keypadCents == o.keypadCents && changeCents == o.changeCents;
         public override bool Equals(object obj) => obj is State o && Equals(o);
         public override int GetHashCode() => customer * 397 ^ totalCents ^ changeCents * 31;
@@ -118,6 +125,10 @@ public class CheckoutCounter : NetworkBehaviour
     [SerializeField] private Transform countingSpot;
     [Tooltip("Where the change you count out is laid out.")]
     [SerializeField] private Transform changeSpot;
+
+    [Header("Cash drawer")]
+    [Tooltip("Optional: a DoorMotion (Slide) whose leaf is the drawer. It opens and shuts with the drawer.")]
+    [SerializeField] private DoorMotion drawerMotion;
 
     [Header("Money models (optional)")]
     [SerializeField] private List<MoneyModel> moneyPrefabs = new();
@@ -162,8 +173,14 @@ public class CheckoutCounter : NetworkBehaviour
     {
         All.Add(this);
         lines.OnListChanged += _ => screenDirty = true;
-        state.OnValueChanged += (_, _) => { screenDirty = true; moneyDirty = true; };
+        state.OnValueChanged += (_, now) =>
+        {
+            screenDirty = true;
+            moneyDirty = true;
+            if (drawerMotion != null) drawerMotion.SetOpen(now.drawerOpen != 0);
+        };
         screenDirty = moneyDirty = true;
+        if (drawerMotion != null) drawerMotion.SetOpen(state.Value.drawerOpen != 0, 1f, true);
     }
 
     public override void OnNetworkDespawn()
@@ -367,7 +384,9 @@ public class CheckoutCounter : NetworkBehaviour
             case CheckoutClickable.Action.CardReader:
                 return paying && !cash ? (s.moneyTaken != 0 ? "Click: swipe the card" : "Take the card first") : null;
             case CheckoutClickable.Action.Drawer:
-                return cash ? $"Click: {FormatAmount(part.value)} as change" : null;
+                return !cash ? null : s.drawerOpen != 0 ? $"Click: {FormatAmount(part.value)} as change" : "Open the drawer first";
+            case CheckoutClickable.Action.DrawerToggle:
+                return s.drawerOpen != 0 ? "Click: close the drawer" : "Click: open the drawer";
             case CheckoutClickable.Action.ClearChange:
                 return cash && s.changeCents > 0 ? "Click: put the change back" : null;
             case CheckoutClickable.Action.Confirm:
@@ -404,13 +423,22 @@ public class CheckoutCounter : NetworkBehaviour
                 if (!paying) ServerScan(value);
                 return;
             case CheckoutClickable.Action.CustomerMoney:
-                if (paying && s.moneyTaken == 0) { s.moneyTaken = 1; state.Value = s; }
+                if (paying && s.moneyTaken == 0)
+                {
+                    s.moneyTaken = 1;
+                    if (cash) s.drawerOpen = 1; // the till pops open for the cash
+                    state.Value = s;
+                }
+                return;
+            case CheckoutClickable.Action.DrawerToggle:
+                s.drawerOpen = (byte)(s.drawerOpen != 0 ? 0 : 1);
+                state.Value = s;
                 return;
             case CheckoutClickable.Action.CardReader:
                 if (paying && !cash && s.moneyTaken != 0) Complete(s.totalCents, "Card approved");
                 return;
             case CheckoutClickable.Action.Drawer:
-                if (cash && value > 0 && s.changeCents < 1000000) { s.changeCents += value; state.Value = s; }
+                if (cash && s.drawerOpen != 0 && value > 0 && s.changeCents < 1000000) { s.changeCents += value; state.Value = s; }
                 return;
             case CheckoutClickable.Action.ClearChange:
                 if (cash) { s.changeCents = 0; state.Value = s; }
@@ -433,7 +461,12 @@ public class CheckoutCounter : NetworkBehaviour
                 if (paying) { s.keypadCents = 0; s.keypadEntered = 0; state.Value = s; }
                 return;
             case CheckoutClickable.Action.KeypadEnter:
-                if (paying) { s.keypadEntered = 1; state.Value = s; }
+                if (paying)
+                {
+                    s.keypadEntered = 1;
+                    if (cash) s.drawerOpen = 1; // like a real till
+                    state.Value = s;
+                }
                 return;
         }
     }
