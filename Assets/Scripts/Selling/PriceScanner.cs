@@ -161,6 +161,10 @@ public class PriceScanner : NetworkBehaviour
             targetProduct = item.ItemId;
             if (!item.SellWhenLoose) hint = "This is stock: price it on the shelf";
             else if (!InOwnStore(item.transform.position)) hint = "Not in your store";
+            // A checkout counter can only go up for sale if another one is left for customers (and
+            // nobody's at it). One already for sale can still have its price changed or taken off.
+            else if (item.Price == 0 && item.TryGetComponent<CheckoutCounter>(out var counter) &&
+                     !CheckoutCounter.CanBePutForSale(counter, out string why)) hint = why;
             return;
         }
 
