@@ -21,7 +21,8 @@ using UnityEngine;
 ///
 /// Prefab setup (a catalog item, placed and moved in edit mode like shelves):
 /// - NetworkObject + ItemPickupNet (Edit Mode Only, Physics Mode Frozen) + this, with colliders.
-/// - Belt: child BoxCollider over the belt surface, blue arrow (+Z) toward the scanner end.
+/// - Belt: child BoxCollider sitting ON the belt surface (its bottom face is the surface things ride
+///   on; make it as tall as Max Item Height), blue arrow (+Z) toward the scanner end.
 /// - Clickable parts: child objects with colliders and a CheckoutClickable: keypad keys (0-9, 00,
 ///   Clear, Enter), drawer slots (one per bill/coin, Value in cents), Clear Change, Confirm, Card Reader,
 ///   and Drawer Toggle (a button or the drawer's front). Put the drawer slots on the drawer itself
@@ -102,6 +103,7 @@ public class CheckoutCounter : NetworkBehaviour
     private static readonly int[] Denominations = { 10000, 5000, 2000, 1000, 500, 100, 25, 10, 5, 1 };
 
     [Header("Belt")]
+    [Tooltip("BoxCollider sitting on the belt: its BOTTOM face is the surface things ride on. Blue arrow (+Z) toward the scanner.")]
     [SerializeField] private BoxCollider belt;
     [SerializeField] private float beltSpeed = 0.6f;
     [SerializeField] private float itemGap = 0.05f;
@@ -254,7 +256,7 @@ public class CheckoutCounter : NetworkBehaviour
         float height = Mathf.Abs(belt.size.y * s.y);
         forward = t.forward;
         up = t.up;
-        front = t.TransformPoint(belt.center) + forward * (length * 0.5f) + up * (height * 0.5f);
+        front = t.TransformPoint(belt.center) + forward * (length * 0.5f) - up * (height * 0.5f); // the box's bottom = the belt surface
     }
 
     private bool IsTooBig(int itemId, bool whole)
@@ -698,13 +700,19 @@ public class CheckoutCounter : NetworkBehaviour
 
     private readonly Dictionary<float, Transform> fallbackSpots = new();
 
-    // Fan the models out in a row across the spot.
+    // Fan the models out in a row across the spot, lying on the counter top under it.
     private void Lay(List<GameObject> models, Transform spot, bool clickable)
     {
+        bool onCounter = TrySurfaceBelow(spot.position, out float surface);
         for (int i = 0; i < models.Count; i++)
         {
             var go = models[i];
-            go.transform.SetPositionAndRotation(spot.position + spot.right * (i * 0.04f) + spot.up * (0.002f + i * 0.001f), spot.rotation);
+            Vector3 pos = spot.position + spot.right * (i * 0.04f);
+            go.transform.SetPositionAndRotation(pos, spot.rotation);
+            // Bottom of the model on the counter (each one a hair above the last so they don't flicker).
+            float bottom = BottomOf(go, pos.y);
+            float floor = onCounter ? surface : spot.position.y;
+            go.transform.position += Vector3.up * (floor - bottom + 0.0005f + i * 0.0008f);
             if (clickable)
             {
                 var click = go.AddComponent<CheckoutClickable>();
@@ -715,6 +723,36 @@ public class CheckoutCounter : NetworkBehaviour
             else foreach (var c in go.GetComponentsInChildren<Collider>()) c.enabled = false;
             money.Add(go);
         }
+    }
+
+    // The top of the counter straight below a point (its own colliders only).
+    private bool TrySurfaceBelow(Vector3 point, out float y)
+    {
+        y = point.y;
+        var hits = Physics.RaycastAll(point + Vector3.up * 0.3f, Vector3.down, 1.5f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        float best = float.MaxValue;
+        bool found = false;
+        foreach (var h in hits)
+        {
+            if (!h.collider.transform.IsChildOf(transform) || h.distance >= best) continue;
+            best = h.distance;
+            y = h.point.y;
+            found = true;
+        }
+        return found;
+    }
+
+    private static float BottomOf(GameObject go, float fallback)
+    {
+        bool any = false;
+        float bottom = fallback;
+        foreach (var r in go.GetComponentsInChildren<Renderer>())
+        {
+            if (r.GetComponent<TextMeshPro>() != null || r.GetComponent<TMP_SubMesh>() != null) continue; // labels sit on top
+            bottom = any ? Mathf.Min(bottom, r.bounds.min.y) : r.bounds.min.y;
+            any = true;
+        }
+        return bottom;
     }
 
     // Bills and coins making up an amount, largest first.
