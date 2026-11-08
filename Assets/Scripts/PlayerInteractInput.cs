@@ -316,10 +316,21 @@ public class PlayerInteractInput : NetworkBehaviour
     }
 
     // The prompt goes to the Canvas (InteractPromptUI) when there is one.
+    /// <summary>Is the local player looking at something they can use (there's a prompt)? For the crosshair.</summary>
+    public static bool LocalHasTarget { get; private set; }
+
     private void LateUpdate()
     {
-        if (!IsOwner || InteractPromptUI.Instance == null) return;
-        InteractPromptUI.Instance.Show(CurrentPrompt());
+        if (!IsOwner) return;
+        string prompt = CurrentPrompt();
+        LocalHasTarget = !string.IsNullOrEmpty(prompt);
+        if (InteractPromptUI.Instance != null) InteractPromptUI.Instance.Show(prompt);
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        if (IsOwner) LocalHasTarget = false;
+        base.OnNetworkDespawn();
     }
 
     /// <summary>Built-in prompt, only when there's no InteractPromptUI in the scene.</summary>
