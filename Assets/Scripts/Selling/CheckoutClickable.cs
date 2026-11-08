@@ -32,6 +32,8 @@ public class CheckoutClickable : MonoBehaviour
         ScanItem,
         /// <summary>Added by the counter: the customer's cash or card.</summary>
         CustomerMoney,
+        /// <summary>Added by the counter: a bill or coin of the change counted out (Value = cents); back to the drawer.</summary>
+        ReturnChange,
     }
 
     public Action action;

@@ -13,7 +13,8 @@ using UnityEngine;
 ///   The cash drawer pops open when you take the cash or press Enter (or click Drawer Toggle).
 ///   Optionally type what they gave on the keypad (2 5 0 0 = $25.00) and press Enter: the screen
 ///   shows the change due. Click the drawer's bills and coins to count out the change (it's laid
-///   out on the counter), then press Confirm (the drawer shuts). Too little change and they wait;
+///   out on the counter, exactly the bills and coins you took; click one to put it back in the
+///   drawer), then press Confirm (the drawer shuts). Too little change and they wait;
 ///   too much is lost.
 /// The money goes to the store's team. Everyone sees the same screen, belt, cash and change.
 ///
@@ -121,7 +122,7 @@ public class CheckoutCounter : NetworkBehaviour
     [SerializeField] private int screenLines = 8;
 
     [Header("Spots on the counter (empty Transforms)")]
-    [Tooltip("Where the customer puts their cash or card.")]
+    [Tooltip("Where the customer puts their cash or card ON the counter (not where they stand).")]
     [SerializeField] private Transform customerSpot;
     [Tooltip("Where cash you've taken is laid out to count.")]
     [SerializeField] private Transform countingSpot;
@@ -144,6 +145,7 @@ public class CheckoutCounter : NetworkBehaviour
 
     private NetworkList<BeltItem> items;
     private NetworkList<Line> lines;
+    private NetworkList<int> change; // the bills and coins counted out, in cents, in the order taken
     private readonly NetworkVariable<State> state = new();
 
     // Server
@@ -168,6 +170,7 @@ public class CheckoutCounter : NetworkBehaviour
     {
         items = new NetworkList<BeltItem>(null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
         lines = new NetworkList<Line>(null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+        change = new NetworkList<int>(null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
         if (belt != null) belt.isTrigger = true;
     }
 
@@ -175,6 +178,7 @@ public class CheckoutCounter : NetworkBehaviour
     {
         All.Add(this);
         lines.OnListChanged += _ => screenDirty = true;
+        change.OnListChanged += _ => moneyDirty = true;
         state.OnValueChanged += (_, now) =>
         {
             screenDirty = true;
@@ -391,6 +395,8 @@ public class CheckoutCounter : NetworkBehaviour
                 return s.drawerOpen != 0 ? "Click: close the drawer" : "Click: open the drawer";
             case CheckoutClickable.Action.ClearChange:
                 return cash && s.changeCents > 0 ? "Click: put the change back" : null;
+            case CheckoutClickable.Action.ReturnChange:
+                return !cash ? null : s.drawerOpen != 0 ? $"Click: put the {FormatAmount(part.value)} back in the drawer" : "Open the drawer first";
             case CheckoutClickable.Action.Confirm:
                 return cash ? (s.moneyTaken != 0 ? $"Click: confirm (change {FormatAmount(s.changeCents)})" : "Take the cash first") : null;
             case CheckoutClickable.Action.KeypadDigit:
@@ -440,10 +446,31 @@ public class CheckoutCounter : NetworkBehaviour
                 if (paying && !cash && s.moneyTaken != 0) Complete(s.totalCents, "Card approved");
                 return;
             case CheckoutClickable.Action.Drawer:
-                if (cash && s.drawerOpen != 0 && value > 0 && s.changeCents < 1000000) { s.changeCents += value; state.Value = s; }
+                if (cash && s.drawerOpen != 0 && value > 0 && s.changeCents < 1000000 && change.Count < 60)
+                {
+                    change.Add(value);
+                    s.changeCents += value;
+                    state.Value = s;
+                }
                 return;
             case CheckoutClickable.Action.ClearChange:
-                if (cash) { s.changeCents = 0; state.Value = s; }
+                if (cash)
+                {
+                    change.Clear();
+                    s.changeCents = 0;
+                    state.Value = s;
+                }
+                return;
+            case CheckoutClickable.Action.ReturnChange:
+                if (!cash || s.drawerOpen == 0) return;
+                for (int i = change.Count - 1; i >= 0; i--)
+                    if (change[i] == value)
+                    {
+                        change.RemoveAt(i);
+                        s.changeCents -= value;
+                        state.Value = s;
+                        break;
+                    }
                 return;
             case CheckoutClickable.Action.Confirm:
                 if (!cash) return;
@@ -528,6 +555,7 @@ public class CheckoutCounter : NetworkBehaviour
         var econ = EconomyManager.Instance;
         if (plot != null && plot.HasOwner && econ != null) econ.ServerAddCents(plot.OwnerTeamId, receivedCents);
         lines.Clear();
+        change.Clear();
         state.Value = new State { phase = Phase.Scanning, customer = items.Count > 0 ? items[0].customer : 0 };
         MessageRpc($"{text}: {FormatAmount(receivedCents)}");
         ServerFill();
@@ -672,12 +700,20 @@ public class CheckoutCounter : NetworkBehaviour
         Transform where = s.moneyTaken == 0 ? Spot(customerSpot, 0.35f) : Spot(countingSpot, 0.15f);
         bool clickable = s.moneyTaken == 0;
         if (s.method == PayMethod.Card)
-            Lay(new List<GameObject> { MakeCard() }, where, clickable);
+            Lay(new List<GameObject> { MakeCard() }, where, clickable ? CheckoutClickable.Action.CustomerMoney : null);
         else
-            Lay(MakeCash(s.tenderedCents), where, clickable);
+            Lay(MakeCash(s.tenderedCents), where, clickable ? CheckoutClickable.Action.CustomerMoney : null);
 
-        if (s.method == PayMethod.Cash && s.changeCents > 0)
-            Lay(MakeCash(s.changeCents), Spot(changeSpot, -0.1f), false);
+        // The change: exactly the bills and coins taken from the drawer, biggest first; click one to put it back.
+        if (s.method == PayMethod.Cash && change.Count > 0)
+        {
+            var given = new List<int>();
+            foreach (int c in change) given.Add(c);
+            given.Sort((a, b) => b.CompareTo(a));
+            var models = new List<GameObject>();
+            foreach (int c in given) models.Add(MakeBillOrCoin(c));
+            Lay(models, Spot(changeSpot, -0.1f), CheckoutClickable.Action.ReturnChange, given);
+        }
     }
 
     // A spot on the counter top (a fallback near the scanner end if it isn't set).
@@ -701,7 +737,8 @@ public class CheckoutCounter : NetworkBehaviour
     private readonly Dictionary<float, Transform> fallbackSpots = new();
 
     // Fan the models out in a row across the spot, lying on the counter top under it.
-    private void Lay(List<GameObject> models, Transform spot, bool clickable)
+    // Click: what clicking each one does (null: they can't be clicked); values: each one's Value.
+    private void Lay(List<GameObject> models, Transform spot, CheckoutClickable.Action? click, List<int> values = null)
     {
         bool onCounter = TrySurfaceBelow(spot.position, out float surface);
         for (int i = 0; i < models.Count; i++)
@@ -713,11 +750,12 @@ public class CheckoutCounter : NetworkBehaviour
             float bottom = BottomOf(go, pos.y);
             float floor = onCounter ? surface : spot.position.y;
             go.transform.position += Vector3.up * (floor - bottom + 0.0005f + i * 0.0008f);
-            if (clickable)
+            if (click.HasValue)
             {
-                var click = go.AddComponent<CheckoutClickable>();
-                click.action = CheckoutClickable.Action.CustomerMoney;
-                click.Counter = this;
+                var part = go.AddComponent<CheckoutClickable>();
+                part.action = click.Value;
+                part.value = values != null && i < values.Count ? values[i] : 0;
+                part.Counter = this;
                 if (go.GetComponentInChildren<Collider>() == null) go.AddComponent<BoxCollider>();
             }
             else foreach (var c in go.GetComponentsInChildren<Collider>()) c.enabled = false;
