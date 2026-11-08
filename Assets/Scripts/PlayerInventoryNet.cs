@@ -120,6 +120,10 @@ public class PlayerInventoryNet : NetworkBehaviour
         int id = HeldItemId.Value;
         if (id == 0 || !StockContainer.IsStockCrate(id)) return;
         if (!TryGetContainerZone(containerRef, zone, rpcParams.Receive.SenderClientId, out var container, out var at)) return;
+
+        // A shelf still settling after being put down stops where it is first, so its stock can't send it flying.
+        if (container.TryGetComponent<ItemPickupNet>(out var shelf)) shelf.ServerFreezeNow();
+
         if (!container.ServerAddOne(zone, id, orient)) return; // full, holds something else, or wrong kind of zone
 
         // The empty crate goes away.
@@ -220,6 +224,10 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (!onWall && PlacementCheck.GetTestBox(def, position, rotation, out Vector3 center, out _))
             cart = CartNet.FindCartAt(center);
 
+        // Set down on something that's still settling (a shelf just put down)? It stops where it is first,
+        // so the two can't knock each other flying.
+        if (!onWall && cart == null) FreezeWhatsBelow(def, position, rotation);
+
         var spawned = Instantiate(def.worldNetworkPrefab, position, rotation);
         if (onWall && spawned.TryGetComponent<ItemPickupNet>(out var hung))
             hung.ServerPrepareFrozen(onWall: true); // hangs there; never falls
@@ -238,6 +246,23 @@ public class PlayerInventoryNet : NetworkBehaviour
         HeldUnits.Value = 0;
 
         PlayItemSoundClientRpc(id, position, true);
+    }
+
+    private static readonly Collider[] BelowHits = new Collider[16];
+
+    // Server: freeze any still-settling items just under where this one is being put.
+    private static void FreezeWhatsBelow(ItemDef def, Vector3 position, Quaternion rotation)
+    {
+        if (!PlacementCheck.GetTestBox(def, position, rotation, out Vector3 center, out Vector3 half)) return;
+        // The item's footprint, reaching a little below it.
+        Vector3 probeHalf = new(half.x, 0.06f, half.z);
+        Vector3 probeCenter = center - rotation * new Vector3(0f, half.y, 0f);
+        int n = Physics.OverlapBoxNonAlloc(probeCenter, probeHalf, BelowHits, rotation, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < n; i++)
+        {
+            var below = BelowHits[i].GetComponentInParent<ItemPickupNet>();
+            if (below != null) below.ServerFreezeNow();
+        }
     }
 
     private void ServerPlaceBoxOnCart(ItemDef def, NetworkObject boxPrefab, Vector3 position, Quaternion rotation, ulong sender)
