@@ -176,6 +176,9 @@ public class CheckoutCounter : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        if (belt == null)
+            Debug.LogError($"[CheckoutCounter] '{name}' has no Belt set, so nothing can go on it. Drag the belt's " +
+                           "BoxCollider into Belt on the counter prefab.", this);
         All.Add(this);
         lines.OnListChanged += _ => screenDirty = true;
         change.OnListChanged += _ => moneyDirty = true;
@@ -859,6 +862,22 @@ public class CheckoutCounter : NetworkBehaviour
         money.Clear();
     }
 
+    // Selected in the editor: the belt surface (green) and an arrow to the scanner end.
+    private void OnDrawGizmosSelected()
+    {
+        if (belt == null) return;
+        GetBelt(out Vector3 front, out Vector3 forward, out Vector3 up, out float length, out float width);
+        Vector3 right = Vector3.Cross(up, forward).normalized;
+        Vector3 back = front - forward * length;
+        Gizmos.color = new Color(0.2f, 1f, 0.3f, 0.9f);
+        Vector3 a = back - right * width * 0.5f, b = back + right * width * 0.5f;
+        Vector3 c = front + right * width * 0.5f, d = front - right * width * 0.5f;
+        Gizmos.DrawLine(a, b); Gizmos.DrawLine(b, c); Gizmos.DrawLine(c, d); Gizmos.DrawLine(d, a);
+        Gizmos.DrawLine(back, front);
+        Gizmos.DrawLine(front, front - forward * 0.15f + right * 0.08f);
+        Gizmos.DrawLine(front, front - forward * 0.15f - right * 0.08f);
+    }
+
     /* ========================= TESTING ========================= */
 
     private bool IsNearestToHost()
@@ -932,6 +951,9 @@ public class CheckoutCounter : NetworkBehaviour
             return;
         }
         ServerAddCustomer(purchases);
-        Debug.Log($"[CheckoutCounter] Test customer brought {purchases.Count} thing(s).", this);
+        Debug.Log($"[CheckoutCounter] Test customer brought {purchases.Count} thing(s) to '{name}' " +
+                  $"({items.Count} on the belt, {waiting.Count} waiting for room).", this);
+        if (belt == null)
+            Debug.LogError($"[CheckoutCounter] '{name}' has no Belt set: its customers' things can't go on it.", this);
     }
 }
