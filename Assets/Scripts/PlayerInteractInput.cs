@@ -245,6 +245,8 @@ public class PlayerInteractInput : NetworkBehaviour
             }
         }
 
+        UpdateStockOutline(held);
+
         // Show the product where it'll go.
         if (stockTarget != null && !stockTargetIsTake && stockZone >= 0 &&
             stockTarget.TryGetNextSlot(stockZone, held, stockOrient, out Vector3 slotPos, out Quaternion slotRot))
@@ -258,7 +260,36 @@ public class PlayerInteractInput : NetworkBehaviour
         stockZone = -1;
         putBackZone = -1;
         DestroyStockPreview();
+        if (IsOwner) TargetOutline.For(this).Hide();
     }
+
+    [Tooltip("Outline colour for the product F would take off a shelf.")]
+    [SerializeField] private Color takeOutlineColor = new(1f, 0.85f, 0.2f, 1f);
+    [Tooltip("Outline colour for the shelf space F would stock (or G would take back from).")]
+    [SerializeField] private Color stockOutlineColor = new(0.3f, 0.9f, 1f, 1f);
+
+    // Box what F (or G) would act on: the product it takes, or the space it stocks.
+    private void UpdateStockOutline(int held)
+    {
+        var outline = TargetOutline.For(this);
+        if (stockTarget == null) { outline.Hide(); return; }
+
+        if (stockTargetIsTake && stockZone >= 0)
+        {
+            var model = stockTarget.GetTakeModel(stockZone);
+            if (model != null) { outline.ShowObject(model, takeOutlineColor); return; }
+        }
+        int zone = stockZone >= 0 ? stockZone : putBackZone;
+        if (zone == putBackZone && stockZone < 0)
+        {
+            var model = stockTarget.GetTakeModel(zone); // G would take this one back into the crate
+            if (model != null) { outline.ShowObject(model, takeOutlineColor); return; }
+        }
+        if (zone >= 0 && stockTarget.TryGetZoneBox(zone, out Vector3 c, out Quaternion r, out Vector3 s))
+            outline.ShowBox(c, r, s, stockOutlineColor);
+        else outline.Hide();
+    }
+
 
     private void ShowStockPreview(GameObject prefab, Vector3 position, Quaternion rotation)
     {
@@ -287,6 +318,7 @@ public class PlayerInteractInput : NetworkBehaviour
     public override void OnDestroy()
     {
         DestroyStockPreview();
+        TargetOutline.Release(this);
         base.OnDestroy();
     }
 
