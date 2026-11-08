@@ -17053,8 +17053,8 @@ MonoBehaviour:
   image: {fileID: 0}
   normalColor: {r: 1, g: 1, b: 1, a: 0.8}
   targetColor: {r: 1, g: 0.85, b: 0.2, a: 1}
-  size: 6
-  targetSize: 10
+  size: 2
+  targetSize: 4
 --- !u!1 &1233263569
 GameObject:
   m_ObjectHideFlags: 0
