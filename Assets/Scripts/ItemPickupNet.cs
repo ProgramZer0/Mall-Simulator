@@ -341,6 +341,19 @@ public class ItemPickupNet : NetworkBehaviour
         ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(itemId, out var def) &&
         PlacementCheck.GetTestBox(def, position, rotation, out Vector3 c, out _) ? c : position;
 
+    /// <summary>Is it frozen in place (not falling)?</summary>
+    public bool IsFrozen => !Falls || rb == null || freeze.Value.frozen;
+
+    /// <summary>
+    /// Server: stop it falling and freeze it where it is right now. Used when something is stocked onto
+    /// it or set down on it while it's still settling, so the two can't knock each other flying.
+    /// </summary>
+    public void ServerFreezeNow()
+    {
+        if (!IsServer || !IsSpawned || IsFrozen) return;
+        ServerFreeze(rb.position, rb.rotation);
+    }
+
     /// <summary>Server: unfreeze this item so it falls and settles again.</summary>
     public void ServerWake()
     {
