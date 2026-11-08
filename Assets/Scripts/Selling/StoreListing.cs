@@ -151,7 +151,7 @@ public class StoreListing : MonoBehaviour
             if (s == null || !s.IsSpawned || !s.IsForSale || !plot.Contains(s.transform.position)) continue;
             if (s.TryGetComponent<ItemPickupNet>(out var p) && p.IsOnCart) continue; // riding a cart isn't on display
             Add(s.ItemId, s.Price, 1, true);
-            sources.Add(new Source { item = s, priceCents = s.Price, quantity = 1 });
+            sources.Add(new Source { item = s, priceCents = s.SalePrice, quantity = 1 }); // a part-used crate sells for its share
         }
     }
 

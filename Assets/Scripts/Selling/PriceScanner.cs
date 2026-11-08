@@ -171,7 +171,13 @@ public class PriceScanner : NetworkBehaviour
         int cost = CostEach(targetProduct, stock);
         string title = NameOf(targetProduct);
         int suggested = DefaultPrice(cost);
-        if (!stock && StockContainer.IsStockCrate(targetProduct)) title += " (whole crate)"; // priced apart from one on the shelf
+        if (!stock && StockContainer.IsStockCrate(targetProduct))
+        {
+            title += " (full crate price)"; // priced apart from one on the shelf
+            // A part-used one sells for its share.
+            if (targetItem.TryGetComponent<ItemPickupNet>(out var crate) && crate.Units < crate.UnitsPerCrate)
+                title += $": {crate.Units} of {crate.UnitsPerCrate} left, sells for {Sellable.FormatPrice(targetItem.SalePrice)}";
+        }
 
         // Remember the target now; the player can look away while typing.
         var container = targetContainer;
