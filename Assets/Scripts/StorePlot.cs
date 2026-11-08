@@ -1495,7 +1495,7 @@ public class StorePlot : NetworkBehaviour
                            PlacementCheck.HasWallBehind(def, pos, rot, PlacementCheck.DefaultWallMask));
             item.ServerPrepareFrozen(onWall);
             if (units > 0) item.ServerSetUnits(units);
-            if (price > 0 && spawned.TryGetComponent<Sellable>(out var sellable)) sellable.ServerSetPrice(price);
+            if (price > 0 && spawned.TryGetComponent<Sellable>(out var sellable)) sellable.ServerSetPrice(price, restore: true);
         }
         if (stock != null && spawned.TryGetComponent<StockContainer>(out var container))
             container.ServerPrepareStock(stock);

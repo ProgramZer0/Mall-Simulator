@@ -159,6 +159,26 @@ public class CheckoutCounter : NetworkBehaviour
     private bool screenDirty = true, moneyDirty = true;
 
     public State Current => state.Value;
+
+    /// <summary>Has a price on it (up for sale)? Then customers can't check out here.</summary>
+    public bool IsForSale => TryGetComponent<Sellable>(out var s) && s.Price > 0;
+
+    /// <summary>
+    /// Could this counter be put up for sale? Not while someone's being served, and not if it would leave
+    /// the store without a counter customers can use (so a store can't lock itself out of selling).
+    /// Works before the counter is spawned too (a counter being put down in a store that prices them all).
+    /// </summary>
+    public static bool CanBePutForSale(CheckoutCounter counter, out string reason)
+    {
+        reason = null;
+        if (counter == null) return true;
+        if (counter.IsBusy) { reason = "Finish serving the customer first"; return false; }
+        var plot = counter.Plot;
+        foreach (var other in All)
+            if (other != null && other != counter && !other.IsForSale && other.Plot == plot) return true;
+        reason = "Your store needs a checkout counter that isn't for sale";
+        return false;
+    }
     public int ItemCount => IsSpawned ? items.Count : 0;
     public StorePlot Plot => MallManager.Instance != null ? MallManager.Instance.GetPlotAt(transform.position + Vector3.up * 0.1f) : null;
     public bool CanUse(ulong clientId) { var p = Plot; return p != null && p.IsAuthorized(clientId); }
@@ -303,6 +323,7 @@ public class CheckoutCounter : NetworkBehaviour
     public int ServerAddCustomer(IList<Purchase> purchases)
     {
         if (!IsServer || purchases == null || purchases.Count == 0) return 0;
+        if (IsForSale) return 0; // a counter up for sale isn't open to customers
         int customer = nextCustomer++;
         foreach (var p in purchases)
             waiting.Add(new BeltItem
@@ -362,6 +383,7 @@ public class CheckoutCounter : NetworkBehaviour
     public string StatusFor(ulong clientId)
     {
         if (!IsSpawned || !CanUse(clientId)) return null;
+        if (IsForSale && !IsBusy) return "For sale: customers can't use this counter";
         var s = state.Value;
         if (s.phase == Phase.AwaitingPayment)
             return s.method == PayMethod.Card
@@ -897,6 +919,11 @@ public class CheckoutCounter : NetworkBehaviour
     public void ServerAddTestCustomer()
     {
         if (!IsServer) return;
+        if (IsForSale)
+        {
+            Debug.LogWarning($"[CheckoutCounter] '{name}' is for sale, so customers can't use it. Take its price off first.", this);
+            return;
+        }
         var plot = Plot;
         var purchases = new List<Purchase>();
         int want = UnityEngine.Random.Range(1, Mathf.Max(2, testMaxItems + 1));

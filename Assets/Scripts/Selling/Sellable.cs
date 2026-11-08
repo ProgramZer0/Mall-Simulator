@@ -68,10 +68,20 @@ public class Sellable : NetworkBehaviour
 
     private void OnPriceChanged(int previous, int current) => StoreListing.MarkAllDirty();
 
-    /// <summary>Server: set the price in cents (0 = not for sale). Before Spawn works too.</summary>
-    public void ServerSetPrice(int cents)
+    /// <summary>
+    /// Server: set the price in cents (0 = not for sale). Before Spawn works too. Returns false if it
+    /// can't be put up for sale (e.g. a store's last checkout counter customers can use). Restore: put
+    /// back a price it already had (edit mode respawning things), skipping that check.
+    /// </summary>
+    public bool ServerSetPrice(int cents, bool restore = false)
     {
-        if (sellWhenLoose) priceCents.Value = Mathf.Max(0, cents);
+        if (!sellWhenLoose) return false;
+        cents = Mathf.Max(0, cents);
+        if (!restore && cents > 0 && priceCents.Value == 0 && TryGetComponent<CheckoutCounter>(out var counter) &&
+            !CheckoutCounter.CanBePutForSale(counter, out _))
+            return false;
+        priceCents.Value = cents;
+        return true;
     }
 
     /// <summary>Can this catalog item be sold (its world prefab has a Sellable)?</summary>

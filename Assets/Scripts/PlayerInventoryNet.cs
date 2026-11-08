@@ -92,6 +92,9 @@ public class PlayerInventoryNet : NetworkBehaviour
         // A shelf with stock on it has to be emptied first.
         if (pickupNO.TryGetComponent<StockContainer>(out var container) && container.HasStock) return;
 
+        // A checkout counter with a customer at it waits until they're served.
+        if (pickupNO.TryGetComponent<CheckoutCounter>(out var counter) && counter.IsBusy) return;
+
         bool isBox = pickupNO.TryGetComponent<ShipmentPackage>(out var box);
         if (isBox && box.IsReservedAgainst(MallManager.GetTeamOf(rpcParams.Receive.SenderClientId))) return;
 
