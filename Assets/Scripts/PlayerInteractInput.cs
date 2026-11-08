@@ -325,6 +325,15 @@ public class PlayerInteractInput : NetworkBehaviour
     private static GUIStyle promptStyle; // made once; a new GUIStyle every OnGUI call makes garbage
     private static readonly GUIContent PromptContent = new();
 
+    // Looking at the counter itself: what's going on there, and F picks it up when that's allowed.
+    private string CounterBodyPrompt(CheckoutCounter counter)
+    {
+        string status = counter.StatusFor(OwnerClientId);
+        bool canLift = inventory.HeldItemId.Value == 0 && !counter.IsBusy &&
+                       counter.TryGetComponent<ItemPickupNet>(out var pickup) && !pickup.EditModeOnly;
+        return canLift ? $"{status}   F: Pick up counter" : status;
+    }
+
     /// <summary>The F prompt right now (null: nothing to show).</summary>
     private string CurrentPrompt()
     {
@@ -338,7 +347,7 @@ public class PlayerInteractInput : NetworkBehaviour
                     : lookedAtDoor != null ? DoorPrompt()
                     : lookedAtCounter != null ? (lookedAtCheckoutPart != null
                         ? lookedAtCheckoutPart.Counter.PromptFor(lookedAtCheckoutPart, OwnerClientId) ?? lookedAtCounter.StatusFor(OwnerClientId)
-                        : lookedAtCounter.StatusFor(OwnerClientId))
+                        : CounterBodyPrompt(lookedAtCounter))
                     : lookedAtBuriedCartItem ? "Take the things on top off first"
                     : lookedAtMonitor != null ? "F: Shop monitor"
                     : lookedAtSign != null ? $"F: Buy {lookedAtSign.Plot.DisplayName} ({lookedAtSign.Plot.Price})"
@@ -540,8 +549,8 @@ public class PlayerInteractInput : NetworkBehaviour
             return;
         }
 
-        // Checkout: F on the counter itself does nothing (its parts are clicked).
-        if (lookedAtCounter != null) return;
+        // Checkout: its parts are clicked (handled above); F on the counter itself picks it up like
+        // anything else (the host refuses while a customer is at it).
 
         // The shop monitor opens the shop GUI for its store (local only; orders go through the host).
         if (lookedAtMonitor != null)
