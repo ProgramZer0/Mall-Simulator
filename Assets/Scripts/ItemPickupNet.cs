@@ -131,6 +131,12 @@ public class ItemPickupNet : NetworkBehaviour
     /// <summary>Server: how many products are left in this crate. Call after Instantiate, before Spawn.</summary>
     public void ServerSetUnits(int count) => units.Value = count >= UnitsPerCrate ? 0 : Mathf.Max(1, count);
 
+    // A part-used crate for sale is worth less: the store's listing needs redoing when its count changes.
+    private void OnUnitsChanged(int before, int now)
+    {
+        if (TryGetComponent<Sellable>(out _)) StoreListing.MarkAllDirty();
+    }
+
     /// <summary>Every spawned item on this machine (stores use it to find their contents).</summary>
     public static readonly List<ItemPickupNet> All = new();
 
@@ -233,6 +239,7 @@ public class ItemPickupNet : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        units.OnValueChanged += OnUnitsChanged;
         All.Add(this);
         freeze.OnValueChanged += OnFreezeChanged;
 
@@ -243,6 +250,7 @@ public class ItemPickupNet : NetworkBehaviour
 
     public override void OnNetworkDespawn()
     {
+        units.OnValueChanged -= OnUnitsChanged;
         All.Remove(this);
         freeze.OnValueChanged -= OnFreezeChanged;
 

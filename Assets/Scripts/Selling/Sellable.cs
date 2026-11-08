@@ -26,8 +26,22 @@ public class Sellable : NetworkBehaviour
 
     public bool SellWhenLoose => sellWhenLoose;
 
-    /// <summary>Price in cents (0 = not for sale).</summary>
+    /// <summary>The price tag in cents (0 = not for sale). For a stock crate it's the price of a FULL crate.</summary>
     public int Price => priceCents.Value;
+
+    /// <summary>
+    /// What it actually sells for, in cents. A part-used stock crate sells for its share of the full
+    /// crate's price (3 of 12 left at $24 a crate: $6); anything else sells for its price tag.
+    /// </summary>
+    public int SalePrice
+    {
+        get
+        {
+            int price = priceCents.Value;
+            if (price <= 0 || !TryGetComponent<ItemPickupNet>(out var crate) || !crate.IsStockCrate) return price;
+            return Mathf.Max(1, Mathf.RoundToInt(price * (float)crate.Units / crate.UnitsPerCrate));
+        }
+    }
 
     /// <summary>
     /// Priced and sold as a loose item? A shelf or rack (anything with a StockContainer) isn't for sale
