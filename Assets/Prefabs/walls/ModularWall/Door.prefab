@@ -9,7 +9,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 348302963241108780}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: hingeright
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -50,7 +50,7 @@ GameObject:
   - component: {fileID: 296045394205213046}
   - component: {fileID: 5223972249239243785}
   - component: {fileID: 6232550960694380416}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: Door
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -66,7 +66,7 @@ Transform:
   m_GameObject: {fileID: 1948721290863445510}
   serializedVersion: 2
   m_LocalRotation: {x: 0.000000030908623, y: 0.7071068, z: -0.7071067, w: -0.000000030908616}
-  m_LocalPosition: {x: -21.07343, y: -0.4676355, z: -58.739853}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 0.421395, y: 2.6283398, z: 3.8372195}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -284,6 +284,7 @@ MonoBehaviour:
   parts:
   - renderer: {fileID: 8871544796042669684}
     materialIndex: 0
+  zoneName: 
 --- !u!1 &2874378843485636321
 GameObject:
   m_ObjectHideFlags: 0
@@ -293,7 +294,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2542719304144413854}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: hingeleft
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -329,7 +330,7 @@ GameObject:
   - component: {fileID: 37899971217217980}
   - component: {fileID: 9119448879262237740}
   - component: {fileID: 3864674012257322584}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: mesh1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -444,6 +445,7 @@ MonoBehaviour:
   parts:
   - renderer: {fileID: 37899971217217980}
     materialIndex: 0
+  zoneName: 
 --- !u!1 &8841987221866876305
 GameObject:
   m_ObjectHideFlags: 0
@@ -457,7 +459,7 @@ GameObject:
   - component: {fileID: 6783977326989613826}
   - component: {fileID: 7254003291611772352}
   - component: {fileID: 6679277497413871289}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: mesh2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -572,6 +574,7 @@ MonoBehaviour:
   parts:
   - renderer: {fileID: 6783977326989613826}
     materialIndex: 0
+  zoneName: 
 --- !u!1 &9125262637184855153
 GameObject:
   m_ObjectHideFlags: 0
@@ -581,7 +584,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8357023525140853405}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: doubledoor
   m_TagString: Untagged
   m_Icon: {fileID: 0}

@@ -16,7 +16,7 @@ GameObject:
   - component: {fileID: 7166040245009018403}
   - component: {fileID: 7934380373013050630}
   - component: {fileID: 3026854408821039931}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: BigtTALLWindow
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -32,7 +32,7 @@ Transform:
   m_GameObject: {fileID: 355272404716024676}
   serializedVersion: 2
   m_LocalRotation: {x: -0.70710677, y: 0, z: -0, w: 0.7071068}
-  m_LocalPosition: {x: -23.9575, y: 0.10156637, z: -41.99973}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 0.9801019, y: 0.9801019, z: 0.9801019}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -200,3 +200,4 @@ MonoBehaviour:
   parts:
   - renderer: {fileID: 2019622714304172178}
     materialIndex: 0
+  zoneName: 

@@ -16,7 +16,7 @@ GameObject:
   - component: {fileID: 3339914593648648466}
   - component: {fileID: 3063179651413053089}
   - component: {fileID: -8003250446748475929}
-  m_Layer: 0
+  m_Layer: 3
   m_Name: CurvedDoorway
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -32,7 +32,7 @@ Transform:
   m_GameObject: {fileID: 8863387626637269206}
   serializedVersion: 2
   m_LocalRotation: {x: 0.000000030908623, y: 0.7071068, z: -0.7071067, w: -0.000000030908616}
-  m_LocalPosition: {x: -23.9575, y: -0.054600634, z: -35.56152}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 0.421395, y: 2.6283398, z: 3.8372195}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -201,3 +201,4 @@ MonoBehaviour:
   parts:
   - renderer: {fileID: 1765414779243861376}
     materialIndex: 0
+  zoneName: 
