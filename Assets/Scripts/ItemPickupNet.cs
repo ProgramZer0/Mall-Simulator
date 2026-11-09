@@ -25,6 +25,12 @@ public class ItemPickupNet : NetworkBehaviour
     [SerializeField] private Mounting mounting = Mounting.Floor;
     [Tooltip("Can't be picked up in normal play, only moved in store edit mode (e.g. the shop monitor).")]
     [SerializeField] private bool editModeOnly;
+    [Tooltip("Extra turn so the model faces the right way when it's placed or hung, on top of the rotation its " +
+             "prefab root already has (that one is kept automatically, e.g. Blender's -90 on X). Select the item: " +
+             "the yellow arrow is its front, the side that faces out from a wall. If the arrow comes out of its " +
+             "back, try (0, 180, 0); out of a side, (0, 90, 0) or (0, -90, 0). Windows and doors use their " +
+             "WallOpening's Model Rotation instead.")]
+    [SerializeField] private Vector3 modelRotation;
     [Tooltip("Placed in the scene hanging on a wall: stays there when the game starts instead of falling. " +
              "Set by itself when you hang it with the scene tool (Tools > Mall Sim > Hang On Wall); " +
              "untick it if you move the item off the wall by hand.")]
@@ -65,6 +71,8 @@ public class ItemPickupNet : NetworkBehaviour
     [SerializeField] private float stillSpeed = 0.05f;
 
     public bool EditModeOnly => editModeOnly;
+    /// <summary>Extra turn on top of the prefab root's rotation (see PlacementCheck.ModelFix).</summary>
+    public Vector3 ModelRotation => modelRotation;
     public Mounting MountingType => mounting;
 
     // Wall-only items never fall (nothing to land on).
@@ -116,6 +124,35 @@ public class ItemPickupNet : NetworkBehaviour
     }
 
 #if UNITY_EDITOR
+    /// <summary>
+    /// Editor: how this item's model stands and faces (its prefab root's rotation, then Model Rotation),
+    /// for a prefab being edited or an item in the scene.
+    /// </summary>
+    public Quaternion EditorModelFix()
+    {
+        var source = UnityEditor.PrefabUtility.GetCorrespondingObjectFromOriginalSource(gameObject);
+        Quaternion root = source != null && source != gameObject ? source.transform.localRotation : transform.localRotation;
+        Vector3 extra = TryGetComponent<WallOpening>(out var o) ? o.modelRotation : modelRotation;
+        return root * Quaternion.Euler(extra);
+    }
+
+    // The yellow arrow: the item's front (it faces out from a wall when hung). The short line is up.
+    private void OnDrawGizmosSelected()
+    {
+        Bounds local = PlacementCheck.ComputeLocalBounds(gameObject);
+        Vector3 center = transform.TransformPoint(local.center);
+        Quaternion upright = transform.rotation * Quaternion.Inverse(EditorModelFix());
+        Vector3 front = upright * Vector3.forward, up = upright * Vector3.up;
+        float length = Mathf.Max(0.3f, local.extents.magnitude * Mathf.Abs(transform.lossyScale.x) * 1.5f);
+        Vector3 tip = center + front * length;
+        Vector3 side = Vector3.Cross(up, front) * length * 0.15f;
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawLine(center, tip);
+        Gizmos.DrawLine(tip, tip - front * length * 0.2f + side);
+        Gizmos.DrawLine(tip, tip - front * length * 0.2f - side);
+        Gizmos.DrawLine(center, center + up * length * 0.4f); // and which way is up
+    }
+
     /// <summary>Editor: mark this scene item as hanging on a wall (the scene tool calls it).</summary>
     public void SetStartsOnWallInEditor(bool on)
     {

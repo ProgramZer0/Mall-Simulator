@@ -99,10 +99,8 @@ public class WallHangTool : EditorTool
                              out Vector3 pos, out Quaternion rot)
     {
         Bounds local = PlacementCheck.ComputeLocalBounds(item.gameObject);
-        // How its model stands upright: its prefab root's rotation (e.g. Blender's -90 on X).
-        var source = PrefabUtility.GetCorrespondingObjectFromOriginalSource(item.gameObject);
-        Quaternion fix = source != null ? source.transform.localRotation : Quaternion.identity;
-        PlacementCheck.WallPose(local, item.transform.lossyScale, fix, point, normal, flip, out pos, out rot);
+        // How its model stands and faces: prefab root rotation, then Model Rotation (the yellow arrow).
+        PlacementCheck.WallPose(local, item.transform.lossyScale, item.EditorModelFix(), point, normal, flip, out pos, out rot);
     }
 
     private static void Hang(ItemPickupNet item, Vector3 pos, Quaternion rot)
