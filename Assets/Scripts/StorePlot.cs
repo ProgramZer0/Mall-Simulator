@@ -909,8 +909,12 @@ public class StorePlot : NetworkBehaviour
     {
         get
         {
-            if (storefrontWalls == null) return false;
-            foreach (var w in storefrontWalls) if (w != null) return true;
+            if (storefrontWalls != null)
+                foreach (var w in storefrontWalls) if (w != null) return true;
+            // Front modules with flat panels count too.
+            EnsureFrontSlots();
+            foreach (var slot in frontSlots)
+                if (slot.original != null && slot.original.GetComponentInChildren<CuttableWall>(true) != null) return true;
             return false;
         }
     }
@@ -980,7 +984,21 @@ public class StorePlot : NetworkBehaviour
         if (frontSlots != null) return;
         frontSlots = new List<FrontSlot>();
         foreach (var (module, center) in FindFrontModules())
+        {
             frontSlots.Add(new FrontSlot { original = module, anchor = center });
+            MarkStorefrontPanels(module.gameObject);
+        }
+    }
+
+    // A front module's flat panels (CuttableWalls) are this store's front wall: windows and doors go
+    // in them, and the store needs a door in one of them.
+    private void MarkStorefrontPanels(GameObject module)
+    {
+        foreach (var w in module.GetComponentsInChildren<CuttableWall>(true))
+        {
+            w.Plot = this;
+            w.IsStorefront = true;
+        }
     }
 
     private List<(WallModule module, Vector3 center)> FindFrontModules()
@@ -1110,11 +1128,27 @@ public class StorePlot : NetworkBehaviour
         go.transform.localScale = t.localScale;
         go.name = $"{prefab.name} ({displayName} front {index})";
         if (go.TryGetComponent<WallModule>(out var wm)) wm.IsReplacement = true;
+        if (prefab.FitToSection) FitToSection(go, slot.original.gameObject, t);
         go.transform.position += slot.anchor - WallModule.GeometryBounds(go).center;
+        MarkStorefrontPanels(go);
 
         slot.original.gameObject.SetActive(false);
         slot.replacement = go;
         slot.replacementId = moduleId;
+    }
+
+    // Stretch a swapped-in module to the length and height of the section it replaces; the thinnest
+    // side (its thickness) stays as built.
+    private static void FitToSection(GameObject module, GameObject section, Transform frame)
+    {
+        Bounds want = WallModule.GeometryBoundsIn(section, frame);
+        Bounds have = WallModule.GeometryBoundsIn(module, frame);
+        Vector3 w = want.size, h = have.size;
+        int thin = w.x <= w.y && w.x <= w.z ? 0 : w.y <= w.z ? 1 : 2;
+        Vector3 f = Vector3.one;
+        for (int a = 0; a < 3; a++)
+            if (a != thin && h[a] > 1e-3f && w[a] > 1e-3f) f[a] = w[a] / h[a];
+        module.transform.localScale = Vector3.Scale(module.transform.localScale, f);
     }
 
     /// <summary>The module type a section currently shows.</summary>
@@ -1133,6 +1167,15 @@ public class StorePlot : NetworkBehaviour
         if (FrontWallCatalog.TryGet(id, out var m)) return m.DisplayName;
         return index >= 0 && index < FrontSlotCount && frontSlots[index].original != null
             ? frontSlots[index].original.DisplayName : "?";
+    }
+
+    /// <summary>The object a section shows right now (its scene module, or the one swapped in).</summary>
+    public GameObject GetFrontSlotShown(int index)
+    {
+        EnsureFrontSlots();
+        if (index < 0 || index >= frontSlots.Count) return null;
+        var slot = frontSlots[index];
+        return slot.replacement != null ? slot.replacement : slot.original != null ? slot.original.gameObject : null;
     }
 
     /// <summary>World box around a section's current module (for highlighting).</summary>

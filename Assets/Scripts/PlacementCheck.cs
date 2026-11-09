@@ -28,10 +28,10 @@ public static class PlacementCheck
         if (!GetTestBox(def, position, rotation, out Vector3 center, out Vector3 halfExtents))
             return true; // nothing measurable; don't block
 
-        // 1) Nothing in the way.
+        // 1) Nothing in the way, and not in a No Place Area.
         int count = Physics.OverlapBoxNonAlloc(center, halfExtents, Hits, rotation,
                                                blockingMask, QueryTriggerInteraction.Ignore);
-        if (count > 0) return false;
+        if (count > 0 || NoPlaceArea.Find(center, halfExtents, rotation) != null) return false;
 
         // 2) Something underneath to sit on (stops placing items in mid-air).
         Vector3 up = rotation * Vector3.up;
@@ -169,6 +169,8 @@ public static class PlacementCheck
 
         if (Physics.OverlapBoxNonAlloc(center, halfExtents, Hits, rotation, blockingMask, QueryTriggerInteraction.Ignore) > 0)
             return false;
+        // Hanging items touch the wall, so the area is checked a little deeper than the item.
+        if (NoPlaceArea.Find(center, halfExtents + Vector3.one * (Skin + HangTouch), rotation) != null) return false;
 
         return HasWallBehind(def, position, rotation, wallMask);
     }
@@ -207,7 +209,7 @@ public static class PlacementCheck
                                                blockingMask, QueryTriggerInteraction.Ignore);
         for (int i = 0; i < count; i++)
             if (!IsPartOf(EditHits[i], ignoreRoot)) return false;
-        return true;
+        return NoPlaceArea.Find(center, half + Vector3.one * (Skin + HangTouch), rotation) == null;
     }
 
     /// <summary>
@@ -229,7 +231,7 @@ public static class PlacementCheck
             if (c.GetComponentInParent<StockVisualFollower>() != null) continue; // stock models on shelves
             return c;
         }
-        return null;
+        return NoPlaceArea.Find(center, half + Vector3.one * (Skin + HangTouch), rotation);
     }
 
     /// <summary>
@@ -258,7 +260,8 @@ public static class PlacementCheck
             return c;
         }
 
-        // Something hung on the wall where the hole would go (on either face): the hole can't cut under it.
+        // Something hung on the wall where the hole would go (on either face), or a No Place Area there:
+        // the hole can't cut under it.
         if (WallOpening.TryGet(def, out _))
         {
             var shape = WallOpening.Measure(def, position, rotation);
@@ -267,6 +270,8 @@ public static class PlacementCheck
                 Quaternion facing = Quaternion.LookRotation(shape.forward, shape.up);
                 Vector3 h = new(Mathf.Max(0.001f, shape.size.x * 0.5f - Skin), Mathf.Max(0.001f, shape.size.y * 0.5f - Skin),
                                 OpeningReach);
+                var area = NoPlaceArea.Find(shape.center, h, facing);
+                if (area != null) return area;
                 float floorY = plot != null ? plot.FloorHeight : float.NegativeInfinity;
                 count = Physics.OverlapBoxNonAlloc(shape.center, h, EditHits, facing, Physics.AllLayers, QueryTriggerInteraction.Ignore);
                 for (int i = 0; i < count; i++)
