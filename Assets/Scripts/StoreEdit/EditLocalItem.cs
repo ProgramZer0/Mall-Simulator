@@ -24,25 +24,16 @@ public class EditLocalItem : MonoBehaviour
     /// <summary>A window or door (it sits in a wall).</summary>
     public WallOpening Opening => GetComponent<WallOpening>();
 
-    /// <summary>Its paint color now (PaintPalette id) and when editing started (repaints cost a fee).</summary>
+    /// <summary>Its paint color (PaintPalette id); painting itself is done with the paint brush outside edit mode.</summary>
     public byte Paint { get; private set; }
-    public byte StartPaint { get; private set; }
-    public bool Repainted => Paint != StartPaint;
     public bool CanPaint => PaintParts.IsPaintable(Def);
 
-    /// <summary>Paint this copy (shown straight away; the host applies it on save).</summary>
+    /// <summary>Show this copy in its paint color.</summary>
     public void SetPaint(byte id)
     {
         if (!CanPaint || !PaintPalette.IsValid(id)) return;
         Paint = id;
         PaintParts.ApplyToCopy(Def.worldNetworkPrefab.gameObject, gameObject, id);
-    }
-
-    /// <summary>The color it had when editing started.</summary>
-    public void SetStartPaint(byte id)
-    {
-        SetPaint(id);
-        StartPaint = Paint;
     }
 
     public static EditLocalItem Create(ItemDef def, int index, Vector3 position, Quaternion rotation)

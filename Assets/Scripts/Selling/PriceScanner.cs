@@ -44,6 +44,12 @@ public class PriceScanner : NetworkBehaviour
 
     public bool IsActive => active;
 
+    /// <summary>Put the scanner away (another tool is coming out).</summary>
+    public void PutAway()
+    {
+        if (active) SetActive(false);
+    }
+
     private void Awake()
     {
         inventory = GetComponent<PlayerInventoryNet>();
@@ -98,6 +104,7 @@ public class PriceScanner : NetworkBehaviour
 
     private void SetActive(bool on)
     {
+        if (on && TryGetComponent<PaintBrush>(out var brush)) brush.PutAway(); // one hand tool at a time
         active = on;
         if (on && handVisualPrefab != null && handVisual == null && inventory != null && inventory.HandAnchor != null)
         {

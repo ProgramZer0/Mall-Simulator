@@ -5,8 +5,8 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// A row of color swatches from the PaintPalette (TMP UI). Used by the buy menu and the edit-mode
-/// paint panel; it fills itself, so new palette colors show up by themselves.
+/// A row of color swatches from the PaintPalette (TMP UI), used by the buy menu. It fills itself, so
+/// new palette colors show up by themselves.
 ///
 /// Setup (on a Canvas with an EventSystem):
 /// - Container: where swatches go, e.g. an object with a Horizontal or Grid Layout Group.
