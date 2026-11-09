@@ -92,7 +92,7 @@ public class StorePlot : NetworkBehaviour
     [SerializeField] private BoxCollider[] shipmentZones;
 
     [Header("Paint")]
-    [Tooltip("The store's floor renderers, painted with the paint tool in edit mode (P). The floor's collider must be " +
+    [Tooltip("The store's floor renderers, painted with the paint brush (2). The floor's collider must be " +
              "on the same object or a child of it, so clicks find it. Leave empty if the floor can't be painted.")]
     [SerializeField] private Renderer[] floorRenderers;
 
@@ -1469,13 +1469,10 @@ public class StorePlot : NetworkBehaviour
     /// Windows and doors (WallOpening) bought during the session come in Added and are paid for here,
     /// by Team. They're checked against this store's walls instead of its space. Items taken out
     /// during the session (ServerRemoveEditItem) aren't put back.
-    ///
-    /// Paints: the editor's paint color for each item (by its place in the session). A changed color
-    /// costs the palette's Item Fee, paid by Team; without the money (or a Team) it keeps its old one.
     /// </summary>
     public void ServerEndEdit(Vector3[] positions, Quaternion[] rotations,
                               Func<ItemDef, Vector3, Quaternion, bool> isValid, bool log = false,
-                              IList<NewEditItem> added = null, ulong team = NoOwner, byte[] paints = null)
+                              IList<NewEditItem> added = null, ulong team = NoOwner)
     {
         if (!IsServer || !IsRenovating) return;
 
@@ -1556,17 +1553,7 @@ public class StorePlot : NetworkBehaviour
                 }
             }
 
-            // Repainted in edit mode: paid for here.
-            byte paint = entry.paint;
-            if (paints != null && i < paints.Length && paints[i] != paint && PaintPalette.IsValid(paints[i]) &&
-                PaintParts.IsPaintable(def) && team != NoOwner)
-            {
-                int fee = PaintPalette.Instance != null ? PaintPalette.Instance.ItemFee : 0;
-                if (econ == null || !econ.IsSpawned || econ.ServerTrySpend(team, fee)) paint = paints[i];
-                else if (log) Debug.LogWarning($"[StorePlot] Not enough money to repaint '{def.displayName}'.", this);
-            }
-
-            SpawnEditItem(def, pos, rot, entry.units, entry.price, entry.stock, paint);
+            SpawnEditItem(def, pos, rot, entry.units, entry.price, entry.stock, entry.paint);
         }
 
         // Windows and doors bought in edit mode.

@@ -55,8 +55,6 @@ public class StoreEditController : NetworkBehaviour
     [SerializeField] private KeyCode openingsKey = KeyCode.N;
     [Tooltip("Takes the selected window or door out of the store (part refund).")]
     [SerializeField] private KeyCode removeKey = KeyCode.Delete;
-    [Tooltip("Paint tool: pick a color (PaintPalette), then click items, built walls, the storefront or the floor.")]
-    [SerializeField] private KeyCode paintKey = KeyCode.P;
     [Tooltip("Log (on the host) which items couldn't keep their new spot when edit mode is saved, and why.")]
     [SerializeField] private bool logEditSave = true;
     [Tooltip("Wall items dragged onto a wall from the floor view hang this high (their middle), in meters above the floor.")]
@@ -181,7 +179,6 @@ public class StoreEditController : NetworkBehaviour
     // Server: final positions arriving from the editor
     private Vector3[] pendingPositions;
     private Quaternion[] pendingRotations;
-    private byte[] pendingPaints;
     private int pendingSessionId = -1;
     private readonly List<StorePlot.NewEditItem> pendingAdded = new();
 
@@ -299,16 +296,14 @@ public class StoreEditController : NetworkBehaviour
             int n = Mathf.Min(ChunkSize, count - start);
             var positions = new Vector3[n];
             var rotations = new Quaternion[n];
-            var paints = new byte[n];
             for (int k = 0; k < n; k++)
             {
                 var item = localItems[start + k];
                 // A missing copy sends "no position", so the host keeps that item where it was.
                 positions[k] = item != null ? item.transform.position : Vector3.positiveInfinity;
                 rotations[k] = item != null ? item.transform.rotation : Quaternion.identity;
-                paints[k] = item != null ? item.Paint : (byte)0;
             }
-            SubmitEditPosesRpc(clientSessionId, start, positions, rotations, paints);
+            SubmitEditPosesRpc(clientSessionId, start, positions, rotations);
         }
 
         // Windows and doors taken out or bought this session.
@@ -383,7 +378,6 @@ public class StoreEditController : NetworkBehaviour
 
     private void ExitView()
     {
-        SetPaintTool(false);
         SetWallTool(false);
         Deselect();
         selectedSlot = -1;
@@ -595,18 +589,6 @@ public class StoreEditController : NetworkBehaviour
         }
 
         if (Input.GetKeyDown(openingsKey)) SetOpeningsMenu(!OpeningsMenuOpen);
-
-        if (Input.GetKeyDown(paintKey)) SetPaintTool(!paintTool);
-        if (paintTool)
-        {
-            if (Input.GetKeyDown(wallToolKey)) SetPaintTool(false); // straight on to the wall tool below
-            else
-            {
-                UpdatePaintTool(ray);
-                lastMouse = mouse;
-                return;
-            }
-        }
 
         if (Input.GetKeyDown(wallToolKey)) { SetWallTool(!wallTool); if (wallTool) SetOpeningsMenu(false); }
         if (wallTool)
@@ -1185,15 +1167,12 @@ public class StoreEditController : NetworkBehaviour
         return econ.GetMoneyOf(OwnerClientId) - PendingCost();
     }
 
-    /// <summary>What the windows and doors bought and the items repainted this session will cost when it's saved.</summary>
+    /// <summary>What the windows and doors bought this session will cost when it's saved.</summary>
     private int PendingCost()
     {
         int cost = 0;
         foreach (var item in addedItems)
             if (item != null) cost += MarketModifiers.OrderCost(item.Def);
-        int fee = PaintPalette.Instance != null ? PaintPalette.Instance.ItemFee : 0;
-        foreach (var item in localItems)
-            if (item != null && item.Repainted) cost += fee;
         return cost;
     }
 
@@ -2185,17 +2164,6 @@ public class StoreEditController : NetworkBehaviour
 
     private void BuildHudTexts()
     {
-        if (paintTool)
-        {
-            hudTitle = "PAINT";
-            hudStatus = $"Color: {PaintPalette.NameOf(paintColor)}";
-            hudControls = $"{K("Click")} an item, a built wall, the storefront or the floor to paint it\n" +
-                          $"Items: paid on save   Walls, storefront, floor: paid straight away\n" +
-                          $"{K(paintKey)} / {K("RMB")} / {K("Esc")}: back to items";
-            hudInfo = paintInfo;
-            return;
-        }
-
         if (wallTool)
         {
             hudTitle = eraseMode ? "WALL TOOL - REMOVING" : "WALL TOOL";
@@ -2238,7 +2206,7 @@ public class StoreEditController : NetworkBehaviour
         hudStatus = $"Selected: {itemName}   Tool: {toolName}   Gravity: {gravity}";
         hudControls = $"{K("Drag")} item: slide   {K("X")}: move > rotate > hide   {K(rotateKey)}: rotate   {K("G")}: gravity\n" +
                       $"{K("Ctrl")}: no snap   {K("RMB")} drag: camera   {K("RMB")} click / {K("Esc")}: deselect\n" +
-                      $"{K(openingsKey)}: windows & doors   {K(wallToolKey)}: build walls   {K(paintKey)}: paint   {K(toggleKey)}: save & exit";
+                      $"{K(openingsKey)}: windows & doors   {K(wallToolKey)}: build walls   {K(toggleKey)}: save & exit";
         hudInfo = openingInfo;
     }
 
@@ -2280,178 +2248,12 @@ public class StoreEditController : NetworkBehaviour
                 GUI.Label(new Rect(20, 16 + i * 20, 450, 20), lines[i]);
         }
 
-        if (paintTool && PaintPanel.Instance == null) DrawPaintFallback();
-
         // The pick lists are still built-in (the windows & doors list only without a WallPiecesMenu).
-        if (!finishing && !wallTool && !paintTool)
+        if (!finishing && !wallTool)
         {
             DrawSlotPanel();
             DrawOpeningsPanel();
         }
-    }
-
-    /* ========================= PAINT TOOL ========================= */
-
-    private bool paintTool;
-    private byte paintColor = 1;
-    private string paintInfo;
-    private Rect paintFallbackRect;
-
-    private void SetPaintTool(bool on)
-    {
-        if (on)
-        {
-            SetWallTool(false);
-            SetOpeningsMenu(false);
-            CancelPlacing();
-            Deselect();
-            selectedSlot = -1;
-            if (PaintPalette.Instance == null)
-            {
-                ShowEditMessage("There's no PaintPalette in the scene, so there's nothing to paint with.");
-                on = false;
-            }
-        }
-        paintTool = on;
-        paintInfo = null;
-
-        var panel = PaintPanel.Instance;
-        if (panel == null) return;
-        panel.SetOpen(on);
-        if (panel.Swatches == null) return;
-        panel.Swatches.Picked -= OnPaintPicked;
-        if (on)
-        {
-            panel.Swatches.Picked += OnPaintPicked;
-            panel.Swatches.SetSelected(paintColor);
-        }
-    }
-
-    private void OnPaintPicked(byte id) => paintColor = id;
-
-    private enum PaintTarget { None, Item, Wall, Front, Floor }
-
-    private void UpdatePaintTool(Ray ray)
-    {
-        if (Input.GetKeyDown(KeyCode.Escape) || rmbClicked)
-        {
-            SetPaintTool(false);
-            return;
-        }
-
-        var palette = PaintPalette.Instance;
-        var target = FindPaintTarget(ray, out EditLocalItem item, out BuiltWall wall);
-        string colorName = PaintPalette.NameOf(paintColor);
-        int fee = 0;
-        byte current = 0;
-        string what = null;
-        switch (target)
-        {
-            case PaintTarget.Item:
-                what = item.Def.displayName;
-                current = item.Paint;
-                // Repainting costs (once per item per session); going back to how it was is free, and so
-                // is painting a window or door bought this session.
-                fee = item.Index < 0 || paintColor == item.StartPaint || item.Repainted ? 0 : palette.ItemFee;
-                break;
-            case PaintTarget.Wall:
-                what = $"Wall ({wall.Length:0.0} m)";
-                current = wall.paint;
-                fee = palette.WallFee(wall.Length);
-                break;
-            case PaintTarget.Front:
-                what = "Storefront";
-                current = editPlot.FrontPaint;
-                fee = palette.FrontFee;
-                break;
-            case PaintTarget.Floor:
-                what = "Floor";
-                current = editPlot.FloorPaint;
-                fee = palette.FloorFee;
-                break;
-        }
-
-        if (target == PaintTarget.None)
-            paintInfo = item != null ? $"{item.Def.displayName} can't be painted" : "Point at something to paint";
-        else if (current == paintColor)
-            paintInfo = $"{what} is already {colorName}";
-        else
-            paintInfo = $"{what}: {PaintPalette.NameOf(current)} > {colorName}" +
-                        (fee > 0 ? $"   ${fee}{(target == PaintTarget.Item ? " on save" : "")}" : "");
-        if (PaintPanel.Instance != null) PaintPanel.Instance.SetInfo(paintInfo);
-
-        if (!Input.GetMouseButtonDown(0) || IsMouseOverPaintUi() || target == PaintTarget.None || current == paintColor) return;
-        if (fee > 0 && MoneyLeft() < fee)
-        {
-            ShowEditMessage("Not enough money to paint that.");
-            return;
-        }
-
-        switch (target)
-        {
-            case PaintTarget.Item: item.SetPaint(paintColor); break;
-            case PaintTarget.Wall: RequestPaintWallRpc(wall.id, paintColor); break;
-            case PaintTarget.Front: RequestPaintFrontRpc(paintColor); break;
-            case PaintTarget.Floor: RequestPaintFloorRpc(paintColor); break;
-        }
-    }
-
-    /// <summary>The nearest paintable thing under the mouse (the renovation wall is looked through).</summary>
-    private PaintTarget FindPaintTarget(Ray ray, out EditLocalItem item, out BuiltWall wall)
-    {
-        item = null;
-        wall = default;
-        if (editPlot == null) return PaintTarget.None;
-        var hits = Physics.RaycastAll(ray, 500f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
-        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-        foreach (var hit in hits)
-        {
-            Transform t = hit.collider.transform;
-            if (editPlot.IsStorefrontCover(t)) continue;
-
-            item = t.GetComponentInParent<EditLocalItem>();
-            if (item != null) return item.CanPaint ? PaintTarget.Item : PaintTarget.None;
-
-            var piece = t.GetComponentInParent<BuiltWallPiece>();
-            if (piece != null)
-                return piece.Plot == editPlot && editPlot.TryGetBuiltWallById(piece.WallId, out wall)
-                    ? PaintTarget.Wall : PaintTarget.None;
-
-            if (editPlot.IsStorefrontPart(t)) return PaintTarget.Front;
-            if (editPlot.IsFloor(t)) return PaintTarget.Floor;
-            return PaintTarget.None; // something else is in the way
-        }
-        return PaintTarget.None;
-    }
-
-    private bool IsMouseOverPaintUi()
-    {
-        if (PaintPanel.Instance == null)
-            return paintFallbackRect.Contains(new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y));
-        return UnityEngine.EventSystems.EventSystem.current != null &&
-               UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject();
-    }
-
-    // Built-in color list, only when there's no PaintPanel in the scene.
-    private void DrawPaintFallback()
-    {
-        var palette = PaintPalette.Instance;
-        if (palette == null) return;
-        int count = palette.Count + 1;
-        float width = Mathf.Min(Screen.width - 20f, 20f + count * 74f);
-        paintFallbackRect = new Rect((Screen.width - width) * 0.5f, Screen.height - 90f, width, 80f);
-        GUI.Box(paintFallbackRect, GUIContent.none);
-        for (int i = 0; i < count; i++)
-        {
-            byte id = (byte)i;
-            var r = new Rect(paintFallbackRect.x + 10 + i * 74f, paintFallbackRect.y + 8, 68, 26);
-            var old = GUI.backgroundColor;
-            if (PaintPalette.TryGetColor(id, out Color c)) GUI.backgroundColor = c;
-            if (GUI.Button(r, id == paintColor ? $"[{PaintPalette.NameOf(id)}]" : PaintPalette.NameOf(id))) paintColor = id;
-            GUI.backgroundColor = old;
-        }
-        if (!string.IsNullOrEmpty(paintInfo))
-            GUI.Label(new Rect(paintFallbackRect.x + 10, paintFallbackRect.y + 44, width - 20, 24), paintInfo);
     }
 
     /* ========================= HELPERS ========================= */
@@ -2498,49 +2300,6 @@ public class StoreEditController : NetworkBehaviour
     }
 
     /* ========================= NETWORK ========================= */
-
-    /// <summary>Host: paint a built wall of the store this player is editing (paid straight away).</summary>
-    [Rpc(SendTo.Server)]
-    private void RequestPaintWallRpc(int wallId, byte paint, RpcParams rpcParams = default)
-    {
-        if (!ServerTryGetPaintTarget(rpcParams, paint, out var plot, out var palette)) return;
-        if (!plot.TryGetBuiltWallById(wallId, out var wall) || wall.paint == paint) return;
-        if (ServerTryPayForPaint(palette.WallFee(wall.Length))) plot.ServerPaintWall(wallId, paint);
-    }
-
-    /// <summary>Host: paint the storefront of the store this player is editing.</summary>
-    [Rpc(SendTo.Server)]
-    private void RequestPaintFrontRpc(byte paint, RpcParams rpcParams = default)
-    {
-        if (!ServerTryGetPaintTarget(rpcParams, paint, out var plot, out var palette) || plot.FrontPaint == paint) return;
-        if (ServerTryPayForPaint(palette.FrontFee)) plot.ServerPaintFront(paint);
-    }
-
-    /// <summary>Host: paint the floor of the store this player is editing.</summary>
-    [Rpc(SendTo.Server)]
-    private void RequestPaintFloorRpc(byte paint, RpcParams rpcParams = default)
-    {
-        if (!ServerTryGetPaintTarget(rpcParams, paint, out var plot, out var palette) || plot.FloorPaint == paint) return;
-        if (!plot.HasPaintableFloor) return;
-        if (ServerTryPayForPaint(palette.FloorFee)) plot.ServerPaintFloor(paint);
-    }
-
-    private bool ServerTryGetPaintTarget(RpcParams rpcParams, byte paint, out StorePlot plot, out PaintPalette palette)
-    {
-        plot = null;
-        palette = PaintPalette.Instance;
-        if (rpcParams.Receive.SenderClientId != OwnerClientId || MallManager.Instance == null || palette == null) return false;
-        if (!PaintPalette.IsValid(paint)) return false;
-        plot = MallManager.Instance.GetPlotEditedBy(OwnerClientId);
-        return plot != null;
-    }
-
-    private bool ServerTryPayForPaint(int fee)
-    {
-        var eco = EconomyManager.Instance;
-        if (eco == null || !eco.IsSpawned || fee <= 0) return true;
-        return eco.ServerTrySpend(MallManager.GetTeamOf(OwnerClientId), fee);
-    }
 
     /// <summary>Host: swap one storefront section of the store this player is editing.</summary>
     [Rpc(SendTo.Server)]
@@ -2658,14 +2417,14 @@ public class StoreEditController : NetworkBehaviour
                 continue;
             }
             localItems[index] = EditLocalItem.Create(def, index, positions[k], rotations[k]);
-            if (paints != null && k < paints.Length && paints[k] != 0) localItems[index].SetStartPaint(paints[k]);
+            if (paints != null && k < paints.Length && paints[k] != 0) localItems[index].SetPaint(paints[k]); // shown as it is
         }
     }
 
     /// <summary>Host: collect a chunk of the editor's final positions.</summary>
     [Rpc(SendTo.Server)]
     private void SubmitEditPosesRpc(int sessionId, int start, Vector3[] positions, Quaternion[] rotations,
-                                    byte[] paints, RpcParams rpcParams = default)
+                                    RpcParams rpcParams = default)
     {
         if (!ServerTryGetSession(rpcParams, sessionId, out _)) return;
 
@@ -2676,7 +2435,6 @@ public class StoreEditController : NetworkBehaviour
             if (index < 0 || index >= pendingPositions.Length) continue;
             pendingPositions[index] = positions[k];
             pendingRotations[index] = rotations[k];
-            if (paints != null && k < paints.Length) pendingPaints[index] = paints[k];
         }
     }
 
@@ -2763,11 +2521,10 @@ public class StoreEditController : NetworkBehaviour
                                  $"'{blocker.name}' (root '{blocker.transform.root.name}', layer " +
                                  $"'{LayerMask.LayerToName(blocker.gameObject.layer)}'). It goes back to where it was.", blocker);
             return blocker == null;
-        }, logEditSave, pendingAdded, MallManager.GetTeamOf(OwnerClientId), pendingPaints);
+        }, logEditSave, pendingAdded, MallManager.GetTeamOf(OwnerClientId));
 
         pendingPositions = null;
         pendingRotations = null;
-        pendingPaints = null;
         pendingSessionId = -1;
         pendingAdded.Clear();
     }
@@ -2789,12 +2546,10 @@ public class StoreEditController : NetworkBehaviour
             int count = plot.ServerEditSession.Count;
             pendingPositions = new Vector3[count];
             pendingRotations = new Quaternion[count];
-            pendingPaints = new byte[count];
             for (int i = 0; i < count; i++)
             {
                 pendingPositions[i] = Vector3.positiveInfinity;
                 pendingRotations[i] = Quaternion.identity;
-                pendingPaints[i] = plot.ServerEditSession[i].paint; // unchanged unless the editor says so
             }
             pendingSessionId = sessionId;
             pendingAdded.Clear();

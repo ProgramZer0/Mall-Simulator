@@ -401,8 +401,10 @@ public class PlayerInteractInput : NetworkBehaviour
     private void LateUpdate()
     {
         if (!IsOwner) return;
-        string prompt = CurrentPrompt();
-        LocalHasTarget = !string.IsNullOrEmpty(prompt);
+        string own = CurrentPrompt();
+        string prompt = WithToolPrompt(own);
+        // Only a real target lights the crosshair, not the brush's idle hint.
+        LocalHasTarget = !string.IsNullOrEmpty(own) || (prompt != null && prompt.StartsWith("Click"));
         if (InteractPromptUI.Instance != null) InteractPromptUI.Instance.Show(prompt);
     }
 
@@ -412,11 +414,24 @@ public class PlayerInteractInput : NetworkBehaviour
         base.OnNetworkDespawn();
     }
 
+    private PaintBrush brush;
+
+    // The paint brush, when it's out: what a click would paint comes first; otherwise the usual prompt
+    // (F still works), or the brush's own hint.
+    private string WithToolPrompt(string prompt)
+    {
+        if (brush == null && !TryGetComponent(out brush)) return prompt;
+        string tool = brush.Prompt;
+        if (string.IsNullOrEmpty(tool) || UIState.IsMenuOpen) return prompt;
+        if (tool.StartsWith("Click")) return string.IsNullOrEmpty(prompt) ? tool : $"{tool}\n{prompt}";
+        return string.IsNullOrEmpty(prompt) ? tool : prompt;
+    }
+
     /// <summary>Built-in prompt, only when there's no InteractPromptUI in the scene.</summary>
     private void OnGUI()
     {
         if (InteractPromptUI.Instance != null) return;
-        string text = CurrentPrompt();
+        string text = WithToolPrompt(CurrentPrompt());
         if (string.IsNullOrEmpty(text)) return;
         promptStyle ??= new GUIStyle(GUI.skin.box) { fontSize = 16, alignment = TextAnchor.MiddleCenter };
         PromptContent.text = text;
@@ -549,9 +564,9 @@ public class PlayerInteractInput : NetworkBehaviour
             return;
         }
 
-        // Checkout: click (or F) the part you're looking at, with empty hands.
+        // Checkout: click (or F) the part you're looking at, with empty hands (a click paints while the brush is out).
         if (lookedAtCheckoutPart != null && inventory.HeldItemId.Value == 0 &&
-            (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.F)))
+            ((Input.GetMouseButtonDown(0) && !PaintBrush.LocalActive) || Input.GetKeyDown(KeyCode.F)))
         {
             lookedAtCheckoutPart.Counter.Click(lookedAtCheckoutPart);
             return;

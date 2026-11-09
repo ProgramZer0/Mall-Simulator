@@ -6,8 +6,8 @@ using UnityEngine;
 /// The colors players can paint things with: items (their marked parts, see PaintParts), built walls,
 /// the storefront and the store's floor. Put one in the scene (the MallManager object is a good spot).
 ///
-/// Colors are picked in the buy menu (free, with the purchase) and with the paint tool in store edit
-/// mode (P), where repainting costs the fees below. Each color is synced as its place in the list, so
+/// Colors are picked in the buy menu (free, with the purchase) and with the paint brush (2), where
+/// each paint job costs the fees below, paid straight away. Each color is synced as its place in the list, so
 /// add new colors at the end and don't reorder them once stores use them. 0 always means "Original":
 /// the model's own colors.
 ///
@@ -44,14 +44,14 @@ public class PaintPalette : MonoBehaviour
     [Tooltip("Name shown for color 0 (the model's own colors).")]
     [SerializeField] private string originalName = "Original";
 
-    [Header("Repaint fees (edit mode; painting at purchase is free)")]
-    [Tooltip("Per item repainted. Paid when edit mode is saved.")]
+    [Header("Paint brush fees (painting at purchase is free)")]
+    [Tooltip("Per item painted.")]
     [Min(0)] [SerializeField] private int itemFee = 10;
-    [Tooltip("Per meter of built wall repainted (rounded up). Paid straight away.")]
+    [Tooltip("Per meter of built wall painted (rounded up).")]
     [Min(0)] [SerializeField] private int wallFeePerMeter = 5;
-    [Tooltip("Repainting the whole storefront. Paid straight away.")]
+    [Tooltip("Painting the whole storefront.")]
     [Min(0)] [SerializeField] private int frontFee = 100;
-    [Tooltip("Repainting the store's floor. Paid straight away.")]
+    [Tooltip("Painting the store's floor.")]
     [Min(0)] [SerializeField] private int floorFee = 150;
 
     public int ItemFee => itemFee;
