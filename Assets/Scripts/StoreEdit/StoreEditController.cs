@@ -800,6 +800,7 @@ public class StoreEditController : NetworkBehaviour
         if (Input.GetKeyDown(KeyCode.Escape))
         {
             freeDragging = false;
+            HideBoxDrop(selected);
             selected.SetPose(dragStartPos, dragStartRot);
             selected.SetFaded(false);
             selected.SetDragging(false);
@@ -1217,6 +1218,7 @@ public class StoreEditController : NetworkBehaviour
 
     private void CancelPlacing()
     {
+        HideBoxDrop(null);
         if (placing != null) Destroy(placing.gameObject);
         placing = null;
         if (placingBox != null) ShowBox(placingBox); // still boxed
@@ -1233,6 +1235,12 @@ public class StoreEditController : NetworkBehaviour
         }
 
         bool valid = DragOpening(placing, ray);
+        if (Input.GetMouseButtonDown(0) && boxDropArmed)
+        {
+            string name = placing.Def.displayName;
+            StopPlacing($"{name} stays in its box.");
+            return;
+        }
         if (!Input.GetMouseButtonDown(0) || !valid || !placing.gameObject.activeSelf) return;
 
         // Put in: its box is used up on save. The next box of the same piece is ready right away.
@@ -1268,10 +1276,19 @@ public class StoreEditController : NetworkBehaviour
         var o = item.Opening;
         if (!PickWallSpot(ray, item, out var wall, out float u, out float v))
         {
+            // Over the store's floor: letting go there puts it back in its box.
+            if (TryBoxDropSpot(ray, item, out Vector3 floorPoint))
+            {
+                ShowBoxDrop(item, floorPoint);
+                openingInfo = "Let go here: back in its box";
+                return false;
+            }
+            HideBoxDrop(item);
             openingInfo = "Point at one of your store's walls";
             item.SetFaded(true);
             return false;
         }
+        HideBoxDrop(item);
 
         var settings = BuiltWallSettings.Instance;
         float step = settings != null ? settings.OpeningSnap : 0.25f;
@@ -1314,10 +1331,84 @@ public class StoreEditController : NetworkBehaviour
     private Vector3 lastValidOpeningPos;
     private Quaternion lastValidOpeningRot;
 
+    /* ---- dropping a piece on the floor puts it back in its box ---- */
+
+    private bool boxDropArmed;
+    private Vector3 boxDropPoint;
+    private GameObject boxDropGhost;
+    private GameObject boxDropGhostSource;
+
+    // The store's floor under the mouse (away from its walls), where a dragged piece would be boxed.
+    private bool TryBoxDropSpot(Ray ray, EditLocalItem item, out Vector3 point)
+    {
+        point = default;
+        if (editPlot == null || PlacementCheck.CartBoxOf(item.Def) == null) return false;
+        if (!new Plane(Vector3.up, new Vector3(0f, editPlot.FloorHeight, 0f)).Raycast(ray, out float enter)) return false;
+        point = ray.GetPoint(enter);
+        return editPlot.Contains(point + Vector3.up * 0.1f);
+    }
+
+    // The piece hides (its hole closes) and a see-through box stands where it would go.
+    private void ShowBoxDrop(EditLocalItem item, Vector3 floorPoint)
+    {
+        var prefab = PlacementCheck.CartBoxOf(item.Def).gameObject;
+        if (boxDropGhost == null || boxDropGhostSource != prefab)
+        {
+            if (boxDropGhost != null) Destroy(boxDropGhost);
+            boxDropGhost = Instantiate(GhostBuilder.BuildTemplate(prefab, 0.5f));
+            foreach (var c in boxDropGhost.GetComponentsInChildren<Collider>()) c.enabled = false;
+            boxDropGhostSource = prefab;
+        }
+        boxDropGhost.SetActive(true);
+        boxDropGhost.transform.SetPositionAndRotation(
+            floorPoint + Vector3.up * PlacementCheck.PivotHeightAboveBase(prefab),
+            Quaternion.Euler(0f, editCam.transform.eulerAngles.y, 0f));
+        if (item.gameObject.activeSelf) item.gameObject.SetActive(false);
+        boxDropArmed = true;
+        boxDropPoint = floorPoint;
+    }
+
+    private void HideBoxDrop(EditLocalItem item)
+    {
+        if (boxDropGhost != null) boxDropGhost.SetActive(false);
+        boxDropArmed = false;
+        if (item != null && item != placing && !item.gameObject.activeSelf) item.gameObject.SetActive(true);
+    }
+
+    /// <summary>
+    /// A dragged window or door let go on the floor: back in a box there (one taken out of a box this
+    /// session just goes back to that box).
+    /// </summary>
+    private void BoxOpening(EditLocalItem item, Vector3 floorPoint)
+    {
+        HideBoxDrop(null);
+        if (item == null) return;
+        if (selected == item) Deselect();
+        bool fromSession = !addedItems.Contains(item) && item.Index >= 0;
+        if (addedItems.Remove(item))
+        {
+            if (addedFrom.TryGetValue(item, out var box)) ShowBox(box);
+            addedFrom.Remove(item);
+        }
+        else if (fromSession)
+        {
+            RequestBoxEditItemRpc(clientSessionId, item.Index, floorPoint);
+            if (item.Index < localItems.Count) localItems[item.Index] = null;
+        }
+        ShowEditMessage($"{item.Def.displayName} is back in its box{(fromSession ? " (it appears when you save)" : "")}.");
+        Destroy(item.gameObject);
+    }
+
     /// <summary>A dragged window or door let go where it can't go: back to its last good spot.</summary>
     private void SettleOpening(EditLocalItem item, Vector3 fallbackPos, Quaternion fallbackRot)
     {
         if (item == null || item.Opening == null) return;
+        if (boxDropArmed)
+        {
+            BoxOpening(item, boxDropPoint);
+            return;
+        }
+        if (!item.gameObject.activeSelf) item.gameObject.SetActive(true);
         if (item.Faded)
         {
             if (lastValidOpening == item) item.SetPose(lastValidOpeningPos, lastValidOpeningRot);
@@ -2434,6 +2525,17 @@ public class StoreEditController : NetworkBehaviour
     }
 
     private const int MaxNewPerSave = 64;
+
+    /// <summary>Host: a window or door the editor dropped on the floor goes back in its box there (on save).</summary>
+    [Rpc(SendTo.Server)]
+    private void RequestBoxEditItemRpc(int sessionId, int index, Vector3 at, RpcParams rpcParams = default)
+    {
+        if (!ServerTryGetSession(rpcParams, sessionId, out var plot)) return;
+        var session = plot.ServerEditSession;
+        if (index < 0 || index >= session.Count || ItemCatalog.Instance == null ||
+            !ItemCatalog.Instance.TryGet(session[index].itemId, out var def) || !WallOpening.IsOpening(def)) return;
+        plot.ServerRemoveEditItem(index, MallManager.GetTeamOf(OwnerClientId), out _, at);
+    }
 
     /// <summary>Host: sell back windows, doors and wall items the editor took out (by their place in the session).</summary>
     [Rpc(SendTo.Server)]

@@ -1480,7 +1480,7 @@ public class StorePlot : NetworkBehaviour
     }
 
     // Windows and doors taken out of walls this session: they go back in boxes when it ends.
-    private readonly List<(int itemId, uint paint, Vector3 near)> boxesOnSave = new();
+    private readonly List<(int itemId, uint paint, Vector3 near, bool exact)> boxesOnSave = new();
 
     /// <summary>
     /// Server only. Ends the edit session and respawns its items. Each item uses the editor's
@@ -1565,7 +1565,7 @@ public class StorePlot : NetworkBehaviour
                 if (!CanPlaceOpening(def, pos, rot, out string why))
                 {
                     if (log) Debug.LogWarning($"[StorePlot] '{def.displayName}' has no wall to sit in ({why}); back in its box.", this);
-                    boxesOnSave.Add((entry.itemId, entry.paint, pos));
+                    boxesOnSave.Add((entry.itemId, entry.paint, pos, false));
                     sold++;
                     continue;
                 }
@@ -1600,7 +1600,7 @@ public class StorePlot : NetworkBehaviour
         }
 
         // Windows and doors taken out of walls go back in their boxes, near where they were.
-        foreach (var (itemId, paint, near) in boxesOnSave) ServerSpawnBoxNear(itemId, paint, near);
+        foreach (var (itemId, paint, near, exact) in boxesOnSave) ServerSpawnBoxNear(itemId, paint, near, exact);
         boxesOnSave.Clear();
 
         if (log)
@@ -1620,7 +1620,13 @@ public class StorePlot : NetworkBehaviour
     /// Server: take an item out of the edit session for good (it won't come back on save) and give
     /// Team part of its price back. Only windows, doors and wall items.
     /// </summary>
-    public bool ServerRemoveEditItem(int index, ulong team, out int refund)
+    public bool ServerRemoveEditItem(int index, ulong team, out int refund) => ServerRemoveEditItem(index, team, out refund, null);
+
+    /// <summary>
+    /// Same; a window or door goes back in its box at Box At (a floor spot the editor dropped it on)
+    /// when given, otherwise near where it was.
+    /// </summary>
+    public bool ServerRemoveEditItem(int index, ulong team, out int refund, Vector3? boxAt)
     {
         refund = 0;
         if (!IsServer || !IsRenovating || index < 0 || index >= editSession.Count) return false;
@@ -1634,7 +1640,10 @@ public class StorePlot : NetworkBehaviour
         // A window or door goes back in its box, on the floor near where it was (when the session ends).
         if (WallOpening.IsOpening(def))
         {
-            boxesOnSave.Add((entry.itemId, entry.paint, entry.position));
+            if (boxAt.HasValue && IsInsideOrNear(boxAt.Value, 0.5f))
+                boxesOnSave.Add((entry.itemId, entry.paint, boxAt.Value, true));
+            else
+                boxesOnSave.Add((entry.itemId, entry.paint, entry.position, false));
             return true;
         }
 
@@ -1662,7 +1671,7 @@ public class StorePlot : NetworkBehaviour
     /// Server: put a window or door back in its shipment box, on this store's floor near a point (a spot
     /// that's clear, a little into the store). Without a clear spot it's set down there and settles.
     /// </summary>
-    public void ServerSpawnBoxNear(int itemId, uint paint, Vector3 near)
+    public void ServerSpawnBoxNear(int itemId, uint paint, Vector3 near, bool exact = false)
     {
         if (!IsServer || ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemId, out var def)) return;
         var prefab = PlacementCheck.CartBoxOf(def);
@@ -1674,7 +1683,8 @@ public class StorePlot : NetworkBehaviour
         Vector3 inward = space.center - near;
         inward.y = 0f;
         inward = inward.sqrMagnitude > 1e-4f ? inward.normalized : Vector3.forward;
-        Vector3 start = new Vector3(near.x, floor, near.z) + inward * 0.6f;
+        // Exact: right there (a spot on the floor), otherwise a little into the store from a wall.
+        Vector3 start = new Vector3(near.x, floor, near.z) + (exact ? Vector3.zero : inward * 0.6f);
         Quaternion rot = Quaternion.LookRotation(inward, Vector3.up);
         float lift = PlacementCheck.PivotHeightAboveBase(prefab.gameObject);
 
