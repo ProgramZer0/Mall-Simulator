@@ -30,6 +30,19 @@ public class PriceScanner : NetworkBehaviour
     [SerializeField] private GameObject handVisualPrefab;
     [Tooltip("Optional: the name of the display's TextMeshPro object in the Hand Visual Prefab. Empty = the first one.")]
     [SerializeField] private string displayTextName = "";
+    [Tooltip("Where the scanner is held. Empty = the inventory's Hand Anchor (where held items show). Set it to a " +
+             "hand bone later to put the scanner in the hand.")]
+    [SerializeField] private Transform hand;
+    [Tooltip("Where the scanner sits from the hand: right, up, forward (meters). The default keeps it off to the " +
+             "lower right, close enough to read.")]
+    [SerializeField] private Vector3 handOffset = new(0.2f, -0.16f, 0.3f);
+    [Tooltip("How the scanner is turned in the hand (degrees).")]
+    [SerializeField] private Vector3 handRotation = new(-90f, 0f, 0f);
+    [Tooltip("While typing a price, the scanner moves this much more (right, up, forward) toward the middle so the " +
+             "display is easy to read. Zero = it stays put.")]
+    [SerializeField] private Vector3 typingShift = new(-0.06f, 0.06f, -0.04f);
+    [Tooltip("How fast it moves there and back.")]
+    [SerializeField] private float typingShiftSpeed = 8f;
     [Tooltip("How far you can scan, in meters.")]
     [SerializeField] private float range = 4f;
     [Tooltip("The suggested price is cost × this: a safe price with a small profit, but rarely the best one. " +
@@ -102,6 +115,19 @@ public class PriceScanner : NetworkBehaviour
         if (active) SetActive(false);
     }
 
+    private float shift; // 0 resting .. 1 shifted for reading while typing
+
+    // Slide the scanner toward the middle while typing, and back after.
+    private void LateUpdate()
+    {
+        if (handVisual == null) return;
+        float target = typing ? 1f : 0f;
+        if (Mathf.Approximately(shift, target)) return;
+        shift = Mathf.MoveTowards(shift, target, typingShiftSpeed * Time.deltaTime);
+        float eased = shift * shift * (3f - 2f * shift);
+        handVisual.transform.localPosition = handOffset + typingShift * eased;
+    }
+
     private void Update()
     {
         if (!IsOwner || cam == null) return;
@@ -131,11 +157,13 @@ public class PriceScanner : NetworkBehaviour
         if (on && TryGetComponent<PaintBrush>(out var brush)) brush.PutAway(); // one hand tool at a time
         active = on;
         if (IsOwner) LocalActive = on;
-        if (on && handVisualPrefab != null && handVisual == null && inventory != null && inventory.HandAnchor != null)
+        Transform holdAt = hand != null ? hand : inventory != null ? inventory.HandAnchor : null;
+        if (on && handVisualPrefab != null && handVisual == null && holdAt != null)
         {
-            handVisual = Instantiate(handVisualPrefab, inventory.HandAnchor);
-            handVisual.transform.localPosition = Vector3.zero;
-            handVisual.transform.localRotation = Quaternion.identity;
+            handVisual = Instantiate(handVisualPrefab, holdAt);
+            handVisual.transform.localPosition = handOffset;
+            handVisual.transform.localRotation = Quaternion.Euler(handRotation);
+            shift = 0f;
             if (IsOwner) HeldItemBlocker.Add(handVisual, transform, inventory.HeldItemBlockedBy);
             display = FindDisplay(handVisual);
         }
