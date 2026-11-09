@@ -91,14 +91,19 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         if (!IsOwner || cam == null) return;
 
-        // Store edit mode or an open menu: drop any placement preview and stand by.
-        if ((storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen)
+        // Store edit mode, an open menu, or the paint brush out (it has the clicks to itself): drop any
+        // placement preview and stand by.
+        if ((storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen || PaintBrush.LocalActive)
         {
             lookedAtSign = null;
             lookedAtSegment = null;
             lookedAtMonitor = null;
             lookedAtCart = null;
             lookedAtDoor = null;
+            lookedAtCounter = null;
+            lookedAtCheckoutPart = null;
+            lookedAtPickup = null;
+            lookedAtBuriedCartItem = false;
             ClearStockTarget();
             if (previewActive || ghostPreview != null)
             {
@@ -416,15 +421,13 @@ public class PlayerInteractInput : NetworkBehaviour
 
     private PaintBrush brush;
 
-    // The paint brush, when it's out: what a click would paint comes first; otherwise the usual prompt
-    // (F still works), or the brush's own hint.
+    // The paint brush, when it's out, is the only thing that shows (everything else is off meanwhile).
     private string WithToolPrompt(string prompt)
     {
         if (brush == null && !TryGetComponent(out brush)) return prompt;
         string tool = brush.Prompt;
         if (string.IsNullOrEmpty(tool) || UIState.IsMenuOpen) return prompt;
-        if (tool.StartsWith("Click")) return string.IsNullOrEmpty(prompt) ? tool : $"{tool}\n{prompt}";
-        return string.IsNullOrEmpty(prompt) ? tool : prompt;
+        return tool;
     }
 
     /// <summary>Built-in prompt, only when there's no InteractPromptUI in the scene.</summary>
@@ -564,9 +567,9 @@ public class PlayerInteractInput : NetworkBehaviour
             return;
         }
 
-        // Checkout: click (or F) the part you're looking at, with empty hands (a click paints while the brush is out).
+        // Checkout: click (or F) the part you're looking at, with empty hands.
         if (lookedAtCheckoutPart != null && inventory.HeldItemId.Value == 0 &&
-            ((Input.GetMouseButtonDown(0) && !PaintBrush.LocalActive) || Input.GetKeyDown(KeyCode.F)))
+            (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.F)))
         {
             lookedAtCheckoutPart.Counter.Click(lookedAtCheckoutPart);
             return;
