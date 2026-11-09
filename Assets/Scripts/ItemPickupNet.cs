@@ -25,6 +25,10 @@ public class ItemPickupNet : NetworkBehaviour
     [SerializeField] private Mounting mounting = Mounting.Floor;
     [Tooltip("Can't be picked up in normal play, only moved in store edit mode (e.g. the shop monitor).")]
     [SerializeField] private bool editModeOnly;
+    [Tooltip("Placed in the scene hanging on a wall: stays there when the game starts instead of falling. " +
+             "Set by itself when you hang it with the scene tool (Tools > Mall Sim > Hang On Wall); " +
+             "untick it if you move the item off the wall by hand.")]
+    [SerializeField] private bool startsOnWall;
 
     [Header("Stocking")]
     [Tooltip("This item is stock: hold it, look at a StockContainer (shelf, rack...) and press F to put one product on it.")]
@@ -112,6 +116,16 @@ public class ItemPickupNet : NetworkBehaviour
     }
 
 #if UNITY_EDITOR
+    /// <summary>Editor: mark this scene item as hanging on a wall (the scene tool calls it).</summary>
+    public void SetStartsOnWallInEditor(bool on)
+    {
+        if (startsOnWall == on) return;
+        UnityEditor.Undo.RecordObject(this, "Hang On Wall");
+        startsOnWall = on;
+        UnityEditor.EditorUtility.SetDirty(this);
+        UnityEditor.PrefabUtility.RecordPrefabInstancePropertyModifications(this);
+    }
+
     private void OnValidate()
     {
         // Move models set before variants existed into the lists.
@@ -242,6 +256,10 @@ public class ItemPickupNet : NetworkBehaviour
         units.OnValueChanged += OnUnitsChanged;
         All.Add(this);
         freeze.OnValueChanged += OnFreezeChanged;
+
+        // Hung on a wall in the scene: frozen there from the start, and it stays put when what's
+        // below it is picked up (like one a player hung).
+        if (IsServer && startsOnWall && !freeze.Value.frozen && !IsOnCart) ServerPrepareFrozen(onWall: true);
 
         if (!Falls || rb == null) return;
         if (freeze.Value.frozen) ApplyFrozen(freeze.Value);

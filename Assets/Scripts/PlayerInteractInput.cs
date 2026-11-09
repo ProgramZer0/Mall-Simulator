@@ -124,6 +124,7 @@ public class PlayerInteractInput : NetworkBehaviour
     private DoorNet lookedAtDoor; // a door you can open/close with F (and maybe lock with L)
     private CheckoutCounter lookedAtCounter;        // your store's checkout counter
     private CheckoutClickable lookedAtCheckoutPart; // a part of it to click: something on the belt, a key, the drawer...
+    private ItemPickupNet lookedAtPickup;           // something F would pick up (empty hands)
     private bool lookedAtBuriedCartItem; // something on a cart with other things stacked on it
     [Tooltip("Lock / unlock a door your store owns.")]
     [SerializeField] private KeyCode doorLockKey = KeyCode.L;
@@ -140,8 +141,10 @@ public class PlayerInteractInput : NetworkBehaviour
         lookedAtDoor = null;
         lookedAtCounter = null;
         lookedAtCheckoutPart = null;
+        lookedAtPickup = null;
         lookedAtBuriedCartItem = false;
         pushedCart = CartNet.GetPushedBy(OwnerClientId);
+        FindPickupTarget();
         if (Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit,
                 interactRange, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
         {
@@ -325,6 +328,30 @@ public class PlayerInteractInput : NetworkBehaviour
     private static GUIStyle promptStyle; // made once; a new GUIStyle every OnGUI call makes garbage
     private static readonly GUIContent PromptContent = new();
 
+    // Something F would pick up: same ray and rules as picking up, so the prompt only shows when it works.
+    private void FindPickupTarget()
+    {
+        if (inventory.HeldItemId.Value != 0 || pushedCart != null) return;
+        if (!Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit, interactRange, pickupMask)) return;
+        var pickup = hit.collider.GetComponentInParent<ItemPickupNet>();
+        if (pickup == null || !pickup.IsSpawned || pickup.EditModeOnly) return;
+        if (!MallManager.CanPickupOrPlace(OwnerClientId, transform.position, pickup.transform.position)) return;
+        if (pickup.HasItemOnTopOnCart()) return; // "take the things on top off first" says that
+        if (pickup.TryGetComponent<StockContainer>(out var shelf) && shelf.HasStock) return;
+        if (pickup.TryGetComponent<CheckoutCounter>(out var counter) && counter.IsBusy) return;
+        if (pickup.TryGetComponent<ShipmentPackage>(out var box) &&
+            MallManager.Instance != null && box.IsReservedAgainst(MallManager.GetTeamOf(OwnerClientId))) return;
+        lookedAtPickup = pickup;
+    }
+
+    private string PickupPrompt()
+    {
+        if (lookedAtPickup == null) return null;
+        if (lookedAtPickup.TryGetComponent<ShipmentPackage>(out var box) && box.ContainedItemId != 0)
+            return $"F: Pick up {ItemName(box.ContainedItemId)} (box)";
+        return $"F: Pick up {ItemName(lookedAtPickup.itemId)}";
+    }
+
     // Looking at the counter itself: what's going on there, and F picks it up when that's allowed.
     private string CounterBodyPrompt(CheckoutCounter counter)
     {
@@ -339,7 +366,7 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         if (!IsOwner || (lookedAtSign == null && lookedAtSegment == null && lookedAtMonitor == null && stockTarget == null &&
                          lookedAtCart == null && pushedCart == null && lookedAtDoor == null &&
-                         lookedAtCounter == null && !lookedAtBuriedCartItem) ||
+                         lookedAtCounter == null && lookedAtPickup == null && !lookedAtBuriedCartItem) ||
             (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return null;
 
         return pushedCart != null ? "F: Let go of cart"
@@ -353,7 +380,8 @@ public class PlayerInteractInput : NetworkBehaviour
                     : lookedAtSign != null ? $"F: Buy {lookedAtSign.Plot.DisplayName} ({lookedAtSign.Plot.Price})"
                     : lookedAtSegment != null ? $"F: Unlock {lookedAtSegment.Plot.GetSegmentName(lookedAtSegment.Index)} " +
                                                 $"(${lookedAtSegment.Plot.GetSegmentPrice(lookedAtSegment.Index)})"
-                    : StockPrompt();
+                    : stockTarget != null ? StockPrompt()
+                    : PickupPrompt();
     }
 
     // The prompt goes to the Canvas (InteractPromptUI) when there is one.

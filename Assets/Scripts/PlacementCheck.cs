@@ -120,19 +120,28 @@ public static class PlacementCheck
     public static void WallPose(ItemDef def, Vector3 hitPoint, Vector3 wallNormal, bool flip,
                                 out Vector3 position, out Quaternion rotation)
     {
+        if (def != null && def.worldNetworkPrefab != null && def.LocalBounds.size != Vector3.zero)
+            WallPose(def.LocalBounds, def.worldNetworkPrefab.transform.localScale, hitPoint, wallNormal, flip,
+                     out position, out rotation);
+        else
+            WallPose(new Bounds(Vector3.zero, Vector3.one * 0.1f), Vector3.one, hitPoint, wallNormal, flip,
+                     out position, out rotation);
+    }
+
+    /// <summary>
+    /// Same as above for any object: Local is its box in its own space before scale (see
+    /// ComputeLocalBounds), Scale its scale. Used to hang items placed in the scene.
+    /// </summary>
+    public static void WallPose(Bounds local, Vector3 scale, Vector3 hitPoint, Vector3 wallNormal, bool flip,
+                                out Vector3 position, out Quaternion rotation)
+    {
         Vector3 n = wallNormal;
         n.y = 0f;
         if (n.sqrMagnitude < 1e-6f) n = Vector3.forward;
         n.Normalize();
 
-        Vector3 c = Vector3.zero, e = Vector3.one * 0.05f;
-        if (def != null && def.worldNetworkPrefab != null && def.LocalBounds.size != Vector3.zero)
-        {
-            Bounds local = def.LocalBounds;
-            Vector3 scale = def.worldNetworkPrefab.transform.localScale;
-            c = Vector3.Scale(local.center, scale);
-            e = Vector3.Scale(local.extents, Abs(scale));
-        }
+        Vector3 c = Vector3.Scale(local.center, scale);
+        Vector3 e = Vector3.Scale(local.extents, Abs(scale));
 
         // Thin along z: its blue arrow points out of the wall. Thin along x: its red arrow does.
         bool thinX = e.x < e.z;
