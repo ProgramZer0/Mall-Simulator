@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 9180209600854476357}
   - component: {fileID: 4743831801467924091}
   - component: {fileID: -3503740585031919176}
+  - component: {fileID: 2638685618981034559}
   m_Layer: 0
   m_Name: SmallWindow
   m_TagString: Untagged
@@ -135,6 +136,8 @@ MonoBehaviour:
   itemId: 105
   mounting: 1
   editModeOnly: 1
+  modelRotation: {x: 0, y: 0, z: 0}
+  startsOnWall: 0
   isStockCrate: 0
   shelfPrefabs: []
   hangPrefabs: []
@@ -157,6 +160,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c9e8f032584c6c148ace38cc48917f20, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WallOpening
+  kind: 0
   isDoor: 0
   holeSize: {x: 0, y: 0}
   modelRotation: {x: 0, y: 0, z: 90}
@@ -181,3 +185,18 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.5138849, y: 3.3111436, z: 2.2004836}
   m_Center: {x: 0.005775749, y: -0.026315926, z: -0.020990191}
+--- !u!114 &2638685618981034559
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2453307234295913013}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PaintParts
+  parts:
+  - renderer: {fileID: 3171751966283341888}
+    materialIndex: 0

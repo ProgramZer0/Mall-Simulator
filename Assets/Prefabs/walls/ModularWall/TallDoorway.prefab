@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 5207118145016102118}
   - component: {fileID: 8608894533777456522}
   - component: {fileID: 2394098653915291399}
+  - component: {fileID: 4232949908539570627}
   m_Layer: 0
   m_Name: TallDoorway
   m_TagString: Untagged
@@ -157,6 +158,8 @@ MonoBehaviour:
   itemId: 106
   mounting: 1
   editModeOnly: 1
+  modelRotation: {x: 0, y: 0, z: 0}
+  startsOnWall: 0
   isStockCrate: 0
   shelfPrefabs: []
   hangPrefabs: []
@@ -179,6 +182,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c9e8f032584c6c148ace38cc48917f20, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WallOpening
-  isDoor: 1
+  kind: 1
+  isDoor: 0
   holeSize: {x: 0, y: 0}
   modelRotation: {x: 0, y: 0, z: 90}
+--- !u!114 &4232949908539570627
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6389578670159571754}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PaintParts
+  parts:
+  - renderer: {fileID: 3191112015410142686}
+    materialIndex: 0

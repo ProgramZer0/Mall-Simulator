@@ -16,6 +16,7 @@ GameObject:
   - component: {fileID: 323429474624334279}
   - component: {fileID: 7971765392998675163}
   - component: {fileID: 2219767622475551815}
+  - component: {fileID: 4172821250325467523}
   m_Layer: 3
   m_Name: ShopMonitor
   m_TagString: Untagged
@@ -157,6 +158,8 @@ MonoBehaviour:
   itemId: 4
   mounting: 1
   editModeOnly: 1
+  modelRotation: {x: 180, y: 180, z: 0}
+  startsOnWall: 0
   isStockCrate: 0
   shelfPrefabs: []
   hangPrefabs: []
@@ -206,3 +209,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d1c49b889b262864284b06851bd5afa7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ShopMonitor
+--- !u!114 &4172821250325467523
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1306133706262369954}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PaintParts
+  parts:
+  - renderer: {fileID: 6200317335002420273}
+    materialIndex: 0

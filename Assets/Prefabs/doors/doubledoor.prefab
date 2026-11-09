@@ -124,6 +124,7 @@ GameObject:
   - component: {fileID: 4202184575352363138}
   - component: {fileID: 8501773901293844591}
   - component: {fileID: 1182346007594407722}
+  - component: {fileID: 5276670455479568562}
   m_Layer: 0
   m_Name: doubledoor
   m_TagString: Untagged
@@ -213,6 +214,7 @@ MonoBehaviour:
   ownerStore: {fileID: 0}
   startOpen: 0
   startLocked: 1
+  ownerSegment: -1
   linkedDoors: []
   useRange: 3.5
   sensorMask:
@@ -220,6 +222,23 @@ MonoBehaviour:
     m_Bits: 0
   sensorRange: 2.5
   closeDelay: 1.5
+--- !u!114 &5276670455479568562
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3899408042228214449}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PaintParts
+  parts:
+  - renderer: {fileID: 5204099738310942588}
+    materialIndex: 0
+  - renderer: {fileID: 1629053601531387330}
+    materialIndex: 0
 --- !u!1 &6432266688725228648
 GameObject:
   m_ObjectHideFlags: 0

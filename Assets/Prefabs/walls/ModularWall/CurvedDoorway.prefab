@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 5142968316462350609}
   - component: {fileID: 3339914593648648466}
   - component: {fileID: 3063179651413053089}
+  - component: {fileID: -8003250446748475929}
   m_Layer: 0
   m_Name: CurvedDoorway
   m_TagString: Untagged
@@ -157,6 +158,8 @@ MonoBehaviour:
   itemId: 103
   mounting: 1
   editModeOnly: 1
+  modelRotation: {x: 0, y: 0, z: 0}
+  startsOnWall: 0
   isStockCrate: 0
   shelfPrefabs: []
   hangPrefabs: []
@@ -179,6 +182,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c9e8f032584c6c148ace38cc48917f20, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WallOpening
-  isDoor: 1
+  kind: 1
+  isDoor: 0
   holeSize: {x: 0, y: 0}
   modelRotation: {x: 0, y: 0, z: 90}
+--- !u!114 &-8003250446748475929
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8863387626637269206}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PaintParts
+  parts:
+  - renderer: {fileID: 1765414779243861376}
+    materialIndex: 0

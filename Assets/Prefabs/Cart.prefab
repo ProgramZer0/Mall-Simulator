@@ -245,6 +245,7 @@ GameObject:
   - component: {fileID: 5594205380189465680}
   - component: {fileID: 676623913699236181}
   - component: {fileID: 5569744157652878400}
+  - component: {fileID: 7647760434473780207}
   m_Layer: 9
   m_Name: Cart
   m_TagString: Untagged
@@ -425,6 +426,21 @@ MonoBehaviour:
   loopMinPitch: 0.85
   loopMaxPitch: 1.15
   loopFadeSpeed: 6
+--- !u!114 &7647760434473780207
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5352068521343598991}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PaintParts
+  parts:
+  - renderer: {fileID: 8518497194740763206}
+    materialIndex: 0
 --- !u!1 &6550152973711632455
 GameObject:
   m_ObjectHideFlags: 0

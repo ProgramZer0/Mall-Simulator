@@ -17,6 +17,7 @@ GameObject:
   - component: {fileID: 4557772816896807919}
   - component: {fileID: 539076270770265909}
   - component: {fileID: 8633662202500201234}
+  - component: {fileID: 4640246194913997983}
   m_Layer: 3
   m_Name: ClotheRackStands
   m_TagString: Untagged
@@ -179,6 +180,8 @@ MonoBehaviour:
   itemId: 10
   mounting: 0
   editModeOnly: 0
+  modelRotation: {x: 0, y: 0, z: 0}
+  startsOnWall: 0
   isStockCrate: 0
   shelfPrefabs: []
   hangPrefabs: []
@@ -230,6 +233,21 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Sellable
   ShowTopMostFoldoutHeaderGroup: 1
   sellWhenLoose: 1
+--- !u!114 &4640246194913997983
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1092326089046679974}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PaintParts
+  parts:
+  - renderer: {fileID: 5785820573458213864}
+    materialIndex: 0
 --- !u!1 &4290858791808091233
 GameObject:
   m_ObjectHideFlags: 0

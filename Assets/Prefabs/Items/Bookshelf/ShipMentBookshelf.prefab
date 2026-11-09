@@ -16,6 +16,7 @@ GameObject:
   - component: {fileID: 323429474624334279}
   - component: {fileID: 7971765392998675163}
   - component: {fileID: 2557607900684497476}
+  - component: {fileID: -8158313924546339178}
   m_Layer: 3
   m_Name: ShipMentBookshelf
   m_TagString: Untagged
@@ -155,9 +156,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
   itemId: 6
+  mounting: 0
   editModeOnly: 0
+  modelRotation: {x: 0, y: 0, z: 0}
+  startsOnWall: 0
   isStockCrate: 0
-  stockedPrefab: {fileID: 0}
+  shelfPrefabs: []
+  hangPrefabs: []
+  randomVariants: 0
   unitsPerCrate: 1
   physicsMode: 1
   stillSeconds: 4
@@ -204,3 +210,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ShipmentPackage
   ShowTopMostFoldoutHeaderGroup: 1
+--- !u!114 &-8158313924546339178
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1306133706262369954}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PaintParts
+  parts:
+  - renderer: {fileID: 6200317335002420273}
+    materialIndex: 0

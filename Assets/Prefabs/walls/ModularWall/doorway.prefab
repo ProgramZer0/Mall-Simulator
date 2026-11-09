@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 7986386913516174642}
   - component: {fileID: 399705071185705681}
   - component: {fileID: 4226562737500381729}
+  - component: {fileID: -1574744409450896610}
   m_Layer: 0
   m_Name: Doorway
   m_TagString: Untagged
@@ -157,6 +158,8 @@ MonoBehaviour:
   itemId: 104
   mounting: 1
   editModeOnly: 1
+  modelRotation: {x: 0, y: 0, z: 0}
+  startsOnWall: 0
   isStockCrate: 0
   shelfPrefabs: []
   hangPrefabs: []
@@ -179,6 +182,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c9e8f032584c6c148ace38cc48917f20, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WallOpening
-  isDoor: 1
+  kind: 1
+  isDoor: 0
   holeSize: {x: 0, y: 0}
   modelRotation: {x: 0, y: 0, z: 90}
+--- !u!114 &-1574744409450896610
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3781658584618818984}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PaintParts
+  parts:
+  - renderer: {fileID: 1803612492130333889}
+    materialIndex: 0

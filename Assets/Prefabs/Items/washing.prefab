@@ -16,6 +16,7 @@ GameObject:
   - component: {fileID: 3279461360851579719}
   - component: {fileID: 7720008476236679494}
   - component: {fileID: 6260578444024174849}
+  - component: {fileID: -5261857996823288575}
   m_Layer: 3
   m_Name: washing
   m_TagString: Untagged
@@ -136,6 +137,8 @@ MonoBehaviour:
   itemId: 3
   mounting: 0
   editModeOnly: 0
+  modelRotation: {x: 0, y: 0, z: 0}
+  startsOnWall: 0
   isStockCrate: 0
   shelfPrefabs: []
   hangPrefabs: []
@@ -208,3 +211,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Sellable
   ShowTopMostFoldoutHeaderGroup: 1
   sellWhenLoose: 1
+--- !u!114 &-5261857996823288575
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8111841602143186489}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PaintParts
+  parts:
+  - renderer: {fileID: 4635179723197239667}
+    materialIndex: 0

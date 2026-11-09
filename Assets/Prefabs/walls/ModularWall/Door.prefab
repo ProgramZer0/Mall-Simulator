@@ -49,6 +49,7 @@ GameObject:
   - component: {fileID: 6309640777389838671}
   - component: {fileID: 296045394205213046}
   - component: {fileID: 5223972249239243785}
+  - component: {fileID: 6232550960694380416}
   m_Layer: 0
   m_Name: Door
   m_TagString: Untagged
@@ -192,6 +193,8 @@ MonoBehaviour:
   itemId: 107
   mounting: 1
   editModeOnly: 1
+  modelRotation: {x: 0, y: 0, z: 0}
+  startsOnWall: 0
   isStockCrate: 0
   shelfPrefabs: []
   hangPrefabs: []
@@ -214,7 +217,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c9e8f032584c6c148ace38cc48917f20, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WallOpening
-  isDoor: 1
+  kind: 1
+  isDoor: 0
   holeSize: {x: 0, y: 0}
   modelRotation: {x: 0, y: 0, z: 90}
 --- !u!114 &296045394205213046
@@ -265,6 +269,21 @@ MonoBehaviour:
   distance: 1
   duration: 0.6
   swingAwayFromUser: 1
+--- !u!114 &6232550960694380416
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1948721290863445510}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PaintParts
+  parts:
+  - renderer: {fileID: 8871544796042669684}
+    materialIndex: 0
 --- !u!1 &2874378843485636321
 GameObject:
   m_ObjectHideFlags: 0
@@ -309,6 +328,7 @@ GameObject:
   - component: {fileID: 2856278842712792866}
   - component: {fileID: 37899971217217980}
   - component: {fileID: 9119448879262237740}
+  - component: {fileID: 5082468724788438833}
   m_Layer: 0
   m_Name: mesh
   m_TagString: Untagged
@@ -409,6 +429,21 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.24162424, y: 1.4966956, z: 2.5752904}
   m_Center: {x: 0.5003485, y: -0.18339919, z: 0.73673075}
+--- !u!114 &5082468724788438833
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3129728999626076430}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PaintParts
+  parts:
+  - renderer: {fileID: 37899971217217980}
+    materialIndex: 0
 --- !u!1 &8841987221866876305
 GameObject:
   m_ObjectHideFlags: 0
@@ -421,6 +456,7 @@ GameObject:
   - component: {fileID: 6351078861120823843}
   - component: {fileID: 6783977326989613826}
   - component: {fileID: 7254003291611772352}
+  - component: {fileID: 5814439566377261439}
   m_Layer: 0
   m_Name: mesh
   m_TagString: Untagged
@@ -521,6 +557,21 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.24162424, y: 1.4966956, z: 2.5752904}
   m_Center: {x: 0.5003485, y: -0.18339919, z: 0.73673075}
+--- !u!114 &5814439566377261439
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8841987221866876305}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PaintParts
+  parts:
+  - renderer: {fileID: 6783977326989613826}
+    materialIndex: 0
 --- !u!1 &9125262637184855153
 GameObject:
   m_ObjectHideFlags: 0
