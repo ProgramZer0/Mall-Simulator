@@ -867,28 +867,29 @@ public class PlayerInteractInput : NetworkBehaviour
 
             pos = hit.point;
 
-            // Items always stand upright on their bottom, turned only by R / < >. Aiming at the side
-            // of something (a shelf, a wall) puts the item on the floor right next to it, instead of
-            // leaving it hanging off that side.
-            rot = yaw;
-            if (hit.normal.y < 0.7f && def != null && TryFloorBeside(def, hit, yaw, out Vector3 beside))
+            // Items always stand upright on their bottom (the way their prefab stands, e.g. a Blender
+            // model's -90 on X), turned only by R / < >. Aiming at the side of something (a shelf, a
+            // wall) puts the item on the floor right next to it, instead of leaving it hanging off
+            // that side.
+            rot = PlacementCheck.Upright(def, yaw);
+            if (hit.normal.y < 0.7f && def != null && TryFloorBeside(def, hit, rot, out Vector3 beside))
                 pos = beside;
         }
         else
         {
             pos = cam.transform.position + cam.transform.forward * 2f;
-            rot = yaw;
+            rot = PlacementCheck.Upright(def, yaw);
         }
 
         // Sit the item on the surface by its measured bottom, not its pivot,
         // so models with a centered pivot don't sink halfway into the floor.
-        if (def != null) pos += rot * Vector3.up * PlacementCheck.PivotHeightAboveBase(def);
+        if (def != null) pos += Vector3.up * PlacementCheck.PivotHeightAboveBase(def, rot);
 
         return true;
     }
 
     /// <summary>The floor just in front of a side that was aimed at, far enough out for the item to fit.</summary>
-    private bool TryFloorBeside(ItemDef def, RaycastHit side, Quaternion yaw, out Vector3 floor)
+    private bool TryFloorBeside(ItemDef def, RaycastHit side, Quaternion rot, out Vector3 floor)
     {
         floor = default;
         Vector3 n = side.normal;
@@ -897,11 +898,9 @@ public class PlayerInteractInput : NetworkBehaviour
         n.Normalize();
 
         // How far the item reaches toward the side, turned the way it'll be placed.
-        Bounds local = def.LocalBounds;
-        Vector3 scale = def.worldNetworkPrefab.transform.localScale;
-        Vector3 e = Vector3.Scale(local.extents, new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z)));
-        float reach = Mathf.Abs(Vector3.Dot(yaw * Vector3.right, n)) * e.x + Mathf.Abs(Vector3.Dot(yaw * Vector3.forward, n)) * e.z;
-        Vector3 centerOffset = yaw * Vector3.Scale(local.center, scale);
+        PlacementCheck.TurnedBox(def.LocalBounds, def.worldNetworkPrefab.transform.localScale, rot,
+                                 out Vector3 centerOffset, out Vector3 e);
+        float reach = Mathf.Abs(n.x) * e.x + Mathf.Abs(n.z) * e.z;
         centerOffset.y = 0f;
 
         Vector3 probe = side.point + n * (reach + 0.03f) + Vector3.up * 0.05f;

@@ -104,7 +104,7 @@ public class PriceScanner : NetworkBehaviour
             handVisual = Instantiate(handVisualPrefab, inventory.HandAnchor);
             handVisual.transform.localPosition = Vector3.zero;
             handVisual.transform.localRotation = Quaternion.identity;
-            if (IsOwner) HeldVisualNoClip.Add(handVisual, GetComponentInChildren<Camera>(true), transform);
+            if (IsOwner) HeldItemBlocker.Add(handVisual, transform, inventory.HeldItemBlockedBy);
         }
         if (!on && handVisual != null)
         {
