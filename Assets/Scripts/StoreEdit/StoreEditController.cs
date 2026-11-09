@@ -16,10 +16,12 @@ using UnityEngine.Rendering.Universal;
 /// Drag       an arrow to slide along that axis (stops on contact), a ring to rotate
 ///            (snaps to 15 degrees; hold Ctrl to turn freely)
 /// G          toggle gravity for the selected item (everything hangs in place otherwise)
-/// N          windows and doors (WallPiecesMenu, or a built-in list): pick one, then click a spot on
-///            one of your walls. Drag them along walls to move them, R turns them around, Delete
-///            takes them out (part refund). New ones are paid for when edit mode is saved.
-///            Removing a built wall (B, Shift+click) also removes everything in or on it (part refund).
+/// Click      a delivery box holding a window or door (bought in the shop, set down in the store):
+///            the piece comes out and follows the mouse along your walls; click to put it in. More boxes
+///            of the same piece follow on until there are none left (RMB / Esc stops). Drag pieces
+///            along walls to move them, R turns them around, Delete takes them out: they go back in a
+///            box on the floor nearby (when edit mode ends). Removing a built wall does the same for
+///            the pieces in it.
 /// Esc        cancel the current drag / deselect
 ///
 /// The edit camera shows only your store: everything above it (Cutaway) and everything
@@ -51,8 +53,6 @@ public class StoreEditController : NetworkBehaviour
     [SerializeField] private KeyCode controlsKey = KeyCode.H;
     [Tooltip("Wall tool: switch between building and removing walls (holding Shift also removes).")]
     [SerializeField] private KeyCode wallEraseKey = KeyCode.E;
-    [Tooltip("Opens the list of windows and doors to buy.")]
-    [SerializeField] private KeyCode openingsKey = KeyCode.N;
     [Tooltip("Takes the selected window or door out of the store (part refund).")]
     [SerializeField] private KeyCode removeKey = KeyCode.Delete;
     [Tooltip("Log (on the host) which items couldn't keep their new spot when edit mode is saved, and why.")]
@@ -186,10 +186,10 @@ public class StoreEditController : NetworkBehaviour
     private readonly List<EditLocalItem> addedItems = new();
     private EditLocalItem placing;
     private bool placingShown;
-    private bool openingsPanel;
-    private Rect openingsPanelRect;
-    private Vector2 openingsScroll;
-    private readonly List<ItemDef> openingDefs = new();
+    // Delivery boxes the pieces came out of (hidden here until saved), and the one being placed from now.
+    private readonly Dictionary<EditLocalItem, ShipmentPackage> addedFrom = new();
+    private ShipmentPackage placingBox;
+    private readonly Dictionary<ShipmentPackage, List<(Renderer r, Collider c)>> hiddenBoxes = new();
     private string openingInfo;
 
     /// <summary>True while this player is in edit mode. PlayerController / PlayerInteractInput pause on it.</summary>
@@ -311,16 +311,18 @@ public class StoreEditController : NetworkBehaviour
         var newPositions = new List<Vector3>();
         var newRotations = new List<Quaternion>();
         var newPaints = new List<uint>();
+        var newBoxes = new List<ulong>();
         foreach (var item in addedItems)
         {
-            if (item == null) continue;
+            if (item == null || !addedFrom.TryGetValue(item, out var box) || box == null) continue;
             newIds.Add(item.Def.id);
             newPositions.Add(item.transform.position);
             newRotations.Add(item.transform.rotation);
             newPaints.Add(item.Paint);
+            newBoxes.Add(box.NetworkObjectId);
         }
         SubmitEditChangesRpc(clientSessionId, newIds.ToArray(), newPositions.ToArray(), newRotations.ToArray(),
-                             newPaints.ToArray());
+                             newPaints.ToArray(), newBoxes.ToArray());
 
         FinishEditRpc(clientSessionId);
         // The local copies stay until the host's respawned items arrive (see SyncEditState).
@@ -433,8 +435,9 @@ public class StoreEditController : NetworkBehaviour
         addedItems.Clear();
         if (placing != null) Destroy(placing.gameObject);
         placing = null;
-        reopenOpeningsMenu = false;
-        SetOpeningsMenu(false);
+        placingBox = null;
+        addedFrom.Clear();
+        ShowAllBoxes();
         openingInfo = null;
         selected = null;
     }
@@ -588,9 +591,7 @@ public class StoreEditController : NetworkBehaviour
             return;
         }
 
-        if (Input.GetKeyDown(openingsKey)) SetOpeningsMenu(!OpeningsMenuOpen);
-
-        if (Input.GetKeyDown(wallToolKey)) { SetWallTool(!wallTool); if (wallTool) SetOpeningsMenu(false); }
+        if (Input.GetKeyDown(wallToolKey)) SetWallTool(!wallTool);
         if (wallTool)
         {
             UpdateWallTool(ray, mouse);
@@ -627,7 +628,7 @@ public class StoreEditController : NetworkBehaviour
         if (selectedSlot >= 0 && (Input.GetKeyDown(KeyCode.Escape) || rmbClicked))
             selectedSlot = -1;
 
-        if (Input.GetMouseButtonDown(0) && !IsMouseOverSlotPanel(mouse) && !IsMouseOverOpeningsPanel(mouse))
+        if (Input.GetMouseButtonDown(0) && !IsMouseOverSlotPanel(mouse))
         {
             if (hoverHandle != StoreEditHandles.None)
                 BeginDrag(hoverHandle, ray, mouse);
@@ -643,6 +644,14 @@ public class StoreEditController : NetworkBehaviour
         int mask = interact != null ? interact.PickupMask.value : Physics.DefaultRaycastLayers;
         if (Physics.Raycast(ray, out RaycastHit hit, 500f, mask, QueryTriggerInteraction.Ignore))
         {
+            // A delivery box with a window or door in it: take the piece out and place it.
+            var box = hit.collider.GetComponentInParent<ShipmentPackage>();
+            if (box != null && IsUsablePieceBox(box))
+            {
+                StartPlacing(box);
+                return;
+            }
+
             var item = hit.collider.GetComponentInParent<EditLocalItem>();
             if (item != null)
             {
@@ -1140,110 +1149,68 @@ public class StoreEditController : NetworkBehaviour
 
     /* ========================= WINDOWS AND DOORS ========================= */
 
-    private bool OpeningsMenuOpen =>
-        WallPiecesMenu.Instance != null ? WallPiecesMenu.Instance.IsOpen : openingsPanel;
-
-    /// <summary>The list of windows and doors: the Canvas menu if there is one, the built-in one otherwise.</summary>
-    private void SetOpeningsMenu(bool open)
+    /// <summary>A box this player can take a window or door out of: in this store, holding a piece, not in use.</summary>
+    private bool IsUsablePieceBox(ShipmentPackage box)
     {
-        var menu = WallPiecesMenu.Instance;
-        if (open) SetWallTool(false);
-        if (menu != null)
+        if (box == null || !box.IsSpawned || editPlot == null || hiddenBoxes.ContainsKey(box)) return false;
+        if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(box.ContainedItemId, out var def)) return false;
+        if (!WallOpening.IsOpening(def)) return false;
+        if (box.IsReservedAgainst(MallManager.GetTeamOf(OwnerClientId))) return false;
+        return editPlot.IsInsideOrNear(box.transform.position, 1f);
+    }
+
+    /// <summary>Another box in this store with the same piece in it (to keep placing), or null.</summary>
+    private ShipmentPackage NextPieceBox(int itemId)
+    {
+        foreach (var item in ItemPickupNet.All)
+            if (item != null && item.TryGetComponent<ShipmentPackage>(out var box) && box.ContainedItemId == itemId &&
+                IsUsablePieceBox(box)) return box;
+        return null;
+    }
+
+    // While its piece is out (being placed, or placed but not saved yet) a box is hidden on this
+    // machine only; the host uses it up on save. Cancelled or taken back out: it shows again.
+    private void HideBox(ShipmentPackage box)
+    {
+        if (box == null || hiddenBoxes.ContainsKey(box)) return;
+        var list = new List<(Renderer, Collider)>();
+        foreach (var r in box.GetComponentsInChildren<Renderer>()) if (r.enabled) { r.enabled = false; list.Add((r, null)); }
+        foreach (var c in box.GetComponentsInChildren<Collider>()) if (c.enabled) { c.enabled = false; list.Add((null, c)); }
+        hiddenBoxes[box] = list;
+    }
+
+    private void ShowBox(ShipmentPackage box)
+    {
+        if (box == null || !hiddenBoxes.TryGetValue(box, out var list)) return;
+        foreach (var (r, c) in list)
         {
-            if (open) menu.Open(StartPlacing, () => MoneyLeft(), PendingCost);
-            else if (menu.IsOpen) menu.Close();
-            openingsPanel = false;
-            return;
+            if (r != null) r.enabled = true;
+            if (c != null) c.enabled = true;
         }
-        openingsPanel = open;
-        if (open) WallPiecesMenu.FindPieces(openingDefs);
+        hiddenBoxes.Remove(box);
     }
 
-    /// <summary>Money left after paying for what's been placed this session.</summary>
-    private int MoneyLeft()
+    private void ShowAllBoxes()
     {
-        var econ = EconomyManager.Instance;
-        if (econ == null || !econ.IsSpawned) return int.MaxValue;
-        return econ.GetMoneyOf(OwnerClientId) - PendingCost();
+        foreach (var box in new List<ShipmentPackage>(hiddenBoxes.Keys)) ShowBox(box);
+        hiddenBoxes.Clear();
     }
-
-    /// <summary>What the windows and doors bought this session will cost when it's saved.</summary>
-    private int PendingCost()
-    {
-        int cost = 0;
-        foreach (var item in addedItems)
-            if (item != null) cost += MarketModifiers.OrderCost(item.Def);
-        return cost;
-    }
-
-    private bool IsMouseOverOpeningsPanel(Vector2 mouse)
-    {
-        if (WallPiecesMenu.Instance != null && WallPiecesMenu.Instance.IsOpen)
-            return UnityEngine.EventSystems.EventSystem.current != null &&
-                   UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject();
-        return openingsPanel && openingsPanelRect.Contains(new Vector2(mouse.x, Screen.height - mouse.y));
-    }
-
-    private void DrawOpeningsPanel()
-    {
-        if (!openingsPanel) return;
-
-        const float rowHeight = 34f;
-        float w = 280f;
-        float h = Mathf.Clamp(84f + openingDefs.Count * rowHeight, 110f, Mathf.Max(110f, Screen.height - 230f));
-        openingsPanelRect = new Rect(Screen.width - w - 10f, 10f, w, h);
-        float x = openingsPanelRect.x, y = openingsPanelRect.y;
-
-        GUI.Box(openingsPanelRect, GUIContent.none);
-        GUI.Label(new Rect(x + 10, y + 6, w - 20, 20), $"WINDOWS & DOORS   ({openingsKey} to close)");
-
-        if (openingDefs.Count == 0)
-        {
-            GUI.Label(new Rect(x + 10, y + 30, w - 20, 60),
-                "None in the catalog. Add a WallOpening to an item's world prefab.");
-            return;
-        }
-
-        int pending = PendingCost();
-        int left = MoneyLeft();
-
-        var view = new Rect(0f, 0f, w - 40f, openingDefs.Count * rowHeight);
-        openingsScroll = GUI.BeginScrollView(new Rect(x + 8, y + 30, w - 16, h - 60), openingsScroll, view);
-        for (int i = 0; i < openingDefs.Count; i++)
-        {
-            var def = openingDefs[i];
-            int cost = MarketModifiers.OrderCost(def);
-            bool door = WallOpening.TryGet(def, out var o) && o.IsDoor;
-            GUI.enabled = cost <= left;
-            if (GUI.Button(new Rect(0f, i * rowHeight, w - 40f, rowHeight - 4f), $"{def.displayName}{(door ? " (door)" : "")}   ${cost}"))
-                StartPlacing(def);
-            GUI.enabled = true;
-        }
-        GUI.EndScrollView();
-
-        GUI.Label(new Rect(x + 10, y + h - 26, w - 20, 20), $"Paid when you save: ${pending}");
-    }
-
-    // The windows & doors list was open when placing started: it comes back when placing stops.
-    private bool reopenOpeningsMenu;
 
     /// <summary>
-    /// A piece was picked from the list: the list hides and that piece follows the mouse along the walls.
-    /// Every click places one and the next one is ready straight away; RMB or Esc stops and brings the
-    /// list back.
+    /// A box was clicked: its piece comes out and follows the mouse along the walls. Every click puts
+    /// one in, and the next box of the same piece is ready straight away; RMB or Esc stops.
     /// </summary>
-    private void StartPlacing(ItemDef def)
+    private void StartPlacing(ShipmentPackage box)
     {
-        if (OpeningsMenuOpen)
-        {
-            reopenOpeningsMenu = true;
-            SetOpeningsMenu(false);
-        }
         CancelPlacing();
+        if (!ItemCatalog.Instance.TryGet(box.ContainedItemId, out var def)) return;
         Deselect();
         selectedSlot = -1;
+        placingBox = box;
+        HideBox(box);
         // Hidden until it's over a wall it fits in.
         placing = EditLocalItem.Create(def, -1, new Vector3(0f, -10000f, 0f), Quaternion.identity);
+        placing.SetPaint(box.ContainedPaint);
         placing.gameObject.SetActive(false);
         openingInfo = "Point at one of your store's walls";
     }
@@ -1252,12 +1219,14 @@ public class StoreEditController : NetworkBehaviour
     {
         if (placing != null) Destroy(placing.gameObject);
         placing = null;
+        if (placingBox != null) ShowBox(placingBox); // still boxed
+        placingBox = null;
     }
 
-    /// <summary>A window or door from the list follows the mouse along walls; click to put it there.</summary>
+    /// <summary>A window or door from a box follows the mouse along walls; click to put it there.</summary>
     private void UpdatePlacing(Ray ray, Vector2 mouse)
     {
-        if (Input.GetKeyDown(KeyCode.Escape) || rmbClicked)
+        if (Input.GetKeyDown(KeyCode.Escape) || rmbClicked || placingBox == null || !placingBox.IsSpawned)
         {
             StopPlacing(null);
             return;
@@ -1266,32 +1235,28 @@ public class StoreEditController : NetworkBehaviour
         bool valid = DragOpening(placing, ray);
         if (!Input.GetMouseButtonDown(0) || !valid || !placing.gameObject.activeSelf) return;
 
-        // Placed: it's bought on save. The next one of the same piece is ready right away.
+        // Put in: its box is used up on save. The next box of the same piece is ready right away.
         var item = placing;
+        addedFrom[item] = placingBox;
         placing = null;
+        placingBox = null;
         item.SetFaded(false);
         addedItems.Add(item);
-        var def = item.Def;
-        int cost = MarketModifiers.OrderCost(def);
-        if (MoneyLeft() >= cost)
+        var next = NextPieceBox(item.Def.id);
+        if (next != null)
         {
-            StartPlacing(def);
-            openingInfo = $"Placed (${cost} on save). Click to place another, RMB / Esc to stop";
+            StartPlacing(next);
+            openingInfo = "Put in. Click to put in another, RMB / Esc to stop";
         }
-        else StopPlacing("Not enough money for another");
+        else StopPlacing($"{item.Def.displayName} put in.");
     }
 
-    /// <summary>Stop placing (RMB / Esc, or out of money) and bring the list back if it was open.</summary>
+    /// <summary>Stop placing (RMB / Esc, or no boxes left).</summary>
     private void StopPlacing(string message)
     {
         CancelPlacing();
         openingInfo = null;
         if (!string.IsNullOrEmpty(message)) ShowEditMessage(message);
-        if (reopenOpeningsMenu)
-        {
-            reopenOpeningsMenu = false;
-            SetOpeningsMenu(true);
-        }
     }
 
     /// <summary>
@@ -1434,17 +1399,26 @@ public class StoreEditController : NetworkBehaviour
     {
         Deselect();
         var indices = new List<int>();
-        int refund = 0, count = 0;
+        int refund = 0, count = 0, boxed = 0;
         string firstName = null;
         foreach (var item in items)
         {
             if (item == null) continue;
             count++;
             firstName ??= item.Def.displayName;
-            if (!addedItems.Remove(item) && item.Index >= 0)
+            if (addedItems.Remove(item))
+            {
+                // Taken back out before saving: it's still in its box.
+                if (addedFrom.TryGetValue(item, out var box)) ShowBox(box);
+                addedFrom.Remove(item);
+                boxed++;
+            }
+            else if (item.Index >= 0)
             {
                 indices.Add(item.Index);
-                refund += StorePlot.RemovalRefund(item.Def);
+                // Windows and doors go back in a box; wall items are sold back.
+                if (item.Opening != null) boxed++;
+                else refund += StorePlot.RemovalRefund(item.Def);
                 if (item.Index < localItems.Count) localItems[item.Index] = null;
             }
             Destroy(item.gameObject);
@@ -1454,10 +1428,11 @@ public class StoreEditController : NetworkBehaviour
         if (wallId.HasValue) RequestRemoveWallRpc(wallId.Value);
 
         openingInfo = null;
-        if (refund > 0)
-            ShowEditMessage(count == 1 && !wallId.HasValue
-                ? $"{firstName} removed: ${refund} back."
-                : $"Removed {count} item{(count == 1 ? "" : "s")}: ${refund} back.");
+        string back = boxed > 0 ? $"{(boxed == 1 ? "it goes" : $"{boxed} go")} back in a box" : null;
+        string money = refund > 0 ? $"${refund} back" : null;
+        string what = back != null && money != null ? $"{back}, {money}" : back ?? money;
+        if (what != null)
+            ShowEditMessage(count == 1 && !wallId.HasValue ? $"{firstName} removed: {what}." : $"Removed {count} item{(count == 1 ? "" : "s")}: {what}.");
     }
 
     /// <summary>
@@ -1731,7 +1706,8 @@ public class StoreEditController : NetworkBehaviour
             meters += span.Length;
             refund += settings.GetRefund(span.Length, span.wall.height < full - 0.01f);
         }
-        foreach (var item in items) if (!addedItems.Contains(item)) refund += StorePlot.RemovalRefund(item.Def);
+        foreach (var item in items)
+            if (!addedItems.Contains(item) && item.Opening == null) refund += StorePlot.RemovalRefund(item.Def); // pieces go back in boxes
 
         ShowEraseGhosts(eraseSpans);
         string what = $"{meters:0.0} m of wall" +
@@ -2206,7 +2182,7 @@ public class StoreEditController : NetworkBehaviour
         hudStatus = $"Selected: {itemName}   Tool: {toolName}   Gravity: {gravity}";
         hudControls = $"{K("Drag")} item: slide   {K("X")}: move > rotate > hide   {K(rotateKey)}: rotate   {K("G")}: gravity\n" +
                       $"{K("Ctrl")}: no snap   {K("RMB")} drag: camera   {K("RMB")} click / {K("Esc")}: deselect\n" +
-                      $"{K(openingsKey)}: windows & doors   {K(wallToolKey)}: build walls   {K(toggleKey)}: save & exit";
+                      $"{K("Click")} a box: put its window / door in   {K(wallToolKey)}: build walls   {K(toggleKey)}: save & exit";
         hudInfo = openingInfo;
     }
 
@@ -2248,11 +2224,10 @@ public class StoreEditController : NetworkBehaviour
                 GUI.Label(new Rect(20, 16 + i * 20, 450, 20), lines[i]);
         }
 
-        // The pick lists are still built-in (the windows & doors list only without a WallPiecesMenu).
+        // The storefront module list is still built-in.
         if (!finishing && !wallTool)
         {
             DrawSlotPanel();
-            DrawOpeningsPanel();
         }
     }
 
@@ -2441,18 +2416,20 @@ public class StoreEditController : NetworkBehaviour
     /// <summary>Host: the windows and doors the editor took out and bought (sent just before finishing).</summary>
     [Rpc(SendTo.Server)]
     private void SubmitEditChangesRpc(int sessionId, int[] newIds, Vector3[] newPositions,
-                                      Quaternion[] newRotations, uint[] newPaints, RpcParams rpcParams = default)
+                                      Quaternion[] newRotations, uint[] newPaints, ulong[] newBoxes,
+                                      RpcParams rpcParams = default)
     {
         if (!ServerTryGetSession(rpcParams, sessionId, out _)) return;
 
         pendingAdded.Clear();
-        if (newIds == null || newPositions == null || newRotations == null) return;
+        if (newIds == null || newPositions == null || newRotations == null || newBoxes == null) return;
         int n = Mathf.Min(MaxNewPerSave, Mathf.Min(newIds.Length, Mathf.Min(newPositions.Length, newRotations.Length)));
         for (int k = 0; k < n; k++)
             pendingAdded.Add(new StorePlot.NewEditItem
             {
                 itemId = newIds[k], position = newPositions[k], rotation = newRotations[k],
                 paint = newPaints != null && k < newPaints.Length ? newPaints[k] : 0u,
+                boxId = k < newBoxes.Length ? newBoxes[k] : ulong.MaxValue,
             });
     }
 

@@ -1469,14 +1469,18 @@ public class StorePlot : NetworkBehaviour
         editorClientId.Value = clientId;
     }
 
-    /// <summary>A window or door bought in edit mode (spawned when the session is saved).</summary>
+    /// <summary>A window or door taken out of its box in edit mode (spawned, and the box used up, on save).</summary>
     public struct NewEditItem
     {
         public int itemId;
         public Vector3 position;
         public Quaternion rotation;
-        public uint paint;  // PaintSet
+        public uint paint;   // PaintSet
+        public ulong boxId;  // the ShipmentPackage it came out of
     }
+
+    // Windows and doors taken out of walls this session: they go back in boxes when it ends.
+    private readonly List<(int itemId, uint paint, Vector3 near)> boxesOnSave = new();
 
     /// <summary>
     /// Server only. Ends the edit session and respawns its items. Each item uses the editor's
@@ -1560,11 +1564,8 @@ public class StorePlot : NetworkBehaviour
                 Physics.SyncTransforms();
                 if (!CanPlaceOpening(def, pos, rot, out string why))
                 {
-                    if (log) Debug.LogWarning($"[StorePlot] '{def.displayName}' has no wall to sit in ({why}); sold back.", this);
-                    // Refunds go to the store's team even when the editor dropped out (no Team given).
-                    ulong refundTeam = team != NoOwner ? team : ownerTeamId.Value;
-                    var econ2 = EconomyManager.Instance;
-                    if (econ2 != null && econ2.IsSpawned && refundTeam != NoOwner) econ2.ServerAddMoney(refundTeam, RemovalRefund(def));
+                    if (log) Debug.LogWarning($"[StorePlot] '{def.displayName}' has no wall to sit in ({why}); back in its box.", this);
+                    boxesOnSave.Add((entry.itemId, entry.paint, pos));
                     sold++;
                     continue;
                 }
@@ -1573,30 +1574,39 @@ public class StorePlot : NetworkBehaviour
             SpawnEditItem(def, pos, rot, entry.units, entry.price, entry.stock, entry.paint);
         }
 
-        // Windows and doors bought in edit mode.
+        // Windows and doors taken out of their boxes in edit mode: each box is used up.
         if (added != null)
+        {
+            var usedBoxes = new HashSet<ulong>();
             foreach (var n in added)
             {
                 if (catalog == null || !catalog.TryGet(n.itemId, out var def) || def.worldNetworkPrefab == null ||
                     !WallOpening.IsOpening(def) || !IsFinite(n.position) || !IsFinite(n.rotation))
                 { notBought++; continue; }
-
-                Quaternion r = n.rotation.normalized;
-                if (!Allowed(def, n.position, r)) { notBought++; continue; }
-                if (econ != null && econ.IsSpawned && !econ.ServerTrySpend(team, MarketModifiers.OrderCost(def)))
+                if (!usedBoxes.Add(n.boxId) || !TryGetPieceBox(n.boxId, n.itemId, out var box))
                 {
-                    if (log) Debug.LogWarning($"[StorePlot] Not enough money for '{def.displayName}'.", this);
+                    if (log) Debug.LogWarning($"[StorePlot] The box for '{def.displayName}' isn't in the store any more.", this);
                     notBought++;
                     continue;
                 }
-                SpawnEditItem(def, n.position, r, 0, 0, null, PaintSet.IsValid(n.paint) ? n.paint : 0u);
+
+                Quaternion r = n.rotation.normalized;
+                if (!Allowed(def, n.position, r)) { notBought++; continue; }
+                uint paint = box.ContainedPaint;
+                box.NetworkObject.Despawn(true);
+                SpawnEditItem(def, n.position, r, 0, 0, null, paint);
                 bought++;
             }
+        }
+
+        // Windows and doors taken out of walls go back in their boxes, near where they were.
+        foreach (var (itemId, paint, near) in boxesOnSave) ServerSpawnBoxNear(itemId, paint, near);
+        boxesOnSave.Clear();
 
         if (log)
             Debug.Log($"[StorePlot] Edit of '{displayName}' saved: {moved} moved, {unchanged} unchanged, " +
                       $"{rejected} put back (see warnings above), {noPose} with no position from the editor, " +
-                      $"{sold} removed, {bought} windows/doors bought, {notBought} not bought.", this);
+                      $"{sold} removed, {bought} windows/doors put in, {notBought} not put in.", this);
 
         editSession.Clear();
         editorClientId.Value = NoOwner;
@@ -1620,13 +1630,83 @@ public class StorePlot : NetworkBehaviour
 
         entry.removed = true;
         editSession[index] = entry;
+
+        // A window or door goes back in its box, on the floor near where it was (when the session ends).
+        if (WallOpening.IsOpening(def))
+        {
+            boxesOnSave.Add((entry.itemId, entry.paint, entry.position));
+            return true;
+        }
+
         refund = RemovalRefund(def);
         var econ = EconomyManager.Instance;
         if (econ != null && econ.IsSpawned && team != NoOwner) econ.ServerAddMoney(team, refund);
         return true;
     }
 
-    /// <summary>What removing a window, door or wall item in edit mode gives back.</summary>
+    /// <summary>
+    /// A delivery box in (or just outside) this store holding this window or door, not held for
+    /// another team. Edit mode takes pieces out of these.
+    /// </summary>
+    public bool TryGetPieceBox(ulong boxId, int itemId, out ShipmentPackage box)
+    {
+        box = null;
+        var nm = NetworkManager;
+        if (nm == null || nm.SpawnManager == null || !nm.SpawnManager.SpawnedObjects.TryGetValue(boxId, out var no)) return false;
+        if (!no.TryGetComponent(out box) || box.ContainedItemId != itemId) return false;
+        if (!IsInsideOrNear(no.transform.position, 1f)) return false;
+        return !box.IsReservedAgainst(ownerTeamId.Value);
+    }
+
+    /// <summary>
+    /// Server: put a window or door back in its shipment box, on this store's floor near a point (a spot
+    /// that's clear, a little into the store). Without a clear spot it's set down there and settles.
+    /// </summary>
+    public void ServerSpawnBoxNear(int itemId, uint paint, Vector3 near)
+    {
+        if (!IsServer || ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemId, out var def)) return;
+        var prefab = PlacementCheck.CartBoxOf(def);
+        if (prefab == null) prefab = def.GetShipmentPrefab();
+        if (prefab == null) return;
+
+        float floor = FloorHeight;
+        Bounds space = GetWorldBounds();
+        Vector3 inward = space.center - near;
+        inward.y = 0f;
+        inward = inward.sqrMagnitude > 1e-4f ? inward.normalized : Vector3.forward;
+        Vector3 start = new Vector3(near.x, floor, near.z) + inward * 0.6f;
+        Quaternion rot = Quaternion.LookRotation(inward, Vector3.up);
+        float lift = PlacementCheck.PivotHeightAboveBase(prefab.gameObject);
+
+        int ground = LayerMask.NameToLayer("Ground");
+        int blocking = Physics.DefaultRaycastLayers & ~(ground >= 0 ? 1 << ground : 0);
+        Vector3 spot = start + Vector3.up * (lift + 0.3f); // fallback: drop it there
+        Physics.SyncTransforms();
+        bool found = false;
+        for (int ring = 0; ring <= 6 && !found; ring++)
+            for (int k = 0; k < Mathf.Max(1, ring * 8) && !found; k++)
+            {
+                float a = k * Mathf.PI * 2f / Mathf.Max(1, ring * 8);
+                Vector3 p = start + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * (ring * 0.45f);
+                if (!Contains(p + Vector3.up * 0.1f)) continue;
+                Vector3 at = p + Vector3.up * lift;
+                if (PlacementCheck.FitsPrefab(prefab.gameObject, at, rot, blocking, Physics.DefaultRaycastLayers))
+                {
+                    spot = at;
+                    found = true;
+                }
+            }
+
+        var spawned = Instantiate(prefab, spot, rot);
+        if (spawned.TryGetComponent<ShipmentPackage>(out var box))
+        {
+            box.ServerSetContents(itemId);
+            box.ServerSetPaint(paint);
+        }
+        spawned.Spawn(true);
+    }
+
+    /// <summary>What removing a wall item in edit mode gives back.</summary>
     public static int RemovalRefund(ItemDef def)
     {
         float share = BuiltWallSettings.Instance != null ? BuiltWallSettings.Instance.OpeningRefundFraction : 0.5f;

@@ -758,7 +758,7 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         // Work out the pose first: aiming at your cart switches the preview to the item's box.
         bool posed = TryGetPlacementPose(out Vector3 pos, out Quaternion rot);
-        bool wantBox = placingOnCart && cartBoxPrefab != null;
+        bool wantBox = (placingOnCart || placingBoxed) && cartBoxPrefab != null;
         if (ghostPreview != null && ghostIsBox != wantBox) DestroyGhost();
 
         if (ghostPreview == null)
@@ -848,6 +848,7 @@ public class PlayerInteractInput : NetworkBehaviour
     private bool placingOnWall;
     // True while aiming at your own cart: the item goes on packed in its shipment box (if it has one).
     private bool placingOnCart;
+    private bool placingBoxed; // a wall piece: it's set down in its box (see PlacementCheck.StaysBoxed)
     private GameObject cartBoxPrefab;
     private bool wallFlip; // R while on a wall: the other face outward
 
@@ -858,6 +859,7 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         placingOnWall = false;
         placingOnCart = false;
+        placingBoxed = false;
         cartBoxPrefab = null;
         Vector3 rayStart = cam.transform.position + cam.transform.forward * 0.5f;
 
@@ -865,13 +867,14 @@ public class PlayerInteractInput : NetworkBehaviour
         ItemDef def = null;
         if (ItemCatalog.Instance != null) ItemCatalog.Instance.TryGet(inventory.HeldItemId.Value, out def);
         var mounting = PlacementCheck.GetMounting(def);
+        bool boxed = PlacementCheck.StaysBoxed(def);
 
         if (Physics.Raycast(rayStart, cam.transform.forward,
             out RaycastHit hit, 5f, placementMask, QueryTriggerInteraction.Ignore))
         {
             // Wall items aimed at a wall hang on it: upright, thinnest side against the wall. R turns
             // them around.
-            if (mounting != ItemPickupNet.Mounting.Floor && PlacementCheck.IsWallNormal(hit.normal) &&
+            if (!boxed && mounting != ItemPickupNet.Mounting.Floor && PlacementCheck.IsWallNormal(hit.normal) &&
                 PlacementCheck.IsWallLayer(hit.collider, EffectiveWallMask))
             {
                 PlacementCheck.WallPose(def, hit.point, hit.normal, wallFlip, out pos, out rot);
@@ -899,6 +902,16 @@ public class PlayerInteractInput : NetworkBehaviour
                 }
             }
 
+            // A wall piece goes down in its box, standing on what was aimed at.
+            if (boxed)
+            {
+                placingBoxed = true;
+                cartBoxPrefab = PlacementCheck.CartBoxOf(def).gameObject;
+                rot = yaw;
+                pos = hit.point + rot * Vector3.up * PlacementCheck.PivotHeightAboveBase(cartBoxPrefab);
+                return true;
+            }
+
             pos = hit.point;
 
             // Items always stand upright on their bottom (the way their prefab stands, e.g. a Blender
@@ -908,6 +921,14 @@ public class PlayerInteractInput : NetworkBehaviour
             rot = PlacementCheck.Upright(def, yaw);
             if (hit.normal.y < 0.7f && def != null && TryFloorBeside(def, hit, rot, out Vector3 beside))
                 pos = beside;
+        }
+        else if (boxed)
+        {
+            placingBoxed = true;
+            cartBoxPrefab = PlacementCheck.CartBoxOf(def).gameObject;
+            pos = cam.transform.position + cam.transform.forward * 2f;
+            rot = yaw;
+            return true;
         }
         else
         {
@@ -1026,8 +1047,8 @@ public class PlayerInteractInput : NetworkBehaviour
         if (MallManager.IsNoPlaceZone(ghost.transform.position)) // the docks: pick up only
             return false;
 
-        // Packed into its box on your cart.
-        if (placingOnCart && cartBoxPrefab != null)
+        // Packed into its box on your cart, or a wall piece in its box.
+        if ((placingOnCart || placingBoxed) && cartBoxPrefab != null)
             return FitsBoxAt(cartBoxPrefab, ghost.transform.position, ghost.transform.rotation);
 
         // A wall-only item has to be aimed at a wall (or go on a cart).
