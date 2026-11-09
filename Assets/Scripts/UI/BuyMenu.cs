@@ -19,6 +19,9 @@ using UnityEngine.UI;
 ///
 /// With Use Cart on, buy buttons add to a cart and Checkout orders everything in one delivery.
 /// With it off, each buy button orders one item straight away.
+///
+/// With a Paint Bar, the color picked there is the color paintable items (those with PaintParts) are
+/// bought in, for free. The same item in two colors is two lines in the cart.
 /// </summary>
 public class BuyMenu : MonoBehaviour, IShopScreen
 {
@@ -59,6 +62,10 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     [SerializeField] private Button checkoutButton;
     [SerializeField] private Button clearCartButton;
 
+    [Header("Paint (optional)")]
+    [Tooltip("Color swatches: paintable items are bought in the picked color (free).")]
+    [SerializeField] private PaintSwatchBar paintBar;
+
     [Header("Info")]
     [Tooltip("Short messages: added to cart, ordered, not enough money, ...")]
     [SerializeField] private TMP_Text statusText;
@@ -79,7 +86,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     private readonly List<GameObject> pages = new(); // slot-prefab mode: one per page
     private bool warnedFallback;
     private readonly List<ItemDef> shown = new();
-    private readonly List<(int itemId, int quantity)> cart = new();
+    private readonly List<(int itemId, byte paint, int quantity)> cart = new();
     private int pageIndex;
     private string filterText = "";
     private bool waitingForResult;
@@ -400,16 +407,19 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     {
         if (plot == null) return;
 
+        // Paintable items come in the picked color; the rest ignore it.
+        byte paint = paintBar != null && PaintParts.IsPaintable(def) ? paintBar.Selected : (byte)0;
+
         if (!useCart)
         {
-            PlaceOrder(new[] { def.id }, new[] { 1 });
+            PlaceOrder(new[] { def.id }, new[] { 1 }, new[] { paint });
             return;
         }
 
-        int i = cart.FindIndex(c => c.itemId == def.id);
-        if (i >= 0) cart[i] = (def.id, cart[i].quantity + 1);
-        else cart.Add((def.id, 1));
-        ShowStatus($"Added {def.displayName}");
+        int i = cart.FindIndex(c => c.itemId == def.id && c.paint == paint);
+        if (i >= 0) cart[i] = (def.id, paint, cart[i].quantity + 1);
+        else cart.Add((def.id, paint, 1));
+        ShowStatus(paint != 0 ? $"Added {def.displayName} ({PaintPalette.NameOf(paint)})" : $"Added {def.displayName}");
         RefreshCart();
     }
 
@@ -418,11 +428,12 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         if (cart.Count == 0 || plot == null) return;
         var ids = new int[cart.Count];
         var qty = new int[cart.Count];
-        for (int i = 0; i < cart.Count; i++) { ids[i] = cart[i].itemId; qty[i] = cart[i].quantity; }
-        PlaceOrder(ids, qty);
+        var paints = new byte[cart.Count];
+        for (int i = 0; i < cart.Count; i++) { ids[i] = cart[i].itemId; qty[i] = cart[i].quantity; paints[i] = cart[i].paint; }
+        PlaceOrder(ids, qty, paints);
     }
 
-    private void PlaceOrder(int[] itemIds, int[] quantities)
+    private void PlaceOrder(int[] itemIds, int[] quantities, byte[] paints)
     {
         var eco = EconomyManager.Instance;
         if (eco == null || plot == null)
@@ -433,7 +444,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         waitingForResult = true;
         if (checkoutButton != null) checkoutButton.interactable = false;
         ShowStatus("Ordering...");
-        eco.Order(plot.PlotId, itemIds, quantities, GetDeliverySeconds(itemIds, quantities));
+        eco.Order(plot.PlotId, itemIds, quantities, paints, GetDeliverySeconds(itemIds, quantities));
     }
 
     /// <summary>
@@ -477,12 +488,13 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         int total = 0;
         var catalog = ItemCatalog.Instance;
         var lines = new System.Text.StringBuilder();
-        foreach (var (itemId, quantity) in cart)
+        foreach (var (itemId, paint, quantity) in cart)
         {
             if (catalog == null || !catalog.TryGet(itemId, out var def)) continue;
             int sub = (MarketModifiers.OrderCost(def) + MarketModifiers.DeliveryFee(def)) * quantity; // with events
             total += sub;
-            lines.AppendLine($"{def.displayName} x{quantity}   ${sub:N0}");
+            string color = paint != 0 ? $" ({PaintPalette.NameOf(paint)})" : "";
+            lines.AppendLine($"{def.displayName}{color} x{quantity}   ${sub:N0}");
         }
 
         int money = EconomyManager.Instance != null ? EconomyManager.Instance.LocalMoney : 0;

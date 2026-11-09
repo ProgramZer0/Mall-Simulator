@@ -9,10 +9,11 @@ public struct BuiltWall : INetworkSerializeByMemcpy, IEquatable<BuiltWall>
     public Vector3 a;     // start, on the floor
     public Vector3 b;     // end, on the floor
     public float height;  // meters
+    public byte paint;    // PaintPalette color id (0 = the wall material's own color)
 
     public float Length => Vector3.Distance(a, b);
 
-    public bool Equals(BuiltWall o) => id == o.id && a == o.a && b == o.b && height == o.height;
+    public bool Equals(BuiltWall o) => id == o.id && a == o.a && b == o.b && height == o.height && paint == o.paint;
     public override bool Equals(object obj) => obj is BuiltWall o && Equals(o);
     public override int GetHashCode() => id;
 }

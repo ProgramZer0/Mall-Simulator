@@ -33,6 +33,17 @@ public class CuttableWall : MonoBehaviour
     /// <summary>One of its store's front walls (the store needs a door in one of these).</summary>
     public bool IsStorefront { get; set; }
 
+    /// <summary>Its paint color (PaintPalette id, 0 = its own material's color). Set by its store.</summary>
+    public byte Paint { get; private set; }
+
+    /// <summary>Paint this wall (shown on this machine; stores sync the color themselves).</summary>
+    public void SetPaint(byte id)
+    {
+        Paint = id;
+        if (originalRenderer != null) PaintPalette.Apply(originalRenderer, -1, id);
+        if (cut != null && cut.TryGetComponent<MeshRenderer>(out var mr)) PaintPalette.Apply(mr, -1, id);
+    }
+
     /// <summary>Windows and doors in this wall at the last cut.</summary>
     public int OpeningCount => holes.Count;
 
@@ -331,6 +342,7 @@ public class CuttableWall : MonoBehaviour
                 mr.shadowCastingMode = originalRenderer.shadowCastingMode;
                 mr.receiveShadows = originalRenderer.receiveShadows;
             }
+            if (Paint != 0) PaintPalette.Apply(mr, -1, Paint);
         }
         if (originalRenderer != null) originalRenderer.enabled = false;
         foreach (var c in originalColliders) if (c != null) c.enabled = false;
