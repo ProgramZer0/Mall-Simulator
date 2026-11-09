@@ -67,6 +67,8 @@ public class PlayerInventoryNet : NetworkBehaviour
             currentHandVisual = Instantiate(def.handVisualPrefab, handAnchor);
             currentHandVisual.transform.localPosition = Vector3.zero;
             currentHandVisual.transform.localRotation = Quaternion.identity;
+            // Your own held item mustn't poke through walls in front of you.
+            if (IsOwner) HeldVisualNoClip.Add(currentHandVisual, GetComponentInChildren<Camera>(true), transform);
         }
     }
 
