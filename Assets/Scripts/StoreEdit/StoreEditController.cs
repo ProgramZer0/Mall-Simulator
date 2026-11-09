@@ -685,6 +685,27 @@ public class StoreEditController : NetworkBehaviour
         return false;
     }
 
+    // Things hung on a storefront section (as edited here). Swapping the section would leave them
+    // floating, so they have to come off first. Windows and doors in it are checked after the swap:
+    // any that no longer fit are taken out and refunded.
+    private int CountHungOnFrontSlot(int index)
+    {
+        var shown = editPlot != null ? editPlot.GetFrontSlotShown(index) : null;
+        if (shown == null) return 0;
+        bool IsSection(Collider c) => c.transform.IsChildOf(shown.transform);
+        float floor = editPlot.FloorHeight;
+        int n = 0;
+        void Check(EditLocalItem item)
+        {
+            if (item == null || !item.gameObject.activeInHierarchy || item.Opening != null) return;
+            Transform t = item.transform;
+            if (PlacementCheck.IsHungAgainst(item.Def, t.position, t.rotation, floor, IsSection)) n++;
+        }
+        foreach (var item in localItems) Check(item);
+        foreach (var item in addedItems) Check(item);
+        return n;
+    }
+
     private bool IsMouseOverSlotPanel(Vector2 mouse)
     {
         if (selectedSlot < 0) return false;
@@ -724,8 +745,11 @@ public class StoreEditController : NetworkBehaviour
             GUI.enabled = !isCurrent;
             if (GUI.Button(r, isCurrent ? $"[{m.DisplayName}]" : m.DisplayName))
             {
+                int hung = CountHungOnFrontSlot(selectedSlot);
                 if (editPlot.WouldRemoveLastEntrance(selectedSlot, m.ModuleId))
                     slotMessage = "Your store needs at least one doorway.";
+                else if (hung > 0)
+                    slotMessage = $"Take the {hung} thing{(hung == 1 ? "" : "s")} hung on this section off first.";
                 else
                 {
                     slotMessage = null;
