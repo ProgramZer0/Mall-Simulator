@@ -63,7 +63,9 @@ public class PaintSwatchBar : MonoBehaviour
             byte id = (byte)i;
             var button = Instantiate(swatchPrefab, parent);
             button.name = $"Swatch {PaintPalette.NameOf(id)}";
-            PaintPalette.StyleSwatch(button.image, id, originalSwatchColor);
+            // Turning the icon would turn the button's label and Selected mark too, so only label-less ones turn.
+            PaintPalette.StyleSwatch(button.image, id, originalSwatchColor,
+                                     turn: button.GetComponentInChildren<TMP_Text>(true) == null && button.transform.childCount == 0);
             var label = button.GetComponentInChildren<TMP_Text>(true);
             if (label != null) label.text = PaintPalette.NameOf(id);
             var selected = button.transform.Find("Selected");

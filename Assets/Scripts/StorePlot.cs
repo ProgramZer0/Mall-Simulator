@@ -1190,9 +1190,24 @@ public class StorePlot : NetworkBehaviour
     private void OnFloorPaintChanged(byte before, byte now) => ApplyFloorPaint();
 
     // Every storefront panel, plus the marked parts (PaintParts) of the front modules shown.
-    private void ApplyFrontPaint()
+    /// <summary>
+    /// This machine only: show the storefront / floor in a color for a moment (the paint brush's
+    /// preview). Show Paint() puts the synced colors back.
+    /// </summary>
+    public void PreviewFrontPaint(byte id) => ApplyFrontPaint(id);
+    public void PreviewFloorPaint(byte id) => ApplyFloorPaint(id);
+
+    /// <summary>Show the storefront and floor in their synced colors again (ends a preview).</summary>
+    public void ShowPaint()
     {
-        byte id = frontPaint.Value;
+        ApplyFrontPaint();
+        ApplyFloorPaint();
+    }
+
+    private void ApplyFrontPaint() => ApplyFrontPaint(frontPaint.Value);
+
+    private void ApplyFrontPaint(byte id)
+    {
         foreach (var w in CuttableWall.All)
             if (w != null && w.Plot == this && w.IsStorefront) w.SetPaint(id);
         if (storefrontWalls != null)
@@ -1207,10 +1222,12 @@ public class StorePlot : NetworkBehaviour
         }
     }
 
-    private void ApplyFloorPaint()
+    private void ApplyFloorPaint() => ApplyFloorPaint(floorPaint.Value);
+
+    private void ApplyFloorPaint(byte id)
     {
         if (floorRenderers == null) return;
-        foreach (var r in floorRenderers) PaintPalette.Apply(r, -1, floorPaint.Value);
+        foreach (var r in floorRenderers) PaintPalette.Apply(r, -1, id);
     }
 
     private void SetSlotVisual(int index, int moduleId)
