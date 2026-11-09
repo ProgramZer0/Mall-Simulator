@@ -46,6 +46,12 @@ public static class PlacementCheck
     /// What an item turns into when it's set down on a cart: its shipment box (or the catalog's
     /// default box), so it takes less room. Null if it has no box (it goes on as itself).
     /// </summary>
+    /// <summary>
+    /// Wall pieces (windows, doors: WallOpening) stay in their shipment box when set down in normal play;
+    /// they come out in store edit mode, where they're dragged onto a wall. Needs a box to go in.
+    /// </summary>
+    public static bool StaysBoxed(ItemDef def) => WallOpening.IsOpening(def) && CartBoxOf(def) != null;
+
     public static NetworkObject CartBoxOf(ItemDef def)
     {
         if (def == null) return null;

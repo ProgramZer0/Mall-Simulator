@@ -230,11 +230,12 @@ public class PlayerInventoryNet : NetworkBehaviour
 
         if (!ItemCatalog.Instance.TryGet(id, out var def) || def.worldNetworkPrefab == null) return;
 
-        // Set down on a cart: it goes on packed in its shipment box, to save room.
-        var cartBox = onCart ? PlacementCheck.CartBoxOf(def) : null;
-        if (cartBox != null)
+        // Set down on a cart: it goes on packed in its shipment box, to save room. Wall pieces always
+        // go down in their box (they come out in edit mode).
+        var boxPrefab = onCart || PlacementCheck.StaysBoxed(def) ? PlacementCheck.CartBoxOf(def) : null;
+        if (boxPrefab != null)
         {
-            ServerPlaceBoxOnCart(def, cartBox, position, rotation, rpcParams.Receive.SenderClientId);
+            ServerPlaceBox(def, boxPrefab, position, rotation, rpcParams.Receive.SenderClientId, onCart);
             return;
         }
 
@@ -312,10 +313,12 @@ public class PlayerInventoryNet : NetworkBehaviour
         }
     }
 
-    private void ServerPlaceBoxOnCart(ItemDef def, NetworkObject boxPrefab, Vector3 position, Quaternion rotation, ulong sender)
+    private void ServerPlaceBox(ItemDef def, NetworkObject boxPrefab, Vector3 position, Quaternion rotation, ulong sender,
+                                bool onCart)
     {
         var cart = CartNet.FindCartAt(PlacementCheck.PrefabCenter(boxPrefab.gameObject, position, rotation));
-        if (cart == null || !cart.CanUse(sender)) return;
+        if (cart != null && !cart.CanUse(sender)) return;
+        if (onCart && cart == null) return;
         if (interact == null || !interact.FitsBoxAt(boxPrefab.gameObject, position, rotation)) return;
 
         int id = def.id;
@@ -328,9 +331,9 @@ public class PlayerInventoryNet : NetworkBehaviour
         }
         else Debug.LogWarning($"[PlayerInventoryNet] Shipment prefab '{boxPrefab.name}' has no ShipmentPackage, so " +
                               "picking it up won't give the item inside.", boxPrefab);
-        if (spawned.TryGetComponent<ItemPickupNet>(out var pickup)) pickup.ServerPrepareFrozen(carried: true);
+        if (cart != null && spawned.TryGetComponent<ItemPickupNet>(out var pickup)) pickup.ServerPrepareFrozen(carried: true);
         spawned.Spawn(true);
-        cart.ServerLoad(spawned);
+        if (cart != null) cart.ServerLoad(spawned); // on the floor it settles like anything else
 
         HeldItemId.Value = 0;
         HeldPaint.Value = 0;

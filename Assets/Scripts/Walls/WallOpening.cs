@@ -18,8 +18,10 @@ using UnityEngine;
 ///   DoorMotion leaf. A child must not have its own NetworkObject: NGO can't spawn those inside an item.
 ///   The store is filled in on DoorNet by itself.
 ///
-/// Players buy these in store edit mode (N) and drag them along walls. Tick Edit Mode Only on the
-/// ItemPickupNet and untick Show In Shop on the catalog entry, so they're only handled there.
+/// Players buy these in the shop like anything else; they're delivered in a box and stay in it when
+/// set down (give the catalog entry a Shipment Prefab, or the catalog a default one). In store edit
+/// mode, clicking the box takes the piece out to drag onto a wall. Tick Edit Mode Only on the
+/// ItemPickupNet (the piece itself is only handled in edit mode) and Show In Shop on the catalog entry.
 /// </summary>
 [DisallowMultipleComponent]
 public class WallOpening : MonoBehaviour
