@@ -20,6 +20,14 @@ public class PaintBrush : NetworkBehaviour
     [SerializeField] private float holdSeconds = 0.25f;
     [Tooltip("Optional: the brush in your hand. Give it PaintParts (e.g. on the bristles) to show the color picked.")]
     [SerializeField] private GameObject handVisualPrefab;
+    [Tooltip("Where the brush is held. Empty = the inventory's Hand Anchor (where held items show). Set it to a " +
+             "hand bone later to put the brush in the hand.")]
+    [SerializeField] private Transform hand;
+    [Tooltip("Where the brush sits from the hand: right, up, forward (meters). The default keeps it low in " +
+             "the right corner of the view.")]
+    [SerializeField] private Vector3 handOffset = new(0.3f, -0.25f, 0.15f);
+    [Tooltip("How the brush is turned in the hand (degrees). Change this if the model points the wrong way.")]
+    [SerializeField] private Vector3 handRotation = new(0f, -90f, 0f);
     [Tooltip("How far you can paint, in meters.")]
     [SerializeField] private float range = 4f;
     [Tooltip("Outline color for what a click would paint.")]
@@ -86,7 +94,7 @@ public class PaintBrush : NetworkBehaviour
         if (!IsOwner || cam == null) return;
 
         bool editing = storeEdit != null && storeEdit.IsEditing;
-        bool holding = inventory != null && inventory.HeldItemId.Value != 0;
+        bool holding = (inventory != null && inventory.HeldItemId.Value != 0) || CartNet.GetPushedBy(OwnerClientId) != null;
         if (editing || holding)
         {
             if (active) SetActive(false);
@@ -139,11 +147,12 @@ public class PaintBrush : NetworkBehaviour
             TargetOutline.For(this).Hide();
         }
 
-        if (on && handVisual == null && handVisualPrefab != null && inventory != null && inventory.HandAnchor != null)
+        Transform holdAt = hand != null ? hand : inventory != null ? inventory.HandAnchor : null;
+        if (on && handVisual == null && handVisualPrefab != null && holdAt != null)
         {
-            handVisual = Instantiate(handVisualPrefab, inventory.HandAnchor);
-            handVisual.transform.localPosition = Vector3.zero;
-            handVisual.transform.localRotation = Quaternion.identity;
+            handVisual = Instantiate(handVisualPrefab, holdAt);
+            handVisual.transform.localPosition = handOffset;
+            handVisual.transform.localRotation = Quaternion.Euler(handRotation);
             if (IsOwner) HeldItemBlocker.Add(handVisual, transform, inventory.HeldItemBlockedBy);
             PaintHand();
         }
@@ -169,11 +178,9 @@ public class PaintBrush : NetworkBehaviour
         wheelOpen = true;
         wheelHover = color;
         UIState.OpenMenu(this); // frees the cursor and stops looking around while picking
-        if (PaintWheel.Instance != null)
-        {
-            PaintWheel.Instance.SetOpen(true);
-            PaintWheel.Instance.Highlight(wheelHover);
-        }
+        var wheel = PaintWheel.GetOrCreate(); // a plain one if the scene has none
+        wheel.SetOpen(true);
+        wheel.Highlight(wheelHover);
     }
 
     private void UpdateWheel()
@@ -351,23 +358,5 @@ public class PaintBrush : NetworkBehaviour
         var eco = EconomyManager.Instance;
         if (eco == null || !eco.IsSpawned || fee <= 0) return true;
         return eco.ServerTrySpend(MallManager.GetTeamOf(OwnerClientId), fee);
-    }
-
-    /* ========================= BUILT-IN WHEEL ========================= */
-
-    private void OnGUI()
-    {
-        if (!IsOwner || !wheelOpen || PaintWheel.Instance != null) return;
-        int count = WheelCount;
-        Vector2 c = new(Screen.width * 0.5f, Screen.height * 0.5f);
-        for (int i = 0; i < count; i++)
-        {
-            Vector2 d = PaintWheel.Direction(i, count);
-            var r = new Rect(c.x + d.x * 130f - 36f, c.y - d.y * 130f - 14f, 72f, 28f);
-            var old = GUI.backgroundColor;
-            if (PaintPalette.TryGetColor((byte)i, out Color col)) GUI.backgroundColor = col;
-            GUI.Box(r, i == wheelHover ? $"[{PaintPalette.NameOf((byte)i)}]" : PaintPalette.NameOf((byte)i));
-            GUI.backgroundColor = old;
-        }
     }
 }

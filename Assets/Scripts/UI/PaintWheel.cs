@@ -7,9 +7,10 @@ using UnityEngine.UI;
 /// The paint brush's color wheel (TMP UI): hold the brush key and the palette's colors appear in a
 /// ring; move the mouse toward one and let go to pick it. It fills itself from the PaintPalette.
 ///
-/// Setup (on a Canvas): Root (the wheel, centered on screen, shown while open), Swatch Prefab (an
-/// Image, one per color, placed around the ring), Radius in pixels, and an optional Name Text in the
-/// middle for the color pointed at. Without a PaintWheel in the scene, a simple built-in wheel is drawn.
+/// No setup needed: without a PaintWheel in the scene, the brush makes a plain one by itself (round
+/// swatches on their own overlay Canvas). To style it, put a PaintWheel on your Canvas: Root (the wheel,
+/// centered on screen, shown while open), Swatch Prefab (an Image, one per color, placed around the
+/// ring), Radius in pixels, and an optional Name Text in the middle for the color pointed at.
 /// </summary>
 public class PaintWheel : MonoBehaviour
 {
@@ -28,6 +29,77 @@ public class PaintWheel : MonoBehaviour
     private int builtFor = -1;
 
     public bool IsOpen => root != null && root.gameObject.activeSelf;
+
+    /// <summary>The scene's wheel, or a plain one made on the spot when there's none.</summary>
+    public static PaintWheel GetOrCreate()
+    {
+        if (Instance != null) return Instance;
+
+        var canvasGo = new GameObject("[Paint Wheel]", typeof(Canvas), typeof(CanvasScaler));
+        var canvas = canvasGo.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 500;
+        var scaler = canvasGo.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+
+        var rootGo = new GameObject("Wheel", typeof(RectTransform));
+        var rootRect = (RectTransform)rootGo.transform;
+        rootRect.SetParent(canvasGo.transform, false);
+        rootRect.anchorMin = rootRect.anchorMax = new Vector2(0.5f, 0.5f);
+        rootRect.sizeDelta = Vector2.zero;
+
+        // A soft dark disc behind the ring.
+        var back = new GameObject("Back", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
+        back.rectTransform.SetParent(rootRect, false);
+        back.rectTransform.sizeDelta = Vector2.one * 420f;
+        back.sprite = Circle();
+        back.color = new Color(0f, 0f, 0f, 0.45f);
+        back.raycastTarget = false;
+
+        // The swatch template (kept inactive; copies are made per color).
+        var swatch = new GameObject("Swatch", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
+        swatch.rectTransform.SetParent(canvasGo.transform, false);
+        swatch.rectTransform.sizeDelta = Vector2.one * 64f;
+        swatch.sprite = Circle();
+        swatch.raycastTarget = false;
+        swatch.gameObject.SetActive(false);
+
+        var label = new GameObject("Name", typeof(RectTransform), typeof(TextMeshProUGUI)).GetComponent<TextMeshProUGUI>();
+        label.rectTransform.SetParent(rootRect, false);
+        label.rectTransform.sizeDelta = new Vector2(220f, 50f);
+        label.alignment = TextAlignmentOptions.Center;
+        label.fontSize = 30f;
+        label.raycastTarget = false;
+
+        rootGo.SetActive(false);
+        var wheel = canvasGo.AddComponent<PaintWheel>();
+        wheel.root = rootRect;
+        wheel.swatchPrefab = swatch;
+        wheel.nameText = label;
+        Instance = wheel;
+        return wheel;
+    }
+
+    private static Sprite circle;
+
+    // A white disc with a soft edge, made in code (so no art is needed).
+    private static Sprite Circle()
+    {
+        if (circle != null) return circle;
+        const int size = 64;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+        float r = size * 0.5f;
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(r, r));
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Clamp01(r - d)));
+            }
+        tex.Apply();
+        circle = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+        return circle;
+    }
 
     private void Awake()
     {
@@ -73,6 +145,7 @@ public class PaintWheel : MonoBehaviour
         for (int i = 0; i < count; i++)
         {
             var img = Instantiate(swatchPrefab, root);
+            img.gameObject.SetActive(true);
             img.name = $"Swatch {PaintPalette.NameOf((byte)i)}";
             img.color = PaintPalette.TryGetColor((byte)i, out Color c) ? c : originalSwatchColor;
             Vector2 dir = Direction(i, count);
