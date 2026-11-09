@@ -5,6 +5,12 @@ using UnityEngine;
 public class PlayerInventoryNet : NetworkBehaviour
 {
     [SerializeField] private Transform handAnchor;
+    [Tooltip("What pushes back on the item in your hands, so it can't poke through (nothing ticked = the \"walls\" layer). " +
+             "Leave shelves and counters out, or they'll shove you away while stocking.")]
+    [SerializeField] private LayerMask heldItemBlockedBy;
+
+    /// <summary>Layers that push back on held things (the price scanner uses it too).</summary>
+    public int HeldItemBlockedBy => heldItemBlockedBy.value;
 
     /// <summary>Where held things show in the hand (the price scanner uses it too).</summary>
     public Transform HandAnchor => handAnchor;
@@ -67,8 +73,8 @@ public class PlayerInventoryNet : NetworkBehaviour
             currentHandVisual = Instantiate(def.handVisualPrefab, handAnchor);
             currentHandVisual.transform.localPosition = Vector3.zero;
             currentHandVisual.transform.localRotation = Quaternion.identity;
-            // Your own held item mustn't poke through walls in front of you.
-            if (IsOwner) HeldVisualNoClip.Add(currentHandVisual, GetComponentInChildren<Camera>(true), transform);
+            // Your own held item gets a body, so walls push you back instead of it poking through.
+            if (IsOwner) HeldItemBlocker.Add(currentHandVisual, transform, heldItemBlockedBy.value);
         }
     }
 
