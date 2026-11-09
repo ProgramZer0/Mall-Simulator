@@ -46,9 +46,11 @@ public class FrontWallCatalog : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
+    /// <summary>A module type by id: from this catalog, or from a FrontWallKit item in the ItemCatalog.</summary>
     public static bool TryGet(int id, out WallModule module)
     {
         module = null;
-        return Instance != null && Instance.byId.TryGetValue(id, out module);
+        if (Instance != null && Instance.byId.TryGetValue(id, out module)) return true;
+        return FrontWallKit.TryFindKitItem(id, out var kit) && FrontWallKit.TryGetModule(kit, out module);
     }
 }

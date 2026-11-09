@@ -10,7 +10,8 @@ using UnityEngine.Rendering.Universal;
 /// WASD / QE  pan / turn the top-down camera, mouse wheel zooms
 /// RMB drag   rotate (orbit) the camera, or pan it (Right Drag setting); RMB click deselects
 /// Click      select an item in your store; click and drag an item to slide it across the floor
-///            click a storefront wall section, then pick a module (wall, window, doorway, ...)
+///            click a front wall kit box (bought in the shop), then a storefront section: it becomes
+///            that type, and the old type goes back in a box on save
 /// X          cycle Move (arrows) -> Rotate (rings) -> no handles
 /// R          straight to Rotate (rings) for the selected item; again to hide them
 /// Drag       an arrow to slide along that axis (stops on contact), a ring to rotate
@@ -132,8 +133,6 @@ public class StoreEditController : NetworkBehaviour
 
     // Storefront section being changed (-1 = none) and its on-screen module panel.
     private int selectedSlot = -1;
-    private Rect slotPanelRect;
-    private string slotMessage;
 
     private PlayerInteractInput interact;
     private Camera playerCam;
@@ -287,6 +286,7 @@ public class StoreEditController : NetworkBehaviour
         }
         finishing = true;
         finishStartedAt = Time.time;
+        StopApplyingKit();
         Deselect();
         selectedSlot = -1;
 
@@ -436,6 +436,7 @@ public class StoreEditController : NetworkBehaviour
         if (placing != null) Destroy(placing.gameObject);
         placing = null;
         placingBox = null;
+        kitBox = null;
         addedFrom.Clear();
         ShowAllBoxes();
         openingInfo = null;
@@ -591,6 +592,13 @@ public class StoreEditController : NetworkBehaviour
             return;
         }
 
+        if (kitBox != null)
+        {
+            UpdateApplyingKit(ray);
+            lastMouse = mouse;
+            return;
+        }
+
         if (Input.GetKeyDown(wallToolKey)) SetWallTool(!wallTool);
         if (wallTool)
         {
@@ -625,10 +633,7 @@ public class StoreEditController : NetworkBehaviour
 
         hoverHandle = PickHandle(mouse, grabRadiusPixels);
 
-        if (selectedSlot >= 0 && (Input.GetKeyDown(KeyCode.Escape) || rmbClicked))
-            selectedSlot = -1;
-
-        if (Input.GetMouseButtonDown(0) && !IsMouseOverSlotPanel(mouse))
+        if (Input.GetMouseButtonDown(0))
         {
             if (hoverHandle != StoreEditHandles.None)
                 BeginDrag(hoverHandle, ray, mouse);
@@ -648,7 +653,10 @@ public class StoreEditController : NetworkBehaviour
             var box = hit.collider.GetComponentInParent<ShipmentPackage>();
             if (box != null && IsUsablePieceBox(box))
             {
-                StartPlacing(box);
+                if (ItemCatalog.Instance.TryGet(box.ContainedItemId, out var boxed) && FrontWallKit.IsKit(boxed))
+                    StartApplyingKit(box);
+                else
+                    StartPlacing(box);
                 return;
             }
 
@@ -667,11 +675,10 @@ public class StoreEditController : NetworkBehaviour
             }
         }
 
-        if (TryPickFrontSlot(ray, out int slot))
+        if (TryPickFrontSlot(ray, out _))
         {
             Deselect();
-            selectedSlot = slot;
-            slotMessage = null;
+            ShowEditMessage("To change this part of your storefront, click a front wall kit box (bought in the shop), then this.");
             return;
         }
 
@@ -718,61 +725,59 @@ public class StoreEditController : NetworkBehaviour
         return n;
     }
 
-    private bool IsMouseOverSlotPanel(Vector2 mouse)
+    /* ---- front wall kits: click a kit box, then a storefront section ---- */
+
+    private ShipmentPackage kitBox;
+    private string kitInfo;
+
+    private void StartApplyingKit(ShipmentPackage box)
     {
-        if (selectedSlot < 0) return false;
-        // GUI rects count y from the top; mouse positions from the bottom.
-        return slotPanelRect.Contains(new Vector2(mouse.x, Screen.height - mouse.y));
+        CancelPlacing();
+        Deselect();
+        kitBox = box;
+        selectedSlot = -1;
+        kitInfo = null;
     }
 
-    private void DrawSlotPanel()
+    private void StopApplyingKit(string message = null)
     {
-        var catalog = FrontWallCatalog.Instance;
-        if (selectedSlot < 0 || editPlot == null || selectedSlot >= editPlot.FrontSlotCount) return;
+        kitBox = null;
+        selectedSlot = -1;
+        kitInfo = null;
+        if (!string.IsNullOrEmpty(message)) ShowEditMessage(message);
+    }
 
-        int count = catalog != null ? catalog.Modules.Count : 0;
-        float width = Mathf.Max(360f, 20f + count * 110f);
-        slotPanelRect = new Rect((Screen.width - width) * 0.5f, Screen.height - 110f, width, 96f);
-
-        GUI.Box(slotPanelRect, GUIContent.none);
-        GUI.Label(new Rect(slotPanelRect.x + 10, slotPanelRect.y + 6, width - 20, 20),
-            $"Storefront section {selectedSlot + 1}/{editPlot.FrontSlotCount}: {editPlot.GetFrontModuleName(selectedSlot)}" +
-            "   (Esc / RMB click to close)");
-
-        if (catalog == null || count == 0)
+    /// <summary>A kit box is picked: the storefront section under the mouse is outlined; click to put it up.</summary>
+    private void UpdateApplyingKit(Ray ray)
+    {
+        if (Input.GetKeyDown(KeyCode.Escape) || rmbClicked || kitBox == null || !kitBox.IsSpawned ||
+            !ItemCatalog.Instance.TryGet(kitBox.ContainedItemId, out var def) || !FrontWallKit.TryGetModule(def, out var module))
         {
-            GUI.Label(new Rect(slotPanelRect.x + 10, slotPanelRect.y + 32, width - 20, 40),
-                "No FrontWallCatalog in the scene (or it's empty), so there's nothing to choose from.");
+            StopApplyingKit();
             return;
         }
 
-        int current = editPlot.GetFrontModuleId(selectedSlot);
-        for (int i = 0; i < count; i++)
+        if (!TryPickFrontSlot(ray, out int slot))
         {
-            var m = catalog.Modules[i];
-            if (m == null) continue;
-
-            var r = new Rect(slotPanelRect.x + 10 + i * 110f, slotPanelRect.y + 30, 100, 32);
-            bool isCurrent = m.ModuleId == current;
-            GUI.enabled = !isCurrent;
-            if (GUI.Button(r, isCurrent ? $"[{m.DisplayName}]" : m.DisplayName))
-            {
-                int hung = CountHungOnFrontSlot(selectedSlot);
-                if (editPlot.WouldRemoveLastEntrance(selectedSlot, m.ModuleId))
-                    slotMessage = "Your store needs at least one doorway.";
-                else if (hung > 0)
-                    slotMessage = $"Take the {hung} thing{(hung == 1 ? "" : "s")} hung on this section off first.";
-                else
-                {
-                    slotMessage = null;
-                    RequestSetFrontModuleRpc(selectedSlot, m.ModuleId);
-                }
-            }
-            GUI.enabled = true;
+            selectedSlot = -1;
+            kitInfo = $"{module.DisplayName}: click a section of your storefront";
+            return;
         }
+        selectedSlot = slot; // outlined
 
-        if (!string.IsNullOrEmpty(slotMessage))
-            GUI.Label(new Rect(slotPanelRect.x + 10, slotPanelRect.y + 68, width - 20, 20), slotMessage);
+        string why = null;
+        int hung = CountHungOnFrontSlot(slot);
+        if (editPlot.GetFrontModuleId(slot) == module.ModuleId) why = $"This section is already {module.DisplayName}";
+        else if (editPlot.WouldRemoveLastEntrance(slot, module.ModuleId)) why = "Your store needs at least one doorway";
+        else if (hung > 0) why = $"Take the {hung} thing{(hung == 1 ? "" : "s")} hung on this section off first";
+        kitInfo = why ?? $"Click: put up {module.DisplayName} here (now {editPlot.GetFrontModuleName(slot)})";
+
+        if (!Input.GetMouseButtonDown(0) || why != null) return;
+        int old = editPlot.GetFrontModuleId(slot);
+        RequestApplyFrontKitRpc(slot, kitBox.NetworkObjectId);
+        StopApplyingKit(FrontWallKit.TryFindKitItem(old, out _)
+            ? $"{module.DisplayName} put up. The old front goes back in a box when you save."
+            : $"{module.DisplayName} put up.");
     }
 
     /* ========================= CLICK-AND-DRAG ========================= */
@@ -1155,7 +1160,7 @@ public class StoreEditController : NetworkBehaviour
     {
         if (box == null || !box.IsSpawned || editPlot == null || hiddenBoxes.ContainsKey(box)) return false;
         if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(box.ContainedItemId, out var def)) return false;
-        if (!WallOpening.IsOpening(def)) return false;
+        if (!WallOpening.IsOpening(def) && !FrontWallKit.IsKit(def)) return false;
         if (box.IsReservedAgainst(MallManager.GetTeamOf(OwnerClientId))) return false;
         return editPlot.IsInsideOrNear(box.transform.position, 1f);
     }
@@ -1649,7 +1654,7 @@ public class StoreEditController : NetworkBehaviour
             else { SetWallTool(false); return; }
         }
 
-        bool click = Input.GetMouseButtonDown(0) && !IsMouseOverSlotPanel(mouse);
+        bool click = Input.GetMouseButtonDown(0);
 
         // Remove mode (E, or hold Shift): see UpdateErase.
         if (erasing || eraseMode || Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
@@ -2249,6 +2254,14 @@ public class StoreEditController : NetworkBehaviour
 
         hudTitle = finishing ? "STORE EDIT MODE - saving..." : "STORE EDIT MODE";
 
+        if (kitBox != null)
+        {
+            hudStatus = "Putting up a front wall kit";
+            hudControls = $"{K("Click")} a section of your storefront   {K("RMB")} / {K("Esc")}: cancel";
+            hudInfo = kitInfo;
+            return;
+        }
+
         if (placing != null)
         {
             hudStatus = $"Placing: {placing.Def.displayName}";
@@ -2273,7 +2286,7 @@ public class StoreEditController : NetworkBehaviour
         hudStatus = $"Selected: {itemName}   Tool: {toolName}   Gravity: {gravity}";
         hudControls = $"{K("Drag")} item: slide   {K("X")}: move > rotate > hide   {K(rotateKey)}: rotate   {K("G")}: gravity\n" +
                       $"{K("Ctrl")}: no snap   {K("RMB")} drag: camera   {K("RMB")} click / {K("Esc")}: deselect\n" +
-                      $"{K("Click")} a box: put its window / door in   {K(wallToolKey)}: build walls   {K(toggleKey)}: save & exit";
+                      $"{K("Click")} a box: put in its window, door or front wall   {K(wallToolKey)}: build walls   {K(toggleKey)}: save & exit";
         hudInfo = openingInfo;
     }
 
@@ -2313,12 +2326,6 @@ public class StoreEditController : NetworkBehaviour
             GUI.Box(new Rect(10, 10, 470, 16 + lines.Count * 20), GUIContent.none);
             for (int i = 0; i < lines.Count; i++)
                 GUI.Label(new Rect(20, 16 + i * 20, 450, 20), lines[i]);
-        }
-
-        // The storefront module list is still built-in.
-        if (!finishing && !wallTool)
-        {
-            DrawSlotPanel();
         }
     }
 
@@ -2367,23 +2374,26 @@ public class StoreEditController : NetworkBehaviour
 
     /* ========================= NETWORK ========================= */
 
-    /// <summary>Host: swap one storefront section of the store this player is editing.</summary>
+    /// <summary>
+    /// Host: put up a front wall kit (from a box in the store) on one storefront section of the store
+    /// this player is editing. The box is used up; the type it replaces goes back in a box on save.
+    /// </summary>
     [Rpc(SendTo.Server)]
-    private void RequestSetFrontModuleRpc(int slot, int moduleId, RpcParams rpcParams = default)
+    private void RequestApplyFrontKitRpc(int slot, ulong boxId, RpcParams rpcParams = default)
     {
         if (rpcParams.Receive.SenderClientId != OwnerClientId || MallManager.Instance == null) return;
-
         var plot = MallManager.Instance.GetPlotEditedBy(OwnerClientId);
-        if (plot == null) return;
+        if (plot == null || !plot.TryGetBoxInStore(boxId, out var box)) return;
+        if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(box.ContainedItemId, out var def) ||
+            !FrontWallKit.TryGetModule(def, out var module)) return;
 
-        // Charge the module's price only if the swap actually happens.
-        var eco = EconomyManager.Instance;
-        ulong team = MallManager.GetTeamOf(OwnerClientId);
-        int price = FrontWallCatalog.TryGet(moduleId, out var module) ? module.Price : 0;
-        if (eco != null && eco.IsSpawned && !eco.ServerCanAfford(team, price)) return;
+        int old = plot.GetFrontModuleId(slot);
+        if (old == module.ModuleId || !plot.ServerTrySetFrontModule(slot, module.ModuleId)) return;
+        box.NetworkObject.Despawn(true);
 
-        if (plot.ServerTrySetFrontModule(slot, moduleId) && eco != null && eco.IsSpawned)
-            eco.ServerTrySpend(team, price);
+        // The old type goes back in a box (if there's a kit for it), near that section.
+        if (FrontWallKit.TryFindKitItem(old, out var oldKit))
+            plot.ServerQueueBoxOnSave(oldKit.id, 0, plot.GetFrontSlotBounds(slot).center);
     }
 
     [Rpc(SendTo.Server)]

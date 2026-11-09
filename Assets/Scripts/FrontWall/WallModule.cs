@@ -3,8 +3,8 @@ using UnityEngine;
 /// <summary>
 /// One storefront wall section: a type of front wall. Add this to each front wall prefab and give
 /// each prefab a different Module Id; every copy already placed in the scene picks it up
-/// automatically. The one placed in the scene is the store's starting front; in edit mode the owner
-/// can click the front and swap it for another type from the FrontWallCatalog.
+/// automatically. The one placed in the scene is the store's starting front. Other types are bought in
+/// the shop as FrontWallKit items and put up in edit mode (click the kit's box, then a section).
 ///
 /// A module can be any model. Where players may put windows, doors and wall items, give it one or
 /// more flat panels: a child box with a CuttableWall (see CuttableWall). Everything else is
@@ -22,7 +22,7 @@ public class WallModule : MonoBehaviour
     [SerializeField] private string displayName = "Wall";
     [Tooltip("Customers can walk through this one (doorways). A store always keeps at least one.")]
     [SerializeField] private bool isEntrance;
-    [Tooltip("Cost to put this module in (charged when swapped in during edit mode).")]
+    [Tooltip("Not used any more: front wall types are bought in the shop as a FrontWallKit item (its catalog price).")]
     [SerializeField] private int price;
     [Tooltip("Doorways: the door object inside this module. The store shows it while closed, for " +
              "sale or being renovated, and hides it while open.")]
