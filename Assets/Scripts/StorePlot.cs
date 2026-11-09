@@ -1387,7 +1387,7 @@ public class StorePlot : NetworkBehaviour
         public StockContainer.ZoneStock[] stock; // what was in its StockContainer, if it has one
         public int units;   // products left, if it's a stock crate
         public int price;   // its price tag (cents), if it's a loose Sellable
-        public byte paint;  // its paint color (PaintPalette id)
+        public uint paint;  // its paint colors (PaintSet)
         public bool removed; // taken out during the session (not put back)
     }
 
@@ -1458,7 +1458,7 @@ public class StorePlot : NetworkBehaviour
         public int itemId;
         public Vector3 position;
         public Quaternion rotation;
-        public byte paint;
+        public uint paint;  // PaintSet
     }
 
     /// <summary>
@@ -1572,7 +1572,7 @@ public class StorePlot : NetworkBehaviour
                     notBought++;
                     continue;
                 }
-                SpawnEditItem(def, n.position, r, 0, 0, null, PaintPalette.IsValid(n.paint) ? n.paint : (byte)0);
+                SpawnEditItem(def, n.position, r, 0, 0, null, PaintSet.IsValid(n.paint) ? n.paint : 0u);
                 bought++;
             }
 
@@ -1638,7 +1638,7 @@ public class StorePlot : NetworkBehaviour
     }
 
     private void SpawnEditItem(ItemDef def, Vector3 pos, Quaternion rot, int units, int price, StockContainer.ZoneStock[] stock,
-                               byte paint = 0)
+                               uint paint = 0)
     {
         var spawned = Instantiate(def.worldNetworkPrefab, pos, rot);
         WarnIfNestedNetworkObjects(def, spawned.gameObject);

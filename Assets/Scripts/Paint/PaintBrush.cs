@@ -54,6 +54,7 @@ public class PaintBrush : NetworkBehaviour
     private enum Kind { None, Item, Wall, Front, Floor }
     private Kind targetKind;
     private ItemPickupNet targetItem;
+    private int targetZone;
     private StorePlot targetPlot;
     private BuiltWall targetWall;
     private GameObject targetObject;
@@ -168,7 +169,7 @@ public class PaintBrush : NetworkBehaviour
 
     private void PaintHand()
     {
-        if (handVisual != null && handVisual.TryGetComponent<PaintParts>(out var parts)) parts.Apply(color);
+        if (handVisual != null) PaintParts.ApplySet(handVisual, PaintSet.All(color));
     }
 
     /* ========================= COLOR WHEEL ========================= */
@@ -230,16 +231,21 @@ public class PaintBrush : NetworkBehaviour
         var item = t.GetComponentInParent<ItemPickupNet>();
         if (item != null)
         {
-            if (!item.TryGetComponent<PaintParts>(out _)) { prompt = "This can't be painted"; return; }
+            if (!PaintParts.IsPaintable(item.gameObject)) { prompt = "This can't be painted"; return; }
             var plot = PlotOf(item);
             if (plot == null || !plot.IsAuthorized(OwnerClientId)) { prompt = "Not in your store"; return; }
+            // Items can have several paint zones (a door's frame and its doors): the one pointed at.
+            var zones = PaintParts.ZonesOf(item.gameObject);
+            targetZone = Mathf.Max(0, PaintParts.ZoneAt(item.gameObject, hit.point));
             targetKind = Kind.Item;
             targetItem = item;
             targetPlot = plot;
-            targetObject = item.gameObject;
-            current = item.Paint;
+            targetObject = zones.Count > 1 ? zones[targetZone].gameObject : item.gameObject;
+            current = PaintSet.Get(item.Paint, targetZone);
             fee = palette.ItemFee;
             what = ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(item.itemId, out var def) ? def.displayName : "Item";
+            string zone = PaintParts.ZoneName(item.gameObject, targetZone);
+            if (zone.Length > 0) what += $" ({zone})";
         }
         else
         {
@@ -315,7 +321,7 @@ public class PaintBrush : NetworkBehaviour
         if (targetPlot == null) return;
         switch (targetKind)
         {
-            case Kind.Item: RequestPaintItemRpc(targetItem.NetworkObject, color); break;
+            case Kind.Item: RequestPaintItemRpc(targetItem.NetworkObject, targetZone, color); break;
             case Kind.Wall: RequestPaintWallRpc(targetPlot.PlotId, targetWall.id, color); break;
             case Kind.Front: RequestPaintFrontRpc(targetPlot.PlotId, color); break;
             case Kind.Floor: RequestPaintFloorRpc(targetPlot.PlotId, color); break;
@@ -327,13 +333,13 @@ public class PaintBrush : NetworkBehaviour
     /* ========================= HOST ========================= */
 
     [Rpc(SendTo.Server)]
-    private void RequestPaintItemRpc(NetworkObjectReference itemRef, byte paint, RpcParams rpcParams = default)
+    private void RequestPaintItemRpc(NetworkObjectReference itemRef, int zone, byte paint, RpcParams rpcParams = default)
     {
         if (!itemRef.TryGet(out NetworkObject no) || !no.TryGetComponent<ItemPickupNet>(out var item)) return;
-        if (!item.TryGetComponent<PaintParts>(out _) || item.Paint == paint) return;
+        if (zone < 0 || zone >= PaintParts.ZonesOf(item.gameObject).Count || PaintSet.Get(item.Paint, zone) == paint) return;
         var plot = PlotOf(item);
         if (!ServerCanPaint(rpcParams, plot, paint, item.transform.position, out var palette, storeBuffer)) return;
-        if (ServerPay(palette.ItemFee)) item.ServerSetPaint(paint);
+        if (ServerPay(palette.ItemFee)) item.ServerSetZonePaint(zone, paint);
     }
 
     [Rpc(SendTo.Server)]
