@@ -47,10 +47,11 @@ public static class PlacementCheck
     /// default box), so it takes less room. Null if it has no box (it goes on as itself).
     /// </summary>
     /// <summary>
-    /// Wall pieces (windows, doors: WallOpening) stay in their shipment box when set down in normal play;
-    /// they come out in store edit mode, where they're dragged onto a wall. Needs a box to go in.
+    /// Wall pieces (windows, doors: WallOpening) and front wall kits stay in their shipment box when set
+    /// down in normal play; they come out in store edit mode. Needs a box to go in.
     /// </summary>
-    public static bool StaysBoxed(ItemDef def) => WallOpening.IsOpening(def) && CartBoxOf(def) != null;
+    public static bool StaysBoxed(ItemDef def) =>
+        (WallOpening.IsOpening(def) || FrontWallKit.IsKit(def)) && CartBoxOf(def) != null;
 
     public static NetworkObject CartBoxOf(ItemDef def)
     {

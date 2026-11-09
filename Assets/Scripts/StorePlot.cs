@@ -1657,14 +1657,27 @@ public class StorePlot : NetworkBehaviour
     /// A delivery box in (or just outside) this store holding this window or door, not held for
     /// another team. Edit mode takes pieces out of these.
     /// </summary>
-    public bool TryGetPieceBox(ulong boxId, int itemId, out ShipmentPackage box)
+    public bool TryGetPieceBox(ulong boxId, int itemId, out ShipmentPackage box) =>
+        TryGetBoxInStore(boxId, out box) && box.ContainedItemId == itemId;
+
+    /// <summary>A delivery box in (or just outside) this store, not held for another team.</summary>
+    public bool TryGetBoxInStore(ulong boxId, out ShipmentPackage box)
     {
         box = null;
         var nm = NetworkManager;
         if (nm == null || nm.SpawnManager == null || !nm.SpawnManager.SpawnedObjects.TryGetValue(boxId, out var no)) return false;
-        if (!no.TryGetComponent(out box) || box.ContainedItemId != itemId) return false;
-        if (!IsInsideOrNear(no.transform.position, 1f)) return false;
+        if (!no.TryGetComponent(out box) || !IsInsideOrNear(no.transform.position, 1f)) return false;
         return !box.IsReservedAgainst(ownerTeamId.Value);
+    }
+
+    /// <summary>
+    /// Server: put something back in a box on this store's floor near a point when the edit session
+    /// ends (e.g. a front wall type that was swapped out).
+    /// </summary>
+    public void ServerQueueBoxOnSave(int itemId, uint paint, Vector3 near)
+    {
+        if (IsServer && IsRenovating) boxesOnSave.Add((itemId, paint, near, false));
+        else if (IsServer) ServerSpawnBoxNear(itemId, paint, near);
     }
 
     /// <summary>
