@@ -617,7 +617,7 @@ public class PlayerInteractInput : NetworkBehaviour
         // The shop monitor opens the shop GUI for its store (local only; orders go through the host).
         if (lookedAtMonitor != null)
         {
-            if (ShopUIController.Instance != null) ShopUIController.Instance.Open(lookedAtMonitor.GetPlot());
+            if (ShopUIController.Instance != null) ShopUIController.Instance.Open(lookedAtMonitor.GetPlot(), lookedAtMonitor, cam);
             else Debug.LogWarning("[PlayerInteractInput] No ShopUIController in the scene to open.");
             return;
         }
