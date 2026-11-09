@@ -1,31 +1,58 @@
 using System.Collections.Generic;
+using TMPro;
 using Unity.Netcode;
 using UnityEngine;
 
 /// <summary>
 /// The price scanner. Put it on the player prefab. Press 1 (with empty hands) to take it out, aim at a
-/// shelf or a sellable item in your store and click: the price tag window opens. Set a price for that
-/// shelf (or item), or for every one of that product in the store. 1 again puts it away.
+/// shelf or a sellable item in your store and click: the scanner's display shows its price, ready to
+/// type over. No window opens; you can keep walking and looking around while typing.
+///
+/// Typing (on the display, one row):
+/// - It starts at the current price, or the suggested price (cost × Default Markup) if it isn't for sale.
+/// - Digits type a new price cash-register style: 1 2 9 9 = $12.99. The first digit replaces what's
+///   shown; Backspace takes the last one off.
+/// - Enter: price this shelf space / item. Shift+Enter: every one of that product in the store.
+///   Entering 0 takes it off sale.
+/// - Esc or right click: cancel. Clicking something else starts on that instead.
+/// While typing, the number keys go to the scanner (they don't switch tools or open edit mode).
+///
+/// The display is the first TextMeshPro text in the Hand Visual Prefab (3D or UI), or the one in
+/// Display Text Name. Without one, the price shows in the interact prompt instead.
 ///
 /// Only things with a Sellable can be priced. Shelves are priced per zone; the price stays on the
-/// zone while it's empty and goes with the product it was set for.
+/// zone while it's empty and goes with the product it was set for. 1 again puts the scanner away.
 /// </summary>
 public class PriceScanner : NetworkBehaviour
 {
     [SerializeField] private KeyCode toggleKey = KeyCode.Alpha1;
-    [Tooltip("Optional: what shows in your hand while scanning.")]
+    [Tooltip("Optional: what shows in your hand while scanning. Put a TextMeshPro text on it for the display.")]
     [SerializeField] private GameObject handVisualPrefab;
+    [Tooltip("Optional: the name of the display's TextMeshPro object in the Hand Visual Prefab. Empty = the first one.")]
+    [SerializeField] private string displayTextName = "";
     [Tooltip("How far you can scan, in meters.")]
     [SerializeField] private float range = 4f;
-    [Tooltip("The Default price is cost × this: a safe price with a small profit, but rarely the best one. " +
+    [Tooltip("The suggested price is cost × this: a safe price with a small profit, but rarely the best one. " +
              "Finding the best price (which moves with events and seasons) is up to the player.")]
     [SerializeField] private float defaultMarkup = 1.2f;
+    [Tooltip("Outline colour for what the scanner would price.")]
+    [SerializeField] private Color outlineColor = new(0.4f, 1f, 0.4f, 1f);
+    [Tooltip("Outline colour for what's being priced while typing.")]
+    [SerializeField] private Color typingOutlineColor = new(1f, 0.9f, 0.3f, 1f);
+
+    private const int MaxDigits = 7; // $99,999.99
+
+    /// <summary>Is the local player's scanner out?</summary>
+    public static bool LocalActive { get; private set; }
+    /// <summary>Is the local player typing a price? Number keys belong to the scanner meanwhile.</summary>
+    public static bool LocalTyping { get; private set; }
 
     private bool active;
     private Camera cam;
     private PlayerInventoryNet inventory;
     private StoreEditController storeEdit;
     private GameObject handVisual;
+    private TMP_Text display;
 
     // What's being aimed at.
     private StockContainer targetContainer;
@@ -34,21 +61,20 @@ public class PriceScanner : NetworkBehaviour
     private int targetProduct;
     private string hint;
 
-    // The built-in window (when there's no PriceTagUI in the scene).
-    private bool fallbackOpen;
-    private string fallbackText = "";
-    private string fallbackTitle;
-    private int fallbackCost;
-    private int fallbackDefault;
-    private System.Action<int, bool> fallbackSet;
+    // What's being priced (kept while typing, wherever the player looks).
+    private bool typing;
+    private StockContainer entryContainer;
+    private int entryZone;
+    private Sellable entryItem;
+    private int entryProduct;
+    private int entryCents;
+    private bool entryFresh;  // the first digit replaces what's shown
+    private string entryNote; // e.g. a part-used crate's share
 
     public bool IsActive => active;
 
-    /// <summary>Put the scanner away (another tool is coming out).</summary>
-    public void PutAway()
-    {
-        if (active) SetActive(false);
-    }
+    /// <summary>What the scanner is doing (shown by PlayerInteractInput's prompt while it's out).</summary>
+    public string Prompt { get; private set; }
 
     private void Awake()
     {
@@ -63,66 +89,81 @@ public class PriceScanner : NetworkBehaviour
 
     public override void OnNetworkDespawn() => SetActive(false);
 
+    public override void OnDestroy()
+    {
+        if (IsOwner) { LocalActive = false; LocalTyping = false; }
+        TargetOutline.Release(this);
+        base.OnDestroy();
+    }
+
+    /// <summary>Put the scanner away (another tool is coming out).</summary>
+    public void PutAway()
+    {
+        if (active) SetActive(false);
+    }
+
     private void Update()
     {
         if (!IsOwner || cam == null) return;
 
         bool editing = storeEdit != null && storeEdit.IsEditing;
-        bool holding = inventory != null && inventory.HeldItemId.Value != 0;
+        bool holding = (inventory != null && inventory.HeldItemId.Value != 0) || CartNet.GetPushedBy(OwnerClientId) != null;
         if (active && (editing || holding)) SetActive(false);
+        if (editing || UIState.IsMenuOpen) return;
 
-        bool ourWindowOpen = fallbackOpen || (PriceTagUI.Instance != null && PriceTagUI.Instance.IsOpen);
-        if (editing || (UIState.IsMenuOpen && !ourWindowOpen)) return;
+        if (typing)
+        {
+            UpdateTyping();
+            return;
+        }
 
-        if (!ourWindowOpen && Input.GetKeyDown(toggleKey) && !holding) SetActive(!active);
-        if (!active || ourWindowOpen) return;
+        if (Input.GetKeyDown(toggleKey) && !holding) SetActive(!active);
+        if (!active) return;
 
         FindTarget();
-        UpdateOutline();
-        if (Input.GetMouseButtonDown(0) && targetProduct != 0 && hint == null) OpenWindow();
-    }
-
-    [Tooltip("Outline colour for what the scanner would price.")]
-    [SerializeField] private Color outlineColor = new(0.4f, 1f, 0.4f, 1f);
-    private readonly List<GameObject> outlineModels = new();
-
-    // Box what a click would price: every product in the shelf space (they share a price), or the item.
-    private void UpdateOutline()
-    {
-        var outline = TargetOutline.For(this);
-        if (targetItem != null) { outline.ShowObject(targetItem.gameObject, outlineColor); return; }
-        if (targetContainer != null && targetZone >= 0)
-        {
-            outlineModels.Clear();
-            foreach (var m in targetContainer.GetZoneModels(targetZone)) if (m != null) outlineModels.Add(m);
-            if (outlineModels.Count > 0) { outline.ShowObjects(outlineModels, outlineColor); return; }
-            if (targetContainer.TryGetZoneBox(targetZone, out Vector3 c, out Quaternion r, out Vector3 s))
-            { outline.ShowBox(c, r, s, outlineColor); return; }
-        }
-        outline.Hide();
+        UpdateOutline(targetContainer, targetZone, targetItem, outlineColor);
+        ShowAiming();
+        if (Input.GetMouseButtonDown(0) && targetProduct != 0 && hint == null) StartTyping();
     }
 
     private void SetActive(bool on)
     {
         if (on && TryGetComponent<PaintBrush>(out var brush)) brush.PutAway(); // one hand tool at a time
         active = on;
+        if (IsOwner) LocalActive = on;
         if (on && handVisualPrefab != null && handVisual == null && inventory != null && inventory.HandAnchor != null)
         {
             handVisual = Instantiate(handVisualPrefab, inventory.HandAnchor);
             handVisual.transform.localPosition = Vector3.zero;
             handVisual.transform.localRotation = Quaternion.identity;
             if (IsOwner) HeldItemBlocker.Add(handVisual, transform, inventory.HeldItemBlockedBy);
+            display = FindDisplay(handVisual);
         }
         if (!on && handVisual != null)
         {
             Destroy(handVisual);
             handVisual = null;
+            display = null;
         }
         if (!on)
         {
+            StopTyping();
             ClearTarget();
+            Prompt = null;
             TargetOutline.For(this).Hide();
         }
+    }
+
+    private TMP_Text FindDisplay(GameObject model)
+    {
+        foreach (var t in model.GetComponentsInChildren<TMP_Text>(true))
+            if (string.IsNullOrEmpty(displayTextName) || t.name == displayTextName) return t;
+        return null;
+    }
+
+    private void ShowOnDisplay(string text)
+    {
+        if (display != null && display.text != text) display.text = text;
     }
 
     private void ClearTarget()
@@ -134,7 +175,133 @@ public class PriceScanner : NetworkBehaviour
         hint = null;
     }
 
+    private readonly List<GameObject> outlineModels = new();
+
+    // Box what a click would price: every product in the shelf space (they share a price), or the item.
+    private void UpdateOutline(StockContainer container, int zone, Sellable item, Color color)
+    {
+        var outline = TargetOutline.For(this);
+        if (item != null) { outline.ShowObject(item.gameObject, color); return; }
+        if (container != null && zone >= 0)
+        {
+            outlineModels.Clear();
+            foreach (var m in container.GetZoneModels(zone)) if (m != null) outlineModels.Add(m);
+            if (outlineModels.Count > 0) { outline.ShowObjects(outlineModels, color); return; }
+            if (container.TryGetZoneBox(zone, out Vector3 c, out Quaternion r, out Vector3 s))
+            { outline.ShowBox(c, r, s, color); return; }
+        }
+        outline.Hide();
+    }
+
+    // Not typing: the display shows the price of what's aimed at.
+    private void ShowAiming()
+    {
+        if (targetProduct != 0 && hint == null)
+        {
+            int now = targetItem != null ? targetItem.Price : targetContainer.GetZone(targetZone).price;
+            ShowOnDisplay(now > 0 ? Money(now) : "- - -");
+            Prompt = $"Click: price {NameOf(targetProduct)}" + (display == null ? $"   (now {Sellable.FormatPrice(now)})" : "");
+            return;
+        }
+        ShowOnDisplay("SCAN");
+        Prompt = hint ?? $"Scanner: aim at a shelf or item   ({KeyName(toggleKey)} to put away)";
+    }
+
+    /* ========================= TYPING ========================= */
+
+    private void StartTyping()
+    {
+        bool stock = targetItem == null;
+        int current = stock ? targetContainer.GetZone(targetZone).price : targetItem.Price;
+        entryContainer = targetContainer;
+        entryZone = targetZone;
+        entryItem = targetItem;
+        entryProduct = targetProduct;
+        // Already for sale: its price. Not for sale yet: the suggested price.
+        entryCents = current > 0 ? current : DefaultPrice(CostEach(targetProduct, stock));
+        entryFresh = true;
+        entryNote = null;
+        if (!stock && StockContainer.IsStockCrate(targetProduct))
+        {
+            entryNote = "full crate";
+            if (targetItem.TryGetComponent<ItemPickupNet>(out var crate) && crate.Units < crate.UnitsPerCrate)
+                entryNote = $"full crate; {crate.Units} of {crate.UnitsPerCrate} left sells for its share";
+        }
+        typing = true;
+        if (IsOwner) LocalTyping = true;
+        ShowTyping();
+    }
+
+    private void StopTyping()
+    {
+        typing = false;
+        if (IsOwner) LocalTyping = false;
+        entryContainer = null;
+        entryItem = null;
+    }
+
+    private void UpdateTyping()
+    {
+        // What's being priced went away (sold, picked up, despawned).
+        if ((entryItem == null || !entryItem.IsSpawned) && (entryContainer == null || !entryContainer.IsSpawned))
+        {
+            StopTyping();
+            return;
+        }
+
+        if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+        {
+            StopTyping();
+            return;
+        }
+
+        // Clicking something else starts on that instead.
+        if (Input.GetMouseButtonDown(0))
+        {
+            FindTarget();
+            if (targetProduct != 0 && hint == null) { StartTyping(); return; }
+        }
+
+        for (int d = 0; d <= 9; d++)
+            if (Input.GetKeyDown(KeyCode.Alpha0 + d) || Input.GetKeyDown(KeyCode.Keypad0 + d))
+            {
+                if (entryFresh) { entryCents = 0; entryFresh = false; }
+                if (entryCents.ToString().Length < MaxDigits || entryCents == 0) entryCents = entryCents * 10 + d;
+            }
+        if (Input.GetKeyDown(KeyCode.Backspace))
+        {
+            entryFresh = false;
+            entryCents /= 10;
+        }
+
+        if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
+        {
+            bool all = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            if (entryItem != null) SetItemPriceRpc(entryItem.NetworkObject, entryCents, all);
+            else if (entryContainer != null) SetZonePriceRpc(entryContainer.NetworkObject, entryZone, entryCents, all);
+            StopTyping();
+            return;
+        }
+
+        UpdateOutline(entryContainer, entryZone, entryItem, typingOutlineColor);
+        ShowTyping();
+    }
+
+    private void ShowTyping()
+    {
+        ShowOnDisplay(entryCents > 0 ? Money(entryCents) : "$0.00");
+        string name = NameOf(entryProduct);
+        string price = display == null ? $"{(entryCents > 0 ? Money(entryCents) : "$0.00 (not for sale)")}   " : "";
+        string note = entryNote != null ? $"({entryNote})   " : "";
+        Prompt = $"{price}{note}Enter: set   Shift+Enter: all {name}   0: not for sale   Esc: cancel";
+    }
+
+    private static string Money(int cents) => $"${cents / 100:N0}.{cents % 100:00}";
+
+    private static string KeyName(KeyCode k) => k.ToString().Replace("Alpha", "");
+
     /* ========================= AIMING ========================= */
+
 
     private void FindTarget()
     {
@@ -198,105 +365,6 @@ public class PriceScanner : NetworkBehaviour
         if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemId, out var def)) return 0;
         int units = stock ? Mathf.Max(1, StockContainer.GetUnitsPerCrate(itemId)) : 1;
         return Mathf.RoundToInt(MarketModifiers.OrderCost(def) * 100f / units); // today's cost, events included
-    }
-
-    /* ========================= WINDOW ========================= */
-
-    private void OpenWindow()
-    {
-        bool stock = targetItem == null;
-        int current = stock ? targetContainer.GetZone(targetZone).price : targetItem.Price;
-        int cost = CostEach(targetProduct, stock);
-        string title = NameOf(targetProduct);
-        int suggested = DefaultPrice(cost);
-        if (!stock && StockContainer.IsStockCrate(targetProduct))
-        {
-            title += " (full crate price)"; // priced apart from one on the shelf
-            // A part-used one sells for its share.
-            if (targetItem.TryGetComponent<ItemPickupNet>(out var crate) && crate.Units < crate.UnitsPerCrate)
-                title += $": {crate.Units} of {crate.UnitsPerCrate} left, sells for {Sellable.FormatPrice(targetItem.SalePrice)}";
-        }
-
-        // Remember the target now; the player can look away while typing.
-        var container = targetContainer;
-        int zone = targetZone;
-        var item = targetItem;
-        System.Action<int, bool> set = (cents, all) =>
-        {
-            if (item != null) SetItemPriceRpc(item.NetworkObject, cents, all);
-            else if (container != null) SetZonePriceRpc(container.NetworkObject, zone, cents, all);
-        };
-
-        if (PriceTagUI.Instance != null)
-        {
-            PriceTagUI.Instance.Open(title, current, cost, suggested, set);
-            return;
-        }
-
-        fallbackOpen = true;
-        fallbackTitle = title;
-        fallbackCost = cost;
-        fallbackDefault = suggested;
-        int shown = current > 0 ? current : suggested;
-        fallbackText = shown > 0 ? (shown / 100f).ToString("0.00") : "";
-        fallbackSet = set;
-        UIState.OpenMenu(this);
-    }
-
-    private void CloseFallback()
-    {
-        fallbackOpen = false;
-        fallbackSet = null;
-        UIState.CloseMenu(this);
-    }
-
-    public override void OnDestroy()
-    {
-        UIState.CloseMenu(this);
-        TargetOutline.Release(this);
-        base.OnDestroy();
-    }
-
-    private static GUIStyle hintStyle;
-
-    private void OnGUI()
-    {
-        if (!IsOwner) return;
-
-        if (fallbackOpen)
-        {
-            var r = new Rect(Screen.width * 0.5f - 170f, Screen.height * 0.5f - 110f, 340f, 220f);
-            GUI.Box(r, $"Price: {fallbackTitle}");
-            GUI.Label(new Rect(r.x + 15, r.y + 28, 310, 20), $"Cost each: {Sellable.FormatPrice(fallbackCost)}");
-            GUI.SetNextControlName("PriceField");
-            fallbackText = GUI.TextField(new Rect(r.x + 15, r.y + 52, 310, 24), fallbackText);
-            GUI.FocusControl("PriceField");
-
-            if (GUI.Button(new Rect(r.x + 15, r.y + 84, 310, 24), $"Default {Sellable.FormatPrice(fallbackDefault)}"))
-                fallbackText = (fallbackDefault / 100f).ToString("0.00");
-
-            bool enter = Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Return;
-            if (GUI.Button(new Rect(r.x + 15, r.y + 118, 150, 28), "Set this one") || enter) SubmitFallback(false);
-            if (GUI.Button(new Rect(r.x + 175, r.y + 118, 150, 28), $"Set all {fallbackTitle}")) SubmitFallback(true);
-            if (GUI.Button(new Rect(r.x + 15, r.y + 152, 150, 28), "Not for sale")) { fallbackSet?.Invoke(0, false); CloseFallback(); }
-            if (GUI.Button(new Rect(r.x + 175, r.y + 152, 150, 28), "Close") ||
-                (Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Escape)) CloseFallback();
-            return;
-        }
-
-        if (!active || UIState.IsMenuOpen) return;
-        hintStyle ??= new GUIStyle(GUI.skin.box) { fontSize = 15, alignment = TextAnchor.MiddleCenter };
-        string text = hint ?? (targetProduct != 0
-            ? $"Click: price {NameOf(targetProduct)}   (now {Sellable.FormatPrice(targetItem != null ? targetItem.Price : targetContainer.GetZone(targetZone).price)})"
-            : $"Scanner: aim at a shelf or item   ({toggleKey} to put away)");
-        GUI.Box(new Rect(Screen.width * 0.5f - 220f, Screen.height * 0.68f, 440f, 28f), text, hintStyle);
-    }
-
-    private void SubmitFallback(bool all)
-    {
-        if (!Sellable.TryParsePrice(fallbackText, out int cents)) return;
-        fallbackSet?.Invoke(cents, all);
-        CloseFallback();
     }
 
     /* ========================= HOST ========================= */

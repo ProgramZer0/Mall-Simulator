@@ -228,7 +228,7 @@ public class StoreEditController : NetworkBehaviour
         // A menu is open: ignore edit-mode keys and mouse until it closes.
         bool menuOpen = UIState.IsMenuOpen;
 
-        if (!menuOpen && (Input.GetKeyDown(toggleKey) || (toggleKey == KeyCode.Alpha0 && Input.GetKeyDown(KeyCode.Keypad0))))
+        if (!menuOpen && !PriceScanner.LocalTyping && (Input.GetKeyDown(toggleKey) || (toggleKey == KeyCode.Alpha0 && Input.GetKeyDown(KeyCode.Keypad0))))
         {
             if (IsEditing) Finish();
             else TryStart();
