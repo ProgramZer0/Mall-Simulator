@@ -50,6 +50,9 @@ public class PaintPalette : MonoBehaviour
     [SerializeField] private Sprite swatchSprite;
     [Tooltip("Icon for Original (no paint), drawn untinted. Empty = the swatch icon in a see-through white.")]
     [SerializeField] private Sprite originalSprite;
+    [Tooltip("Turn each swatch icon by up to this many degrees either way, so they don't all look the same. Each " +
+             "color always gets the same turn. 0 = no turning.")]
+    [Range(0f, 180f)] [SerializeField] private float swatchTurn = 180f;
 
     [Header("Paint brush fees (painting at purchase is free)")]
     [Tooltip("Per item painted.")]
@@ -89,10 +92,16 @@ public class PaintPalette : MonoBehaviour
     /// Set up a swatch image for a color: the palette's icon tinted to the color (Original: its own icon,
     /// untinted, or the tinted icon see-through). Without icons it just gets the color.
     /// </summary>
-    public static void StyleSwatch(UnityEngine.UI.Image image, byte id, Color originalColor)
+    public static void StyleSwatch(UnityEngine.UI.Image image, byte id, Color originalColor, bool turn = true)
     {
         if (image == null) return;
         var p = Instance;
+        // A random-looking turn that's the same for this color every time (and on every machine).
+        if (turn && p != null && p.swatchTurn > 0f)
+        {
+            float t = Mathf.Repeat((id + 1) * 0.6180339f, 1f) * 2f - 1f;
+            image.rectTransform.localRotation = Quaternion.Euler(0f, 0f, t * p.swatchTurn);
+        }
         if (id == 0 && p != null && p.originalSprite != null)
         {
             image.sprite = p.originalSprite;
