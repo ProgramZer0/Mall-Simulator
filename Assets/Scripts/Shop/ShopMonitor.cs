@@ -26,6 +26,13 @@ public class ShopMonitor : MonoBehaviour
     public Transform Screen => screen;
     public float ScreenWidth => screenWidth;
 
+    // Going away (despawned, store edit mode) while the shop is on its screen: take the shop back
+    // first, or it would go with it.
+    private void OnDisable()
+    {
+        if (ShopUIController.Instance != null) ShopUIController.Instance.ReleaseMonitor(this);
+    }
+
     /// <summary>The store this monitor is standing in (null in a hallway).</summary>
     public StorePlot GetPlot() =>
         MallManager.Instance != null ? MallManager.Instance.GetPlotAt(transform.position) : null;
