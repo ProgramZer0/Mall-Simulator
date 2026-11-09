@@ -158,6 +158,19 @@ public class MallManager : NetworkBehaviour
         return null;
     }
 
+    /// <summary>
+    /// The store containing this point, or else one within Reach meters of its space (for things that
+    /// stick out a little, like windows and doors in the front wall). Null if none.
+    /// </summary>
+    public StorePlot GetPlotNear(Vector3 worldPoint, float reach)
+    {
+        var inside = GetPlotAt(worldPoint);
+        if (inside != null || reach <= 0f) return inside;
+        foreach (var plot in plots.Values)
+            if (plot.IsInsideOrNear(worldPoint, reach)) return plot;
+        return null;
+    }
+
     public int CountPlotsOwnedByTeam(ulong teamId)
     {
         int n = 0;

@@ -30,6 +30,9 @@ public class PaintBrush : NetworkBehaviour
     [SerializeField] private Vector3 handRotation = new(0f, -90f, 0f);
     [Tooltip("How far you can paint, in meters.")]
     [SerializeField] private float range = 4f;
+    [Tooltip("Items this far outside your store's space still count as yours (windows and doors in the front " +
+             "wall stick out a little), in meters.")]
+    [SerializeField] private float storeBuffer = 0.75f;
     [Tooltip("Outline color for what a click would paint.")]
     [SerializeField] private Color outlineColor = new(1f, 0.85f, 0.3f, 1f);
 
@@ -228,7 +231,7 @@ public class PaintBrush : NetworkBehaviour
         if (item != null)
         {
             if (!item.TryGetComponent<PaintParts>(out _)) { prompt = "This can't be painted"; return; }
-            var plot = mall != null ? mall.GetPlotAt(item.transform.position) : null;
+            var plot = PlotOf(item);
             if (plot == null || !plot.IsAuthorized(OwnerClientId)) { prompt = "Not in your store"; return; }
             targetKind = Kind.Item;
             targetItem = item;
@@ -283,6 +286,23 @@ public class PaintBrush : NetworkBehaviour
         prompt = $"Click: paint {what} {PaintPalette.NameOf(color)}" + (fee > 0 ? $" (${fee})" : "");
     }
 
+    // The store an item belongs to: the store whose wall a window or door is in, otherwise the store its
+    // middle is in or just outside of (Store Buffer).
+    private StorePlot PlotOf(ItemPickupNet item)
+    {
+        if (item.TryGetComponent<WallOpening>(out var opening))
+        {
+            var host = CuttableWall.HostOf(opening);
+            if (host != null && host.Plot != null) return host.Plot;
+        }
+        var mall = MallManager.Instance;
+        if (mall == null) return null;
+        Vector3 center = ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(item.itemId, out var def) &&
+                         PlacementCheck.GetTestBox(def, item.transform.position, item.transform.rotation, out Vector3 c, out _)
+            ? c : item.transform.position;
+        return mall.GetPlotNear(center, storeBuffer);
+    }
+
     // A storefront panel just outside the store's space still belongs to it.
     private static StorePlot FindStorefrontOwner(Transform t)
     {
@@ -311,9 +331,8 @@ public class PaintBrush : NetworkBehaviour
     {
         if (!itemRef.TryGet(out NetworkObject no) || !no.TryGetComponent<ItemPickupNet>(out var item)) return;
         if (!item.TryGetComponent<PaintParts>(out _) || item.Paint == paint) return;
-        var mall = MallManager.Instance;
-        var plot = mall != null ? mall.GetPlotAt(item.transform.position) : null;
-        if (!ServerCanPaint(rpcParams, plot, paint, item.transform.position, out var palette)) return;
+        var plot = PlotOf(item);
+        if (!ServerCanPaint(rpcParams, plot, paint, item.transform.position, out var palette, storeBuffer)) return;
         if (ServerPay(palette.ItemFee)) item.ServerSetPaint(paint);
     }
 
