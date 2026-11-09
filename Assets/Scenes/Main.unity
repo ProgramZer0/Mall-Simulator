@@ -8164,6 +8164,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 828683915}
     m_Modifications:
+    - target: {fileID: 323429474624334279, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
+      propertyPath: startsOnWall
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1306133706262369954, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
       propertyPath: m_Name
       value: ShopMonitor
@@ -11895,6 +11899,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1527124298}
     m_Modifications:
+    - target: {fileID: 323429474624334279, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
+      propertyPath: startsOnWall
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1306133706262369954, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
       propertyPath: m_Name
       value: ShopMonitor
@@ -13551,6 +13559,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 507848867}
     m_Modifications:
+    - target: {fileID: 323429474624334279, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
+      propertyPath: startsOnWall
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1306133706262369954, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
       propertyPath: m_Name
       value: ShopMonitor
@@ -13833,6 +13845,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1143980433}
     m_Modifications:
+    - target: {fileID: 323429474624334279, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
+      propertyPath: startsOnWall
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1306133706262369954, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
       propertyPath: m_Name
       value: ShopMonitor
@@ -19133,6 +19149,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 2116628163}
     m_Modifications:
+    - target: {fileID: 323429474624334279, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
+      propertyPath: startsOnWall
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1306133706262369954, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
       propertyPath: m_Name
       value: ShopMonitor
@@ -19207,6 +19227,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 504996607}
     m_Modifications:
+    - target: {fileID: 323429474624334279, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
+      propertyPath: startsOnWall
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1306133706262369954, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
       propertyPath: m_Name
       value: ShopMonitor
@@ -19277,6 +19301,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1140952130}
     m_Modifications:
+    - target: {fileID: 323429474624334279, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
+      propertyPath: startsOnWall
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1306133706262369954, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
       propertyPath: m_Name
       value: ShopMonitor
@@ -19526,6 +19554,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 2060748232}
     m_Modifications:
+    - target: {fileID: 323429474624334279, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
+      propertyPath: startsOnWall
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1306133706262369954, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
       propertyPath: m_Name
       value: ShopMonitor
@@ -24503,6 +24535,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 851685060}
     m_Modifications:
+    - target: {fileID: 323429474624334279, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
+      propertyPath: startsOnWall
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1306133706262369954, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
       propertyPath: m_Name
       value: ShopMonitor
@@ -24890,6 +24926,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 2098442445}
     m_Modifications:
+    - target: {fileID: 323429474624334279, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
+      propertyPath: startsOnWall
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1306133706262369954, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
       propertyPath: m_Name
       value: ShopMonitor
@@ -25013,6 +25053,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1876912819}
     m_Modifications:
+    - target: {fileID: 323429474624334279, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
+      propertyPath: startsOnWall
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1306133706262369954, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
       propertyPath: m_Name
       value: ShopMonitor
@@ -25251,6 +25295,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 561587821}
     m_Modifications:
+    - target: {fileID: 323429474624334279, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
+      propertyPath: startsOnWall
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1306133706262369954, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
       propertyPath: m_Name
       value: ShopMonitor
@@ -27531,6 +27579,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1757256647}
     m_Modifications:
+    - target: {fileID: 323429474624334279, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
+      propertyPath: startsOnWall
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1306133706262369954, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
       propertyPath: m_Name
       value: ShopMonitor
@@ -30821,6 +30873,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 2078563124}
     m_Modifications:
+    - target: {fileID: 323429474624334279, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
+      propertyPath: startsOnWall
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1306133706262369954, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
       propertyPath: m_Name
       value: ShopMonitor
