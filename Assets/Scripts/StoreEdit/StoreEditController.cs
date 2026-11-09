@@ -846,10 +846,9 @@ public class StoreEditController : NetworkBehaviour
         }
         else if (mounting == ItemPickupNet.Mounting.FloorOrWall && hit.normal.y > 0.7f)
         {
-            Vector3 fwd = selected.transform.forward;
-            fwd.y = 0f;
-            rot = fwd.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(fwd.normalized, Vector3.up) : Quaternion.identity;
-            pos = hit.point + Vector3.up * PlacementCheck.PivotHeightAboveBase(def);
+            // Off the wall onto the floor: standing the way its prefab does, facing the way it faced.
+            rot = PlacementCheck.Upright(def, PlacementCheck.YawOf(def, selected.transform.rotation));
+            pos = hit.point + Vector3.up * PlacementCheck.PivotHeightAboveBase(def, rot);
         }
         else return true; // wall-only item over a floor: stay where it is
 

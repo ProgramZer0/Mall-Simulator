@@ -121,18 +121,19 @@ public static class PlacementCheck
                                 out Vector3 position, out Quaternion rotation)
     {
         if (def != null && def.worldNetworkPrefab != null && def.LocalBounds.size != Vector3.zero)
-            WallPose(def.LocalBounds, def.worldNetworkPrefab.transform.localScale, hitPoint, wallNormal, flip,
-                     out position, out rotation);
+            WallPose(def.LocalBounds, def.worldNetworkPrefab.transform.localScale, ModelFix(def), hitPoint, wallNormal,
+                     flip, out position, out rotation);
         else
-            WallPose(new Bounds(Vector3.zero, Vector3.one * 0.1f), Vector3.one, hitPoint, wallNormal, flip,
-                     out position, out rotation);
+            WallPose(new Bounds(Vector3.zero, Vector3.one * 0.1f), Vector3.one, Quaternion.identity, hitPoint, wallNormal,
+                     flip, out position, out rotation);
     }
 
     /// <summary>
     /// Same as above for any object: Local is its box in its own space before scale (see
-    /// ComputeLocalBounds), Scale its scale. Used to hang items placed in the scene.
+    /// ComputeLocalBounds), Scale its scale, Fix how its model stands upright (ModelFix). Used to hang
+    /// items placed in the scene.
     /// </summary>
-    public static void WallPose(Bounds local, Vector3 scale, Vector3 hitPoint, Vector3 wallNormal, bool flip,
+    public static void WallPose(Bounds local, Vector3 scale, Quaternion fix, Vector3 hitPoint, Vector3 wallNormal, bool flip,
                                 out Vector3 position, out Quaternion rotation)
     {
         Vector3 n = wallNormal;
@@ -140,8 +141,8 @@ public static class PlacementCheck
         if (n.sqrMagnitude < 1e-6f) n = Vector3.forward;
         n.Normalize();
 
-        Vector3 c = Vector3.Scale(local.center, scale);
-        Vector3 e = Vector3.Scale(local.extents, Abs(scale));
+        // Worked out for the model standing upright (its Fix applied); the Fix goes back on at the end.
+        TurnedBox(local, scale, fix, out Vector3 c, out Vector3 e);
 
         // Thin along z: its blue arrow points out of the wall. Thin along x: its red arrow does.
         bool thinX = e.x < e.z;
@@ -153,6 +154,7 @@ public static class PlacementCheck
         Vector3 axis = thinX ? new Vector3(Mathf.Sign(back.x), 0f, 0f) : new Vector3(0f, 0f, Mathf.Sign(back.z));
         Vector3 anchor = c + Vector3.Scale(axis, e);
         position = hitPoint - rotation * anchor;
+        rotation *= fix;
     }
 
     /// <summary>
@@ -308,6 +310,54 @@ public static class PlacementCheck
 
         center = position + rotation * Vector3.Scale(local.center, scale);
         return true;
+    }
+
+    /// <summary>
+    /// How the model stands upright: its prefab root's own rotation (e.g. Blender's -90 on X). Placing
+    /// keeps it, so turning an item only adds a turn around world up on top of this.
+    /// </summary>
+    public static Quaternion ModelFix(ItemDef def) =>
+        def != null && def.worldNetworkPrefab != null ? def.worldNetworkPrefab.transform.localRotation : Quaternion.identity;
+
+    /// <summary>The item's rotation for a turn around world up (Yaw), standing the way its prefab does.</summary>
+    public static Quaternion Upright(ItemDef def, Quaternion yaw) => yaw * ModelFix(def);
+
+    /// <summary>
+    /// The turn around world up of an item's rotation, with its Model Fix taken out (so an upright item
+    /// placed with Upright(def, yaw) gives yaw back).
+    /// </summary>
+    public static Quaternion YawOf(ItemDef def, Quaternion rotation)
+    {
+        Vector3 f = rotation * Quaternion.Inverse(ModelFix(def)) * Vector3.forward;
+        f.y = 0f;
+        return f.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(f.normalized, Vector3.up) : Quaternion.identity;
+    }
+
+    /// <summary>
+    /// The item's box turned by Rotation, as a box lined up with the world: its middle (from the pivot)
+    /// and half size.
+    /// </summary>
+    public static void TurnedBox(Bounds local, Vector3 scale, Quaternion rotation, out Vector3 center, out Vector3 extents)
+    {
+        center = rotation * Vector3.Scale(local.center, scale);
+        Vector3 e = Vector3.Scale(local.extents, Abs(scale));
+        Vector3 x = rotation * new Vector3(e.x, 0f, 0f), y = rotation * new Vector3(0f, e.y, 0f), z = rotation * new Vector3(0f, 0f, e.z);
+        extents = new Vector3(Mathf.Abs(x.x) + Mathf.Abs(y.x) + Mathf.Abs(z.x),
+                              Mathf.Abs(x.y) + Mathf.Abs(y.y) + Mathf.Abs(z.y),
+                              Mathf.Abs(x.z) + Mathf.Abs(y.z) + Mathf.Abs(z.z));
+    }
+
+    /// <summary>
+    /// Distance from the item's pivot up (world up) to its lowest point when turned by Rotation. Adding
+    /// (up * this) to a surface point makes it sit ON the surface, whatever its pivot or Model Fix.
+    /// </summary>
+    public static float PivotHeightAboveBase(ItemDef def, Quaternion rotation)
+    {
+        if (def == null || def.worldNetworkPrefab == null) return 0f;
+        Bounds local = def.LocalBounds;
+        if (local.size == Vector3.zero) return 0f;
+        TurnedBox(local, def.worldNetworkPrefab.transform.localScale, rotation, out Vector3 c, out Vector3 e);
+        return -(c.y - e.y);
     }
 
     /// <summary>
