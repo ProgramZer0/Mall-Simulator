@@ -257,7 +257,82 @@ public static class PlacementCheck
             if (c.GetComponentInParent<StockVisualFollower>() != null) continue;
             return c;
         }
+
+        // Something hung on the wall where the hole would go (on either face): the hole can't cut under it.
+        if (WallOpening.TryGet(def, out _))
+        {
+            var shape = WallOpening.Measure(def, position, rotation);
+            if (shape.forward.sqrMagnitude > 1e-6f)
+            {
+                Quaternion facing = Quaternion.LookRotation(shape.forward, shape.up);
+                Vector3 h = new(Mathf.Max(0.001f, shape.size.x * 0.5f - Skin), Mathf.Max(0.001f, shape.size.y * 0.5f - Skin),
+                                OpeningReach);
+                float floorY = plot != null ? plot.FloorHeight : float.NegativeInfinity;
+                count = Physics.OverlapBoxNonAlloc(shape.center, h, EditHits, facing, Physics.AllLayers, QueryTriggerInteraction.Ignore);
+                for (int i = 0; i < count; i++)
+                {
+                    var c = EditHits[i];
+                    if (IsPartOf(c, ignoreRoot)) continue;
+                    if (skipEditCopies && c.GetComponentInParent<EditLocalItem>() != null) continue;
+                    if (HungItemOf(c, floorY) != null) return c;
+                }
+            }
+        }
         return null;
+    }
+
+    /// <summary>How far in front of and behind a hole hung items are looked for (meters, each way).</summary>
+    private const float OpeningReach = 0.5f;
+    /// <summary>How close to a wall an item's box must come to count as hanging on it.</summary>
+    public const float HangTouch = 0.06f;
+
+    /// <summary>
+    /// The item this collider belongs to if it's hung on a wall: a wall item (Mounting Wall or
+    /// FloorOrWall, not a window or door) whose bottom is off the floor. Works for networked items and
+    /// edit mode's copies. Null otherwise. Floor Y: the store's floor (anything at or below it stands
+    /// on the floor); negative infinity to skip that test.
+    /// </summary>
+    public static Transform HungItemOf(Collider c, float floorY)
+    {
+        if (c == null) return null;
+        ItemDef def = null;
+        Transform root = null;
+        var copy = c.GetComponentInParent<EditLocalItem>();
+        if (copy != null) { def = copy.Def; root = copy.transform; }
+        else
+        {
+            var item = c.GetComponentInParent<ItemPickupNet>();
+            if (item == null || ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(item.itemId, out def)) return null;
+            root = item.transform;
+        }
+        return IsHung(def, root.position, root.rotation, floorY) ? root : null;
+    }
+
+    /// <summary>Is an item at this pose a wall item hanging up (not a window or door, not on the floor)?</summary>
+    public static bool IsHung(ItemDef def, Vector3 position, Quaternion rotation, float floorY)
+    {
+        if (def == null || GetMounting(def) == ItemPickupNet.Mounting.Floor || WallOpening.TryGet(def, out _)) return false;
+        if (!GetTestBox(def, position, rotation, out Vector3 c, out Vector3 half)) return false;
+        float bottom = c.y - (Mathf.Abs((rotation * new Vector3(half.x, 0f, 0f)).y) +
+                              Mathf.Abs((rotation * new Vector3(0f, half.y, 0f)).y) +
+                              Mathf.Abs((rotation * new Vector3(0f, 0f, half.z)).y));
+        return bottom > floorY + 0.05f;
+    }
+
+    /// <summary>
+    /// Is a hung item at this pose up against a wall that Is Wall says yes to? Its box, grown a little,
+    /// touches it.
+    /// </summary>
+    public static bool IsHungAgainst(ItemDef def, Vector3 position, Quaternion rotation, float floorY,
+                                     System.Predicate<Collider> isWall)
+    {
+        if (!IsHung(def, position, rotation, floorY)) return false;
+        if (!GetTestBox(def, position, rotation, out Vector3 c, out Vector3 half)) return false;
+        half += Vector3.one * (Skin + HangTouch);
+        int count = Physics.OverlapBoxNonAlloc(c, half, EditHits, rotation, Physics.AllLayers, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+            if (isWall(EditHits[i])) return true;
+        return false;
     }
 
     /// <summary>

@@ -487,6 +487,8 @@ public class MallManager : NetworkBehaviour
         if (!plot.IsAuthorized(clientId)) return false;
         if (segmentIndex < 0 || segmentIndex >= plot.SegmentCount) return false;
         if (plot.IsSegmentPurchased(segmentIndex)) return false;
+        // Its walls go away: nothing may be hung on them (and the store's items are put away while editing).
+        if (plot.IsRenovating || plot.CountItemsOnSegmentWalls(segmentIndex) > 0) return false;
 
         if (charge && !ServerTryCharge(GetTeamOf(clientId), plot.GetSegmentPrice(segmentIndex),
                 $"segment {segmentIndex} of '{plot.DisplayName}'", plot)) return false;

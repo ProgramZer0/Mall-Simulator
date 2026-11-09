@@ -1441,7 +1441,8 @@ public class StoreEditController : NetworkBehaviour
     {
         var result = new List<EditLocalItem>();
         var cuttable = piece.GetComponent<CuttableWall>();
-        float floor = editPlot.FloorHeight + 0.05f;
+        float floor = editPlot.FloorHeight;
+        bool IsThisWall(Collider c) => c.GetComponentInParent<BuiltWallPiece>() == piece;
 
         void Check(EditLocalItem item)
         {
@@ -1451,14 +1452,9 @@ public class StoreEditController : NetworkBehaviour
                 if (cuttable != null && CuttableWall.HostOf(item.Opening) == cuttable) result.Add(item);
                 return;
             }
-            if (PlacementCheck.GetMounting(item.Def) == ItemPickupNet.Mounting.Floor) return;
+            // Hung on it (whichever way the model is built): its box touches this wall, off the floor.
             Transform t = item.transform;
-            if (!PlacementCheck.GetTestBox(item.Def, t.position, t.rotation, out Vector3 c, out Vector3 half)) return;
-            if (c.y - half.y <= floor) return; // standing on the floor
-            // Hung items have their back (-Z) flat on the wall.
-            var hits = Physics.RaycastAll(c, -t.forward, half.z + 0.15f, WallMask(), QueryTriggerInteraction.Ignore);
-            foreach (var h in hits)
-                if (h.collider.GetComponentInParent<BuiltWallPiece>() == piece) { result.Add(item); return; }
+            if (PlacementCheck.IsHungAgainst(item.Def, t.position, t.rotation, floor, IsThisWall)) result.Add(item);
         }
 
         foreach (var item in localItems) Check(item);
@@ -1678,6 +1674,28 @@ public class StoreEditController : NetworkBehaviour
         else if (editPlot.TryGetBuiltWallById(eraseLine.id, out var whole)) eraseSpans.Add(StorePlot.WallSpan.Whole(whole));
 
         var items = ItemsInSpans(eraseSpans);
+
+        // Things hung on the wall have to come off first (windows and doors in it go with it).
+        int hung = 0;
+        foreach (var item in items) if (item.Opening == null) hung++;
+        if (hung > 0)
+        {
+            ShowEraseGhosts(eraseSpans);
+            wallInfo = $"{hung} thing{(hung == 1 ? " is" : "s are")} hung on this wall: take {(hung == 1 ? "it" : "them")} off first   (Esc: cancel)";
+            // Same timing as removing: a second click, or letting go after a drag, ends it (removing nothing).
+            bool letGo = eraseDragging && !Input.GetMouseButton(0);
+            if (letGo)
+            {
+                eraseDragging = false;
+                if ((mouse - erasePressMouse).sqrMagnitude <= 12f * 12f) return; // it was a click: wait for the second one
+            }
+            else if (!click || eraseDragging) return;
+            erasing = false;
+            HideEraseGhosts();
+            ShowEditMessage("Take what's hung on that wall off first.");
+            return;
+        }
+
         int refund = 0;
         float meters = 0f;
         float full = editPlot.BuiltWallFullHeight;
