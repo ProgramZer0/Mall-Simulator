@@ -11,7 +11,7 @@ using UnityEngine.Rendering.Universal;
 /// RMB drag   rotate (orbit) the camera, or pan it (Right Drag setting); RMB click deselects
 /// Click      select an item in your store; click and drag an item to slide it across the floor
 ///            click a front wall kit box (bought in the shop), then a storefront section: it becomes
-///            that type, and the old type goes back in a box on save
+///            that type, and the old type goes back in a box nearby
 /// X          cycle Move (arrows) -> Rotate (rings) -> no handles
 /// R          straight to Rotate (rings) for the selected item; again to hide them
 /// Drag       an arrow to slide along that axis (stops on contact), a ring to rotate
@@ -21,7 +21,7 @@ using UnityEngine.Rendering.Universal;
 ///            the piece comes out and follows the mouse along your walls; click to put it in. More boxes
 ///            of the same piece follow on until there are none left (RMB / Esc stops). Drag pieces
 ///            along walls to move them, R turns them around, Delete takes them out: they go back in a
-///            box on the floor nearby (when edit mode ends). Removing a built wall does the same for
+///            box on the floor nearby (straight away). Removing a built wall does the same for
 ///            the pieces in it.
 /// Esc        cancel the current drag / deselect
 ///
@@ -776,7 +776,7 @@ public class StoreEditController : NetworkBehaviour
         int old = editPlot.GetFrontModuleId(slot);
         RequestApplyFrontKitRpc(slot, kitBox.NetworkObjectId);
         StopApplyingKit(FrontWallKit.TryFindKitItem(old, out _)
-            ? $"{module.DisplayName} put up. The old front goes back in a box when you save."
+            ? $"{module.DisplayName} put up. The old front is back in a box nearby."
             : $"{module.DisplayName} put up.");
     }
 
@@ -814,8 +814,9 @@ public class StoreEditController : NetworkBehaviour
         if (!Input.GetMouseButton(0))
         {
             freeDragging = false;
-            SettleOpening(selected, dragStartPos, dragStartRot);
-            selected.SetDragging(false);
+            var dropped = selected;
+            dropped.SetDragging(false);
+            SettleOpening(dropped, dragStartPos, dragStartRot); // may box it (and deselect it)
             return;
         }
 
@@ -1350,7 +1351,14 @@ public class StoreEditController : NetworkBehaviour
         if (editPlot == null || PlacementCheck.CartBoxOf(item.Def) == null) return false;
         if (!new Plane(Vector3.up, new Vector3(0f, editPlot.FloorHeight, 0f)).Raycast(ray, out float enter)) return false;
         point = ray.GetPoint(enter);
-        return editPlot.Contains(point + Vector3.up * 0.1f);
+        if (!editPlot.Contains(point + Vector3.up * 0.1f)) return false;
+        // Room for the box there (the items being edited count too).
+        var prefab = PlacementCheck.CartBoxOf(item.Def).gameObject;
+        int ground = LayerMask.NameToLayer("Ground");
+        int blocking = EditMask() & ~(ground >= 0 ? 1 << ground : 0);
+        Quaternion rot = Quaternion.Euler(0f, editCam.transform.eulerAngles.y, 0f);
+        return PlacementCheck.FitsPrefab(prefab, point + Vector3.up * PlacementCheck.PivotHeightAboveBase(prefab), rot,
+                                         blocking, Physics.DefaultRaycastLayers);
     }
 
     // The piece hides (its hole closes) and a see-through box stands where it would go.
@@ -1400,7 +1408,7 @@ public class StoreEditController : NetworkBehaviour
             RequestBoxEditItemRpc(clientSessionId, item.Index, floorPoint);
             if (item.Index < localItems.Count) localItems[item.Index] = null;
         }
-        ShowEditMessage($"{item.Def.displayName} is back in its box{(fromSession ? " (it appears when you save)" : "")}.");
+        ShowEditMessage($"{item.Def.displayName} is back in its box.");
         Destroy(item.gameObject);
     }
 
@@ -2376,7 +2384,7 @@ public class StoreEditController : NetworkBehaviour
 
     /// <summary>
     /// Host: put up a front wall kit (from a box in the store) on one storefront section of the store
-    /// this player is editing. The box is used up; the type it replaces goes back in a box on save.
+    /// this player is editing. The box is used up; the type it replaces goes back in a box nearby.
     /// </summary>
     [Rpc(SendTo.Server)]
     private void RequestApplyFrontKitRpc(int slot, ulong boxId, RpcParams rpcParams = default)
@@ -2536,7 +2544,7 @@ public class StoreEditController : NetworkBehaviour
 
     private const int MaxNewPerSave = 64;
 
-    /// <summary>Host: a window or door the editor dropped on the floor goes back in its box there (on save).</summary>
+    /// <summary>Host: a window or door the editor dropped on the floor goes back in its box there.</summary>
     [Rpc(SendTo.Server)]
     private void RequestBoxEditItemRpc(int sessionId, int index, Vector3 at, RpcParams rpcParams = default)
     {

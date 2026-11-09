@@ -8,7 +8,7 @@ using UnityEngine;
 ///
 /// In store edit mode, click the box, then a storefront section: that section becomes this type and
 /// the box is used up. The type it replaces goes back in a box (if some kit puts that type up) on
-/// the floor inside the store when edit mode ends.
+/// the floor inside the store straight away.
 ///
 /// Kits also count as the FrontWallCatalog: a module in a kit doesn't need to be listed there too.
 /// </summary>
