@@ -20,6 +20,9 @@ public class PlayerInventoryNet : NetworkBehaviour
     /// <summary>Products left in the held stock crate (0 when not holding one).</summary>
     public NetworkVariable<int> HeldUnits = new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    /// <summary>Paint color of the held item (PaintPalette id, 0 = its own colors); it keeps it when put down.</summary>
+    public NetworkVariable<byte> HeldPaint = new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
     private GameObject currentHandVisual;
     private bool handVisualHidden;
     private PlayerInteractInput interact;
@@ -48,10 +51,21 @@ public class PlayerInventoryNet : NetworkBehaviour
     private void OnEnable()
     {
         HeldItemId.OnValueChanged += OnHeldItemChanged;
+        HeldPaint.OnValueChanged += OnHeldPaintChanged;
     }
     private void OnDisable()
     {
         HeldItemId.OnValueChanged -= OnHeldItemChanged;
+        HeldPaint.OnValueChanged -= OnHeldPaintChanged;
+    }
+
+    // The hand model shows the held item's paint, if it has PaintParts of its own.
+    private void OnHeldPaintChanged(byte before, byte now) => PaintHandVisual();
+
+    private void PaintHandVisual()
+    {
+        if (currentHandVisual != null && currentHandVisual.TryGetComponent<PaintParts>(out var parts))
+            parts.Apply(HeldPaint.Value);
     }
 
     public override void OnNetworkSpawn()
@@ -73,6 +87,7 @@ public class PlayerInventoryNet : NetworkBehaviour
             currentHandVisual = Instantiate(def.handVisualPrefab, handAnchor);
             currentHandVisual.transform.localPosition = Vector3.zero;
             currentHandVisual.transform.localRotation = Quaternion.identity;
+            PaintHandVisual();
             // Your own held item gets a body, so walls push you back instead of it poking through.
             if (IsOwner) HeldItemBlocker.Add(currentHandVisual, transform, heldItemBlockedBy.value);
         }
@@ -112,6 +127,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         int itemId = isBox ? box.ContainedItemId : pickup.itemId;
         if (itemId == 0) return;
         HeldItemId.Value = itemId;
+        HeldPaint.Value = isBox ? box.ContainedPaint : pickup.Paint;
         // A crate on the floor remembers how much is left; one from a delivery box is full.
         int perCrate = StockContainer.GetUnitsPerCrate(itemId);
         HeldUnits.Value = perCrate == 0 ? 0
@@ -140,7 +156,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         // The empty crate goes away.
         int left = Mathf.Max(1, HeldUnits.Value) - 1;
         HeldUnits.Value = left;
-        if (left == 0) HeldItemId.Value = 0;
+        if (left == 0) { HeldItemId.Value = 0; HeldPaint.Value = 0; }
         PlayItemSoundClientRpc(id, at, true);
     }
 
@@ -164,6 +180,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (emptyHands)
         {
             HeldItemId.Value = id;
+            HeldPaint.Value = 0;
             HeldUnits.Value = 1;
         }
         else HeldUnits.Value++;
@@ -246,6 +263,8 @@ public class PlayerInventoryNet : NetworkBehaviour
             load.ServerPrepareFrozen(carried: true);
         if (HeldUnits.Value > 0 && spawned.TryGetComponent<ItemPickupNet>(out var crate))
             crate.ServerSetUnits(HeldUnits.Value); // a part-used crate stays part-used
+        if (HeldPaint.Value != 0 && spawned.TryGetComponent<ItemPickupNet>(out var painted))
+            painted.ServerSetPaint(HeldPaint.Value);
         // Put down in a store that priced all of these: it gets that price.
         if (cart == null && spawned.TryGetComponent<Sellable>(out var sellable) && sellable.SellWhenLoose &&
             StorePlot.TryGetStorePriceAt(position, id, true, out int storePrice))
@@ -254,6 +273,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (cart != null) cart.ServerLoad(spawned);
 
         HeldItemId.Value = 0;
+        HeldPaint.Value = 0;
         HeldUnits.Value = 0;
 
         PlayItemSoundClientRpc(id, position, true);
@@ -305,6 +325,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         {
             box.ServerSetContents(id);
             if (HeldUnits.Value > 0) box.ServerSetUnits(HeldUnits.Value); // a part-used crate stays part-used
+            box.ServerSetPaint(HeldPaint.Value);
         }
         else Debug.LogWarning($"[PlayerInventoryNet] Shipment prefab '{boxPrefab.name}' has no ShipmentPackage, so " +
                               "picking it up won't give the item inside.", boxPrefab);
@@ -313,6 +334,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         cart.ServerLoad(spawned);
 
         HeldItemId.Value = 0;
+        HeldPaint.Value = 0;
         HeldUnits.Value = 0;
         PlayItemSoundClientRpc(id, position, true);
     }
@@ -349,6 +371,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (consumed)
         {
             HeldItemId.Value = 0;
+            HeldPaint.Value = 0;
             HeldUnits.Value = 0;
         }
     }

@@ -91,6 +91,11 @@ public class StorePlot : NetworkBehaviour
              "Other teams can't place things in them. Like the area boxes, they're switched off at runtime.")]
     [SerializeField] private BoxCollider[] shipmentZones;
 
+    [Header("Paint")]
+    [Tooltip("The store's floor renderers, painted with the paint tool in edit mode (P). The floor's collider must be " +
+             "on the same object or a child of it, so clicks find it. Leave empty if the floor can't be painted.")]
+    [SerializeField] private Renderer[] floorRenderers;
+
     [Header("Doors")]
     [Tooltip("Door objects for this store (e.g. the door inside each doorway). With a DoorMotion they " +
              "swing/slide/lift open while the store is open and close while it's closed, for sale or being " +
@@ -143,6 +148,12 @@ public class StorePlot : NetworkBehaviour
     // Who is editing this store right now (NoOwner = open for business).
     private readonly NetworkVariable<ulong> editorClientId =
         new(NoOwner, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    // Paint colors (PaintPalette ids, 0 = own colors) for the storefront and the floor.
+    private readonly NetworkVariable<byte> frontPaint =
+        new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private readonly NetworkVariable<byte> floorPaint =
+        new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     // The owners closed the store (doors shut, no customers). Separate from renovating.
     private readonly NetworkVariable<bool> closedByOwner =
@@ -289,8 +300,11 @@ public class StorePlot : NetworkBehaviour
         closedByOwner.OnValueChanged += OnClosedChanged;
         frontOverrides.OnListChanged += OnFrontOverridesChanged;
         builtWalls.OnListChanged += OnBuiltWallsChanged;
+        frontPaint.OnValueChanged += OnFrontPaintChanged;
+        floorPaint.OnValueChanged += OnFloorPaintChanged;
         RebuildBuiltWalls();
         ApplyFrontWall();
+        ApplyFloorPaint();
         ApplyWalls();
         ApplyRenovationWalls();
         ApplyOwnerVisuals();
@@ -308,6 +322,8 @@ public class StorePlot : NetworkBehaviour
         closedByOwner.OnValueChanged -= OnClosedChanged;
         frontOverrides.OnListChanged -= OnFrontOverridesChanged;
         builtWalls.OnListChanged -= OnBuiltWallsChanged;
+        frontPaint.OnValueChanged -= OnFrontPaintChanged;
+        floorPaint.OnValueChanged -= OnFloorPaintChanged;
         if (builtWallRoot != null) Destroy(builtWallRoot.gameObject);
         builtWallRoot = null;
         Changed -= OnAnyChange;
@@ -582,8 +598,14 @@ public class StorePlot : NetworkBehaviour
     public int ServerBuildPlannedWall(WallPlan plan, float height)
     {
         if (!IsServer) return 0;
-        foreach (int id in plan.joins) ServerRemoveWall(id, out _);
-        return ServerAddWall(plan.a, plan.b, height);
+        // Joined walls keep the first one's paint.
+        byte paint = 0;
+        bool first = true;
+        foreach (int id in plan.joins)
+        {
+            if (ServerRemoveWall(id, out var old) && first) { paint = old.paint; first = false; }
+        }
+        return ServerAddWall(plan.a, plan.b, height, paint);
     }
 
     /// <summary>
@@ -656,12 +678,27 @@ public class StorePlot : NetworkBehaviour
     public bool IsInsideOrNear(Vector3 worldPoint, float reach) => Contains(worldPoint) || DistanceToSpace(worldPoint) <= reach;
 
     /// <summary>Server: add a wall (checks done by the caller). Returns its id.</summary>
-    public int ServerAddWall(Vector3 a, Vector3 b, float height)
+    public int ServerAddWall(Vector3 a, Vector3 b, float height, byte paint = 0)
     {
         if (!IsServer) return 0;
         int id = nextWallId++;
-        builtWalls.Add(new BuiltWall { id = id, a = a, b = b, height = height });
+        builtWalls.Add(new BuiltWall { id = id, a = a, b = b, height = height, paint = paint });
         return id;
+    }
+
+    /// <summary>Server: paint a built wall. False if there's no such wall.</summary>
+    public bool ServerPaintWall(int id, byte paint)
+    {
+        if (!IsServer || !PaintPalette.IsValid(paint)) return false;
+        for (int i = 0; i < builtWalls.Count; i++)
+        {
+            if (builtWalls[i].id != id) continue;
+            var w = builtWalls[i];
+            w.paint = paint;
+            builtWalls[i] = w;
+            return true;
+        }
+        return false;
     }
 
     /// <summary>Server: remove a wall by id. Returns false if there's no such wall.</summary>
@@ -749,8 +786,8 @@ public class StorePlot : NetworkBehaviour
             if (!ServerRemoveWall(span.wall.id, out var w)) continue;
             bool half = w.height < BuiltWallFullHeight - 0.01f;
             Vector3 d = Flat(w.b - w.a);
-            if (span.from > 0f) ServerAddWall(w.a, w.a + d * span.from, w.height);
-            if (span.to < w.Length) ServerAddWall(w.a + d * span.to, w.b, w.height);
+            if (span.from > 0f) ServerAddWall(w.a, w.a + d * span.from, w.height, w.paint);
+            if (span.to < w.Length) ServerAddWall(w.a + d * span.to, w.b, w.height, w.paint);
             meters += span.Length;
             refund += settings.GetRefund(span.Length, half);
         }
@@ -797,6 +834,7 @@ public class StorePlot : NetworkBehaviour
             if (!go.TryGetComponent<CuttableWall>(out var cuttable)) cuttable = go.AddComponent<CuttableWall>();
             cuttable.Plot = this;
             cuttable.SetEndSlopes(mitreA ? slopeA : 0f, mitreB ? slopeB : 0f);
+            cuttable.SetPaint(w.paint);
         }
     }
 
@@ -1101,6 +1139,78 @@ public class StorePlot : NetworkBehaviour
         for (int i = 0; i < frontSlots.Count; i++)
             SetSlotVisual(i, i < frontOverrides.Count ? frontOverrides[i] : 0);
         ApplyDoors(); // a swapped-in doorway brings its own door
+        ApplyFrontPaint();
+    }
+
+    /* ========================= PAINT ========================= */
+
+    /// <summary>The storefront's paint color (all its panels and marked parts).</summary>
+    public byte FrontPaint => frontPaint.Value;
+    /// <summary>The floor's paint color.</summary>
+    public byte FloorPaint => floorPaint.Value;
+    /// <summary>Does this store have a floor that can be painted?</summary>
+    public bool HasPaintableFloor
+    {
+        get
+        {
+            if (floorRenderers != null) foreach (var r in floorRenderers) if (r != null) return true;
+            return false;
+        }
+    }
+
+    /// <summary>Is this object part of the store's paintable floor?</summary>
+    public bool IsFloor(Transform t)
+    {
+        if (t == null || floorRenderers == null) return false;
+        foreach (var r in floorRenderers)
+            if (r != null && t.IsChildOf(r.transform)) return true;
+        return false;
+    }
+
+    /// <summary>Is this object part of the storefront (a panel or a front module)?</summary>
+    public bool IsStorefrontPart(Transform t)
+    {
+        if (t == null) return false;
+        var wall = t.GetComponentInParent<CuttableWall>();
+        if (wall != null && wall.Plot == this && wall.IsStorefront) return true;
+        return TryGetFrontSlot(t, out _);
+    }
+
+    public void ServerPaintFront(byte id)
+    {
+        if (IsServer && PaintPalette.IsValid(id)) frontPaint.Value = id;
+    }
+
+    public void ServerPaintFloor(byte id)
+    {
+        if (IsServer && PaintPalette.IsValid(id)) floorPaint.Value = id;
+    }
+
+    private void OnFrontPaintChanged(byte before, byte now) => ApplyFrontPaint();
+    private void OnFloorPaintChanged(byte before, byte now) => ApplyFloorPaint();
+
+    // Every storefront panel, plus the marked parts (PaintParts) of the front modules shown.
+    private void ApplyFrontPaint()
+    {
+        byte id = frontPaint.Value;
+        foreach (var w in CuttableWall.All)
+            if (w != null && w.Plot == this && w.IsStorefront) w.SetPaint(id);
+        if (storefrontWalls != null)
+            foreach (var w in storefrontWalls) if (w != null) w.SetPaint(id); // also while switched off
+        EnsureFrontSlots();
+        for (int i = 0; i < frontSlots.Count; i++)
+        {
+            var shown = GetFrontSlotShown(i);
+            if (shown == null) continue;
+            foreach (var w in shown.GetComponentsInChildren<CuttableWall>(true)) w.SetPaint(id);
+            foreach (var parts in shown.GetComponentsInChildren<PaintParts>(true)) parts.Apply(id);
+        }
+    }
+
+    private void ApplyFloorPaint()
+    {
+        if (floorRenderers == null) return;
+        foreach (var r in floorRenderers) PaintPalette.Apply(r, -1, floorPaint.Value);
     }
 
     private void SetSlotVisual(int index, int moduleId)
@@ -1277,6 +1387,7 @@ public class StorePlot : NetworkBehaviour
         public StockContainer.ZoneStock[] stock; // what was in its StockContainer, if it has one
         public int units;   // products left, if it's a stock crate
         public int price;   // its price tag (cents), if it's a loose Sellable
+        public byte paint;  // its paint color (PaintPalette id)
         public bool removed; // taken out during the session (not put back)
     }
 
@@ -1332,7 +1443,8 @@ public class StorePlot : NetworkBehaviour
                 rotation = item.transform.rotation,
                 stock = item.TryGetComponent<StockContainer>(out var container) ? container.ServerCopyStock() : null,
                 units = item.IsStockCrate ? item.Units : 0,
-                price = item.TryGetComponent<Sellable>(out var sellable) ? sellable.Price : 0
+                price = item.TryGetComponent<Sellable>(out var sellable) ? sellable.Price : 0,
+                paint = item.Paint,
             });
             item.NetworkObject.Despawn(true);
         }
@@ -1346,6 +1458,7 @@ public class StorePlot : NetworkBehaviour
         public int itemId;
         public Vector3 position;
         public Quaternion rotation;
+        public byte paint;
     }
 
     /// <summary>
@@ -1356,10 +1469,13 @@ public class StorePlot : NetworkBehaviour
     /// Windows and doors (WallOpening) bought during the session come in Added and are paid for here,
     /// by Team. They're checked against this store's walls instead of its space. Items taken out
     /// during the session (ServerRemoveEditItem) aren't put back.
+    ///
+    /// Paints: the editor's paint color for each item (by its place in the session). A changed color
+    /// costs the palette's Item Fee, paid by Team; without the money (or a Team) it keeps its old one.
     /// </summary>
     public void ServerEndEdit(Vector3[] positions, Quaternion[] rotations,
                               Func<ItemDef, Vector3, Quaternion, bool> isValid, bool log = false,
-                              IList<NewEditItem> added = null, ulong team = NoOwner)
+                              IList<NewEditItem> added = null, ulong team = NoOwner, byte[] paints = null)
     {
         if (!IsServer || !IsRenovating) return;
 
@@ -1440,7 +1556,17 @@ public class StorePlot : NetworkBehaviour
                 }
             }
 
-            SpawnEditItem(def, pos, rot, entry.units, entry.price, entry.stock);
+            // Repainted in edit mode: paid for here.
+            byte paint = entry.paint;
+            if (paints != null && i < paints.Length && paints[i] != paint && PaintPalette.IsValid(paints[i]) &&
+                PaintParts.IsPaintable(def) && team != NoOwner)
+            {
+                int fee = PaintPalette.Instance != null ? PaintPalette.Instance.ItemFee : 0;
+                if (econ == null || !econ.IsSpawned || econ.ServerTrySpend(team, fee)) paint = paints[i];
+                else if (log) Debug.LogWarning($"[StorePlot] Not enough money to repaint '{def.displayName}'.", this);
+            }
+
+            SpawnEditItem(def, pos, rot, entry.units, entry.price, entry.stock, paint);
         }
 
         // Windows and doors bought in edit mode.
@@ -1459,7 +1585,7 @@ public class StorePlot : NetworkBehaviour
                     notBought++;
                     continue;
                 }
-                SpawnEditItem(def, n.position, r, 0, 0, null);
+                SpawnEditItem(def, n.position, r, 0, 0, null, PaintPalette.IsValid(n.paint) ? n.paint : (byte)0);
                 bought++;
             }
 
@@ -1524,7 +1650,8 @@ public class StorePlot : NetworkBehaviour
                        "child's hinge as the DoorMotion leaf.", def.worldNetworkPrefab);
     }
 
-    private void SpawnEditItem(ItemDef def, Vector3 pos, Quaternion rot, int units, int price, StockContainer.ZoneStock[] stock)
+    private void SpawnEditItem(ItemDef def, Vector3 pos, Quaternion rot, int units, int price, StockContainer.ZoneStock[] stock,
+                               byte paint = 0)
     {
         var spawned = Instantiate(def.worldNetworkPrefab, pos, rot);
         WarnIfNestedNetworkObjects(def, spawned.gameObject);
@@ -1539,6 +1666,7 @@ public class StorePlot : NetworkBehaviour
             item.ServerPrepareFrozen(onWall);
             if (units > 0) item.ServerSetUnits(units);
             if (price > 0 && spawned.TryGetComponent<Sellable>(out var sellable)) sellable.ServerSetPrice(price, restore: true);
+            if (paint != 0) item.ServerSetPaint(paint);
         }
         if (stock != null && spawned.TryGetComponent<StockContainer>(out var container))
             container.ServerPrepareStock(stock);

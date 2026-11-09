@@ -179,6 +179,26 @@ public class ItemPickupNet : NetworkBehaviour
     /// <summary>Products left in this crate (meaningless for items that aren't stock crates).</summary>
     public int Units => units.Value > 0 ? Mathf.Min(units.Value, UnitsPerCrate) : UnitsPerCrate;
 
+    // Its paint (PaintPalette id, 0 = its own colors). Only items with PaintParts show it.
+    private readonly NetworkVariable<byte> paint =
+        new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    /// <summary>Its paint color id (0 = its own colors).</summary>
+    public byte Paint => paint.Value;
+
+    /// <summary>Server: paint it. Call after Instantiate (before Spawn is fine).</summary>
+    public void ServerSetPaint(byte id)
+    {
+        if (PaintPalette.IsValid(id)) paint.Value = id;
+    }
+
+    private void OnPaintChanged(byte before, byte now) => ApplyPaint();
+
+    private void ApplyPaint()
+    {
+        if (TryGetComponent<PaintParts>(out var parts)) parts.Apply(paint.Value);
+    }
+
     /// <summary>Server: how many products are left in this crate. Call after Instantiate, before Spawn.</summary>
     public void ServerSetUnits(int count) => units.Value = count >= UnitsPerCrate ? 0 : Mathf.Max(1, count);
 
@@ -293,6 +313,8 @@ public class ItemPickupNet : NetworkBehaviour
         units.OnValueChanged += OnUnitsChanged;
         All.Add(this);
         freeze.OnValueChanged += OnFreezeChanged;
+        paint.OnValueChanged += OnPaintChanged;
+        if (paint.Value != 0) ApplyPaint();
 
         // Hung on a wall in the scene: frozen there from the start, and it stays put when what's
         // below it is picked up (like one a player hung).
@@ -308,6 +330,7 @@ public class ItemPickupNet : NetworkBehaviour
         units.OnValueChanged -= OnUnitsChanged;
         All.Remove(this);
         freeze.OnValueChanged -= OnFreezeChanged;
+        paint.OnValueChanged -= OnPaintChanged;
 
         // Something resting on this item would be left floating, so let it fall again.
         if (IsServer && NetworkManager != null && !NetworkManager.ShutdownInProgress) ServerWakeItemsOnTop();

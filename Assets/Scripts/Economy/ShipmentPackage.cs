@@ -26,6 +26,19 @@ public class ShipmentPackage : NetworkBehaviour
     /// <summary>Server: how many products are left in the crate inside. Call before Spawn.</summary>
     public void ServerSetUnits(int units) => containedUnits.Value = Mathf.Max(0, units);
 
+    // The paint color of the item inside (PaintPalette id, 0 = its own colors).
+    private readonly NetworkVariable<byte> containedPaint =
+        new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    /// <summary>The paint color of the item inside (0 = its own colors).</summary>
+    public byte ContainedPaint => containedPaint.Value;
+
+    /// <summary>Server: the paint color of the item inside. Call before Spawn.</summary>
+    public void ServerSetPaint(byte id)
+    {
+        if (PaintPalette.IsValid(id)) containedPaint.Value = id;
+    }
+
     // Deliveries are held for the team that ordered them for a while (GDD 13a). Only boxes carry
     // this, so ordinary items don't pay for two extra synced values each.
     private readonly NetworkVariable<ulong> reservedTeam =

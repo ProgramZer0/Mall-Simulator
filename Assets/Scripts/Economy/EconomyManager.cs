@@ -117,15 +117,17 @@ public class EconomyManager : NetworkBehaviour
         public int orderId;
         public int itemId;
         public int quantity;
+        public byte paint;   // PaintPalette color id the items come in (0 = their own colors)
 
         public void NetworkSerialize<T>(BufferSerializer<T> s) where T : IReaderWriter
         {
             s.SerializeValue(ref orderId);
             s.SerializeValue(ref itemId);
             s.SerializeValue(ref quantity);
+            s.SerializeValue(ref paint);
         }
 
-        public bool Equals(OrderLine o) => orderId == o.orderId && itemId == o.itemId && quantity == o.quantity;
+        public bool Equals(OrderLine o) => orderId == o.orderId && itemId == o.itemId && quantity == o.quantity && paint == o.paint;
     }
 
     private NetworkList<TeamMoney> money;
@@ -143,7 +145,7 @@ public class EconomyManager : NetworkBehaviour
     private readonly HashSet<ulong> startingMoneyGiven = new();
     private readonly List<(ulong team, int amount)> pendingGrants = new();
     private readonly List<ShipmentPacker.Box> planBoxes = new();
-    private readonly List<(NetworkObject prefab, int itemId)> planItems = new();
+    private readonly List<(NetworkObject prefab, int itemId, byte paint)> planItems = new();
     private readonly List<Pose> plan = new();
     private readonly Dictionary<int, (double nextCheck, bool fits)> fitCache = new();
     private int nextOrderId = 1;
@@ -311,18 +313,25 @@ public class EconomyManager : NetworkBehaviour
     /// arrives through OrderResultReceived.
     /// </summary>
     public void Order(int plotId, int[] itemIds, int[] quantities, float deliverySeconds = -1f) =>
-        RequestOrderRpc(plotId, itemIds, quantities, deliverySeconds);
+        RequestOrderRpc(plotId, itemIds, quantities, new byte[0], deliverySeconds);
+
+    /// <summary>
+    /// Same, with a paint color for each line (PaintPalette id; 0 = the item's own colors). Painting at
+    /// purchase is free; items that can't be painted ignore it.
+    /// </summary>
+    public void Order(int plotId, int[] itemIds, int[] quantities, byte[] paints, float deliverySeconds = -1f) =>
+        RequestOrderRpc(plotId, itemIds, quantities, paints ?? new byte[0], deliverySeconds);
 
     /// <summary>Buy one kind of item (any quantity) in one delivery.</summary>
     public void Order(int plotId, int itemId, int quantity, float deliverySeconds = -1f) =>
-        RequestOrderRpc(plotId, new[] { itemId }, new[] { quantity }, deliverySeconds);
+        RequestOrderRpc(plotId, new[] { itemId }, new[] { quantity }, new byte[0], deliverySeconds);
 
     [Rpc(SendTo.Server, RequireOwnership = false)]
-    private void RequestOrderRpc(int plotId, int[] itemIds, int[] quantities, float deliverySeconds,
+    private void RequestOrderRpc(int plotId, int[] itemIds, int[] quantities, byte[] paints, float deliverySeconds,
                                  RpcParams rpcParams = default)
     {
         ulong sender = rpcParams.Receive.SenderClientId;
-        var result = ServerTryOrder(sender, plotId, itemIds, quantities, deliverySeconds);
+        var result = ServerTryOrder(sender, plotId, itemIds, quantities, deliverySeconds, paints);
         OrderResultRpc(result, RpcTarget.Single(sender, RpcTargetUse.Temp));
     }
 
@@ -335,7 +344,8 @@ public class EconomyManager : NetworkBehaviour
     }
 
     /// <summary>Server: check, charge and start a delivery.</summary>
-    public OrderResult ServerTryOrder(ulong clientId, int plotId, int[] itemIds, int[] quantities, float deliverySeconds)
+    public OrderResult ServerTryOrder(ulong clientId, int plotId, int[] itemIds, int[] quantities, float deliverySeconds,
+                                      byte[] paints = null)
     {
         var mall = MallManager.Instance;
         if (!IsServer || mall == null || !mall.TryGetPlot(plotId, out var plot) || !plot.IsAuthorized(clientId))
@@ -362,7 +372,7 @@ public class EconomyManager : NetworkBehaviour
             slowest = Mathf.Max(slowest, MarketModifiers.DeliverySeconds(def));
         }
 
-        BuildBoxes(itemIds, quantities);
+        BuildBoxes(itemIds, quantities, null);
         if (!ShipmentPacker.CouldEverFit(plot.ShipmentZones, planBoxes))
             return OrderResult.TooBig;
 
@@ -382,7 +392,13 @@ public class EconomyManager : NetworkBehaviour
             blocked = false,
         });
         for (int i = 0; i < itemIds.Length; i++)
-            orderLines.Add(new OrderLine { orderId = id, itemId = itemIds[i], quantity = quantities[i] });
+        {
+            // Paint only sticks to items that can be painted, and only with a real color.
+            byte paint = paints != null && i < paints.Length ? paints[i] : (byte)0;
+            if (!PaintPalette.IsValid(paint) || !(ItemCatalog.Instance.TryGet(itemIds[i], out var d) && PaintParts.IsPaintable(d)))
+                paint = 0;
+            orderLines.Add(new OrderLine { orderId = id, itemId = itemIds[i], quantity = quantities[i], paint = paint });
+        }
 
         return OrderResult.Ordered;
     }
@@ -470,13 +486,14 @@ public class EconomyManager : NetworkBehaviour
         var lines = GetOrderLines(o.orderId);
         var ids = new int[lines.Count];
         var qty = new int[lines.Count];
-        for (int i = 0; i < lines.Count; i++) { ids[i] = lines[i].itemId; qty[i] = lines[i].quantity; }
-        BuildBoxes(ids, qty);
+        var paints = new byte[lines.Count];
+        for (int i = 0; i < lines.Count; i++) { ids[i] = lines[i].itemId; qty[i] = lines[i].quantity; paints[i] = lines[i].paint; }
+        BuildBoxes(ids, qty, paints);
         return ShipmentPacker.TryPlan(plot.ShipmentZones, planBoxes, BlockingMask(), packStep, plan);
     }
 
     /// <summary>Fills planBoxes/planItems with one entry per box for these items.</summary>
-    private void BuildBoxes(int[] itemIds, int[] quantities)
+    private void BuildBoxes(int[] itemIds, int[] quantities, byte[] paints)
     {
         planBoxes.Clear();
         planItems.Clear();
@@ -489,7 +506,7 @@ public class EconomyManager : NetworkBehaviour
             for (int q = 0; q < quantities[i]; q++)
             {
                 planBoxes.Add(box);
-                planItems.Add((prefab, itemIds[i]));
+                planItems.Add((prefab, itemIds[i], paints != null && i < paints.Length ? paints[i] : (byte)0));
             }
         }
     }
@@ -507,16 +524,21 @@ public class EconomyManager : NetworkBehaviour
     {
         if (!PlanOrder(order, plot) || plan.Count != planItems.Count) return false;
         for (int i = 0; i < plan.Count; i++)
-            SpawnBox(planItems[i].prefab, planItems[i].itemId, plan[i], order.teamId);
+            SpawnBox(planItems[i].prefab, planItems[i].itemId, planItems[i].paint, plan[i], order.teamId);
         return true;
     }
 
-    private void SpawnBox(NetworkObject prefab, int itemId, Pose pose, ulong teamId)
+    private void SpawnBox(NetworkObject prefab, int itemId, byte paint, Pose pose, ulong teamId)
     {
         var spawned = Instantiate(prefab, pose.position, pose.rotation);
         if (spawned.TryGetComponent<ShipmentPackage>(out var box))
+        {
             box.ServerSetContents(itemId);
-        else if (!spawned.TryGetComponent<ItemPickupNet>(out var plain) || plain.itemId != itemId)
+            box.ServerSetPaint(paint);
+        }
+        else if (spawned.TryGetComponent<ItemPickupNet>(out var bare) && bare.itemId == itemId)
+            bare.ServerSetPaint(paint); // delivered as itself
+        else
             Debug.LogWarning($"[EconomyManager] Shipment prefab '{prefab.name}' has no ShipmentPackage, so " +
                              "picking it up won't give the item inside.", prefab);
         spawned.Spawn(true);
