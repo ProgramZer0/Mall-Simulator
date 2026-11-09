@@ -313,11 +313,18 @@ public static class PlacementCheck
     }
 
     /// <summary>
-    /// How the model stands upright: its prefab root's own rotation (e.g. Blender's -90 on X). Placing
-    /// keeps it, so turning an item only adds a turn around world up on top of this.
+    /// How the model stands upright and faces front: its prefab root's own rotation (e.g. Blender's -90
+    /// on X), then the Model Rotation on its ItemPickupNet (or WallOpening, for windows and doors).
+    /// Placing keeps it, so turning an item only adds a turn around world up on top of this.
     /// </summary>
-    public static Quaternion ModelFix(ItemDef def) =>
-        def != null && def.worldNetworkPrefab != null ? def.worldNetworkPrefab.transform.localRotation : Quaternion.identity;
+    public static Quaternion ModelFix(ItemDef def)
+    {
+        if (def == null || def.worldNetworkPrefab == null) return Quaternion.identity;
+        var root = def.worldNetworkPrefab.transform;
+        Vector3 extra = root.TryGetComponent<WallOpening>(out var o) ? o.modelRotation
+                      : root.TryGetComponent<ItemPickupNet>(out var p) ? p.ModelRotation : Vector3.zero;
+        return root.localRotation * Quaternion.Euler(extra);
+    }
 
     /// <summary>The item's rotation for a turn around world up (Yaw), standing the way its prefab does.</summary>
     public static Quaternion Upright(ItemDef def, Quaternion yaw) => yaw * ModelFix(def);
