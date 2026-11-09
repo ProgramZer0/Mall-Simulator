@@ -310,7 +310,7 @@ public class StoreEditController : NetworkBehaviour
         var newIds = new List<int>();
         var newPositions = new List<Vector3>();
         var newRotations = new List<Quaternion>();
-        var newPaints = new List<byte>();
+        var newPaints = new List<uint>();
         foreach (var item in addedItems)
         {
             if (item == null) continue;
@@ -2341,7 +2341,7 @@ public class StoreEditController : NetworkBehaviour
         int sessionId = plot.ServerEditSessionId;
         if (session.Count == 0)
         {
-            ReceiveEditItemsRpc(sessionId, 0, new int[0], new Vector3[0], new Quaternion[0], new byte[0]);
+            ReceiveEditItemsRpc(sessionId, 0, new int[0], new Vector3[0], new Quaternion[0], new uint[0]);
             return;
         }
 
@@ -2351,7 +2351,7 @@ public class StoreEditController : NetworkBehaviour
             var ids = new int[n];
             var positions = new Vector3[n];
             var rotations = new Quaternion[n];
-            var paints = new byte[n];
+            var paints = new uint[n];
             for (int k = 0; k < n; k++)
             {
                 var entry = session[start + k];
@@ -2396,7 +2396,7 @@ public class StoreEditController : NetworkBehaviour
     /// <summary>Editor: build local copies of the items the host took out of the store.</summary>
     [Rpc(SendTo.Owner)]
     private void ReceiveEditItemsRpc(int sessionId, int start, int[] itemIds, Vector3[] positions, Quaternion[] rotations,
-                                     byte[] paints)
+                                     uint[] paints)
     {
         if (sessionId != clientSessionId)
         {
@@ -2441,7 +2441,7 @@ public class StoreEditController : NetworkBehaviour
     /// <summary>Host: the windows and doors the editor took out and bought (sent just before finishing).</summary>
     [Rpc(SendTo.Server)]
     private void SubmitEditChangesRpc(int sessionId, int[] newIds, Vector3[] newPositions,
-                                      Quaternion[] newRotations, byte[] newPaints, RpcParams rpcParams = default)
+                                      Quaternion[] newRotations, uint[] newPaints, RpcParams rpcParams = default)
     {
         if (!ServerTryGetSession(rpcParams, sessionId, out _)) return;
 
@@ -2452,7 +2452,7 @@ public class StoreEditController : NetworkBehaviour
             pendingAdded.Add(new StorePlot.NewEditItem
             {
                 itemId = newIds[k], position = newPositions[k], rotation = newRotations[k],
-                paint = newPaints != null && k < newPaints.Length ? newPaints[k] : (byte)0,
+                paint = newPaints != null && k < newPaints.Length ? newPaints[k] : 0u,
             });
     }
 

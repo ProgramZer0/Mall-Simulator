@@ -179,25 +179,28 @@ public class ItemPickupNet : NetworkBehaviour
     /// <summary>Products left in this crate (meaningless for items that aren't stock crates).</summary>
     public int Units => units.Value > 0 ? Mathf.Min(units.Value, UnitsPerCrate) : UnitsPerCrate;
 
-    // Its paint (PaintPalette id, 0 = its own colors). Only items with PaintParts show it.
-    private readonly NetworkVariable<byte> paint =
+    // The colors of its paint zones (PaintSet: one PaintPalette id per PaintParts zone, 0 = own colors).
+    private readonly NetworkVariable<uint> paint =
         new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    /// <summary>Its paint color id (0 = its own colors).</summary>
-    public byte Paint => paint.Value;
+    /// <summary>The colors of its paint zones (see PaintSet).</summary>
+    public uint Paint => paint.Value;
 
-    /// <summary>Server: paint it. Call after Instantiate (before Spawn is fine).</summary>
-    public void ServerSetPaint(byte id)
+    /// <summary>Server: set every zone's color. Call after Instantiate (before Spawn is fine).</summary>
+    public void ServerSetPaint(uint set)
     {
-        if (PaintPalette.IsValid(id)) paint.Value = id;
+        if (PaintSet.IsValid(set)) paint.Value = set;
     }
 
-    private void OnPaintChanged(byte before, byte now) => ApplyPaint();
-
-    private void ApplyPaint()
+    /// <summary>Server: paint one zone.</summary>
+    public void ServerSetZonePaint(int zone, byte id)
     {
-        if (TryGetComponent<PaintParts>(out var parts)) parts.Apply(paint.Value);
+        if (PaintPalette.IsValid(id)) paint.Value = PaintSet.With(paint.Value, zone, id);
     }
+
+    private void OnPaintChanged(uint before, uint now) => ApplyPaint();
+
+    private void ApplyPaint() => PaintParts.ApplySet(gameObject, paint.Value);
 
     /// <summary>Server: how many products are left in this crate. Call after Instantiate, before Spawn.</summary>
     public void ServerSetUnits(int count) => units.Value = count >= UnitsPerCrate ? 0 : Mathf.Max(1, count);

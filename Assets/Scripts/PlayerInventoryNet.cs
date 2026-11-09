@@ -20,8 +20,8 @@ public class PlayerInventoryNet : NetworkBehaviour
     /// <summary>Products left in the held stock crate (0 when not holding one).</summary>
     public NetworkVariable<int> HeldUnits = new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    /// <summary>Paint color of the held item (PaintPalette id, 0 = its own colors); it keeps it when put down.</summary>
-    public NetworkVariable<byte> HeldPaint = new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    /// <summary>Paint colors of the held item (PaintSet, 0 = its own colors); it keeps them when put down.</summary>
+    public NetworkVariable<uint> HeldPaint = new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     private GameObject currentHandVisual;
     private bool handVisualHidden;
@@ -60,12 +60,11 @@ public class PlayerInventoryNet : NetworkBehaviour
     }
 
     // The hand model shows the held item's paint, if it has PaintParts of its own.
-    private void OnHeldPaintChanged(byte before, byte now) => PaintHandVisual();
+    private void OnHeldPaintChanged(uint before, uint now) => PaintHandVisual();
 
     private void PaintHandVisual()
     {
-        if (currentHandVisual != null && currentHandVisual.TryGetComponent<PaintParts>(out var parts))
-            parts.Apply(HeldPaint.Value);
+        if (currentHandVisual != null) PaintParts.ApplySet(currentHandVisual, HeldPaint.Value);
     }
 
     public override void OnNetworkSpawn()

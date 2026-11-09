@@ -534,10 +534,10 @@ public class EconomyManager : NetworkBehaviour
         if (spawned.TryGetComponent<ShipmentPackage>(out var box))
         {
             box.ServerSetContents(itemId);
-            box.ServerSetPaint(paint);
+            box.ServerSetPaint(PaintSet.All(paint)); // bought in one color: every zone
         }
         else if (spawned.TryGetComponent<ItemPickupNet>(out var bare) && bare.itemId == itemId)
-            bare.ServerSetPaint(paint); // delivered as itself
+            bare.ServerSetPaint(PaintSet.All(paint)); // delivered as itself
         else
             Debug.LogWarning($"[EconomyManager] Shipment prefab '{prefab.name}' has no ShipmentPackage, so " +
                              "picking it up won't give the item inside.", prefab);
