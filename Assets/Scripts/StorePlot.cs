@@ -1637,13 +1637,14 @@ public class StorePlot : NetworkBehaviour
         entry.removed = true;
         editSession[index] = entry;
 
-        // A window or door goes back in its box, on the floor near where it was (when the session ends).
+        // A window or door goes back in its box on the floor near where it was, straight away, so it can
+        // be put in again in this session (the store may need it: its only front door).
         if (WallOpening.IsOpening(def))
         {
             if (boxAt.HasValue && IsInsideOrNear(boxAt.Value, 0.5f))
-                boxesOnSave.Add((entry.itemId, entry.paint, boxAt.Value, true));
+                ServerSpawnBoxNear(entry.itemId, entry.paint, boxAt.Value, exact: true);
             else
-                boxesOnSave.Add((entry.itemId, entry.paint, entry.position, false));
+                ServerSpawnBoxNear(entry.itemId, entry.paint, entry.position);
             return true;
         }
 
@@ -1671,13 +1672,12 @@ public class StorePlot : NetworkBehaviour
     }
 
     /// <summary>
-    /// Server: put something back in a box on this store's floor near a point when the edit session
-    /// ends (e.g. a front wall type that was swapped out).
+    /// Server: put something back in a box on this store's floor near a point, straight away (e.g. a
+    /// front wall type that was swapped out), so it can be used again in the same edit session.
     /// </summary>
     public void ServerQueueBoxOnSave(int itemId, uint paint, Vector3 near)
     {
-        if (IsServer && IsRenovating) boxesOnSave.Add((itemId, paint, near, false));
-        else if (IsServer) ServerSpawnBoxNear(itemId, paint, near);
+        if (IsServer) ServerSpawnBoxNear(itemId, paint, near);
     }
 
     /// <summary>
