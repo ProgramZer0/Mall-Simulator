@@ -134,9 +134,80 @@ public class PaintBrush : NetworkBehaviour
 
         if (!active) return;
         FindTarget();
+        UpdatePreview();
         if (targetObject != null) TargetOutline.For(this).ShowObject(targetObject, outlineColor);
         else TargetOutline.For(this).Hide();
         if (Input.GetMouseButtonDown(0) && targetKind != Kind.None) Paint();
+    }
+
+    /* ========================= PREVIEW ========================= */
+
+    // What's shown in the brush's color right now (this machine only), so it can be put back.
+    private Kind previewKind;
+    private Object previewObject; // the item, or the wall piece
+    private StorePlot previewPlot;
+    private int previewZone;
+    private int previewWallId;
+    private byte previewColor;
+
+    // Show what's under the brush in the brush's color; put it back once the brush moves off it.
+    // After a click it stays in the new color until the host's change arrives, so nothing flickers.
+    private void UpdatePreview()
+    {
+        Object obj = targetKind == Kind.Item ? targetItem : targetKind == Kind.Wall ? targetObject : null;
+        bool same = targetKind == previewKind && obj == previewObject && targetPlot == previewPlot &&
+                    targetZone == previewZone && color == previewColor &&
+                    (targetKind != Kind.Wall || targetWall.id == previewWallId);
+        if (same) return;
+
+        EndPreview();
+        if (targetKind == Kind.None) return;
+        previewKind = targetKind;
+        previewObject = obj;
+        previewPlot = targetPlot;
+        previewZone = targetZone;
+        previewWallId = targetWall.id;
+        previewColor = color;
+
+        switch (targetKind)
+        {
+            case Kind.Item:
+                var zones = PaintParts.ZonesOf(targetItem.gameObject);
+                if (targetZone < zones.Count) zones[targetZone].Apply(color);
+                break;
+            case Kind.Wall:
+                if (targetObject.TryGetComponent<CuttableWall>(out var w)) w.SetPaint(color);
+                break;
+            case Kind.Front: targetPlot.PreviewFrontPaint(color); break;
+            case Kind.Floor: targetPlot.PreviewFloorPaint(color); break;
+        }
+    }
+
+    // Back to the synced colors.
+    private void EndPreview()
+    {
+        switch (previewKind)
+        {
+            case Kind.Item:
+                if (previewObject is ItemPickupNet item && item != null)
+                {
+                    var zones = PaintParts.ZonesOf(item.gameObject);
+                    if (previewZone < zones.Count) zones[previewZone].Apply(PaintSet.Get(item.Paint, previewZone));
+                }
+                break;
+            case Kind.Wall:
+                if (previewObject is GameObject piece && piece != null && piece.TryGetComponent<CuttableWall>(out var w) &&
+                    previewPlot != null && previewPlot.TryGetBuiltWallById(previewWallId, out var wall))
+                    w.SetPaint(wall.paint);
+                break;
+            case Kind.Front:
+            case Kind.Floor:
+                if (previewPlot != null) previewPlot.ShowPaint();
+                break;
+        }
+        previewKind = Kind.None;
+        previewObject = null;
+        previewPlot = null;
     }
 
     private void SetActive(bool on)
@@ -148,6 +219,7 @@ public class PaintBrush : NetworkBehaviour
         {
             prompt = null;
             targetKind = Kind.None;
+            EndPreview();
             TargetOutline.For(this).Hide();
         }
 
