@@ -63,8 +63,7 @@ public class PaintSwatchBar : MonoBehaviour
             byte id = (byte)i;
             var button = Instantiate(swatchPrefab, parent);
             button.name = $"Swatch {PaintPalette.NameOf(id)}";
-            if (button.image != null)
-                button.image.color = PaintPalette.TryGetColor(id, out Color c) ? c : originalSwatchColor;
+            PaintPalette.StyleSwatch(button.image, id, originalSwatchColor);
             var label = button.GetComponentInChildren<TMP_Text>(true);
             if (label != null) label.text = PaintPalette.NameOf(id);
             var selected = button.transform.Find("Selected");

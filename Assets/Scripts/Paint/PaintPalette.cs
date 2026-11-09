@@ -44,6 +44,13 @@ public class PaintPalette : MonoBehaviour
     [Tooltip("Name shown for color 0 (the model's own colors).")]
     [SerializeField] private string originalName = "Original";
 
+    [Header("Swatch icons (color wheel and buy menu)")]
+    [Tooltip("A white icon, tinted to each color: one swatch is made from it for every color in the list, so adding " +
+             "a color adds a swatch. Empty = plain circles (wheel) / the swatch prefab's own image (buy menu).")]
+    [SerializeField] private Sprite swatchSprite;
+    [Tooltip("Icon for Original (no paint), drawn untinted. Empty = the swatch icon in a see-through white.")]
+    [SerializeField] private Sprite originalSprite;
+
     [Header("Paint brush fees (painting at purchase is free)")]
     [Tooltip("Per item painted.")]
     [Min(0)] [SerializeField] private int itemFee = 10;
@@ -76,6 +83,24 @@ public class PaintPalette : MonoBehaviour
     private void OnDestroy()
     {
         if (Instance == this) Instance = null;
+    }
+
+    /// <summary>
+    /// Set up a swatch image for a color: the palette's icon tinted to the color (Original: its own icon,
+    /// untinted, or the tinted icon see-through). Without icons it just gets the color.
+    /// </summary>
+    public static void StyleSwatch(UnityEngine.UI.Image image, byte id, Color originalColor)
+    {
+        if (image == null) return;
+        var p = Instance;
+        if (id == 0 && p != null && p.originalSprite != null)
+        {
+            image.sprite = p.originalSprite;
+            image.color = Color.white;
+            return;
+        }
+        if (p != null && p.swatchSprite != null) image.sprite = p.swatchSprite;
+        image.color = TryGetColor(id, out Color c) ? c : originalColor;
     }
 
     /// <summary>A valid color id: 0 (Original) or one in the list.</summary>

@@ -7,8 +7,9 @@ using UnityEngine.UI;
 /// The paint brush's color wheel (TMP UI): hold the brush key and the palette's colors appear in a
 /// ring; move the mouse toward one and let go to pick it. It fills itself from the PaintPalette.
 ///
-/// No setup needed: without a PaintWheel in the scene, the brush makes a plain one by itself (round
-/// swatches on their own overlay Canvas). To style it, put a PaintWheel on your Canvas: Root (the wheel,
+/// No setup needed: without a PaintWheel in the scene, the brush makes a plain one by itself (on its
+/// own overlay Canvas). Every color in the PaintPalette gets a swatch, drawn with the palette's Swatch
+/// Sprite tinted to the color (round ones if it has none), so new colors show up by themselves. To style it, put a PaintWheel on your Canvas: Root (the wheel,
 /// centered on screen, shown while open), Swatch Prefab (an Image, one per color, placed around the
 /// ring), Radius in pixels, and an optional Name Text in the middle for the color pointed at.
 /// </summary>
@@ -147,7 +148,7 @@ public class PaintWheel : MonoBehaviour
             var img = Instantiate(swatchPrefab, root);
             img.gameObject.SetActive(true);
             img.name = $"Swatch {PaintPalette.NameOf((byte)i)}";
-            img.color = PaintPalette.TryGetColor((byte)i, out Color c) ? c : originalSwatchColor;
+            PaintPalette.StyleSwatch(img, (byte)i, originalSwatchColor); // the palette's icon, tinted
             Vector2 dir = Direction(i, count);
             img.rectTransform.anchoredPosition = dir * radius;
             swatches.Add(img);
