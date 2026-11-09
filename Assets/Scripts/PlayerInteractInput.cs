@@ -91,9 +91,10 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         if (!IsOwner || cam == null) return;
 
-        // Store edit mode, an open menu, or the paint brush out (it has the clicks to itself): drop any
-        // placement preview and stand by.
-        if ((storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen || PaintBrush.LocalActive)
+        // Store edit mode, an open menu, or a hand tool out (the paint brush or price scanner has the
+        // clicks and keys to itself): drop any placement preview and stand by.
+        if ((storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen || PaintBrush.LocalActive ||
+            PriceScanner.LocalActive)
         {
             lookedAtSign = null;
             lookedAtSegment = null;
@@ -410,6 +411,7 @@ public class PlayerInteractInput : NetworkBehaviour
         string prompt = WithToolPrompt(own);
         // Only a real target lights the crosshair, not the brush's idle hint.
         LocalHasTarget = !string.IsNullOrEmpty(own) || (prompt != null && prompt.StartsWith("Click"));
+        if (PriceScanner.LocalTyping) LocalHasTarget = true;
         if (InteractPromptUI.Instance != null) InteractPromptUI.Instance.Show(prompt);
     }
 
@@ -420,14 +422,18 @@ public class PlayerInteractInput : NetworkBehaviour
     }
 
     private PaintBrush brush;
+    private PriceScanner scanner;
 
-    // The paint brush, when it's out, is the only thing that shows (everything else is off meanwhile).
+    // A hand tool that's out (paint brush, price scanner) is the only thing that shows (everything else
+    // is off meanwhile).
     private string WithToolPrompt(string prompt)
     {
-        if (brush == null && !TryGetComponent(out brush)) return prompt;
-        string tool = brush.Prompt;
-        if (string.IsNullOrEmpty(tool) || UIState.IsMenuOpen) return prompt;
-        return tool;
+        if (UIState.IsMenuOpen) return prompt;
+        if (brush != null || TryGetComponent(out brush))
+            if (brush.IsActive && !string.IsNullOrEmpty(brush.Prompt)) return brush.Prompt;
+        if (scanner != null || TryGetComponent(out scanner))
+            if (scanner.IsActive && !string.IsNullOrEmpty(scanner.Prompt)) return scanner.Prompt;
+        return prompt;
     }
 
     /// <summary>Built-in prompt, only when there's no InteractPromptUI in the scene.</summary>

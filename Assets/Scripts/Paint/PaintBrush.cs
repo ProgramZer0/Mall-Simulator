@@ -113,7 +113,7 @@ public class PaintBrush : NetworkBehaviour
             if (!Input.GetKey(key)) CloseWheel(true);
             return;
         }
-        if (UIState.IsMenuOpen) { keyDownAt = -1f; return; }
+        if (UIState.IsMenuOpen || PriceScanner.LocalTyping) { keyDownAt = -1f; return; } // digits are a price
 
         // Tap: take out / put away. Hold: the color wheel.
         if (Input.GetKeyDown(key)) keyDownAt = Time.unscaledTime;
