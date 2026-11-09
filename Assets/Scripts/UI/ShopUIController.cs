@@ -215,6 +215,30 @@ public class ShopUIController : MonoBehaviour
         zoomingBack = false;
     }
 
+    /// <summary>
+    /// A monitor is going away: if the shop is on it, close the shop, put the Canvas back and the camera
+    /// home right now (no zoom).
+    /// </summary>
+    public void ReleaseMonitor(ShopMonitor going)
+    {
+        if (going == null || monitor != going) return;
+        if (IsOpen)
+        {
+            IsOpen = false;
+            if (root != null) root.SetActive(false);
+            UIState.CloseMenu(this);
+            Closed?.Invoke();
+        }
+        RestoreCanvas();
+        if (viewCam != null)
+        {
+            viewCam.transform.localPosition = camLocalPos;
+            viewCam.transform.localRotation = camLocalRot;
+        }
+        monitor = null;
+        viewCam = null;
+    }
+
     private void StartZoomBack()
     {
         if (viewCam == null) { RestoreCanvas(); monitor = null; return; }
