@@ -328,6 +328,17 @@ public class PlayerInteractInput : NetworkBehaviour
     private static GUIStyle promptStyle; // made once; a new GUIStyle every OnGUI call makes garbage
     private static readonly GUIContent PromptContent = new();
 
+    // Unlocking takes the segment's walls away, so anything hung on them has to come off first.
+    private string SegmentPrompt()
+    {
+        var plot = lookedAtSegment.Plot;
+        int i = lookedAtSegment.Index;
+        int onWall = plot.CountItemsOnSegmentWalls(i);
+        if (onWall > 0)
+            return $"Take the {onWall} thing{(onWall == 1 ? "" : "s")} off this wall to unlock {plot.GetSegmentName(i)}";
+        return $"F: Unlock {plot.GetSegmentName(i)} (${plot.GetSegmentPrice(i)})";
+    }
+
     // Something F would pick up: same ray and rules as picking up, so the prompt only shows when it works.
     private void FindPickupTarget()
     {
@@ -378,8 +389,7 @@ public class PlayerInteractInput : NetworkBehaviour
                     : lookedAtBuriedCartItem ? "Take the things on top off first"
                     : lookedAtMonitor != null ? "F: Shop monitor"
                     : lookedAtSign != null ? $"F: Buy {lookedAtSign.Plot.DisplayName} ({lookedAtSign.Plot.Price})"
-                    : lookedAtSegment != null ? $"F: Unlock {lookedAtSegment.Plot.GetSegmentName(lookedAtSegment.Index)} " +
-                                                $"(${lookedAtSegment.Plot.GetSegmentPrice(lookedAtSegment.Index)})"
+                    : lookedAtSegment != null ? SegmentPrompt()
                     : stockTarget != null ? StockPrompt()
                     : PickupPrompt();
     }

@@ -1646,6 +1646,41 @@ public class StorePlot : NetworkBehaviour
         purchasedSegments.Value |= 1 << index;
     }
 
+    /// <summary>
+    /// How many things are hung on a segment's walls or set into them (windows, doors). Unlocking takes
+    /// those walls away, so they'd be left floating: they have to come off first. Works on every
+    /// machine (from the spawned items).
+    /// </summary>
+    public int CountItemsOnSegmentWalls(int index)
+    {
+        if (index < 0 || index >= SegmentCount || segments[index].falseWalls == null) return 0;
+        var walls = segments[index].falseWalls;
+        bool InSegmentWall(Transform t)
+        {
+            foreach (var w in walls)
+                if (w != null && w.activeInHierarchy && t.IsChildOf(w.transform)) return true;
+            return false;
+        }
+        bool IsSegmentWall(Collider c) => InSegmentWall(c.transform);
+
+        float floor = FloorHeight;
+        int count = 0;
+        var catalog = ItemCatalog.Instance;
+        foreach (var item in ItemPickupNet.All)
+        {
+            if (item == null || !item.IsSpawned) continue;
+            if (item.TryGetComponent<WallOpening>(out var o))
+            {
+                var host = CuttableWall.HostOf(o);
+                if (host != null && InSegmentWall(host.transform)) count++;
+                continue;
+            }
+            if (catalog == null || !catalog.TryGet(item.itemId, out var def)) continue;
+            if (PlacementCheck.IsHungAgainst(def, item.transform.position, item.transform.rotation, floor, IsSegmentWall)) count++;
+        }
+        return count;
+    }
+
     public int GetSegmentPrice(int index) =>
         index >= 0 && index < SegmentCount ? segments[index].price : 0;
 
