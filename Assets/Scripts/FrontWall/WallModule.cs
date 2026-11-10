@@ -38,6 +38,18 @@ public class WallModule : MonoBehaviour
     public GameObject Door => door;
     public bool FitToSection => fitToSection;
 
+    /// <summary>
+    /// Make a store's plain storefront wall (a CuttableWall in its Storefront Walls) a section front wall
+    /// kits can replace, without setup: it becomes type 0, "Starting wall".
+    /// </summary>
+    public static WallModule MakeStartingWall(GameObject wall)
+    {
+        var m = wall.AddComponent<WallModule>();
+        m.moduleId = 0;
+        m.displayName = "Starting wall";
+        return m;
+    }
+
     /// <summary>Set on copies a store spawned to replace a section, so they're never counted as slots.</summary>
     [System.NonSerialized] public bool IsReplacement;
 
