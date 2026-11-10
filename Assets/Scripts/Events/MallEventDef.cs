@@ -177,6 +177,11 @@ public class MallEventDef : ScriptableObject
     [Tooltip("At most this many times per season (0 = no limit). Handy for Random: \"maybe once per winter\".")]
     [Min(0)] public int maxPerSeason;
 
+    [Header("Voting")]
+    [Tooltip("Can be on a mall vote's ballot (MallVoteManager). Winning starts it like any other event. Usually " +
+             "with Trigger set to Manual, so it only happens when voted in.")]
+    public bool votable;
+
     [Header("What it does")]
     public List<Rule> rules = new();
 }
