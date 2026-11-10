@@ -1048,11 +1048,21 @@ public class StorePlot : NetworkBehaviour
         {
             foreach (var m in frontWalls)
                 if (m != null) result.Add((m, WallModule.GeometryBounds(m.gameObject).center));
-            return result;
         }
+        else if (autoFindFrontWalls) result = AutoFindFrontModules();
 
-        if (!autoFindFrontWalls) return result;
-        return AutoFindFrontModules();
+        // Plain storefront walls (Storefront Walls, not inside a module) are sections too, so front wall
+        // kits can replace them with no extra setup.
+        if (storefrontWalls != null)
+            foreach (var w in storefrontWalls)
+            {
+                if (w == null) continue;
+                var module = w.GetComponentInParent<WallModule>(true);
+                if (module == null) module = WallModule.MakeStartingWall(w.gameObject);
+                if (result.Exists(r => r.module == module)) continue;
+                result.Add((module, WallModule.GeometryBounds(module.gameObject).center));
+            }
+        return result;
     }
 
     private List<(WallModule module, Vector3 center)> AutoFindFrontModules()
