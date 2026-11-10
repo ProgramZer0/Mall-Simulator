@@ -104,6 +104,7 @@ public class PlayerInteractInput : NetworkBehaviour
             lookedAtCounter = null;
             lookedAtCheckoutPart = null;
             lookedAtPickup = null;
+            lookedAtBuy = null;
             lookedAtBuriedCartItem = false;
             ClearStockTarget();
             if (previewActive || ghostPreview != null)
@@ -131,6 +132,9 @@ public class PlayerInteractInput : NetworkBehaviour
     private CheckoutCounter lookedAtCounter;        // your store's checkout counter
     private CheckoutClickable lookedAtCheckoutPart; // a part of it to click: something on the belt, a key, the drawer...
     private ItemPickupNet lookedAtPickup;           // something F would pick up (empty hands)
+    private NetworkObject lookedAtBuy;              // something for sale in another player's store
+    private int lookedAtBuyZone = -1;               // a shelf zone (one product), or -1 for a loose item
+    private int lookedAtBuyPrice;                   // cents
     private bool lookedAtBuriedCartItem; // something on a cart with other things stacked on it
     [Tooltip("Lock / unlock a door your store owns.")]
     [SerializeField] private KeyCode doorLockKey = KeyCode.L;
@@ -151,6 +155,7 @@ public class PlayerInteractInput : NetworkBehaviour
         lookedAtBuriedCartItem = false;
         pushedCart = CartNet.GetPushedBy(OwnerClientId);
         FindPickupTarget();
+        FindBuyTarget();
         if (Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit,
                 interactRange, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
         {
@@ -345,6 +350,48 @@ public class PlayerInteractInput : NetworkBehaviour
         return $"F: Unlock {plot.GetSegmentName(i)} (${plot.GetSegmentPrice(i)})";
     }
 
+    // Something for sale in someone else's open store: a loose item (empty hands) or one product off a
+    // shelf (empty hands, or a crate of it with room). Same price rule as the host's.
+    private void FindBuyTarget()
+    {
+        lookedAtBuy = null;
+        lookedAtBuyZone = -1;
+        lookedAtBuyPrice = 0;
+        if (pushedCart != null) return;
+        if (!Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit, interactRange, pickupMask)) return;
+        var no = hit.collider.GetComponentInParent<NetworkObject>();
+        if (no == null || !no.IsSpawned) return;
+
+        int held = inventory.HeldItemId.Value;
+        if (no.TryGetComponent<StockContainer>(out var shelf) && shelf.HasStock)
+        {
+            int zone = shelf.FindNearestZone(hit.point, held, wantStock: true);
+            if (zone < 0) return;
+            if (held != 0 && inventory.HeldUnits.Value >= StockContainer.GetUnitsPerCrate(held)) return;
+            int price = PlayerInventoryNet.BuyPrice(OwnerClientId, no, zone, out _);
+            if (price <= 0) return;
+            lookedAtBuy = no;
+            lookedAtBuyZone = zone;
+            lookedAtBuyPrice = price;
+            return;
+        }
+
+        if (held != 0) return;
+        int loose = PlayerInventoryNet.BuyPrice(OwnerClientId, no, -1, out _);
+        if (loose <= 0) return;
+        lookedAtBuy = no;
+        lookedAtBuyPrice = loose;
+    }
+
+    private string BuyPrompt()
+    {
+        int id = lookedAtBuyZone >= 0 && lookedAtBuy.TryGetComponent<StockContainer>(out var shelf)
+            ? shelf.GetZone(lookedAtBuyZone).itemId
+            : lookedAtBuy.TryGetComponent<ItemPickupNet>(out var item) ? item.itemId : 0;
+        string what = lookedAtBuyZone >= 0 ? $"1 {ItemName(id)}" : ItemName(id);
+        return $"F: Buy {what} for {Sellable.FormatPrice(lookedAtBuyPrice)}";
+    }
+
     // Something F would pick up: same ray and rules as picking up, so the prompt only shows when it works.
     private void FindPickupTarget()
     {
@@ -383,7 +430,7 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         if (!IsOwner || (lookedAtSign == null && lookedAtSegment == null && lookedAtMonitor == null && stockTarget == null &&
                          lookedAtCart == null && pushedCart == null && lookedAtDoor == null &&
-                         lookedAtCounter == null && lookedAtPickup == null && !lookedAtBuriedCartItem) ||
+                         lookedAtCounter == null && lookedAtPickup == null && lookedAtBuy == null && !lookedAtBuriedCartItem) ||
             (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return null;
 
         return pushedCart != null ? "F: Let go of cart"
@@ -396,6 +443,7 @@ public class PlayerInteractInput : NetworkBehaviour
                     : lookedAtMonitor != null ? "F: Shop monitor"
                     : lookedAtSign != null ? $"F: Buy {lookedAtSign.Plot.DisplayName} ({lookedAtSign.Plot.Price})"
                     : lookedAtSegment != null ? SegmentPrompt()
+                    : lookedAtBuy != null ? BuyPrompt()
                     : stockTarget != null ? StockPrompt()
                     : PickupPrompt();
     }
@@ -619,6 +667,13 @@ public class PlayerInteractInput : NetworkBehaviour
         {
             if (ShopUIController.Instance != null) ShopUIController.Instance.Open(lookedAtMonitor.GetPlot(), lookedAtMonitor, cam);
             else Debug.LogWarning("[PlayerInteractInput] No ShopUIController in the scene to open.");
+            return;
+        }
+
+        // Something for sale in another player's store: paid for straight away, into your hands.
+        if (lookedAtBuy != null)
+        {
+            inventory.RequestBuyServerRpc(lookedAtBuy, lookedAtBuyZone);
             return;
         }
 

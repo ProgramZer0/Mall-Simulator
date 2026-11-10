@@ -282,6 +282,24 @@ public class EconomyManager : NetworkBehaviour
         return true;
     }
 
+    /// <summary>
+    /// Server: take money in cents if the team has enough (its dollars plus any cents it has waiting).
+    /// For buying things priced in cents, like another player's goods.
+    /// </summary>
+    public bool ServerTrySpendCents(ulong teamId, int cents)
+    {
+        if (!IsServer) return false;
+        if (cents <= 0) return true;
+        centsLeftOver.TryGetValue(teamId, out int left);
+        long have = (long)GetTeamMoney(teamId) * 100 + left;
+        if (have < cents) return false;
+        long after = have - cents;
+        int dollars = (int)(after / 100);
+        centsLeftOver[teamId] = (int)(after % 100);
+        ServerAddMoney(teamId, dollars - GetTeamMoney(teamId));
+        return true;
+    }
+
     /// <summary>Server: a team's first store pays out its Starting Money, once per team.</summary>
     public void ServerGrantStartingMoney(ulong teamId, int amount)
     {
