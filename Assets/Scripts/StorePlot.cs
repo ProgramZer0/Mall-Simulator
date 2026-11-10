@@ -1258,6 +1258,20 @@ public class StorePlot : NetworkBehaviour
         if (slot.replacement != null && slot.replacementId == moduleId) return;
         if (slot.replacement != null) Destroy(slot.replacement);
 
+        // Tiles: copies side by side across the section, nothing stretched.
+        if (prefab.Tile)
+        {
+            var tiled = BuildTiledSection(prefab, slot.original.gameObject, index);
+            if (tiled != null)
+            {
+                MarkStorefrontPanels(tiled);
+                slot.original.gameObject.SetActive(false);
+                slot.replacement = tiled;
+                slot.replacementId = moduleId;
+                return;
+            }
+        }
+
         // Same rotation, scale and parent as the original, then slide it so the meshes line up
         // (the prefabs' pivots are in different places, so matching positions wouldn't work).
         Transform t = slot.original.transform;
@@ -1272,6 +1286,93 @@ public class StorePlot : NetworkBehaviour
         slot.original.gameObject.SetActive(false);
         slot.replacement = go;
         slot.replacementId = moduleId;
+    }
+
+    // Build a section from copies of a tile module, side by side along it: as many as fit (each squeezed
+    // or widened a few percent to fill the length exactly), front facing out of the store, centered on
+    // the section's depth and height. Their CuttableWall panels become one long panel (the first copy's,
+    // lengthened), so holes can go across tiles. Null if the section or tile has no size.
+    private GameObject BuildTiledSection(WallModule prefab, GameObject section, int index)
+    {
+        Transform t = section.transform;
+        Bounds local = WallModule.GeometryBoundsIn(section, t);
+        Vector3 sz = local.size;
+        if (sz.x < 1e-3f && sz.z < 1e-3f) return null;
+
+        // The section's length runs along its longer flat side; out of the store is away from its middle.
+        Vector3 along = t.rotation * (sz.x >= sz.z ? Vector3.right : Vector3.forward);
+        along.y = 0f;
+        along.Normalize();
+        Vector3 center = t.TransformPoint(local.center);
+        Vector3 outward = Vector3.Cross(along, Vector3.up);
+        Vector3 fromStore = center - GetWorldBounds().center;
+        if (Vector3.Dot(outward, fromStore) < 0f) outward = -outward;
+        Quaternion facing = Quaternion.LookRotation(outward, Vector3.up);
+        along = facing * Vector3.right;
+        float length = WallModule.GeometryBoundsIn(section, center, facing).size.x; // measured, scale and all
+
+        Quaternion fix = prefab.transform.localRotation;
+        Quaternion rot = facing * fix;
+        var root = new GameObject($"{prefab.name} ({displayName} front {index})");
+        root.transform.SetPositionAndRotation(center, facing);
+
+        // One copy to measure the tile.
+        var first = Instantiate(prefab.gameObject, center, rot);
+        float tileWidth = WallModule.GeometryBoundsIn(first, center, facing).size.x;
+        if (tileWidth < 1e-3f)
+        {
+            Destroy(first);
+            Destroy(root);
+            return null;
+        }
+        int count = Mathf.Max(1, Mathf.RoundToInt(length / tileWidth));
+        float squeeze = length / (count * tileWidth);
+        float step = length / count;
+
+        // Which of the tile's own axes runs along the wall (to squeeze it).
+        Vector3 localAlong = Quaternion.Inverse(fix) * Vector3.right;
+        int axis = Mathf.Abs(localAlong.x) >= Mathf.Abs(localAlong.y) && Mathf.Abs(localAlong.x) >= Mathf.Abs(localAlong.z) ? 0
+                 : Mathf.Abs(localAlong.y) >= Mathf.Abs(localAlong.z) ? 1 : 2;
+
+        var tiles = new List<GameObject>();
+        for (int i = 0; i < count; i++)
+        {
+            var copy = i == 0 ? first : Instantiate(prefab.gameObject, center, rot);
+            copy.name = $"{prefab.name} tile {i + 1}";
+            if (copy.TryGetComponent<WallModule>(out var wm)) wm.IsReplacement = true;
+            Vector3 scale = copy.transform.localScale;
+            scale[axis] *= squeeze;
+            copy.transform.localScale = scale;
+            Vector3 target = center + along * (-length * 0.5f + (i + 0.5f) * step);
+            copy.transform.position += target - WallModule.GeometryBounds(copy).center;
+            copy.transform.SetParent(root.transform, true);
+            tiles.Add(copy);
+        }
+
+        // One long panel instead of one per tile: the first tile's panels, lengthened to the whole
+        // section; the others' are removed.
+        if (count > 1)
+        {
+            var firstPanels = tiles[0].GetComponentsInChildren<CuttableWall>(true);
+            foreach (var panel in firstPanels)
+            {
+                Transform pt = panel.transform;
+                Vector3 pl = Quaternion.Inverse(pt.rotation) * along;
+                int pa = Mathf.Abs(pl.x) >= Mathf.Abs(pl.y) && Mathf.Abs(pl.x) >= Mathf.Abs(pl.z) ? 0
+                       : Mathf.Abs(pl.y) >= Mathf.Abs(pl.z) ? 1 : 2;
+                Vector3 ps = pt.localScale;
+                ps[pa] *= count;
+                pt.localScale = ps;
+                pt.position += along * ((count - 1) * 0.5f * step);
+            }
+            for (int i = 1; i < tiles.Count; i++)
+                foreach (var panel in tiles[i].GetComponentsInChildren<CuttableWall>(true))
+                {
+                    panel.gameObject.SetActive(false);
+                    Destroy(panel.gameObject);
+                }
+        }
+        return root;
     }
 
     // Stretch a swapped-in module to the length and height of the section it replaces; the thinnest

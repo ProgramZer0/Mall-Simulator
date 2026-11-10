@@ -27,7 +27,12 @@ public class WallModule : MonoBehaviour
     [Tooltip("Doorways: the door object inside this module. The store shows it while closed, for " +
              "sale or being renovated, and hides it while open.")]
     [SerializeField] private GameObject door;
-    [Tooltip("When swapped in, stretch it to the length and height of the section it replaces (its " +
+    [Tooltip("Repeat this module side by side across the section it replaces, so the model never stretches " +
+             "(a few percent at most, to fill the length exactly). Model one tile: full wall height, front facing " +
+             "+Z (toward the hallway), width along X; a Blender root rotation is kept. Its CuttableWall panels are " +
+             "joined into one long panel across the section, so windows and doors can go anywhere. Off: Fit To Section.")]
+    [SerializeField] private bool tile = true;
+    [Tooltip("(When Tile is off.) Stretch it to the length and height of the section it replaces (its " +
              "thickness stays). Off: it keeps its own size and is only centered on the section.")]
     [SerializeField] private bool fitToSection = true;
 
@@ -37,6 +42,7 @@ public class WallModule : MonoBehaviour
     public int Price => price;
     public GameObject Door => door;
     public bool FitToSection => fitToSection;
+    public bool Tile => tile;
 
     /// <summary>
     /// Make a store's plain storefront wall (a CuttableWall in its Storefront Walls) a section front wall
@@ -57,11 +63,15 @@ public class WallModule : MonoBehaviour
     /// Box around a module's meshes in Frame's local space (scale included), e.g. the section's own
     /// transform, so sizes along its length, height and thickness can be compared.
     /// </summary>
-    public static Bounds GeometryBoundsIn(GameObject go, Transform frame)
+    public static Bounds GeometryBoundsIn(GameObject go, Transform frame) =>
+        GeometryBoundsIn(go, frame.position, frame.rotation);
+
+    /// <summary>Same, in a frame given by a position and rotation.</summary>
+    public static Bounds GeometryBoundsIn(GameObject go, Vector3 framePosition, Quaternion frameRotation)
     {
         bool any = false;
         Bounds result = default;
-        Matrix4x4 toFrame = Matrix4x4.TRS(frame.position, frame.rotation, Vector3.one).inverse;
+        Matrix4x4 toFrame = Matrix4x4.TRS(framePosition, frameRotation, Vector3.one).inverse;
         foreach (var mf in go.GetComponentsInChildren<MeshFilter>(true))
         {
             if (mf.sharedMesh == null) continue;
