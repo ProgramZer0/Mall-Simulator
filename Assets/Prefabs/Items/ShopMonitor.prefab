@@ -128,6 +128,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 7436491645222174453}
+  - {fileID: 4830745220260159582}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: -90, y: 0, z: 0}
 --- !u!33 &1984053890712291477
@@ -206,8 +207,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.10215843, y: 1.286371, z: 0.55422276}
-  m_Center: {x: 0.003813818, y: -0.006507695, z: -0.002726883}
+  m_Size: {x: 0.10215843, y: 1.5299326, z: 0.77394444}
+  m_Center: {x: 0.003813818, y: 0.01130867, z: 0.107133985}
 --- !u!114 &5976144729851372552
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -300,6 +301,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d1c49b889b262864284b06851bd5afa7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ShopMonitor
+  screen: {fileID: 4830745220260159582}
+  screenWidth: 1.25
+  viewDistance: 0
 --- !u!114 &4172821250325467523
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -316,3 +320,34 @@ MonoBehaviour:
   - renderer: {fileID: 6200317335002420273}
     materialIndex: 0
   zoneName: 
+--- !u!1 &6626884647311701503
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4830745220260159582}
+  m_Layer: 3
+  m_Name: mountPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4830745220260159582
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6626884647311701503}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0.5, y: -0.5, z: -0.5, w: 0.5}
+  m_LocalPosition: {x: -0.024, y: -0, z: 0.113}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 5822497985098240864}
+  m_LocalEulerAnglesHint: {x: 0, y: -90, z: -90}
