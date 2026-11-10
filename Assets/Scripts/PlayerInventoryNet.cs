@@ -159,6 +159,85 @@ public class PlayerInventoryNet : NetworkBehaviour
         PlayItemSoundClientRpc(id, at, true);
     }
 
+    /* ========================= BUYING FROM OTHER PLAYERS ========================= */
+
+    /// <summary>
+    /// What a for-sale thing in someone else's store costs this player (cents), or 0 if they can't buy
+    /// it: the store is open and not theirs, and it's priced. Zone -1: a loose item; otherwise one
+    /// product off a shelf zone. Works on every machine (for the prompt) and on the host (to buy).
+    /// </summary>
+    public static int BuyPrice(ulong buyer, NetworkObject target, int zone, out StorePlot plot)
+    {
+        plot = null;
+        var mall = MallManager.Instance;
+        if (target == null || mall == null) return 0;
+        plot = mall.GetPlotAt(target.transform.position);
+        if (plot == null || !plot.IsOpen || plot.IsAuthorized(buyer)) return 0;
+
+        if (zone >= 0)
+        {
+            if (!target.TryGetComponent<StockContainer>(out var shelf) || zone >= shelf.ZoneCount) return 0;
+            var z = shelf.GetZone(zone);
+            return z.itemId != 0 && z.count > 0 && z.price > 0 && z.pricedItem == z.itemId ? z.price : 0;
+        }
+
+        if (!target.TryGetComponent<Sellable>(out var sellable) || !sellable.IsForSale) return 0;
+        if (target.TryGetComponent<ItemPickupNet>(out var pickup) && (pickup.EditModeOnly || pickup.IsOnCart)) return 0;
+        if (target.TryGetComponent<CheckoutCounter>(out var counter) && counter.IsBusy) return 0;
+        return sellable.SalePrice;
+    }
+
+    /// <summary>
+    /// Buy something for sale in another player's store: a loose item into empty hands, or one product
+    /// off a shelf zone (into empty hands, or a held crate of it with room). Paid straight to the
+    /// store's team at its price tag.
+    /// </summary>
+    [ServerRpc]
+    public void RequestBuyServerRpc(NetworkObjectReference targetRef, int zone, ServerRpcParams rpcParams = default)
+    {
+        ulong buyer = rpcParams.Receive.SenderClientId;
+        if (!targetRef.TryGet(out NetworkObject target)) return;
+        var actor = NetworkManager.Singleton.ConnectedClients[buyer].PlayerObject;
+        if (DistanceTo(target.gameObject, actor.transform.position) > 3.0f) return;
+
+        int price = BuyPrice(buyer, target, zone, out var plot);
+        if (price <= 0) return;
+
+        var eco = EconomyManager.Instance;
+        int id;
+        if (zone >= 0)
+        {
+            var shelf = target.GetComponent<StockContainer>();
+            id = shelf.GetZone(zone).itemId;
+            bool emptyHands = HeldItemId.Value == 0;
+            bool roomInCrate = HeldItemId.Value == id && HeldUnits.Value < StockContainer.GetUnitsPerCrate(id);
+            if (!emptyHands && !roomInCrate) return;
+            if (eco != null && eco.IsSpawned && !eco.ServerTrySpendCents(MallManager.GetTeamOf(buyer), price)) return;
+            if (shelf.ServerRemoveOne(zone) != id) return; // (can't happen: checked above)
+            if (emptyHands)
+            {
+                HeldItemId.Value = id;
+                HeldPaint.Value = 0;
+                HeldUnits.Value = 1;
+            }
+            else HeldUnits.Value++;
+        }
+        else
+        {
+            if (HeldItemId.Value != 0 || !target.TryGetComponent<ItemPickupNet>(out var item) || item.itemId == 0) return;
+            if (item.HasItemOnTopOnCart()) return;
+            if (eco != null && eco.IsSpawned && !eco.ServerTrySpendCents(MallManager.GetTeamOf(buyer), price)) return;
+            id = item.itemId;
+            HeldItemId.Value = id;
+            HeldPaint.Value = item.Paint;
+            HeldUnits.Value = StockContainer.GetUnitsPerCrate(id) == 0 ? 0 : item.Units;
+            target.Despawn(true);
+        }
+
+        if (eco != null && eco.IsSpawned) eco.ServerAddCents(plot.OwnerTeamId, price);
+        PlayItemSoundClientRpc(id, actor.transform.position, false);
+    }
+
     /// <summary>
     /// Take one product out of a container's zone: into empty hands (as a crate holding one),
     /// or back into a held crate of the same product that has room.
