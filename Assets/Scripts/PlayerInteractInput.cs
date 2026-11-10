@@ -99,6 +99,7 @@ public class PlayerInteractInput : NetworkBehaviour
             lookedAtSign = null;
             lookedAtSegment = null;
             lookedAtMonitor = null;
+            lookedAtVote = null;
             lookedAtCart = null;
             lookedAtDoor = null;
             lookedAtCounter = null;
@@ -135,6 +136,7 @@ public class PlayerInteractInput : NetworkBehaviour
     private NetworkObject lookedAtBuy;              // something for sale in another player's store
     private int lookedAtBuyZone = -1;               // a shelf zone (one product), or -1 for a loose item
     private int lookedAtBuyPrice;                   // cents
+    private VoteButton lookedAtVote;                // a mall vote kiosk's button
     private bool lookedAtBuriedCartItem; // something on a cart with other things stacked on it
     [Tooltip("Lock / unlock a door your store owns.")]
     [SerializeField] private KeyCode doorLockKey = KeyCode.L;
@@ -147,6 +149,7 @@ public class PlayerInteractInput : NetworkBehaviour
         lookedAtSign = null;
         lookedAtSegment = null;
         lookedAtMonitor = null;
+        lookedAtVote = null;
         lookedAtCart = null;
         lookedAtDoor = null;
         lookedAtCounter = null;
@@ -195,6 +198,9 @@ public class PlayerInteractInput : NetworkBehaviour
 
             var monitor = hit.collider.GetComponentInParent<ShopMonitor>();
             if (monitor != null && monitor.CanUse(OwnerClientId)) lookedAtMonitor = monitor;
+
+            var vote = hit.collider.GetComponentInParent<VoteButton>();
+            if (vote != null && vote.Prompt(OwnerClientId) != null) lookedAtVote = vote;
         }
     }
 
@@ -430,7 +436,8 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         if (!IsOwner || (lookedAtSign == null && lookedAtSegment == null && lookedAtMonitor == null && stockTarget == null &&
                          lookedAtCart == null && pushedCart == null && lookedAtDoor == null &&
-                         lookedAtCounter == null && lookedAtPickup == null && lookedAtBuy == null && !lookedAtBuriedCartItem) ||
+                         lookedAtCounter == null && lookedAtPickup == null && lookedAtBuy == null && lookedAtVote == null &&
+                         !lookedAtBuriedCartItem) ||
             (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return null;
 
         return pushedCart != null ? "F: Let go of cart"
@@ -440,6 +447,7 @@ public class PlayerInteractInput : NetworkBehaviour
                         ? lookedAtCheckoutPart.Counter.PromptFor(lookedAtCheckoutPart, OwnerClientId) ?? lookedAtCounter.StatusFor(OwnerClientId)
                         : CounterBodyPrompt(lookedAtCounter))
                     : lookedAtBuriedCartItem ? "Take the things on top off first"
+                    : lookedAtVote != null ? lookedAtVote.Prompt(OwnerClientId)
                     : lookedAtMonitor != null ? "F: Shop monitor"
                     : lookedAtSign != null ? $"F: Buy {lookedAtSign.Plot.DisplayName} ({lookedAtSign.Plot.Price})"
                     : lookedAtSegment != null ? SegmentPrompt()
@@ -667,6 +675,13 @@ public class PlayerInteractInput : NetworkBehaviour
         {
             if (ShopUIController.Instance != null) ShopUIController.Instance.Open(lookedAtMonitor.GetPlot(), lookedAtMonitor, cam);
             else Debug.LogWarning("[PlayerInteractInput] No ShopUIController in the scene to open.");
+            return;
+        }
+
+        // A mall vote kiosk's button: vote for that option (again to change your vote).
+        if (lookedAtVote != null)
+        {
+            lookedAtVote.Press();
             return;
         }
 
