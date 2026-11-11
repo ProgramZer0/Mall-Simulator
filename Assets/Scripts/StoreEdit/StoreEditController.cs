@@ -2100,18 +2100,51 @@ public class StoreEditController : NetworkBehaviour
             if (item == null || item.Opening == null || !item.gameObject.activeInHierarchy) return;
             var o = item.Opening;
             var host = CuttableWall.HostOf(o);
-            if (host == null || host.Plot != editPlot) { bad.Add(item); return; }
-            var shape = o.Current;
-            Vector3 c = host.ToWall(shape.center);
-            var hole = new Rect(c.x - shape.size.x * 0.5f, c.y - shape.size.y * 0.5f, shape.size.x, shape.size.y);
-            if (!host.CanFit(hole, o, false, out _)) bad.Add(item);
+            if (host != null && host.Plot == editPlot)
+            {
+                var shape = o.Current;
+                Vector3 c = host.ToWall(shape.center);
+                var hole = new Rect(c.x - shape.size.x * 0.5f, c.y - shape.size.y * 0.5f, shape.size.x, shape.size.y);
+                if (host.CanFit(hole, o, false, out _)) return;
+            }
+            if (!ReseatOpening(item)) bad.Add(item);
         }
         foreach (var item in localItems) Check(item);
         foreach (var item in addedItems) Check(item);
         if (bad.Count == 0) return;
 
         RemoveEditItems(bad, null);
-        ShowEditMessage($"{bad.Count} window{(bad.Count == 1 ? "" : "s")}/door{(bad.Count == 1 ? "" : "s")} had no room in the changed walls: removed and refunded.");
+        ShowEditMessage($"{bad.Count} window{(bad.Count == 1 ? "" : "s")}/door{(bad.Count == 1 ? "" : "s")} had no room in the changed walls: back in {(bad.Count == 1 ? "its box" : "their boxes")}.");
+    }
+
+    /// <summary>
+    /// A window or door whose wall was swapped for one that's thicker, thinner or set further in or
+    /// out: move it straight in or out onto the new wall (same spot along it, doors back on the floor),
+    /// if it fits there. False if no wall of this store is right there or it doesn't fit.
+    /// </summary>
+    private bool ReseatOpening(EditLocalItem item)
+    {
+        var o = item.Opening;
+        var shape = o.Current;
+        CuttableWall best = null;
+        Vector3 at = default;
+        foreach (var w in CuttableWall.All)
+        {
+            if (w == null || !w.isActiveAndEnabled || w.Plot != editPlot) continue;
+            if (Mathf.Abs(Vector3.Dot(shape.forward, w.Normal)) < 0.9f) continue;
+            Vector3 c = w.ToWall(shape.center);
+            if (Mathf.Abs(c.z) > 1f || c.x <= 0f || c.x >= w.Length || c.y <= 0f || c.y >= w.Height) continue;
+            if (best == null || Mathf.Abs(c.z) < Mathf.Abs(at.z)) { best = w; at = c; }
+        }
+        if (best == null) return false;
+
+        bool flip = Vector3.Dot(shape.forward, best.Normal) < 0f;
+        if (!best.TryFit(o, at.x, at.y, flip, false, out Vector3 pos, out Quaternion rot, out _)) return false;
+        // TryFit keeps it inside the wall; it mustn't have slid sideways to get there.
+        if (Mathf.Abs(best.ToWall(o.PivotFor(best.FromWall(at.x, at.y), rot)).x - best.ToWall(pos).x) > 0.01f) return false;
+        if (PlacementCheck.FindOpeningBlocker(item.Def, pos, rot, EditMask(), item.transform, false, editPlot) != null) return false;
+        item.SetPose(pos, rot);
+        return true;
     }
 
     private void ShowWallGhost(Vector3 a, Vector3 b, float height, bool valid)

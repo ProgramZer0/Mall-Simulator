@@ -1550,13 +1550,14 @@ public class StorePlot : NetworkBehaviour
     {
         EnsureFrontSlots();
         index = -1;
-        var module = t != null ? t.GetComponentInParent<WallModule>() : null;
-        if (module == null) return false;
+        if (t == null) return false;
 
+        // Anything under the slot's wall: its module, or a replacement's tiles and joined panel.
         for (int i = 0; i < frontSlots.Count; i++)
         {
             var slot = frontSlots[i];
-            if (slot.original == module || (slot.replacement != null && slot.replacement == module.gameObject))
+            if ((slot.original != null && t.IsChildOf(slot.original.transform)) ||
+                (slot.replacement != null && t.IsChildOf(slot.replacement.transform)))
             {
                 index = i;
                 return true;
@@ -1822,7 +1823,13 @@ public class StorePlot : NetworkBehaviour
                 }
 
                 Quaternion r = n.rotation.normalized;
-                if (!Allowed(def, n.position, r)) { notBought++; continue; }
+                // The piece's own box (on the floor by the wall) mustn't count as in its way.
+                var boxColliders = new List<Collider>();
+                foreach (var c in box.GetComponentsInChildren<Collider>())
+                    if (c.enabled) { c.enabled = false; boxColliders.Add(c); }
+                bool ok = Allowed(def, n.position, r);
+                foreach (var c in boxColliders) if (c != null) c.enabled = true;
+                if (!ok) { notBought++; continue; }
                 uint paint = box.ContainedPaint;
                 box.NetworkObject.Despawn(true);
                 SpawnEditItem(def, n.position, r, 0, 0, null, paint);
