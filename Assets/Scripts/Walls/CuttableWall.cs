@@ -26,6 +26,17 @@ public class CuttableWall : MonoBehaviour
     [Tooltip("The texture repeats every this many meters.")]
     [SerializeField] private float textureMeters = 1f;
 
+    [Header("Cut a model instead (optional)")]
+    [Tooltip("Instead of drawing itself as a box, cut the holes into a model's own meshes (Models). This " +
+             "object's box is then just the invisible shape: where holes can go, and what you bump into. The " +
+             "model's triangles inside a hole are removed and the ones across its edge trimmed; the hole's sides " +
+             "aren't filled in (a window or door frame covers them). The models' own colliders are turned off.")]
+    [SerializeField] private bool cutModels;
+    [Tooltip("The meshes to cut. Empty = every mesh under this wall's WallModule (or its parent), plus this object's " +
+             "own if it's a model (not a plain box). With the model on this object, give it a BoxCollider for the " +
+             "wall's shape.")]
+    [SerializeField] private List<MeshFilter> models = new();
+
     private const float Eps = 0.001f;
     private const float Facing = 0.9f;        // how square an opening must be to the wall
     private const float SlabTolerance = 0.1f; // how far off the middle of the wall an opening can sit
@@ -73,11 +84,32 @@ public class CuttableWall : MonoBehaviour
     private Renderer originalRenderer;
     private readonly List<Collider> originalColliders = new();
 
+    // Cut Models: each model's own mesh (kept to cut from) and the cut copy shown instead.
+    private readonly List<(MeshFilter filter, Mesh source, Mesh cut)> cutTargets = new();
+    private bool cutTargetsFound;
+    private readonly List<Collider> modelColliders = new();
+
+    public bool CutsModels => cutModels;
+
+    /// <summary>
+    /// Cut these meshes (as well as or instead of what Models lists). Used when front wall tiles are
+    /// joined into one panel: it cuts every tile's model.
+    /// </summary>
+    public void SetCutModels(IEnumerable<MeshFilter> filters)
+    {
+        RestoreModels();
+        models.Clear();
+        models.AddRange(filters);
+        cutModels = true;
+        cutTargetsFound = false;
+        built = false; // cut again next frame
+    }
+
     private void Awake()
     {
         Measure();
         // A shaped model here would be replaced by a plain box: say so.
-        if (TryGetComponent<MeshFilter>(out var shape) && shape.sharedMesh != null && shape.sharedMesh.vertexCount > 24)
+        if (!cutModels && TryGetComponent<MeshFilter>(out var shape) && shape.sharedMesh != null && shape.sharedMesh.vertexCount > 24)
             Debug.LogWarning($"[CuttableWall] '{name}' has a shaped mesh ({shape.sharedMesh.vertexCount} vertices). The wall is " +
                              "redrawn as a plain box, so that model won't show: put the model on a separate object and keep " +
                              "this one a plain box (e.g. a cube) for the flat, cuttable part.", this);
@@ -103,6 +135,7 @@ public class CuttableWall : MonoBehaviour
 
     private void OnDestroy()
     {
+        RestoreModels();
         if (mesh != null) Destroy(mesh);
         foreach (var m in mitredMeshes) if (m != null) Destroy(m);
     }
@@ -116,6 +149,83 @@ public class CuttableWall : MonoBehaviour
         FindHoles(holes);
         if (built && SameHoles()) return;
         Build();
+    }
+
+    /* ========================= CUT MODELS ========================= */
+
+    private void FindCutTargets()
+    {
+        if (cutTargetsFound) return;
+        cutTargetsFound = true;
+        cutTargets.Clear();
+        modelColliders.Clear();
+
+        var filters = new List<MeshFilter>();
+        if (models.Count > 0) filters.AddRange(models);
+        else
+        {
+            var module = GetComponentInParent<WallModule>();
+            Transform root = module != null ? module.transform : transform.parent != null ? transform.parent : transform;
+            foreach (var mf in root.GetComponentsInChildren<MeshFilter>(true))
+            {
+                var owner = mf.GetComponentInParent<CuttableWall>();
+                if (owner != null && owner != this) continue; // another wall's
+                if (cut != null && mf.transform.IsChildOf(cut.transform)) continue;
+                // Its own mesh only if it's a model: a plain box here is just the wall's shape.
+                if (mf.transform == transform && (mf.sharedMesh == null || mf.sharedMesh.vertexCount <= 24)) continue;
+                filters.Add(mf);
+            }
+        }
+
+        foreach (var mf in filters)
+        {
+            if (mf == null || mf.sharedMesh == null) continue;
+            if (!mf.sharedMesh.isReadable)
+            {
+                Debug.LogWarning($"[CuttableWall] Can't cut '{mf.name}': its mesh isn't readable. Tick Read/Write on the " +
+                                 "model's import settings.", mf);
+                continue;
+            }
+            var copy = new Mesh { name = $"{mf.sharedMesh.name} (cut)" };
+            if (mf.transform == transform && !TryGetComponent<BoxCollider>(out _))
+                Debug.LogWarning($"[CuttableWall] '{name}' cuts its own model but has no BoxCollider: add one sized to the " +
+                                 "wall (its shape is measured from it).", this);
+            cutTargets.Add((mf, mf.sharedMesh, copy));
+            mf.sharedMesh = copy;
+            // The box is what you bump into; the model's own colliders would fill the holes.
+            foreach (var c in mf.GetComponents<Collider>())
+                if (c.enabled && !c.isTrigger) { c.enabled = false; modelColliders.Add(c); }
+        }
+        if (cutTargets.Count == 0)
+            Debug.LogWarning($"[CuttableWall] '{name}' has Cut Models on but found no meshes to cut.", this);
+    }
+
+    private void CutModels()
+    {
+        FindCutTargets();
+        foreach (var (filter, source, copy) in cutTargets)
+        {
+            if (filter == null) continue;
+            Transform t = filter.transform;
+            MeshHoleCutter.Cut(source, copy, v =>
+            {
+                Vector3 w = ToWall(t.TransformPoint(v));
+                return new Vector2(w.x, w.y);
+            }, holes);
+        }
+    }
+
+    private void RestoreModels()
+    {
+        foreach (var (filter, source, copy) in cutTargets)
+        {
+            if (filter != null) filter.sharedMesh = source;
+            if (copy != null) Destroy(copy);
+        }
+        cutTargets.Clear();
+        foreach (var c in modelColliders) if (c != null) c.enabled = true;
+        modelColliders.Clear();
+        cutTargetsFound = false;
     }
 
     /* ========================= SHAPE ========================= */
@@ -371,6 +481,17 @@ public class CuttableWall : MonoBehaviour
 
         var boxes = new List<Rect>();
         SolidParts(boxes);
+
+        // Cut Models: the model shows (with the holes cut into it), not the box.
+        if (cut.TryGetComponent<MeshRenderer>(out var boxRenderer)) boxRenderer.enabled = !cutModels;
+        if (cutModels)
+        {
+            CutModels();
+            // Its own model is one of the cut ones: it stays visible (showing the cut copy).
+            if (originalRenderer != null)
+                foreach (var target in cutTargets)
+                    if (target.filter != null && target.filter.transform == transform) originalRenderer.enabled = true;
+        }
 
         var verts = new List<Vector3>();
         var normals = new List<Vector3>();
