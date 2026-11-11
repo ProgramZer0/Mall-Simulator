@@ -7,9 +7,11 @@ using UnityEngine;
 /// wall into the store's Storefront Walls.
 ///
 /// The wall must be a plain box: one object with a BoxCollider (or a box mesh), any size, scaled or
-/// not. Its longer side along X or Z is its length and its shorter side is its thickness. The wall
+/// not, turned any way (e.g. Blender's -90 on X). Whichever of its own axes points most nearly up is
+/// its height; of the other two, the longer is its length and the shorter its thickness. The wall
 /// is redrawn in code (same material, texture repeating every Texture Meters), so the original mesh
-/// is hidden and its colliders are replaced by ones that leave the holes open.
+/// is hidden and its colliders are replaced by ones that leave the holes open. Put any shaped model
+/// (trim, bumps) on a separate object: on this one it would be replaced by the box.
 ///
 /// Every machine cuts its own walls from the openings it can see, so nothing extra is synced.
 /// </summary>
@@ -56,7 +58,9 @@ public class CuttableWall : MonoBehaviour
 
     // Box in the wall's local space.
     private Vector3 boxCenter, boxSize, scale;
-    private int lengthAxis, thickAxis; // 0 = x, 2 = z
+    private int lengthAxis, thickAxis; // the wall's own axes (0 = x, 1 = y, 2 = z)
+    private int upAxis = 1;            // the own axis pointing most nearly up (1 = y for an upright wall)
+    private float upSign = 1f;         // -1 when that axis points down
 
     private readonly List<Rect> holes = new();      // in wall space (u along, v up), meters
     private readonly List<Rect> builtHoles = new();
@@ -72,6 +76,11 @@ public class CuttableWall : MonoBehaviour
     private void Awake()
     {
         Measure();
+        // A shaped model here would be replaced by a plain box: say so.
+        if (TryGetComponent<MeshFilter>(out var shape) && shape.sharedMesh != null && shape.sharedMesh.vertexCount > 24)
+            Debug.LogWarning($"[CuttableWall] '{name}' has a shaped mesh ({shape.sharedMesh.vertexCount} vertices). The wall is " +
+                             "redrawn as a plain box, so that model won't show: put the model on a separate object and keep " +
+                             "this one a plain box (e.g. a cube) for the flat, cuttable part.", this);
         originalRenderer = GetComponent<Renderer>();
         foreach (var c in GetComponents<Collider>()) originalColliders.Add(c);
     }
@@ -134,13 +143,26 @@ public class CuttableWall : MonoBehaviour
 
         Vector3 s = transform.lossyScale;
         scale = new Vector3(Mathf.Max(Eps, Mathf.Abs(s.x)), Mathf.Max(Eps, Mathf.Abs(s.y)), Mathf.Max(Eps, Mathf.Abs(s.z)));
-        float xm = boxSize.x * scale.x, zm = boxSize.z * scale.z;
-        lengthAxis = xm >= zm ? 0 : 2;
-        thickAxis = 2 - lengthAxis;
-        Length = Mathf.Max(xm, zm);
-        Thickness = Mathf.Min(xm, zm);
-        Height = boxSize.y * scale.y;
+
+        // Up is whichever own axis points most nearly up in the world (y for an upright wall).
+        float best = -1f;
+        for (int i = 0; i < 3; i++)
+        {
+            float d = Vector3.Dot(transform.rotation * Axis(i), Vector3.up);
+            if (Mathf.Abs(d) > best) { best = Mathf.Abs(d); upAxis = i; upSign = d >= 0f ? 1f : -1f; }
+        }
+        int a = upAxis == 0 ? 1 : 0, b = upAxis == 2 ? 1 : 2; // the two flat ones
+        float am = boxSize[a] * scale[a], bm = boxSize[b] * scale[b];
+        lengthAxis = am >= bm ? a : b;
+        thickAxis = am >= bm ? b : a;
+        Length = Mathf.Max(am, bm);
+        Thickness = Mathf.Min(am, bm);
+        Height = boxSize[upAxis] * scale[upAxis];
     }
+
+    // Wall space v (meters up from the bottom) to the up axis's local coordinate, and back.
+    private float UpLocal(float v) => boxCenter[upAxis] + upSign * (v / scale[upAxis] - boxSize[upAxis] * 0.5f);
+    private float UpMeters(float local) => (upSign * (local - boxCenter[upAxis]) + boxSize[upAxis] * 0.5f) * scale[upAxis];
 
     /// <summary>World point to wall space: u along (from one end), v up (from the bottom), w across (from the middle).</summary>
     public Vector3 ToWall(Vector3 world)
@@ -148,7 +170,7 @@ public class CuttableWall : MonoBehaviour
         Vector3 l = transform.InverseTransformPoint(world);
         return new Vector3(
             (l[lengthAxis] - (boxCenter[lengthAxis] - boxSize[lengthAxis] * 0.5f)) * scale[lengthAxis],
-            (l.y - (boxCenter.y - boxSize.y * 0.5f)) * scale.y,
+            UpMeters(l[upAxis]),
             (l[thickAxis] - boxCenter[thickAxis]) * scale[thickAxis]);
     }
 
@@ -157,7 +179,7 @@ public class CuttableWall : MonoBehaviour
     {
         Vector3 l = default;
         l[lengthAxis] = boxCenter[lengthAxis] - boxSize[lengthAxis] * 0.5f + u / scale[lengthAxis];
-        l.y = boxCenter.y - boxSize.y * 0.5f + v / scale.y;
+        l[upAxis] = UpLocal(v);
         l[thickAxis] = boxCenter[thickAxis] + w / scale[thickAxis];
         return l;
     }
@@ -518,9 +540,16 @@ public class CuttableWall : MonoBehaviour
         return u;
     }
 
-    // Wall space (u, v, w) maps to local (length axis, y, thickness axis). With length along z and
-    // thickness along x that swap flips handedness, so the winding test flips with it.
-    private float Handedness => lengthAxis == 2 ? -1f : 1f;
+    // Wall space (u, v, w) maps to local (length axis, up axis, thickness axis). An odd reordering of
+    // the axes, or an up axis pointing down, flips handedness, so the winding test flips with it.
+    private float Handedness
+    {
+        get
+        {
+            bool even = (lengthAxis == 0 && upAxis == 1) || (lengthAxis == 1 && upAxis == 2) || (lengthAxis == 2 && upAxis == 0);
+            return (even ? 1f : -1f) * upSign;
+        }
+    }
 
     // A box from (u0, v0, w0) to (u1, v1, w1) in wall space, with all six faces.
     private void AddBox(Rect r, float w0, float w1, List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> tris)
@@ -541,8 +570,8 @@ public class CuttableWall : MonoBehaviour
         {
             // Outward direction in meters, laid out on the wall's local axes.
             Vector3 nm = Vector3.zero;
-            int local = axis == 0 ? lengthAxis : axis == 1 ? 1 : thickAxis;
-            nm[local] = sign;
+            int local = axis == 0 ? lengthAxis : axis == 1 ? upAxis : thickAxis;
+            nm[local] = axis == 1 ? sign * upSign : sign;
 
             // The wall's own ends can be cut at an angle (mitred corners): the end face leans.
             if (axis == 0)
@@ -570,7 +599,7 @@ public class CuttableWall : MonoBehaviour
 
             // Wind so the face points along its outward direction (Unity: Cross(b - a, c - a) points out
             // of a front face). Worked out in wall space (u, v, w): outward there is (nu, nv, nw).
-            Vector3 outward = new(nm[lengthAxis], nm.y, nm[thickAxis]);
+            Vector3 outward = new(nm[lengthAxis], nm[upAxis] * upSign, nm[thickAxis]);
             bool keepOrder = Vector3.Dot(Vector3.Cross(m1 - m0, m2 - m0), outward) * Handedness > 0f;
             if (keepOrder)
             {
