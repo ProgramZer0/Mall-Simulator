@@ -148,5 +148,5 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
-  flipTile: 0
+  flipTile: 1
   fitToSection: 1

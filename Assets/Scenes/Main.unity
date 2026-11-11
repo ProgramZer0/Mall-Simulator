@@ -5182,6 +5182,10 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 9e67ea112a4d1434c921f8255dbd4caa, type: 2}
   - {fileID: 11400000, guid: d8fbd7fac4f463146be75acc1df8fd0f, type: 2}
   - {fileID: 11400000, guid: df227ce61acb15745acbbe2fb6fd2712, type: 2}
+  - {fileID: 11400000, guid: cf7a3ae31f18e2344aa726f8668689d2, type: 2}
+  - {fileID: 11400000, guid: 228c0a5da2ef9a240a089f98c6c25f1b, type: 2}
+  - {fileID: 11400000, guid: 9de024670b34c7f4db19ec3cbe3fd36e, type: 2}
+  - {fileID: 11400000, guid: 38a21c6d5ea2158429d57ce1950bf8ea, type: 2}
   seasonsEnabled: 1
   seasons:
   - {fileID: 11400000, guid: c49ac4e9381c1474891ba908212e0f99, type: 2}
@@ -5314,7 +5318,7 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   ballotEvery: 1600
   firstBallotAt: 1600
-  ballotLength: 200
+  ballotLength: 5
   optionsPerBallot: 4
   noVotesPicksRandom: 0
   devHotkey: 1
@@ -28221,6 +28225,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 508694140233710589, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}
+      propertyPath: m_fontSize
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 508694140233710589, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}
+      propertyPath: m_fontSizeBase
+      value: 10
+      objectReference: {fileID: 0}
     - target: {fileID: 1459525318870959261, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}
       propertyPath: m_Name
       value: votingBooth
@@ -28265,8 +28277,30 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 6951662808129896853, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}
+      propertyPath: m_SizeDelta.x
+      value: 12.3327
+      objectReference: {fileID: 0}
+    - target: {fileID: 6951662808129896853, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}
+      propertyPath: m_SizeDelta.y
+      value: 22.7196
+      objectReference: {fileID: 0}
+    - target: {fileID: 6951662808129896853, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 3.9285
+      objectReference: {fileID: 0}
+    - target: {fileID: 6951662808129896853, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 0.1113
+      objectReference: {fileID: 0}
+    - target: {fileID: 6951662808129896853, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: -0.02
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
-    m_RemovedGameObjects: []
+    m_RemovedGameObjects:
+    - {fileID: 5415288741728213791, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}
+    - {fileID: 2878146074764536181, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}
     m_AddedGameObjects: []
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 6873894127289283189, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}
@@ -28296,9 +28330,6 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 389208919873318194, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}
       insertIndex: -1
       addedObject: {fileID: 0}
-    - targetCorrespondingSourceObject: {fileID: 5415288741728213791, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 0}
     - targetCorrespondingSourceObject: {fileID: 4190476915680699827, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}
       insertIndex: -1
       addedObject: {fileID: 0}
@@ -28309,9 +28340,6 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 0}
     - targetCorrespondingSourceObject: {fileID: 4616525812250275301, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 0}
-    - targetCorrespondingSourceObject: {fileID: 2878146074764536181, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}
       insertIndex: -1
       addedObject: {fileID: 0}
   m_SourcePrefab: {fileID: 100100000, guid: eafdd824ffa4fab49bdffa55d67d2ae7, type: 3}

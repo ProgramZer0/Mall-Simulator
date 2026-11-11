@@ -353,7 +353,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
   walkSpeed: 4.5
-  sprintSpeed: 7
+  sprintSpeed: 30
   jumpHeight: 1.2
   gravity: -20
   airControl: 0.5
@@ -518,7 +518,6 @@ MonoBehaviour:
   wallHeightKey: 104
   controlsKey: 104
   wallEraseKey: 101
-  openingsKey: 110
   removeKey: 127
   logEditSave: 1
   wallHangHeight: 1.5
@@ -568,9 +567,16 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   toggleKey: 49
   handVisualPrefab: {fileID: 9017273729147295850, guid: d6987c5a39e7c7446a78e4bcc60f2eae, type: 3}
+  displayTextName: 
+  hand: {fileID: 0}
+  handOffset: {x: 0.2, y: -0.16, z: 0.3}
+  handRotation: {x: -90, y: 0, z: 0}
+  typingShift: {x: -0.06, y: 0.06, z: -0.04}
+  typingShiftSpeed: 8
   range: 4
   defaultMarkup: 1.2
   outlineColor: {r: 0.4, g: 1, b: 0.4, a: 1}
+  typingOutlineColor: {r: 1, g: 0.9, b: 0.3, a: 1}
 --- !u!114 &9197958977072773821
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -587,7 +593,11 @@ MonoBehaviour:
   key: 50
   holdSeconds: 0.25
   handVisualPrefab: {fileID: 3782376872447599808}
+  hand: {fileID: 0}
+  handOffset: {x: 0.3, y: -0.25, z: 0.15}
+  handRotation: {x: 0, y: -90, z: 0}
   range: 4
+  storeBuffer: 0.75
   outlineColor: {r: 1, g: 0.85, b: 0.3, a: 1}
 --- !u!1 &5427521708554327154
 GameObject:
@@ -706,6 +716,7 @@ MonoBehaviour:
   parts:
   - renderer: {fileID: 1362587244130411287}
     materialIndex: 0
+  zoneName: 
 --- !u!4 &8547537089434203678 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 2726311716024838651, guid: 98bf8115d9cb9ba4c9745c93f567b4c6, type: 3}

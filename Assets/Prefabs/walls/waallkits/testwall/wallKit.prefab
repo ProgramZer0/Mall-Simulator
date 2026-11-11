@@ -209,7 +209,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b0b86f8e9f92b6d4a886fc4d0f319373, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FrontWallKit
-  module: {fileID: 893181381938618653, guid: 3dd521de88caec347b081f32eef32010, type: 3}
+  module: {fileID: 4701647825860735495, guid: 3dd521de88caec347b081f32eef32010, type: 3}
 --- !u!114 &635708619532349428
 MonoBehaviour:
   m_ObjectHideFlags: 0

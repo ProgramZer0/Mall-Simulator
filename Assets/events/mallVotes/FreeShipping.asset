@@ -41,7 +41,7 @@ MonoBehaviour:
       minDeliverySeconds: 0
       maxDeliverySeconds: 0
     effects:
-    - stat: 1
+    - stat: 2
       mode: 0
       amount: -100
     - stat: 0
