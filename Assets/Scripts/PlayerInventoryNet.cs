@@ -235,6 +235,14 @@ public class PlayerInventoryNet : NetworkBehaviour
         }
 
         if (eco != null && eco.IsSpawned) eco.ServerAddCents(plot.OwnerTeamId, price);
+        var progression = ProgressionManager.Instance;
+        if (progression != null)
+        {
+            // The seller's profit, and what the buyer paid (for their own sales).
+            int products = zone >= 0 ? 1 : Mathf.Max(1, HeldUnits.Value);
+            progression.ServerRecordSale(plot, id, products, price);
+            progression.ServerRecordPurchase(MallManager.GetTeamOf(buyer), id, products, price);
+        }
         PlayItemSoundClientRpc(id, actor.transform.position, false);
     }
 

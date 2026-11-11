@@ -38,6 +38,7 @@ public class EconomyManager : NetworkBehaviour
         UnknownItem,
         BadQuantity,
         NotEnoughMoney,
+        LevelTooLow,     // an item needs a higher team level (ItemDef Min Level)
     }
 
     [Header("Deliveries")]
@@ -373,6 +374,7 @@ public class EconomyManager : NetworkBehaviour
         if (itemIds == null || quantities == null || itemIds.Length == 0 || itemIds.Length != quantities.Length)
             return OrderResult.BadQuantity;
 
+        ulong team = MallManager.GetTeamOf(clientId);
         long cost = 0;
         int boxes = 0;
         float slowest = 0f;
@@ -382,6 +384,7 @@ public class EconomyManager : NetworkBehaviour
                 def.worldNetworkPrefab == null)
                 return OrderResult.UnknownItem;
             if (quantities[i] < 1) return OrderResult.BadQuantity;
+            if (!ProgressionManager.CanOrder(team, def)) return OrderResult.LevelTooLow;
 
             boxes += quantities[i];
             if (boxes > maxItemsPerOrder) return OrderResult.BadQuantity;
@@ -394,9 +397,19 @@ public class EconomyManager : NetworkBehaviour
         if (!ShipmentPacker.CouldEverFit(plot.ShipmentZones, planBoxes))
             return OrderResult.TooBig;
 
-        ulong team = MallManager.GetTeamOf(clientId);
         if (cost > int.MaxValue || !ServerTrySpend(team, (int)cost))
             return OrderResult.NotEnoughMoney;
+
+        // What was paid, for the store's profit when it sells (see ProgressionManager).
+        var progression = ProgressionManager.Instance;
+        if (progression != null)
+            for (int i = 0; i < itemIds.Length; i++)
+                if (ItemCatalog.Instance.TryGet(itemIds[i], out var paidFor))
+                    progression.ServerRecordOrder(team, itemIds[i], quantities[i],
+                        (long)(MarketModifiers.OrderCost(paidFor) + MarketModifiers.DeliveryFee(paidFor)) * quantities[i]);
+
+        // Logistics perks: sooner deliveries (at most 75% off).
+        float sooner = 1f - Mathf.Clamp(ProgressionManager.StoreStat(plot, PerkStat.FasterDelivery), 0f, 0.75f);
 
         int id = nextOrderId++;
         orders.Add(new OrderInfo
@@ -405,7 +418,7 @@ public class EconomyManager : NetworkBehaviour
             teamId = team,
             plotId = plotId,
             boxCount = boxes,
-            remaining = Mathf.Max(0f, deliverySeconds < 0f ? slowest : deliverySeconds),
+            remaining = Mathf.Max(0f, (deliverySeconds < 0f ? slowest : deliverySeconds) * sooner),
             stampTime = NetworkManager.ServerTime.Time,
             blocked = false,
         });

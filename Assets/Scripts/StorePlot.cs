@@ -415,6 +415,8 @@ public class StorePlot : NetworkBehaviour
     public void ServerSetOwner(ulong teamId)
     {
         if (!IsServer) return;
+        // A new owner starts this store's profit, perk points and perks over.
+        if (ownerTeamId.Value != teamId && ProgressionManager.Instance != null) ProgressionManager.Instance.ServerForgetStore(plotId);
         ownerTeamId.Value = teamId;
     }
 
@@ -423,6 +425,7 @@ public class StorePlot : NetworkBehaviour
     {
         if (!IsServer) return;
         ServerSetEditor(NoOwner);
+        if (ProgressionManager.Instance != null) ProgressionManager.Instance.ServerForgetStore(plotId);
         ownerTeamId.Value = NoOwner;
         purchasedSegments.Value = 0;
         closedByOwner.Value = false;

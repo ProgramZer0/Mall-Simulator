@@ -118,6 +118,8 @@ public class ItemDef
     }
     [Tooltip("Cost of one when ordered.")]
     public int price = 10;
+    [Tooltip("Team level needed to order it (0 or 1 = from the start). Shown locked in the shop until then.")]
+    [Min(0)] public int minLevel = 0;
     [Tooltip("How rare it is. Customers who love exotic things are drawn to rarer items.")]
     public Rarity rarity = Rarity.Common;
 
