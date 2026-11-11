@@ -134,6 +134,7 @@ public class EconomyManager : NetworkBehaviour
     private NetworkList<TeamMoney> money;
     private NetworkList<OrderInfo> orders;
     private NetworkList<OrderLine> orderLines;
+    private readonly HashSet<int> dockFullNoticed = new(); // host: orders already reported waiting for room
 
     /// <summary>Any team's money changed (on every machine).</summary>
     public event Action MoneyChanged;
@@ -473,6 +474,9 @@ public class EconomyManager : NetworkBehaviour
                     o.stampTime = now;
                     o.blocked = true;
                     orders[i] = o;
+                    // Once per order: it'd otherwise nag every check while the dock stays full.
+                    if (dockFullNoticed.Add(o.orderId) && NotificationManager.Instance != null)
+                        NotificationManager.Instance.ServerNotifyTeam(o.teamId, NotificationManager.Kind.DockFull, o.plotId);
                 }
                 continue;
             }
@@ -498,6 +502,8 @@ public class EconomyManager : NetworkBehaviour
                 fitCache[o.orderId] = (now + fitCheckInterval, false);
                 continue;
             }
+            if (NotificationManager.Instance != null)
+                NotificationManager.Instance.ServerNotifyTeam(o.teamId, NotificationManager.Kind.Delivered, o.plotId, o.boxCount);
             ServerRemoveOrderAt(i);
         }
     }
@@ -582,6 +588,7 @@ public class EconomyManager : NetworkBehaviour
     {
         int id = orders[index].orderId;
         fitCache.Remove(id);
+        dockFullNoticed.Remove(id);
         for (int i = orderLines.Count - 1; i >= 0; i--)
             if (orderLines[i].orderId == id) orderLines.RemoveAt(i);
         orders.RemoveAt(index);
