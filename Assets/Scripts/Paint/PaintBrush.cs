@@ -55,6 +55,7 @@ public class PaintBrush : NetworkBehaviour
     private Kind targetKind;
     private ItemPickupNet targetItem;
     private int targetZone;
+    private int targetModule; // storefront: the front wall type painted (targetZone is its part)
     private StorePlot targetPlot;
     private BuiltWall targetWall;
     private GameObject targetObject;
@@ -178,7 +179,7 @@ public class PaintBrush : NetworkBehaviour
             case Kind.Wall:
                 if (targetObject.TryGetComponent<CuttableWall>(out var w)) w.SetPaint(color);
                 break;
-            case Kind.Front: targetPlot.PreviewFrontPaint(color); break;
+            case Kind.Front: targetPlot.PreviewFrontPaint(targetModule, targetZone, color); break;
             case Kind.Floor: targetPlot.PreviewFloorPaint(color); break;
         }
     }
@@ -337,12 +338,13 @@ public class PaintBrush : NetworkBehaviour
                 fee = palette.WallFee(wall.Length);
                 what = $"Wall ({wall.Length:0.0} m)";
             }
-            else if (plot.IsStorefrontPart(t))
+            else if (plot.TryGetFrontZoneAt(t, hit.point, out targetModule, out targetZone, out string part))
             {
+                // One part of this front wall type, on every section showing it.
                 targetKind = Kind.Front;
-                current = plot.FrontPaint;
+                current = plot.GetFrontPaint(targetModule, targetZone);
                 fee = palette.FrontFee;
-                what = "Storefront";
+                what = part.Length > 0 ? $"Storefront ({part})" : "Storefront";
             }
             else if (plot.IsFloor(t))
             {
@@ -395,7 +397,7 @@ public class PaintBrush : NetworkBehaviour
         {
             case Kind.Item: RequestPaintItemRpc(targetItem.NetworkObject, targetZone, color); break;
             case Kind.Wall: RequestPaintWallRpc(targetPlot.PlotId, targetWall.id, color); break;
-            case Kind.Front: RequestPaintFrontRpc(targetPlot.PlotId, color); break;
+            case Kind.Front: RequestPaintFrontRpc(targetPlot.PlotId, targetModule, targetZone, color); break;
             case Kind.Floor: RequestPaintFloorRpc(targetPlot.PlotId, color); break;
         }
     }
@@ -424,11 +426,12 @@ public class PaintBrush : NetworkBehaviour
     }
 
     [Rpc(SendTo.Server)]
-    private void RequestPaintFrontRpc(int plotId, byte paint, RpcParams rpcParams = default)
+    private void RequestPaintFrontRpc(int plotId, int moduleId, int zone, byte paint, RpcParams rpcParams = default)
     {
-        if (MallManager.Instance == null || !MallManager.Instance.TryGetPlot(plotId, out var plot) || plot.FrontPaint == paint) return;
+        if (MallManager.Instance == null || !MallManager.Instance.TryGetPlot(plotId, out var plot) ||
+            plot.GetFrontPaint(moduleId, zone) == paint) return;
         if (!ServerCanPaint(rpcParams, plot, paint, transform.position, out var palette)) return;
-        if (ServerPay(palette.FrontFee)) plot.ServerPaintFront(paint);
+        if (ServerPay(palette.FrontFee)) plot.ServerPaintFront(moduleId, zone, paint);
     }
 
     [Rpc(SendTo.Server)]

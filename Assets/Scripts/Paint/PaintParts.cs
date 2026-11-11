@@ -6,7 +6,8 @@ using UnityEngine;
 /// Marks a part of something that can be painted (see PaintPalette). Each PaintParts is one paint
 /// zone that takes its own color: put one on an item's world prefab root for the whole thing, or one on
 /// the root and more on children to paint them separately (a door's frame and its doors). Up to 4
-/// zones per item. Works on front wall modules and hand models too.
+/// zones per item. Works on hand models too, and on front wall types, which can have any number: each
+/// part is painted on its own, the same color on every section (and tile) of that type.
 ///
 /// Parts: the Renderers (and which of their materials, Material Index -1 = all) this zone paints.
 /// Leave it empty to paint every renderer under this object, except those under another PaintParts
@@ -39,6 +40,26 @@ public class PaintParts : MonoBehaviour
     [SerializeField] private string zoneName;
 
     public byte Current { get; private set; }
+
+    /// <summary>Its name for prompts: Zone Name, or the object's name.</summary>
+    public string DisplayName => string.IsNullOrEmpty(zoneName) ? name : zoneName;
+
+    /// <summary>
+    /// How big the smallest of this zone's models at a world point is (squared size of its bounds), or
+    /// float.MaxValue if none is there. For picking the zone under the crosshair.
+    /// </summary>
+    public float SizeAt(Vector3 point, float tolerance = 0.05f)
+    {
+        float best = float.MaxValue;
+        foreach (var (r, _) in Targets(this, transform))
+        {
+            if (r == null || !r.enabled) continue;
+            Bounds b = r.bounds;
+            b.Expand(tolerance * 2f);
+            if (b.Contains(point)) best = Mathf.Min(best, r.bounds.size.sqrMagnitude);
+        }
+        return best;
+    }
 
     /// <summary>Paint this zone (0 = back to its own colors).</summary>
     public void Apply(byte id)
@@ -136,15 +157,10 @@ public class PaintParts : MonoBehaviour
         int best = -1;
         float bestSize = float.MaxValue;
         for (int i = 0; i < zones.Count; i++)
-            foreach (var (r, _) in Targets(zones[i], zones[i].transform))
-            {
-                if (r == null || !r.enabled) continue;
-                Bounds b = r.bounds;
-                b.Expand(tolerance * 2f);
-                if (!b.Contains(point)) continue;
-                float size = r.bounds.size.sqrMagnitude;
-                if (size < bestSize) { bestSize = size; best = i; }
-            }
+        {
+            float size = zones[i].SizeAt(point, tolerance);
+            if (size < bestSize) { bestSize = size; best = i; }
+        }
         if (best < 0 && zones.Count > 0) best = 0; // somewhere on it, but not on a model: the main zone
         return best;
     }
