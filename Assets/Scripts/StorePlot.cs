@@ -149,9 +149,10 @@ public class StorePlot : NetworkBehaviour
     private readonly NetworkVariable<ulong> editorClientId =
         new(NoOwner, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    // Paint colors (PaintPalette ids, 0 = own colors) for the storefront and the floor.
-    private readonly NetworkVariable<byte> frontPaint =
-        new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    // Paint colors (PaintPalette ids, 0 = own colors) for the storefront and the floor. The storefront
+    // is painted per front wall type and paint part (see FrontPaintKey): every section of that type
+    // shows the same colors.
+    private NetworkList<int> frontPaints;
     private readonly NetworkVariable<byte> floorPaint =
         new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
@@ -222,6 +223,8 @@ public class StorePlot : NetworkBehaviour
             null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
         frontOverrides = new NetworkList<byte>(
+            null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+        frontPaints = new NetworkList<int>(
             null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
         // Walls the owners built in edit mode.
@@ -300,7 +303,7 @@ public class StorePlot : NetworkBehaviour
         closedByOwner.OnValueChanged += OnClosedChanged;
         frontOverrides.OnListChanged += OnFrontOverridesChanged;
         builtWalls.OnListChanged += OnBuiltWallsChanged;
-        frontPaint.OnValueChanged += OnFrontPaintChanged;
+        frontPaints.OnListChanged += OnFrontPaintChanged;
         floorPaint.OnValueChanged += OnFloorPaintChanged;
         RebuildBuiltWalls();
         ApplyFrontWall();
@@ -322,7 +325,7 @@ public class StorePlot : NetworkBehaviour
         closedByOwner.OnValueChanged -= OnClosedChanged;
         frontOverrides.OnListChanged -= OnFrontOverridesChanged;
         builtWalls.OnListChanged -= OnBuiltWallsChanged;
-        frontPaint.OnValueChanged -= OnFrontPaintChanged;
+        frontPaints.OnListChanged -= OnFrontPaintChanged;
         floorPaint.OnValueChanged -= OnFloorPaintChanged;
         if (builtWallRoot != null) Destroy(builtWallRoot.gameObject);
         builtWallRoot = null;
@@ -1154,8 +1157,19 @@ public class StorePlot : NetworkBehaviour
 
     /* ========================= PAINT ========================= */
 
-    /// <summary>The storefront's paint color (all its panels and marked parts).</summary>
-    public byte FrontPaint => frontPaint.Value;
+    // One entry per painted (type, part): type << 16 | part << 8 | color.
+    private static int FrontPaintKey(int moduleId, int zone) => ((moduleId & 0xFFFF) << 16) | ((zone & 0xFF) << 8);
+
+    /// <summary>
+    /// The storefront's color for one paint part of one front wall type (0 = its own colors). Part 0 of a
+    /// type with no PaintParts is the whole wall.
+    /// </summary>
+    public byte GetFrontPaint(int moduleId, int zone)
+    {
+        int key = FrontPaintKey(moduleId, zone);
+        foreach (int e in frontPaints) if ((e & ~0xFF) == key) return (byte)(e & 0xFF);
+        return 0;
+    }
     /// <summary>The floor's paint color.</summary>
     public byte FloorPaint => floorPaint.Value;
     /// <summary>Does this store have a floor that can be painted?</summary>
@@ -1177,18 +1191,90 @@ public class StorePlot : NetworkBehaviour
         return false;
     }
 
-    /// <summary>Is this object part of the storefront (a panel or a front module)?</summary>
-    public bool IsStorefrontPart(Transform t)
+    public void ServerPaintFront(int moduleId, int zone, byte id)
     {
-        if (t == null) return false;
-        var wall = t.GetComponentInParent<CuttableWall>();
-        if (wall != null && wall.Plot == this && wall.IsStorefront) return true;
-        return TryGetFrontSlot(t, out _);
+        if (!IsServer || !PaintPalette.IsValid(id) || moduleId < 0 || moduleId > 0xFFFF || zone < 0 || zone > 0xFF) return;
+        int key = FrontPaintKey(moduleId, zone);
+        for (int i = 0; i < frontPaints.Count; i++)
+            if ((frontPaints[i] & ~0xFF) == key)
+            {
+                if (id == 0) frontPaints.RemoveAt(i);
+                else frontPaints[i] = key | id;
+                return;
+            }
+        if (id != 0) frontPaints.Add(key | id);
     }
 
-    public void ServerPaintFront(byte id)
+    /// <summary>
+    /// The storefront paint part at a point on a storefront object: which front wall type and which of
+    /// its PaintParts (the smallest one with a model there, so a pillar rather than the wall behind it).
+    /// Name: the part's name for prompts ("" for a type with one part).
+    /// </summary>
+    public bool TryGetFrontZoneAt(Transform t, Vector3 point, out int moduleId, out int zone, out string name)
     {
-        if (IsServer && PaintPalette.IsValid(id)) frontPaint.Value = id;
+        moduleId = 0;
+        zone = 0;
+        name = "";
+        if (t == null) return false;
+
+        GameObject shown;
+        if (TryGetFrontSlot(t, out int slot))
+        {
+            shown = GetFrontSlotShown(slot);
+            moduleId = GetFrontSlotModuleId(slot);
+        }
+        else
+        {
+            var wall = t.GetComponentInParent<CuttableWall>();
+            if (wall == null || wall.Plot != this || !wall.IsStorefront) return false;
+            shown = wall.gameObject;
+            var m = wall.GetComponentInParent<WallModule>();
+            moduleId = m != null ? m.ModuleId : 0;
+        }
+        if (shown == null) return false;
+
+        // Every copy of the type in the section (tiles), each with the same parts in the same order.
+        float best = float.MaxValue;
+        foreach (var module in ModulesIn(shown))
+        {
+            var zones = FrontZonesOf(module);
+            for (int i = 0; i < zones.Count; i++)
+            {
+                float size = zones[i].SizeAt(point);
+                if (size < best) { best = size; zone = i; name = zones.Count > 1 ? zones[i].DisplayName : ""; }
+            }
+        }
+        if (best == float.MaxValue)
+        {
+            // On the wall but not on a model (an invisible panel): its first part.
+            var first = FrontZonesOf(ModulesIn(shown)[0]);
+            name = first.Count > 1 ? first[0].DisplayName : "";
+        }
+        return true;
+    }
+
+    // The front wall type a section shows now.
+    private int GetFrontSlotModuleId(int index)
+    {
+        var slot = frontSlots[index];
+        return slot.replacement != null ? slot.replacementId : slot.original != null ? slot.original.ModuleId : 0;
+    }
+
+    // The copies of a front wall type in what a section shows: its tiles, or the one copy.
+    private static List<GameObject> ModulesIn(GameObject shown)
+    {
+        var list = new List<GameObject>();
+        foreach (var m in shown.GetComponentsInChildren<WallModule>(true)) list.Add(m.gameObject);
+        if (list.Count == 0) list.Add(shown);
+        return list;
+    }
+
+    // A front wall copy's paint parts, in hierarchy order (any number; storefronts aren't packed like items).
+    private static List<PaintParts> FrontZonesOf(GameObject module)
+    {
+        var list = new List<PaintParts>();
+        module.GetComponentsInChildren(true, list);
+        return list;
     }
 
     public void ServerPaintFloor(byte id)
@@ -1196,15 +1282,14 @@ public class StorePlot : NetworkBehaviour
         if (IsServer && PaintPalette.IsValid(id)) floorPaint.Value = id;
     }
 
-    private void OnFrontPaintChanged(byte before, byte now) => ApplyFrontPaint();
+    private void OnFrontPaintChanged(NetworkListEvent<int> e) => ApplyFrontPaint();
     private void OnFloorPaintChanged(byte before, byte now) => ApplyFloorPaint();
 
-    // Every storefront panel, plus the marked parts (PaintParts) of the front modules shown.
     /// <summary>
     /// This machine only: show the storefront / floor in a color for a moment (the paint brush's
     /// preview). Show Paint() puts the synced colors back.
     /// </summary>
-    public void PreviewFrontPaint(byte id) => ApplyFrontPaint(id);
+    public void PreviewFrontPaint(int moduleId, int zone, byte id) => ApplyFrontPaint(moduleId, zone, id);
     public void PreviewFloorPaint(byte id) => ApplyFloorPaint(id);
 
     /// <summary>Show the storefront and floor in their synced colors again (ends a preview).</summary>
@@ -1214,21 +1299,34 @@ public class StorePlot : NetworkBehaviour
         ApplyFloorPaint();
     }
 
-    private void ApplyFrontPaint() => ApplyFrontPaint(frontPaint.Value);
+    private void ApplyFrontPaint() => ApplyFrontPaint(-1, 0, 0);
 
-    private void ApplyFrontPaint(byte id)
+    // Preview: (previewModule, previewZone) shows previewColor instead of its synced color.
+    private void ApplyFrontPaint(int previewModule, int previewZone, byte previewColor)
     {
+        byte ColorOf(int moduleId, int zone) =>
+            moduleId == previewModule && zone == previewZone ? previewColor : GetFrontPaint(moduleId, zone);
+
+        void PaintCopy(GameObject go, int moduleId)
+        {
+            var zones = FrontZonesOf(go);
+            // A plain wall is one part; with PaintParts, the parts paint the models instead.
+            byte whole = zones.Count == 0 ? ColorOf(moduleId, 0) : (byte)0;
+            foreach (var w in go.GetComponentsInChildren<CuttableWall>(true)) w.SetPaint(whole);
+            for (int i = 0; i < zones.Count; i++) zones[i].Apply(ColorOf(moduleId, i));
+        }
+
         foreach (var w in CuttableWall.All)
-            if (w != null && w.Plot == this && w.IsStorefront) w.SetPaint(id);
-        if (storefrontWalls != null)
-            foreach (var w in storefrontWalls) if (w != null) w.SetPaint(id); // also while switched off
+            if (w != null && w.Plot == this && w.IsStorefront && w.GetComponentInParent<WallModule>() == null)
+                PaintCopy(w.gameObject, 0);
         EnsureFrontSlots();
         for (int i = 0; i < frontSlots.Count; i++)
         {
-            var shown = GetFrontSlotShown(i);
-            if (shown == null) continue;
-            foreach (var w in shown.GetComponentsInChildren<CuttableWall>(true)) w.SetPaint(id);
-            foreach (var parts in shown.GetComponentsInChildren<PaintParts>(true)) parts.Apply(id);
+            var slot = frontSlots[i];
+            // The scene's wall too while a kit hides it, so it's right when it comes back.
+            if (slot.original != null) PaintCopy(slot.original.gameObject, slot.original.ModuleId);
+            if (slot.replacement != null)
+                foreach (var copy in ModulesIn(slot.replacement)) PaintCopy(copy, slot.replacementId);
         }
     }
 
