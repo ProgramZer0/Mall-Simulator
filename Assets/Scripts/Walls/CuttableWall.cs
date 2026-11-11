@@ -197,7 +197,8 @@ public class CuttableWall : MonoBehaviour
                 if (c.enabled && !c.isTrigger) { c.enabled = false; modelColliders.Add(c); }
         }
         if (cutTargets.Count == 0)
-            Debug.LogWarning($"[CuttableWall] '{name}' has Cut Models on but found no meshes to cut.", this);
+            Debug.LogWarning($"[CuttableWall] '{name}' has Cut Models on but found no meshes it can cut, so it's drawn as a " +
+                             "plain box instead.", this);
     }
 
     private void CutModels()
@@ -482,9 +483,12 @@ public class CuttableWall : MonoBehaviour
         var boxes = new List<Rect>();
         SolidParts(boxes);
 
-        // Cut Models: the model shows (with the holes cut into it), not the box.
-        if (cut.TryGetComponent<MeshRenderer>(out var boxRenderer)) boxRenderer.enabled = !cutModels;
-        if (cutModels)
+        // Cut Models: the model shows (with the holes cut into it), not the box. With nothing it can cut
+        // (e.g. a mesh without Read/Write), the box is drawn after all so the wall doesn't vanish.
+        if (cutModels) FindCutTargets();
+        bool cutting = cutModels && cutTargets.Count > 0;
+        if (cut.TryGetComponent<MeshRenderer>(out var boxRenderer)) boxRenderer.enabled = !cutting;
+        if (cutting)
         {
             CutModels();
             // Its own model is one of the cut ones: it stays visible (showing the cut copy).

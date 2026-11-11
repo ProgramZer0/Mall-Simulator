@@ -1275,7 +1275,8 @@ public class StorePlot : NetworkBehaviour
         // Fallback (the section or module has no measurable size): same rotation, scale and parent as
         // the original, then slide it so the meshes line up.
         Transform t = slot.original.transform;
-        var go = Instantiate(prefab.gameObject, t.position, t.rotation, t.parent);
+        var go = MakeModuleCopy(prefab, t.position, t.rotation);
+        go.transform.SetParent(t.parent, true);
         go.transform.localScale = t.localScale;
         go.name = $"{prefab.name} ({displayName} front {index})";
         if (go.TryGetComponent<WallModule>(out var wm)) wm.IsReplacement = true;
@@ -1318,7 +1319,7 @@ public class StorePlot : NetworkBehaviour
         var root = new GameObject($"{prefab.name} ({displayName} front {index})");
         root.transform.SetPositionAndRotation(center, facing);
 
-        var first = Instantiate(prefab.gameObject, center, rot);
+        var first = MakeModuleCopy(prefab, center, rot);
         Vector3 tileSize = WallModule.GeometryBoundsIn(first, center, facing).size;
         if (tileSize.z > tileSize.x)
         {
@@ -1369,7 +1370,7 @@ public class StorePlot : NetworkBehaviour
         var tiles = new List<GameObject>();
         for (int i = 0; i < count; i++)
         {
-            var copy = i == 0 ? first : Instantiate(prefab.gameObject, center, rot);
+            var copy = i == 0 ? first : MakeModuleCopy(prefab, center, rot);
             copy.name = $"{prefab.name} tile {i + 1}";
             if (copy.TryGetComponent<WallModule>(out var wm)) wm.IsReplacement = true;
             Vector3 scale = copy.transform.localScale;
@@ -1420,6 +1421,26 @@ public class StorePlot : NetworkBehaviour
             }
         }
         return root;
+    }
+
+    private static bool warnedNetworkModule;
+
+    // A local copy of a front wall module (every machine builds its own; nothing is spawned). A
+    // NetworkObject on the prefab would fight being parented under the section, so it's taken off.
+    private static GameObject MakeModuleCopy(WallModule prefab, Vector3 position, Quaternion rotation)
+    {
+        var copy = Instantiate(prefab.gameObject, position, rotation);
+        foreach (var no in copy.GetComponentsInChildren<NetworkObject>(true))
+        {
+            if (!warnedNetworkModule)
+            {
+                warnedNetworkModule = true;
+                Debug.LogWarning($"[StorePlot] Front wall module '{prefab.name}' has a NetworkObject. Modules are built " +
+                                 "locally on every machine and shouldn't have one (the kit item does): remove it from the prefab.", prefab);
+            }
+            DestroyImmediate(no);
+        }
+        return copy;
     }
 
     // Stretch a swapped-in module to the length and height of the section it replaces; the thinnest
