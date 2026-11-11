@@ -1655,6 +1655,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CuttableWall
   plot: {fileID: 1681599300}
   textureMeters: 1
+  cutModels: 0
+  models: []
 --- !u!65 &135325063
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -1751,6 +1753,7 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
+  flipTile: 0
   fitToSection: 1
 --- !u!1 &146336001
 GameObject:
@@ -3917,6 +3920,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CuttableWall
   plot: {fileID: 270896797}
   textureMeters: 1
+  cutModels: 0
+  models: []
 --- !u!65 &367004040
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -4013,6 +4018,7 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
+  flipTile: 0
   fitToSection: 1
 --- !u!1 &374376732
 GameObject:
@@ -8746,6 +8752,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CuttableWall
   plot: {fileID: 312315458}
   textureMeters: 1
+  cutModels: 0
+  models: []
 --- !u!65 &684895558
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -8842,6 +8850,7 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
+  flipTile: 0
   fitToSection: 1
 --- !u!1 &689354322
 GameObject:
@@ -9561,6 +9570,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CuttableWall
   plot: {fileID: 1320047868}
   textureMeters: 1
+  cutModels: 0
+  models: []
 --- !u!65 &759093100
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -9657,6 +9668,7 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
+  flipTile: 0
   fitToSection: 1
 --- !u!1 &767684046
 GameObject:
@@ -10264,6 +10276,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CuttableWall
   plot: {fileID: 391662817}
   textureMeters: 1
+  cutModels: 0
+  models: []
 --- !u!65 &835698843
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -10391,6 +10405,7 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
+  flipTile: 0
   fitToSection: 1
 --- !u!1 &848846041
 GameObject:
@@ -10442,6 +10457,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CuttableWall
   plot: {fileID: 1386304012}
   textureMeters: 1
+  cutModels: 0
+  models: []
 --- !u!65 &848846044
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -10538,6 +10555,7 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
+  flipTile: 0
   fitToSection: 1
 --- !u!1 &849628855
 GameObject:
@@ -11990,6 +12008,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CuttableWall
   plot: {fileID: 471016917}
   textureMeters: 1
+  cutModels: 0
+  models: []
 --- !u!65 &945472715
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -12086,6 +12106,7 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
+  flipTile: 0
   fitToSection: 1
 --- !u!1 &958296302
 GameObject:
@@ -12137,6 +12158,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CuttableWall
   plot: {fileID: 1415020425}
   textureMeters: 1
+  cutModels: 0
+  models: []
 --- !u!65 &958296305
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -12233,6 +12256,7 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
+  flipTile: 0
   fitToSection: 1
 --- !u!1 &958691921
 GameObject:
@@ -12863,6 +12887,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CuttableWall
   plot: {fileID: 478544376}
   textureMeters: 1
+  cutModels: 0
+  models: []
 --- !u!65 &1065484883
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -12959,6 +12985,7 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
+  flipTile: 0
   fitToSection: 1
 --- !u!1 &1072716370
 GameObject:
@@ -13507,6 +13534,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CuttableWall
   plot: {fileID: 1282217225}
   textureMeters: 1
+  cutModels: 0
+  models: []
 --- !u!65 &1081219054
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -13603,6 +13632,7 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
+  flipTile: 0
   fitToSection: 1
 --- !u!1 &1087041351
 GameObject:
@@ -20999,6 +21029,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CuttableWall
   plot: {fileID: 1013455994}
   textureMeters: 1
+  cutModels: 0
+  models: []
 --- !u!65 &1623974671
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -21095,6 +21127,7 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
+  flipTile: 0
   fitToSection: 1
 --- !u!1001 &1624074251
 PrefabInstance:
@@ -22788,6 +22821,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CuttableWall
   plot: {fileID: 1915735840}
   textureMeters: 1
+  cutModels: 0
+  models: []
 --- !u!65 &1738792345
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -22884,6 +22919,7 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
+  flipTile: 0
   fitToSection: 1
 --- !u!1 &1743499166
 GameObject:
@@ -24159,6 +24195,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CuttableWall
   plot: {fileID: 1915735840}
   textureMeters: 1
+  cutModels: 0
+  models: []
 --- !u!65 &1857805912
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -24255,6 +24293,7 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
+  flipTile: 0
   fitToSection: 1
 --- !u!1 &1861070205
 GameObject:
@@ -25899,6 +25938,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CuttableWall
   plot: {fileID: 478544376}
   textureMeters: 1
+  cutModels: 0
+  models: []
 --- !u!65 &1976839037
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -25995,6 +26036,7 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
+  flipTile: 0
   fitToSection: 1
 --- !u!1 &1978469527
 GameObject:
@@ -26269,6 +26311,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CuttableWall
   plot: {fileID: 1462705345}
   textureMeters: 1
+  cutModels: 0
+  models: []
 --- !u!65 &1986748582
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -26365,6 +26409,7 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
+  flipTile: 0
   fitToSection: 1
 --- !u!1001 &1988867895
 PrefabInstance:

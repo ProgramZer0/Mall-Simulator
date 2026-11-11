@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 3555779693889229383}
   - component: {fileID: 7040793141456778847}
   - component: {fileID: 2496839551532842383}
+  - component: {fileID: 652031343450758176}
   m_Layer: 12
   m_Name: OptionalWall
   m_TagString: Untagged
@@ -107,6 +108,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CuttableWall
   plot: {fileID: 0}
   textureMeters: 1
+  cutModels: 1
+  models: []
 --- !u!65 &7040793141456778847
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -146,4 +149,30 @@ MonoBehaviour:
   price: 0
   door: {fileID: 0}
   tile: 1
+  flipTile: 0
   fitToSection: 1
+--- !u!114 &652031343450758176
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1873157623570124504}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
+  GlobalObjectIdHash: 2224774154
+  InScenePlacedSourceGlobalObjectIdHash: 0
+  DeferredDespawnTick: 0
+  Ownership: 1
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 1
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
+  SyncOwnerTransformWhenParented: 1
+  AllowOwnerToParent: 0
