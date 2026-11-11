@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f9cbadb0f0560ee4aa24b51535afc71f, type: 3}
+  m_Name: MallFunding
+  m_EditorClassIdentifier: Assembly-CSharp::MallEventDef
+  displayName: Mall Funding
+  description: 
+  trigger: 0
+  startAt: 600
+  interval: 4500
+  checkEvery: 60
+  chance: 0.11
+  duration: 1600
+  onlyInSeasons: []
+  timedFromSeasonStart: 0
+  endsWithSeason: 0
+  maxPerSeason: 0
+  votable: 1
+  rules:
+  - note: Mall Fund
+    targets:
+      everything: 1
+      match: 0
+      itemIds: 
+      categories: []
+      nameContains: []
+      usePriceRange: 0
+      priceRangeUsesMarketPrice: 0
+      minPrice: 0
+      maxPrice: 0
+      useDeliveryRange: 0
+      minDeliverySeconds: 0
+      maxDeliverySeconds: 0
+    effects:
+    - stat: 5
+      mode: 0
+      amount: 30
+    - stat: 0
+      mode: 0
+      amount: 30
