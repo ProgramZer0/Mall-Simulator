@@ -171,6 +171,19 @@ public class MallManager : NetworkBehaviour
         return null;
     }
 
+    /// <summary>Why a team can't own another store (null if it can): Max Stores Per Team, or its level.</summary>
+    public string WhyCantOwnMore(ulong teamId)
+    {
+        int owned = CountPlotsOwnedByTeam(teamId);
+        if (owned >= maxStoresPerTeam) return $"Your team owns the most stores allowed ({maxStoresPerTeam})";
+        if (owned >= ProgressionManager.StoresAllowed(teamId))
+        {
+            int need = ProgressionManager.LevelForStores(owned + 1);
+            return need > 0 ? $"Reach level {need} to own another store" : "Your team can't own more stores";
+        }
+        return null;
+    }
+
     public int CountPlotsOwnedByTeam(ulong teamId)
     {
         int n = 0;
@@ -460,10 +473,10 @@ public class MallManager : NetworkBehaviour
         if (!IsServer || !plots.TryGetValue(plotId, out var plot)) return false;
         if (plot.HasOwner) return false;
         ulong team = GetTeamOf(clientId);
-        if (CountPlotsOwnedByTeam(team) >= maxStoresPerTeam)
+        string why = WhyCantOwnMore(team);
+        if (why != null)
         {
-            Debug.Log($"[MallManager] Team {team} can't buy '{plot.DisplayName}': already owns " +
-                      $"{maxStoresPerTeam} store(s) (Max Stores Per Team).", plot);
+            Debug.Log($"[MallManager] Team {team} can't buy '{plot.DisplayName}': {why}.", plot);
             return false;
         }
 

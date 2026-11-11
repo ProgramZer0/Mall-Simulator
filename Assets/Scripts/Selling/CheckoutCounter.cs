@@ -145,6 +145,7 @@ public class CheckoutCounter : NetworkBehaviour
 
     private NetworkList<BeltItem> items;
     private NetworkList<Line> lines;
+    private readonly List<ProgressionManager.Sold> sale = new(); // host: what's been scanned, for profit
     private NetworkList<int> change; // the bills and coins counted out, in cents, in the order taken
     private readonly NetworkVariable<State> state = new();
 
@@ -536,6 +537,7 @@ public class CheckoutCounter : NetworkBehaviour
             if (it.customer != s.customer) return; // the next customer's: this one pays first
             items.RemoveAt(i);
             lines.Add(new Line { itemId = it.itemId, priceCents = it.priceCents });
+            sale.Add(new ProgressionManager.Sold { itemId = it.itemId, products = Mathf.Max(1, it.units), priceCents = it.priceCents });
             s.totalCents += it.priceCents;
 
             // That was this customer's last thing: they pay.
@@ -579,6 +581,8 @@ public class CheckoutCounter : NetworkBehaviour
         var plot = Plot;
         var econ = EconomyManager.Instance;
         if (plot != null && plot.HasOwner && econ != null) econ.ServerAddCents(plot.OwnerTeamId, receivedCents);
+        if (plot != null && ProgressionManager.Instance != null) ProgressionManager.Instance.ServerRecordSale(plot, sale, receivedCents);
+        sale.Clear();
         lines.Clear();
         change.Clear();
         state.Value = new State { phase = Phase.Scanning, customer = items.Count > 0 ? items[0].customer : 0 };

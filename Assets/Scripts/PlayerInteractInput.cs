@@ -389,6 +389,14 @@ public class PlayerInteractInput : NetworkBehaviour
         lookedAtBuyPrice = loose;
     }
 
+    // A store for sale: its price, or why this team can't own another one yet.
+    private string SignPrompt()
+    {
+        var plot = lookedAtSign.Plot;
+        string why = MallManager.Instance != null ? MallManager.Instance.WhyCantOwnMore(MallManager.GetTeamOf(OwnerClientId)) : null;
+        return why ?? $"F: Buy {plot.DisplayName} ({plot.Price})";
+    }
+
     private string BuyPrompt()
     {
         int id = lookedAtBuyZone >= 0 && lookedAtBuy.TryGetComponent<StockContainer>(out var shelf)
@@ -449,7 +457,7 @@ public class PlayerInteractInput : NetworkBehaviour
                     : lookedAtBuriedCartItem ? "Take the things on top off first"
                     : lookedAtVote != null ? lookedAtVote.Prompt(OwnerClientId)
                     : lookedAtMonitor != null ? "F: Shop monitor"
-                    : lookedAtSign != null ? $"F: Buy {lookedAtSign.Plot.DisplayName} ({lookedAtSign.Plot.Price})"
+                    : lookedAtSign != null ? SignPrompt()
                     : lookedAtSegment != null ? SegmentPrompt()
                     : lookedAtBuy != null ? BuyPrompt()
                     : stockTarget != null ? StockPrompt()

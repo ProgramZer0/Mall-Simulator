@@ -182,6 +182,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         eco.MoneyChanged += RefreshMoney;
         eco.OrderResultReceived += OnOrderResult;
         subscribedTo = eco;
+        if (ProgressionManager.Instance != null) ProgressionManager.Instance.LevelChanged += RefreshItems;
     }
 
     private void Unsubscribe()
@@ -190,6 +191,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         subscribedTo.MoneyChanged -= RefreshMoney;
         subscribedTo.OrderResultReceived -= OnOrderResult;
         subscribedTo = null;
+        if (ProgressionManager.Instance != null) ProgressionManager.Instance.LevelChanged -= RefreshItems;
     }
 
     /* ========================= ITEMS & PAGES ========================= */
@@ -379,11 +381,15 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         if (go != null) go.SetActive(true);
         if (icon != null && def.icon != null) icon.sprite = def.icon;
         if (nameText != null) nameText.text = def.displayName;
-        if (priceText != null) priceText.text = $"${MarketModifiers.OrderCost(def) + MarketModifiers.DeliveryFee(def):N0}";
+        // Locked until the team's level reaches the item's Min Level.
+        bool locked = !ProgressionManager.CanOrder(LocalTeam, def);
+        if (priceText != null)
+            priceText.text = locked ? $"Level {def.minLevel}" : $"${MarketModifiers.OrderCost(def) + MarketModifiers.DeliveryFee(def):N0}";
         if (button != null)
         {
             button.onClick.RemoveAllListeners();
             button.onClick.AddListener(() => OnBuyClicked(def));
+            button.interactable = !locked;
         }
     }
 
@@ -403,9 +409,13 @@ public class BuyMenu : MonoBehaviour, IShopScreen
 
     /* ========================= BUYING ========================= */
 
+    private static ulong LocalTeam =>
+        Unity.Netcode.NetworkManager.Singleton != null ? MallManager.GetTeamOf(Unity.Netcode.NetworkManager.Singleton.LocalClientId) : 0;
+
     private void OnBuyClicked(ItemDef def)
     {
         if (plot == null) return;
+        if (!ProgressionManager.CanOrder(LocalTeam, def)) { ShowStatus($"Reach level {def.minLevel} to order {def.displayName}."); return; }
 
         // Paintable items come in the picked color; the rest ignore it.
         byte paint = paintBar != null && PaintParts.IsPaintable(def) ? paintBar.Selected : (byte)0;
@@ -478,6 +488,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         EconomyManager.OrderResult.NotYourStore => "This isn't your store.",
         EconomyManager.OrderResult.UnknownItem => "One of those items can't be ordered.",
         EconomyManager.OrderResult.BadQuantity => "Too many items in one order.",
+        EconomyManager.OrderResult.LevelTooLow => "Your team's level is too low for one of those items.",
         _ => r.ToString(),
     };
 

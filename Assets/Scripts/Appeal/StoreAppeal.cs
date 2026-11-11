@@ -139,11 +139,15 @@ public class StoreAppeal : MonoBehaviour
         r.outsideDraw = 1f - Mathf.Exp(-outside / outSat);
         r.insideDraw = 1f - Mathf.Exp(-inside / inSat);
 
-        float looks = Mathf.Max(0f, 1f + p.looksMatter * (quality - 0.5f));
+        // Store perks: quality points, more walk-ins, more interest.
+        float q = Mathf.Clamp01(quality + ProgressionManager.StoreStat(plot, PerkStat.Quality));
+        float looks = Mathf.Max(0f, 1f + p.looksMatter * (q - 0.5f));
+        float walkIns = 1f + ProgressionManager.StoreStat(plot, PerkStat.WalkIns);
+        float interest = 1f + ProgressionManager.StoreStat(plot, PerkStat.Interest);
         r.enterChance = plot != null && plot.IsOpen
-            ? Mathf.Clamp01((p.curiosity + (1f - p.curiosity) * r.outsideDraw) * looks)
+            ? Mathf.Clamp01((p.curiosity + (1f - p.curiosity) * r.outsideDraw) * looks * walkIns)
             : 0f;
-        r.interest = Mathf.Clamp01(r.insideDraw * looks);
+        r.interest = Mathf.Clamp01(r.insideDraw * looks * interest);
         return r;
     }
 
