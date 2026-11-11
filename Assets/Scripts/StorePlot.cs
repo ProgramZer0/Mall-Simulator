@@ -1359,13 +1359,9 @@ public class StorePlot : NetworkBehaviour
         int upAxis = Mathf.Abs(localUp.x) >= Mathf.Abs(localUp.y) && Mathf.Abs(localUp.x) >= Mathf.Abs(localUp.z) ? 0
                    : Mathf.Abs(localUp.y) >= Mathf.Abs(localUp.z) ? 1 : 2;
 
-        // A tile whose root is the panel can't have its panels joined (lengthening it would stretch
-        // everything on it): each tile keeps its own, so windows and doors can't cross tile edges.
+        // A tile whose root is the panel (CuttableWall on the model itself): its panel can't be
+        // lengthened (that would stretch the model), so a new invisible panel is made across the row.
         bool panelIsRoot = first.TryGetComponent<CuttableWall>(out _);
-        if (panelIsRoot)
-            Debug.LogWarning($"[StorePlot] Front wall tile '{prefab.name}' has its CuttableWall on its root, so the tiles' panels " +
-                             "can't be joined and windows/doors can't cross tile edges. Put the CuttableWall on a child cube " +
-                             "(the flat part) and the model on another child.", prefab);
 
         var tiles = new List<GameObject>();
         for (int i = 0; i < count; i++)
@@ -1420,7 +1416,63 @@ public class StorePlot : NetworkBehaviour
                 panel.SetCutModels(filters);
             }
         }
+        if (count > 1 && panelIsRoot) JoinRootPanels(tiles, root.transform, facing);
         return root;
+    }
+
+    // Tiles whose CuttableWall is on their root: one invisible panel across them all (the box their
+    // panels make together) cuts every tile's model, so windows and doors can go across tile edges.
+    // The tiles keep their models; their own panels are removed.
+    private static void JoinRootPanels(List<GameObject> tiles, Transform root, Quaternion facing)
+    {
+        // Their boxes together, in the row's frame (x along, y up, z out).
+        Matrix4x4 toRow = Matrix4x4.TRS(root.position, facing, Vector3.one).inverse;
+        bool any = false, cutModels = false;
+        Bounds box = default;
+        Material[] materials = null;
+        int layer = tiles[0].layer;
+        foreach (var tile in tiles)
+        {
+            if (!tile.TryGetComponent<CuttableWall>(out var wall)) continue;
+            cutModels |= wall.CutsModels;
+            if (materials == null && tile.TryGetComponent<Renderer>(out var r)) materials = r.sharedMaterials;
+            if (tile.TryGetComponent<BoxCollider>(out var bc))
+            {
+                Matrix4x4 m = toRow * tile.transform.localToWorldMatrix;
+                Vector3 c = bc.center, e = bc.size * 0.5f;
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 p = m.MultiplyPoint3x4(c + new Vector3((i & 1) == 0 ? -e.x : e.x, (i & 2) == 0 ? -e.y : e.y, (i & 4) == 0 ? -e.z : e.z));
+                    if (!any) { box = new Bounds(p, Vector3.zero); any = true; }
+                    else box.Encapsulate(p);
+                }
+                bc.enabled = false; // the joined panel is what you bump into now
+            }
+            DestroyImmediate(wall); // its model stays as it is (the joined panel cuts it)
+        }
+        if (!any) return;
+
+        var panel = new GameObject("Joined Panel");
+        panel.layer = layer;
+        panel.transform.SetParent(root, false);
+        panel.transform.SetPositionAndRotation(root.position, facing);
+        var collider = panel.AddComponent<BoxCollider>();
+        collider.center = box.center;
+        collider.size = box.size;
+        // Materials for the plain box drawn if the models can't be cut.
+        panel.AddComponent<MeshRenderer>().sharedMaterials = materials ?? new Material[0];
+        var joined = panel.AddComponent<CuttableWall>();
+
+        var filters = new List<MeshFilter>();
+        foreach (var tile in tiles) filters.AddRange(tile.GetComponentsInChildren<MeshFilter>(true));
+        if (cutModels) joined.SetCutModels(filters);
+        else
+        {
+            // Without Cut Models the wall draws itself as a box, as each tile would have.
+            foreach (var mf in filters) if (mf != null && mf.TryGetComponent<Renderer>(out var tr)) tr.enabled = false;
+            Debug.LogWarning($"[StorePlot] Front wall tiles under '{root.name}' have their CuttableWall on the model without Cut " +
+                             "Models: the row is drawn as one plain box. Tick Cut Models to keep the models.", root);
+        }
     }
 
     private static bool warnedNetworkModule;
