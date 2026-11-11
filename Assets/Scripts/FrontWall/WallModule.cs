@@ -28,10 +28,13 @@ public class WallModule : MonoBehaviour
              "sale or being renovated, and hides it while open.")]
     [SerializeField] private GameObject door;
     [Tooltip("Repeat this module side by side across the section it replaces, so the model never stretches " +
-             "(a few percent at most, to fill the length exactly). Model one tile: full wall height, front facing " +
-             "+Z (toward the hallway), width along X; a Blender root rotation is kept. Its CuttableWall panels are " +
-             "joined into one long panel across the section, so windows and doors can go anywhere. Off: Fit To Section.")]
+             "(a few percent at most, to fill the length exactly). Model one tile at full wall height, any rotation " +
+             "(a Blender -90 on X is fine): its wider side is laid along the wall and its thin side faces out. Put " +
+             "the flat part on a child cube with a CuttableWall: the tiles' panels are joined into one long panel, " +
+             "so windows and doors can go anywhere. Off: Fit To Section.")]
     [SerializeField] private bool tile = true;
+    [Tooltip("(Tile.) Turn the tiles round: use it if they come out facing into the store.")]
+    [SerializeField] private bool flipTile;
     [Tooltip("(When Tile is off.) Stretch it to the length and height of the section it replaces (its " +
              "thickness stays). Off: it keeps its own size and is only centered on the section.")]
     [SerializeField] private bool fitToSection = true;
@@ -43,6 +46,7 @@ public class WallModule : MonoBehaviour
     public GameObject Door => door;
     public bool FitToSection => fitToSection;
     public bool Tile => tile;
+    public bool FlipTile => flipTile;
 
     /// <summary>
     /// Make a store's plain storefront wall (a CuttableWall in its Storefront Walls) a section front wall
