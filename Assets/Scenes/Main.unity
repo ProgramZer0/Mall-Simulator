@@ -1750,6 +1750,7 @@ MonoBehaviour:
   isEntrance: 0
   price: 0
   door: {fileID: 0}
+  tile: 1
   fitToSection: 1
 --- !u!1 &146336001
 GameObject:
@@ -4011,6 +4012,7 @@ MonoBehaviour:
   isEntrance: 0
   price: 0
   door: {fileID: 0}
+  tile: 1
   fitToSection: 1
 --- !u!1 &374376732
 GameObject:
@@ -8839,6 +8841,7 @@ MonoBehaviour:
   isEntrance: 0
   price: 0
   door: {fileID: 0}
+  tile: 1
   fitToSection: 1
 --- !u!1 &689354322
 GameObject:
@@ -9653,6 +9656,7 @@ MonoBehaviour:
   isEntrance: 0
   price: 0
   door: {fileID: 0}
+  tile: 1
   fitToSection: 1
 --- !u!1 &767684046
 GameObject:
@@ -10386,6 +10390,7 @@ MonoBehaviour:
   isEntrance: 0
   price: 0
   door: {fileID: 0}
+  tile: 1
   fitToSection: 1
 --- !u!1 &848846041
 GameObject:
@@ -10532,6 +10537,7 @@ MonoBehaviour:
   isEntrance: 0
   price: 0
   door: {fileID: 0}
+  tile: 1
   fitToSection: 1
 --- !u!1 &849628855
 GameObject:
@@ -12079,6 +12085,7 @@ MonoBehaviour:
   isEntrance: 0
   price: 0
   door: {fileID: 0}
+  tile: 1
   fitToSection: 1
 --- !u!1 &958296302
 GameObject:
@@ -12225,6 +12232,7 @@ MonoBehaviour:
   isEntrance: 0
   price: 0
   door: {fileID: 0}
+  tile: 1
   fitToSection: 1
 --- !u!1 &958691921
 GameObject:
@@ -12950,6 +12958,7 @@ MonoBehaviour:
   isEntrance: 0
   price: 0
   door: {fileID: 0}
+  tile: 1
   fitToSection: 1
 --- !u!1 &1072716370
 GameObject:
@@ -13593,6 +13602,7 @@ MonoBehaviour:
   isEntrance: 0
   price: 0
   door: {fileID: 0}
+  tile: 1
   fitToSection: 1
 --- !u!1 &1087041351
 GameObject:
@@ -18759,6 +18769,21 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  - id: 202
+    displayName: wallkit wooden
+    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
+    worldNetworkPrefab: {fileID: 5976144729851372552, guid: e24e0e85496056640b8c722096396866, type: 3}
+    showInShop: 1
+    icon: {fileID: 0}
+    categories: []
+    category: 
+    price: 0
+    rarity: 0
+    marketPrice: 0
+    deliverySeconds: 0
+    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
   defaultPickupClip: {fileID: 8300000, guid: b0b6305f02b720e4490beeeb41c410d6, type: 3}
   defaultPlaceClip: {fileID: 8300000, guid: 382cd51e5d8f86d42b7132faadb6ac88, type: 3}
   defaultShipmentPrefab: {fileID: 5976144729851372552, guid: 771bc865ce9ffeb42930bb74e38e4209, type: 3}
@@ -21069,6 +21094,7 @@ MonoBehaviour:
   isEntrance: 0
   price: 0
   door: {fileID: 0}
+  tile: 1
   fitToSection: 1
 --- !u!1001 &1624074251
 PrefabInstance:
@@ -22857,6 +22883,7 @@ MonoBehaviour:
   isEntrance: 0
   price: 0
   door: {fileID: 0}
+  tile: 1
   fitToSection: 1
 --- !u!1 &1743499166
 GameObject:
@@ -24227,6 +24254,7 @@ MonoBehaviour:
   isEntrance: 0
   price: 0
   door: {fileID: 0}
+  tile: 1
   fitToSection: 1
 --- !u!1 &1861070205
 GameObject:
@@ -25966,6 +25994,7 @@ MonoBehaviour:
   isEntrance: 0
   price: 0
   door: {fileID: 0}
+  tile: 1
   fitToSection: 1
 --- !u!1 &1978469527
 GameObject:
@@ -26335,6 +26364,7 @@ MonoBehaviour:
   isEntrance: 0
   price: 0
   door: {fileID: 0}
+  tile: 1
   fitToSection: 1
 --- !u!1001 &1988867895
 PrefabInstance:
