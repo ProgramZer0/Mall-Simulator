@@ -1404,6 +1404,20 @@ public class StorePlot : NetworkBehaviour
                     panel.gameObject.SetActive(false);
                     Destroy(panel.gameObject);
                 }
+
+            // A panel that cuts models now cuts every tile's (the whole row shares its holes).
+            foreach (var panel in firstPanels)
+            {
+                if (!panel.CutsModels) continue;
+                var filters = new List<MeshFilter>();
+                foreach (var mf in root.GetComponentsInChildren<MeshFilter>(true))
+                {
+                    var owner = mf.GetComponentInParent<CuttableWall>(true);
+                    if (owner != null) continue; // a panel (its box), not a model
+                    filters.Add(mf);
+                }
+                panel.SetCutModels(filters);
+            }
         }
         return root;
     }
