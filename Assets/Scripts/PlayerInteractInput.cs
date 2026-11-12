@@ -401,7 +401,7 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         int id = lookedAtBuyZone >= 0 && lookedAtBuy.TryGetComponent<StockContainer>(out var shelf)
             ? shelf.GetZone(lookedAtBuyZone).itemId
-            : lookedAtBuy.TryGetComponent<ItemPickupNet>(out var item) ? item.itemId : 0;
+            : lookedAtBuy.TryGetComponent<ItemPickupNet>(out var item) ? item.ItemId : 0;
         string what = lookedAtBuyZone >= 0 ? $"1 {ItemName(id)}" : ItemName(id);
         return $"F: Buy {what} for {Sellable.FormatPrice(lookedAtBuyPrice)}";
     }
@@ -427,7 +427,7 @@ public class PlayerInteractInput : NetworkBehaviour
         if (lookedAtPickup == null) return null;
         if (lookedAtPickup.TryGetComponent<ShipmentPackage>(out var box) && box.ContainedItemId != 0)
             return $"F: Pick up {ItemName(box.ContainedItemId)} (box)";
-        return $"F: Pick up {ItemName(lookedAtPickup.itemId)}";
+        return $"F: Pick up {ItemName(lookedAtPickup.ItemId)}";
     }
 
     // Looking at the counter itself: what's going on there, and F picks it up when that's allowed.

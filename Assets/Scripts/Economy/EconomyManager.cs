@@ -573,8 +573,11 @@ public class EconomyManager : NetworkBehaviour
             box.ServerSetContents(itemId);
             box.ServerSetPaint(PaintSet.All(paint)); // bought in one color: every zone
         }
-        else if (spawned.TryGetComponent<ItemPickupNet>(out var bare) && bare.itemId == itemId)
+        else if (spawned.TryGetComponent<ItemPickupNet>(out var bare) && bare.itemId == BaseIdOf(itemId))
+        {
+            bare.ServerSetItemId(itemId); // which size
             bare.ServerSetPaint(PaintSet.All(paint)); // delivered as itself
+        }
         else
             Debug.LogWarning($"[EconomyManager] Shipment prefab '{prefab.name}' has no ShipmentPackage, so " +
                              "picking it up won't give the item inside.", prefab);
@@ -583,6 +586,9 @@ public class EconomyManager : NetworkBehaviour
 
         if (box != null) box.ServerReserve(teamId, reservationSeconds);
     }
+
+    private static int BaseIdOf(int itemId) =>
+        ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(itemId, out var def) ? def.BaseId : itemId;
 
     private void ServerRemoveOrderAt(int index)
     {

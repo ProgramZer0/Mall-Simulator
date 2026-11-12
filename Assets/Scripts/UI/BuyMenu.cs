@@ -65,6 +65,9 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     [Header("Paint (optional)")]
     [Tooltip("Color swatches: paintable items are bought in the picked color (free).")]
     [SerializeField] private PaintSwatchBar paintBar;
+    [Tooltip("Optional: the pop-up that asks which sizes of a sized item (clothing, shoes). Without it, sized " +
+             "items are ordered in their middle size.")]
+    [SerializeField] private SizePicker sizePicker;
 
     [Header("Info")]
     [Tooltip("Short messages: added to cart, ordered, not enough money, ...")]
@@ -420,16 +423,41 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         // Paintable items come in the picked color; the rest ignore it.
         byte paint = paintBar != null && PaintParts.IsPaintable(def) ? paintBar.Selected : (byte)0;
 
+        // Sized: which sizes, and how many of each.
+        var sizes = ItemCatalog.Instance != null ? ItemCatalog.Instance.GetSizes(def.id) : null;
+        if (sizes != null && sizes.Count > 0)
+        {
+            if (sizePicker != null) sizePicker.Open(def, sizes, picked => Buy(picked, paint));
+            else Buy(new[] { (sizes[Sizes.Middle(def.sizes)], 1) }, paint);
+            return;
+        }
+        Buy(new[] { (def, 1) }, paint);
+    }
+
+    // Order these now, or add them to the cart.
+    private void Buy(IReadOnlyList<(ItemDef def, int quantity)> what, byte paint)
+    {
         if (!useCart)
         {
-            PlaceOrder(new[] { def.id }, new[] { 1 }, new[] { paint });
+            var ids = new int[what.Count];
+            var qty = new int[what.Count];
+            var paints = new byte[what.Count];
+            for (int k = 0; k < what.Count; k++) { ids[k] = what[k].def.id; qty[k] = what[k].quantity; paints[k] = paint; }
+            PlaceOrder(ids, qty, paints);
             return;
         }
 
-        int i = cart.FindIndex(c => c.itemId == def.id && c.paint == paint);
-        if (i >= 0) cart[i] = (def.id, paint, cart[i].quantity + 1);
-        else cart.Add((def.id, paint, 1));
-        ShowStatus(paint != 0 ? $"Added {def.displayName} ({PaintPalette.NameOf(paint)})" : $"Added {def.displayName}");
+        int count = 0;
+        foreach (var (def, quantity) in what)
+        {
+            int i = cart.FindIndex(c => c.itemId == def.id && c.paint == paint);
+            if (i >= 0) cart[i] = (def.id, paint, cart[i].quantity + quantity);
+            else cart.Add((def.id, paint, quantity));
+            count += quantity;
+        }
+        string name = what.Count == 1 ? what[0].def.displayName : what[0].def.BaseDef.displayName;
+        if (count > 1) name = $"{count} × {name}";
+        ShowStatus(paint != 0 ? $"Added {name} ({PaintPalette.NameOf(paint)})" : $"Added {name}");
         RefreshCart();
     }
 

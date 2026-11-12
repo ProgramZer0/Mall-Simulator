@@ -316,7 +316,7 @@ public class PaintBrush : NetworkBehaviour
             targetObject = zones.Count > 1 ? zones[targetZone].gameObject : item.gameObject;
             current = PaintSet.Get(item.Paint, targetZone);
             fee = palette.ItemFee;
-            what = ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(item.itemId, out var def) ? def.displayName : "Item";
+            what = ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(item.ItemId, out var def) ? def.displayName : "Item";
             string zone = PaintParts.ZoneName(item.gameObject, targetZone);
             if (zone.Length > 0) what += $" ({zone})";
         }
@@ -377,7 +377,7 @@ public class PaintBrush : NetworkBehaviour
         }
         var mall = MallManager.Instance;
         if (mall == null) return null;
-        Vector3 center = ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(item.itemId, out var def) &&
+        Vector3 center = ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(item.ItemId, out var def) &&
                          PlacementCheck.GetTestBox(def, item.transform.position, item.transform.rotation, out Vector3 c, out _)
             ? c : item.transform.position;
         return mall.GetPlotNear(center, storeBuffer);
