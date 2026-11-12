@@ -807,7 +807,7 @@ public class PlayerInteractInput : NetworkBehaviour
             previewActive = !previewActive;
             ItemDebug.Log($"Place preview {(previewActive ? "on" : "off")} for {ItemDebug.Describe(inventory.HeldItemId.Value)}.");
         }
-        if (previewActive && Input.GetKeyDown(KeyCode.Escape))
+        if (previewActive && UIState.TakeEscape())
             previewActive = false;
 
         bool previewing = previewActive;

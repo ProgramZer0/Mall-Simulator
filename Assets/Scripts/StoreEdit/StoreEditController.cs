@@ -570,7 +570,7 @@ public class StoreEditController : NetworkBehaviour
         if (dragHandle != StoreEditHandles.None)
         {
             if (selected == null) dragHandle = StoreEditHandles.None;
-            else if (Input.GetKeyDown(KeyCode.Escape)) CancelDrag();
+            else if (UIState.TakeEscape()) CancelDrag();
             else if (Input.GetMouseButton(0)) ContinueDrag(ray, mouse);
             else EndDrag();
 
@@ -613,7 +613,7 @@ public class StoreEditController : NetworkBehaviour
             tool = Tool.None;
             if (Input.GetKeyDown(rotateKey)) FlipOpening(selected);
             if (Input.GetKeyDown(removeKey) || Input.GetKeyDown(KeyCode.Backspace)) RemoveEditItems(new List<EditLocalItem> { selected }, null);
-            else if (Input.GetKeyDown(KeyCode.Escape) || rmbClicked) Deselect();
+            else if (UIState.TakeEscape() || rmbClicked) Deselect();
         }
         else if (selected != null)
         {
@@ -627,7 +627,7 @@ public class StoreEditController : NetworkBehaviour
             if (Input.GetKeyDown(gravityKey))
                 selected.SetGravity(!selected.Gravity);
 
-            if (Input.GetKeyDown(KeyCode.Escape) || rmbClicked)
+            if (UIState.TakeEscape() || rmbClicked)
                 Deselect();
         }
 
@@ -750,7 +750,7 @@ public class StoreEditController : NetworkBehaviour
     /// <summary>A kit box is picked: the storefront section under the mouse is outlined; click to put it up.</summary>
     private void UpdateApplyingKit(Ray ray)
     {
-        if (Input.GetKeyDown(KeyCode.Escape) || rmbClicked || kitBox == null || !kitBox.IsSpawned ||
+        if (UIState.TakeEscape() || rmbClicked || kitBox == null || !kitBox.IsSpawned ||
             !ItemCatalog.Instance.TryGet(kitBox.ContainedItemId, out var def) || !FrontWallKit.TryGetModule(def, out var module))
         {
             StopApplyingKit();
@@ -802,7 +802,7 @@ public class StoreEditController : NetworkBehaviour
             selected.SetDragging(true);
         }
 
-        if (Input.GetKeyDown(KeyCode.Escape))
+        if (UIState.TakeEscape())
         {
             freeDragging = false;
             HideBoxDrop(selected);
@@ -1234,7 +1234,7 @@ public class StoreEditController : NetworkBehaviour
     /// <summary>A window or door from a box follows the mouse along walls; click to put it there.</summary>
     private void UpdatePlacing(Ray ray, Vector2 mouse)
     {
-        if (Input.GetKeyDown(KeyCode.Escape) || rmbClicked || placingBox == null || !placingBox.IsSpawned)
+        if (UIState.TakeEscape() || rmbClicked || placingBox == null || !placingBox.IsSpawned)
         {
             StopPlacing(null);
             return;
@@ -1628,7 +1628,7 @@ public class StoreEditController : NetworkBehaviour
         if (settings == null || settings.WallPrefab == null)
         {
             wallInfo = "Add BuiltWallSettings (with a Wall Prefab) to the MallManager object.";
-            if (Input.GetKeyDown(KeyCode.Escape) || rmbClicked) SetWallTool(false);
+            if (UIState.TakeEscape() || rmbClicked) SetWallTool(false);
             return;
         }
 
@@ -1641,7 +1641,7 @@ public class StoreEditController : NetworkBehaviour
             HideEraseGhosts();
         }
 
-        bool cancel = Input.GetKeyDown(KeyCode.Escape) || rmbClicked;
+        bool cancel = UIState.TakeEscape() || rmbClicked;
         if (erasing && cancel)
         {
             erasing = false; // drop the erase, stay in the tool

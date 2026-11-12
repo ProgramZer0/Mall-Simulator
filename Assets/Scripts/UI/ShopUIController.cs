@@ -109,7 +109,9 @@ public class ShopUIController : MonoBehaviour
         bool lost = nm == null || !nm.IsListening || CurrentPlot == null || !CurrentPlot.IsAuthorized(nm.LocalClientId);
         bool stepBack = monitor != null && Time.frameCount > openedFrame && !Typing() &&
                         (Input.GetKeyDown(KeyCode.F) || Input.GetMouseButtonDown(1)); // not the F that opened it
-        if (Input.GetKeyDown(closeKey) || stepBack || lost) Close();
+        bool closeKeyDown = Input.GetKeyDown(closeKey);
+        if (closeKeyDown && closeKey == KeyCode.Escape) UIState.MarkEscapeTaken(); // not the phone too
+        if (closeKeyDown || stepBack || lost) Close();
     }
 
     // Typing in a text box (the search): F is a letter then, not "step back".

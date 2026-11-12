@@ -1,16 +1,17 @@
-using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 /// <summary>
-/// A phone app (see PhoneController). Put a component that implements it on each app's screen
-/// under the phone's Screen; the phone finds them and shows a button for each when there's more than one.
-/// NotificationsApp is the first; more can come later (bids, store stats...).
+/// A phone app (see PhoneScreen). Put a component that implements it on each app's screen inside the
+/// phone prefab's canvas; the home screen gets a button for each.
 /// </summary>
 public interface IPhoneApp
 {
     string AppName { get; }
+    /// <summary>Its home screen icon (null: the button's own picture).</summary>
+    Sprite Icon { get; }
+    /// <summary>A number on its home screen button (unread notifications...), 0 for none.</summary>
+    int Badge { get; }
     /// <summary>The app is shown (its GameObject has just been turned on).</summary>
     void OnAppOpened();
     /// <summary>The app is hidden (or the phone put away).</summary>
@@ -18,56 +19,46 @@ public interface IPhoneApp
 }
 
 /// <summary>
-/// The player's phone: Tab brings it up (Tab or Esc puts it away) (the cursor is freed and the player stops, like other menus)
-/// and puts it away. Purely local.
+/// The player's phone, held up in front of the camera with its UI on the phone itself (like the shop
+/// on the monitor), so the screen always fits the phone. Purely local.
 ///
-/// Setup (on the HUD canvas or anywhere in the scene):
-/// - Phone Root: the phone UI panel (hidden at start). Apps: GameObjects with an IPhoneApp component
-///   under it (e.g. NotificationsApp); the first is opened by default.
-/// - Optional: App Bar + App Button Prefab (a Button with a TMP label) to switch apps, made only when
-///   there's more than one. Hand Model Prefab: shown in front of the camera while the phone is out.
-/// - Optional: Hint Text on the HUD, e.g. "Tab: Phone (3)" with the unread count.
+/// Keys:
+/// - Esc: brings the phone up on its home screen; Esc again goes back to home, then puts it away.
+///   Esc that something else used first (closing the shop, cancelling a drag, the scanner...) doesn't
+///   bring it up (see UIState.TakeEscape).
+/// - Tab: brings it up straight on the Notifications app; Tab again puts it away.
+/// While it's up the cursor is free and the player stands still, like other menus.
+///
+/// Setup: put this on any always-on object (e.g. the HUD canvas). Phone Prefab: the phone model with a
+/// PhoneScreen (and its world-space canvas) on it. It's made once, under the camera, at Hold Offset.
+/// Optional Hint Text on the HUD: "Tab: Phone (3)" while there are unread notifications.
 /// </summary>
 public class PhoneController : MonoBehaviour
 {
     public static bool IsOpen { get; private set; }
 
-    [SerializeField] private KeyCode key = KeyCode.Tab;
-    [SerializeField] private GameObject phoneRoot;
-    [SerializeField] private RectTransform appBar;
-    [SerializeField] private Button appButtonPrefab;
-    [Tooltip("Optional: a phone model held in front of the camera while it's out.")]
-    [SerializeField] private GameObject handModelPrefab;
-    [SerializeField] private Vector3 handModelOffset = new(0.18f, -0.16f, 0.4f);
-    [SerializeField] private Vector3 handModelRotation = new(-15f, 180f, 0f);
+    [SerializeField] private PhoneScreen phonePrefab;
+    [Tooltip("Where it's held, from the camera (right, up, forward).")]
+    [SerializeField] private Vector3 holdOffset = new(0f, -0.02f, 0.32f);
+    [SerializeField] private Vector3 holdRotation = new(0f, 180f, 0f);
+    [Tooltip("Comes up from this far below the held spot.")]
+    [SerializeField, Min(0f)] private float raiseFrom = 0.25f;
+    [SerializeField, Min(0.01f)] private float raiseSeconds = 0.15f;
+
+    [SerializeField] private KeyCode homeKey = KeyCode.Escape;
+    [SerializeField] private KeyCode notificationsKey = KeyCode.Tab;
+    [Tooltip("The app Tab opens (its App Name).")]
+    [SerializeField] private string notificationsApp = "Notifications";
+
     [Tooltip("Optional HUD text: {0} = unread count. Empty when nothing's unread.")]
     [SerializeField] private TMP_Text hintText;
     [SerializeField] private string hintFormat = "Tab: Phone ({0})";
 
-    private readonly List<MonoBehaviour> apps = new();
-    private int current = -1;
-    private GameObject handModel;
+    private PhoneScreen phone;
+    private float raisedAt;
+    private int closedFrame = -1; // the key that put it away mustn't bring it straight back up
 
-    private void Awake()
-    {
-        if (phoneRoot != null)
-        {
-            foreach (var mb in phoneRoot.GetComponentsInChildren<MonoBehaviour>(true))
-                if (mb is IPhoneApp) apps.Add(mb);
-            foreach (var app in apps) app.gameObject.SetActive(false);
-            phoneRoot.SetActive(false);
-        }
-        if (appBar != null && appButtonPrefab != null && apps.Count > 1)
-            for (int i = 0; i < apps.Count; i++)
-            {
-                int index = i;
-                var b = Instantiate(appButtonPrefab, appBar);
-                var label = b.GetComponentInChildren<TMP_Text>();
-                if (label != null) label.text = ((IPhoneApp)apps[i]).AppName;
-                b.onClick.AddListener(() => OpenApp(index));
-            }
-        IsOpen = false;
-    }
+    private void Awake() => IsOpen = false;
 
     private void OnEnable()
     {
@@ -81,12 +72,26 @@ public class PhoneController : MonoBehaviour
         if (IsOpen) Close();
     }
 
+    // Open keys are read after everything else (LateUpdate), so an Esc something else used this
+    // frame doesn't also bring the phone up.
     private void Update()
     {
-        if (IsOpen && Input.GetKeyDown(KeyCode.Escape)) { Close(); return; }
-        if (!Input.GetKeyDown(key)) return;
-        if (IsOpen) Close();
-        else if (!UIState.IsMenuOpen && InGame()) Open();
+        if (!IsOpen) return;
+        if (Input.GetKeyDown(notificationsKey)) { Close(); return; }
+        if (Input.GetKeyDown(homeKey))
+        {
+            if (homeKey == KeyCode.Escape) UIState.MarkEscapeTaken();
+            if (phone != null && !phone.OnHome) phone.ShowHome();
+            else Close();
+        }
+        if (phone != null) Raise();
+    }
+
+    private void LateUpdate()
+    {
+        if (IsOpen || closedFrame == Time.frameCount || UIState.IsMenuOpen || !InGame()) return;
+        if (Input.GetKeyDown(notificationsKey)) Open(notificationsApp);
+        else if (Input.GetKeyDown(homeKey) && !(homeKey == KeyCode.Escape && UIState.EscapeTakenThisFrame)) Open(null);
     }
 
     private static bool InGame()
@@ -95,56 +100,54 @@ public class PhoneController : MonoBehaviour
         return nm != null && nm.IsListening && nm.LocalClient?.PlayerObject != null;
     }
 
-    public void Open()
+    /// <summary>Bring the phone up on an app (by App Name), or its home screen (null).</summary>
+    public void Open(string app)
     {
-        if (IsOpen || phoneRoot == null) return;
+        if (IsOpen || !EnsurePhone()) return;
         IsOpen = true;
-        phoneRoot.SetActive(true);
+        if (homeKey == KeyCode.Escape) UIState.MarkEscapeTaken();
+        phone.gameObject.SetActive(true);
+        raisedAt = Time.unscaledTime;
+        Raise();
         UIState.OpenMenu(this);
-        OpenApp(current >= 0 ? current : 0);
-        ShowHandModel(true);
+        if (app == null || !phone.ShowApp(app)) phone.ShowHome();
     }
 
     public void Close()
     {
         if (!IsOpen) return;
         IsOpen = false;
-        if (current >= 0 && current < apps.Count)
+        closedFrame = Time.frameCount;
+        if (phone != null)
         {
-            ((IPhoneApp)apps[current]).OnAppClosed();
-            apps[current].gameObject.SetActive(false);
+            phone.CloseApps();
+            phone.gameObject.SetActive(false);
         }
-        if (phoneRoot != null) phoneRoot.SetActive(false);
         UIState.CloseMenu(this);
-        ShowHandModel(false);
     }
 
-    /// <summary>Show one of the phone's apps (by its order under Phone Root).</summary>
-    public void OpenApp(int index)
+    private bool EnsurePhone()
     {
-        if (index < 0 || index >= apps.Count) return;
-        if (current >= 0 && current < apps.Count && current != index && apps[current].gameObject.activeSelf)
-        {
-            ((IPhoneApp)apps[current]).OnAppClosed();
-            apps[current].gameObject.SetActive(false);
-        }
-        current = index;
-        apps[index].gameObject.SetActive(true);
-        ((IPhoneApp)apps[index]).OnAppOpened();
-    }
-
-    private void ShowHandModel(bool on)
-    {
-        if (handModelPrefab == null) return;
+        if (phone != null) return true;
         var cam = Camera.main;
-        if (on && handModel == null && cam != null)
+        if (phonePrefab == null || cam == null)
         {
-            handModel = Instantiate(handModelPrefab, cam.transform);
-            handModel.transform.localPosition = handModelOffset;
-            handModel.transform.localRotation = Quaternion.Euler(handModelRotation);
-            foreach (var c in handModel.GetComponentsInChildren<Collider>()) c.enabled = false;
+            Debug.LogWarning("[PhoneController] Needs a Phone Prefab (with a PhoneScreen) and a main camera.", this);
+            return false;
         }
-        if (handModel != null) handModel.SetActive(on);
+        phone = Instantiate(phonePrefab, cam.transform);
+        phone.Init(cam);
+        phone.gameObject.SetActive(false);
+        return true;
+    }
+
+    // Slide up into the hand.
+    private void Raise()
+    {
+        float t = Mathf.Clamp01((Time.unscaledTime - raisedAt) / raiseSeconds);
+        t = 1f - (1f - t) * (1f - t);
+        phone.transform.localPosition = holdOffset + Vector3.down * (raiseFrom * (1f - t));
+        phone.transform.localRotation = Quaternion.Euler(holdRotation);
     }
 
     private void RefreshHint()

@@ -42,6 +42,26 @@ public static class UIState
         if (menu != null && openMenus.Remove(menu)) Changed?.Invoke();
     }
 
+    /// <summary>The frame something last used Esc (see TakeEscape).</summary>
+    public static int EscapeTakenFrame { get; private set; } = -1;
+
+    /// <summary>
+    /// Esc was pressed this frame: use it (true) and mark it used, so the phone (which opens on an
+    /// unused Esc) stays away. Use this instead of Input.GetKeyDown(KeyCode.Escape) for anything Esc
+    /// closes or cancels.
+    /// </summary>
+    public static bool TakeEscape()
+    {
+        if (!Input.GetKeyDown(KeyCode.Escape)) return false;
+        EscapeTakenFrame = Time.frameCount;
+        return true;
+    }
+
+    /// <summary>Mark this frame's Esc as used (for code that checked the key itself).</summary>
+    public static void MarkEscapeTaken() => EscapeTakenFrame = Time.frameCount;
+
+    public static bool EscapeTakenThisFrame => EscapeTakenFrame == Time.frameCount;
+
     /// <summary>Close everything (e.g. on disconnect).</summary>
     public static void CloseAll()
     {
