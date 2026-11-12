@@ -18,11 +18,6 @@ public class PerkRow : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     [Tooltip("Optional: shown once it's maxed (a check mark).")]
     public GameObject maxedMark;
 
-    [Header("Old row layout (unused)")]
-    public TMP_Text buttonText;
-    public TMP_Text nameText;
-    public TMP_Text descriptionText;
-
     /// <summary>The pointer went over (true) or off (false) this perk.</summary>
     public event Action<PerkRow, bool> Hovered;
 
