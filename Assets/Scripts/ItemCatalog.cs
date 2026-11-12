@@ -21,6 +21,10 @@ public class ItemCatalog : MonoBehaviour
     [SerializeField] private NetworkObject defaultShipmentPrefab;
 
     public NetworkObject DefaultShipmentPrefab => defaultShipmentPrefab;
+
+    [Header("Debug")]
+    [Tooltip("Log picking up, placing, stocking and sizes to the Console (see ItemDebug).")]
+    [SerializeField] private bool debugItemLogs = true;
     public AudioClip DefaultPlaceClip => defaultPlaceClip;
 
     private Dictionary<int, ItemDef> map;
@@ -30,6 +34,7 @@ public class ItemCatalog : MonoBehaviour
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
+        ItemDebug.On = debugItemLogs;
         map = new Dictionary<int, ItemDef>();
         foreach (var it in items)
         {
@@ -51,6 +56,12 @@ public class ItemCatalog : MonoBehaviour
                 list.Add(v);
             }
             sizesOf[it.id] = list;
+            if (ItemDebug.On)
+            {
+                var sb = new System.Text.StringBuilder();
+                foreach (var v in list) sb.Append($"  {v.id} {v.SizeName} ${v.price} (market ${v.marketPrice:0.00})\n");
+                ItemDebug.Log($"Sizes for '{it.displayName}' ({it.id}, {it.sizes}, step {it.sizePriceStep:P0}):\n{sb}");
+            }
         }
     }
 
@@ -287,4 +298,48 @@ public static class Sizes
 
     private static string[] Names(ItemDef.SizeSet set) =>
         set == ItemDef.SizeSet.Clothing ? Clothing : set == ItemDef.SizeSet.Shoes ? Shoes : System.Array.Empty<string>();
+}
+
+/// <summary>
+/// Console logs for picking up, placing, stocking and sizes ("[Items] ..."). Turn off with the
+/// ItemCatalog's Debug Item Logs.
+/// </summary>
+public static class ItemDebug
+{
+    public static bool On = true;
+
+    public static void Log(string message, Object context = null)
+    {
+        if (On) Debug.Log("[Items] " + message, context);
+    }
+
+    /// <summary>"7000123 'Sneakers (8)' (size 8 of 'Sneakers' 77, crate 12, Floor)" for logs.</summary>
+    public static string Describe(int id)
+    {
+        if (id == 0) return "nothing (0)";
+        if (ItemCatalog.Instance == null) return $"{id} (no ItemCatalog)";
+        if (!ItemCatalog.Instance.TryGet(id, out var def))
+        {
+            string split = Sizes.TrySplit(id, out int baseId, out int index) ? $", looks like size {index} of item {baseId}" : "";
+            return $"{id} (NOT IN THE CATALOG{split})";
+        }
+        var text = $"{id} '{def.displayName}'";
+        var parts = new List<string>();
+        if (def.IsSize) parts.Add($"size {def.SizeName} of '{def.BaseDef.displayName}' {def.BaseId}");
+        if (def.worldNetworkPrefab == null) parts.Add("NO WORLD PREFAB");
+        else
+        {
+            var p = def.worldNetworkPrefab.GetComponent<ItemPickupNet>();
+            if (p == null) parts.Add("prefab has NO ItemPickupNet");
+            else
+            {
+                if (p.itemId != def.BaseId) parts.Add($"PREFAB ItemPickupNet id is {p.itemId}, not {def.BaseId}");
+                parts.Add(p.MountingType.ToString());
+                if (p.IsStockCrate) parts.Add($"stock crate x{p.UnitsPerCrate}" +
+                                              (p.ShelfPrefab == null && p.HangPrefab == null ? " (NO Shelf/Hang Prefab)" : ""));
+            }
+        }
+        if (PlacementCheck.StaysBoxed(def)) parts.Add("stays boxed");
+        return parts.Count > 0 ? $"{text} ({string.Join(", ", parts)})" : text;
+    }
 }
