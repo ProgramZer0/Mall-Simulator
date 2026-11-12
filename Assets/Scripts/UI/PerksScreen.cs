@@ -220,11 +220,8 @@ public class PerksScreen : MonoBehaviour, IShopScreen
             rt.sizeDelta = cellSize;
             rt.anchoredPosition = new Vector2(padding + (i % cols) * (cellSize.x + cellSpacing.x),
                                               -(padding + (i / cols) * (cellSize.y + cellSpacing.y)));
-            if (rows[i].icon != null)
-            {
-                rows[i].icon.sprite = perk.icon;
-                rows[i].icon.enabled = perk.icon != null;
-            }
+            // The perk's picture; a perk without one keeps the prefab's (never hidden: it may be the button itself).
+            if (rows[i].icon != null && perk.icon != null) rows[i].icon.sprite = perk.icon;
         }
 
         int lines = (shown.Count + cols - 1) / cols;
