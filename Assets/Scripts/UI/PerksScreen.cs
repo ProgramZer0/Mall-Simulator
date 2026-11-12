@@ -11,9 +11,11 @@ using UnityEngine.UI;
 /// No layout groups needed: the screen places everything itself.
 /// - Tab Bar: an empty RectTransform. Tab Prefab (a Button with a TMP label) is made once per branch,
 ///   side by side, filling the bar. The chosen tab's button is turned off (it shows its Disabled color).
-/// - Row Parent: a Scroll View's Content (anchored top, stretched across). Row Prefab (a PerkRow) is
-///   stacked top to bottom, Row Height tall with Row Spacing between; Content grows to fit, so it
-///   scrolls. A perk that needs another comes after it, indented by Indent.
+/// - Row Parent: a Scroll View's Content (anchored top, stretched across). Row Prefab (a PerkRow: the
+///   perk's picture as a button) is laid out in a grid (Cell Size, Cell Spacing; as many columns as fit);
+///   Content grows to fit, so it scrolls. A perk that needs another comes after it.
+/// - Hover a perk: Tooltip Root shows its name, description and cost, or why it can't be bought.
+///   Click it to buy; it's greyed out (and can't be clicked) when it can't be bought.
 /// Optional: Summary Text (team level, store profit, points), Reset Button (free respec; click twice
 /// to confirm) with its TMP text, Status Text.
 /// </summary>
@@ -26,14 +28,25 @@ public class PerksScreen : MonoBehaviour, IShopScreen
     [Tooltip("Added to a tab's name when something in it can be bought.")]
     [SerializeField] private string canBuyMark = " •";
 
-    [Header("Perk List")]
+    [Header("Perk Grid")]
+    [Tooltip("A PerkRow: the perk's picture as a button.")]
     [SerializeField] private PerkRow rowPrefab;
+    [Tooltip("The Scroll View's Content (anchored top, stretched across).")]
     [SerializeField] private RectTransform rowParent;
-    [SerializeField, Min(1f)] private float rowHeight = 70f;
-    [SerializeField, Min(0f)] private float rowSpacing = 6f;
+    [SerializeField] private Vector2 cellSize = new(80f, 80f);
+    [SerializeField] private Vector2 cellSpacing = new(8f, 8f);
     [SerializeField, Min(0f)] private float padding = 6f;
-    [Tooltip("How far a perk that needs another is moved in, per step.")]
-    [SerializeField, Min(0f)] private float indent = 24f;
+    [Tooltip("As many columns as fit the width. Off: Columns.")]
+    [SerializeField] private bool fitColumns = true;
+    [SerializeField, Min(1)] private int columns = 5;
+
+    [Header("Hover Pop-up")]
+    [Tooltip("A panel shown beside the perk under the pointer (hidden at start). Put it last on the screen so " +
+             "it draws on top, and untick Raycast Target on its graphics so it doesn't steal the hover.")]
+    [SerializeField] private GameObject tooltipRoot;
+    [SerializeField] private TMP_Text tooltipNameText;
+    [SerializeField] private TMP_Text tooltipDescriptionText;
+    [SerializeField] private Vector2 tooltipOffset = new(8f, 0f);
 
     [Header("Other")]
     [SerializeField] private TMP_Text summaryText;
@@ -54,6 +67,7 @@ public class PerksScreen : MonoBehaviour, IShopScreen
     private void Awake()
     {
         if (resetButton != null) resetButton.onClick.AddListener(OnReset);
+        if (tooltipRoot != null) tooltipRoot.SetActive(false);
         // Our own placing would fight a layout group left on these.
         DisableLayout(rowParent);
         DisableLayout(tabBar);
@@ -147,7 +161,7 @@ public class PerksScreen : MonoBehaviour, IShopScreen
         branch = branches.Contains(name) ? name : branches[0];
         Status("");
 
-        // This branch's perks, each after the one it needs (indented one more step).
+        // This branch's perks, each after the one it needs.
         shown.Clear();
         var pm = ProgressionManager.Instance;
         var inBranch = new List<PerkDef>();
@@ -175,9 +189,9 @@ public class PerksScreen : MonoBehaviour, IShopScreen
         return false;
     }
 
-    /* ========================= ROWS ========================= */
+    /* ========================= GRID ========================= */
 
-    // Stack the shown perks top to bottom and size Content to fit.
+    // Lay the shown perks out in a grid, left to right then down, and size Content to fit.
     private void PlaceRows()
     {
         if (rowPrefab == null || rowParent == null) return;
@@ -186,22 +200,26 @@ public class PerksScreen : MonoBehaviour, IShopScreen
             var row = Instantiate(rowPrefab, rowParent);
             int index = rows.Count;
             if (row.buyButton != null) row.buyButton.onClick.AddListener(() => OnBuy(index));
+            row.Hovered += OnHovered;
             rows.Add(row);
         }
+
+        int cols = Mathf.Max(1, columns);
+        if (fitColumns && rowParent.rect.width > 0f)
+            cols = Mathf.Max(1, Mathf.FloorToInt((rowParent.rect.width - padding * 2f + cellSpacing.x) / (cellSize.x + cellSpacing.x)));
 
         for (int i = 0; i < rows.Count; i++)
         {
             bool used = i < shown.Count;
             rows[i].gameObject.SetActive(used);
             if (!used) continue;
-            var (perk, depth) = shown[i];
+            var perk = shown[i].perk;
             var rt = (RectTransform)rows[i].transform;
-            float top = padding + i * (rowHeight + rowSpacing);
-            rt.anchorMin = new Vector2(0f, 1f);
-            rt.anchorMax = new Vector2(1f, 1f);
-            rt.pivot = new Vector2(0.5f, 1f);
-            rt.offsetMin = new Vector2(padding + depth * indent, -(top + rowHeight));
-            rt.offsetMax = new Vector2(-padding, -top);
+            rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+            rt.pivot = new Vector2(0f, 1f);
+            rt.sizeDelta = cellSize;
+            rt.anchoredPosition = new Vector2(padding + (i % cols) * (cellSize.x + cellSpacing.x),
+                                              -(padding + (i / cols) * (cellSize.y + cellSpacing.y)));
             if (rows[i].icon != null)
             {
                 rows[i].icon.sprite = perk.icon;
@@ -209,9 +227,11 @@ public class PerksScreen : MonoBehaviour, IShopScreen
             }
         }
 
-        float height = shown.Count == 0 ? 0f : padding * 2f + shown.Count * rowHeight + (shown.Count - 1) * rowSpacing;
+        int lines = (shown.Count + cols - 1) / cols;
+        float height = lines == 0 ? 0f : padding * 2f + lines * cellSize.y + (lines - 1) * cellSpacing.y;
         rowParent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
         rowParent.anchoredPosition = new Vector2(rowParent.anchoredPosition.x, 0f); // back to the top
+        HideTooltip();
     }
 
     private void Refresh()
@@ -248,23 +268,71 @@ public class PerksScreen : MonoBehaviour, IShopScreen
             var perk = shown[i].perk;
             var row = rows[i];
             int rank = pm.GetRank(id, perk.id);
-            bool can = pm.CanBuyPerk(id, perk, out string why);
-            if (row.nameText != null) row.nameText.text = perk.maxRank > 1 ? $"{perk.displayName}  {rank}/{perk.maxRank}" : perk.displayName;
-            if (row.descriptionText != null)
-            {
-                string effect = perk.DescribeEffects();
-                if (perk.maxRank > 1 && effect.Length > 0) effect += " per rank";
-                row.descriptionText.text = string.IsNullOrEmpty(perk.description) ? effect : $"{perk.description}\n{effect}";
-            }
-            if (row.buyButton != null) row.buyButton.interactable = can;
-            if (row.buttonText != null)
-                row.buttonText.text = can || why == "Not enough points"
-                    ? $"Buy ({perk.costPerRank} pt{(perk.costPerRank == 1 ? "" : "s")})"
-                    : why;
+            if (row.buyButton != null) row.buyButton.interactable = pm.CanBuyPerk(id, perk, out _);
+            if (row.rankText != null) row.rankText.text = perk.maxRank > 1 ? $"{rank}/{perk.maxRank}" : "";
+            if (row.maxedMark != null) row.maxedMark.SetActive(rank >= perk.maxRank);
         }
+        if (hovered != null) ShowTooltip(hovered);
 
         if (resetButton != null) resetButton.interactable = pm.GetPointsSpent(id) > 0;
         if (resetButtonText != null) resetButtonText.text = resetArmedUntil > 0f ? "Click again to reset" : "Reset perks";
+    }
+
+    /* ========================= TOOLTIP ========================= */
+
+    private PerkRow hovered;
+
+    private void OnHovered(PerkRow row, bool over)
+    {
+        if (over) ShowTooltip(row);
+        else if (row == hovered) HideTooltip();
+    }
+
+    // Name, rank, description, effect, cost, and why it can't be bought; beside the hovered perk.
+    private void ShowTooltip(PerkRow row)
+    {
+        hovered = row;
+        int index = rows.IndexOf(row);
+        var pm = ProgressionManager.Instance;
+        if (tooltipRoot == null || pm == null || plot == null || index < 0 || index >= shown.Count) { HideTooltip(); return; }
+        var perk = shown[index].perk;
+        int rank = pm.GetRank(plot.PlotId, perk.id);
+        bool can = pm.CanBuyPerk(plot.PlotId, perk, out string why);
+
+        if (tooltipNameText != null)
+            tooltipNameText.text = perk.maxRank > 1 ? $"{perk.displayName}  {rank}/{perk.maxRank}" : perk.displayName;
+        if (tooltipDescriptionText != null)
+        {
+            string effect = perk.DescribeEffects();
+            if (perk.maxRank > 1 && effect.Length > 0) effect += " per rank";
+            string text = string.IsNullOrEmpty(perk.description) ? effect : $"{perk.description}\n{effect}";
+            string cost = $"{perk.costPerRank} point{(perk.costPerRank == 1 ? "" : "s")}";
+            text += can ? $"\n\nClick to buy ({cost})" : why == "Maxed" ? "\n\nMaxed" : $"\n\nCan't buy: {why} ({cost})";
+            tooltipDescriptionText.text = text;
+        }
+
+        tooltipRoot.SetActive(true);
+        tooltipRoot.transform.SetAsLastSibling();
+        if (tooltipRoot.transform is RectTransform tip && tip.parent is RectTransform area)
+        {
+            // Beside the perk (right side, or left if it'd go off the screen), kept inside the screen.
+            var cell = (RectTransform)row.transform;
+            Vector3 corner = area.InverseTransformPoint(cell.TransformPoint(new Vector3(cell.rect.xMax, cell.rect.yMax)));
+            Vector3 left = area.InverseTransformPoint(cell.TransformPoint(new Vector3(cell.rect.xMin, cell.rect.yMax)));
+            Rect bounds = area.rect;
+            Vector2 size = tip.rect.size;
+            tip.pivot = new Vector2(0f, 1f);
+            float x = corner.x + tooltipOffset.x;
+            if (x + size.x > bounds.xMax) x = left.x - tooltipOffset.x - size.x;
+            float y = Mathf.Clamp(corner.y + tooltipOffset.y, bounds.yMin + size.y, bounds.yMax);
+            tip.localPosition = new Vector3(Mathf.Max(bounds.xMin, x), y, 0f);
+        }
+    }
+
+    private void HideTooltip()
+    {
+        hovered = null;
+        if (tooltipRoot != null) tooltipRoot.SetActive(false);
     }
 
     private static bool AnyBuyable(ProgressionManager pm, int plotId, string branchName)
