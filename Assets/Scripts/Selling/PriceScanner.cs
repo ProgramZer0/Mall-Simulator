@@ -277,7 +277,7 @@ public class PriceScanner : NetworkBehaviour
             return;
         }
 
-        if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+        if (UIState.TakeEscape() || Input.GetMouseButtonDown(1))
         {
             StopTyping();
             return;
