@@ -24,16 +24,44 @@ public class ItemCatalog : MonoBehaviour
     public AudioClip DefaultPlaceClip => defaultPlaceClip;
 
     private Dictionary<int, ItemDef> map;
+    private readonly Dictionary<int, List<ItemDef>> sizesOf = new();
 
     private void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         map = new Dictionary<int, ItemDef>();
-        foreach (var it in items) map[it.id] = it;
+        foreach (var it in items)
+        {
+            if (it == null) continue;
+            if (it.id >= Sizes.FirstSizedId)
+                Debug.LogWarning($"[ItemCatalog] '{it.displayName}' has id {it.id}: ids from {Sizes.FirstSizedId} up are " +
+                                 "used for sizes. Give it a smaller one.");
+            map[it.id] = it;
+        }
+        // Each size of a sized item is its own item (own id, price, stock, price tag), made here.
+        foreach (var it in items)
+        {
+            if (it == null || it.sizes == ItemDef.SizeSet.None) continue;
+            var list = new List<ItemDef>();
+            for (int i = 0; i < Sizes.Count(it.sizes); i++)
+            {
+                var v = it.MakeSize(i);
+                map[v.id] = v;
+                list.Add(v);
+            }
+            sizesOf[it.id] = list;
+        }
     }
 
     public bool TryGet(int id, out ItemDef def) => map.TryGetValue(id, out def);
+
+    /// <summary>A sized item's sizes, smallest first (null if it has none).</summary>
+    public IReadOnlyList<ItemDef> GetSizes(int itemId)
+    {
+        int baseId = TryGet(itemId, out var def) ? def.BaseId : itemId;
+        return sizesOf.TryGetValue(baseId, out var list) ? list : null;
+    }
 
 #if UNITY_EDITOR
     // Items used to have one Category; move it into Categories so nothing set up is lost.
@@ -118,6 +146,42 @@ public class ItemDef
     }
     [Tooltip("Cost of one when ordered.")]
     public int price = 10;
+
+    public enum SizeSet { None, Clothing, Shoes }
+    [Tooltip("Clothing: XS to XXL. Shoes: 4 to 12. Each size becomes its own item (own stock and price tag); " +
+             "the shop shows this item once and asks which sizes.")]
+    public SizeSet sizes = SizeSet.None;
+    [Tooltip("Each size up from the middle (M, or 8) costs this much more, each size down this much less " +
+             "(0.03 = 3%). Market price too.")]
+    [Range(0f, 0.25f)] public float sizePriceStep = 0.03f;
+
+    [System.NonSerialized] private ItemDef sizeOf;   // a size: the item it's a size of
+    [System.NonSerialized] private int sizeIndex = -1;
+
+    /// <summary>The item this is a size of (itself if it isn't a size).</summary>
+    public ItemDef BaseDef => sizeOf ?? this;
+    public int BaseId => BaseDef.id;
+    public bool IsSize => sizeOf != null;
+    /// <summary>Which size (0 = smallest), -1 if it isn't a size.</summary>
+    public int SizeIndex => sizeIndex;
+    public string SizeName => IsSize ? Sizes.Name(sizeOf.sizes, sizeIndex) : "";
+
+    /// <summary>One size of this item (ItemCatalog makes them).</summary>
+    public ItemDef MakeSize(int index)
+    {
+        var v = (ItemDef)MemberwiseClone();
+        v.sizeOf = this;
+        v.sizeIndex = index;
+        v.id = Sizes.SizedId(id, index);
+        v.displayName = $"{displayName} ({Sizes.Name(sizes, index)})";
+        v.showInShop = false; // the shop lists the item once
+        float scale = 1f + sizePriceStep * (index - Sizes.Middle(sizes));
+        v.price = Mathf.Max(1, Mathf.RoundToInt(price * scale));
+        v.marketPrice = marketPrice * scale;
+        v.categorySet = null;
+        v.ghostTemplate = null;
+        return v;
+    }
     [Tooltip("Team level needed to order it (0 or 1 = from the start). Shown locked in the shop until then.")]
     [Min(0)] public int minLevel = 0;
     [Tooltip("How rare it is. Customers who love exotic things are drawn to rarer items.")]
@@ -165,6 +229,7 @@ public class ItemDef
     {
         get
         {
+            if (sizeOf != null) return sizeOf.LocalBounds; // same model
             if (!localBoundsComputed && worldNetworkPrefab != null)
             {
                 localBounds = PlacementCheck.ComputeLocalBounds(worldNetworkPrefab.gameObject);
@@ -180,6 +245,7 @@ public class ItemDef
     /// </summary>
     public GameObject GetGhostPrefab()
     {
+        if (sizeOf != null) return sizeOf.GetGhostPrefab(); // one per model, not per size
         if (ghostTemplate != null) return ghostTemplate;
         if (worldNetworkPrefab == null) return null;
 
@@ -187,4 +253,38 @@ public class ItemDef
         ghostTemplate = GhostBuilder.BuildTemplate(worldNetworkPrefab.gameObject, 0.45f);
         return ghostTemplate;
     }
+}
+/// <summary>
+/// Clothing and shoe sizes. A size of an item is its own item: id FirstSizedId + item id * 16 + size.
+/// </summary>
+public static class Sizes
+{
+    public const int FirstSizedId = 1_000_000;
+    private static readonly string[] Clothing = { "XS", "S", "M", "L", "XL", "XXL" };
+    private static readonly string[] Shoes = { "4", "5", "6", "7", "8", "9", "10", "11", "12" };
+
+    public static int Count(ItemDef.SizeSet set) => Names(set).Length;
+    /// <summary>The size priced as the item itself (M, 8).</summary>
+    public static int Middle(ItemDef.SizeSet set) => set == ItemDef.SizeSet.Clothing ? 2 : set == ItemDef.SizeSet.Shoes ? 4 : 0;
+    public static string Name(ItemDef.SizeSet set, int index)
+    {
+        var names = Names(set);
+        return index >= 0 && index < names.Length ? names[index] : "";
+    }
+
+    public static int SizedId(int itemId, int index) => FirstSizedId + itemId * 16 + index;
+
+    /// <summary>Is this a size's id? Gives the item it's a size of and which size.</summary>
+    public static bool TrySplit(int id, out int itemId, out int index)
+    {
+        itemId = id;
+        index = -1;
+        if (id < FirstSizedId) return false;
+        itemId = (id - FirstSizedId) / 16;
+        index = (id - FirstSizedId) % 16;
+        return true;
+    }
+
+    private static string[] Names(ItemDef.SizeSet set) =>
+        set == ItemDef.SizeSet.Clothing ? Clothing : set == ItemDef.SizeSet.Shoes ? Shoes : System.Array.Empty<string>();
 }

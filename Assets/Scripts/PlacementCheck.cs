@@ -314,7 +314,7 @@ public static class PlacementCheck
         else
         {
             var item = c.GetComponentInParent<ItemPickupNet>();
-            if (item == null || ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(item.itemId, out def)) return null;
+            if (item == null || ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(item.ItemId, out def)) return null;
             root = item.transform;
         }
         return IsHung(def, root.position, root.rotation, floorY) ? root : null;

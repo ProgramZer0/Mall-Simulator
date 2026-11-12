@@ -219,7 +219,7 @@ public class WallOpening : MonoBehaviour
             ItemDef def = null;
             if (TryGetComponent<EditLocalItem>(out var copy)) def = copy.Def;
             else if (TryGetComponent<ItemPickupNet>(out var item) && ItemCatalog.Instance != null)
-                ItemCatalog.Instance.TryGet(item.itemId, out def);
+                ItemCatalog.Instance.TryGet(item.ItemId, out def);
             if (def == null || def.worldNetworkPrefab == null) return Quaternion.Euler(modelRotation); // try again later
             fix = FixOf(def.worldNetworkPrefab.transform, modelRotation);
             hasFix = true;

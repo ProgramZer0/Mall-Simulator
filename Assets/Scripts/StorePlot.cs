@@ -1779,16 +1779,16 @@ public class StorePlot : NetworkBehaviour
             if (item.IsOnCart) continue;                                 // so do things riding on a cart
 
             // Only take items we can respawn later; anything else is left untouched.
-            if (catalog == null || !catalog.TryGet(item.itemId, out var def) || def.worldNetworkPrefab == null)
+            if (catalog == null || !catalog.TryGet(item.ItemId, out var def) || def.worldNetworkPrefab == null)
             {
-                Debug.LogWarning($"[StorePlot] '{item.name}' (item id {item.itemId}) has no catalog entry " +
+                Debug.LogWarning($"[StorePlot] '{item.name}' (item id {item.ItemId}) has no catalog entry " +
                                  "with a world prefab, so it can't be edited and stays where it is.", item);
                 continue;
             }
 
             editSession.Add(new EditEntry
             {
-                itemId = item.itemId,
+                itemId = item.ItemId,
                 position = item.transform.position,
                 rotation = item.transform.rotation,
                 stock = item.TryGetComponent<StockContainer>(out var container) ? container.ServerCopyStock() : null,
@@ -2104,6 +2104,7 @@ public class StorePlot : NetworkBehaviour
         // Edit mode already let the player choose whether it falls, so it comes back exactly as left.
         if (spawned.TryGetComponent<ItemPickupNet>(out var item))
         {
+            if (def.IsSize) item.ServerSetItemId(def.id);
             // Hung on a wall in edit mode? Then it stays up even if what's below it is picked up.
             // Windows and doors are always held by their wall.
             bool onWall = WallOpening.IsOpening(def) ||
@@ -2292,7 +2293,7 @@ public class StorePlot : NetworkBehaviour
                 if (host != null && InSegmentWall(host.transform)) count++;
                 continue;
             }
-            if (catalog == null || !catalog.TryGet(item.itemId, out var def)) continue;
+            if (catalog == null || !catalog.TryGet(item.ItemId, out var def)) continue;
             if (PlacementCheck.IsHungAgainst(def, item.transform.position, item.transform.rotation, floor, IsSegmentWall)) count++;
         }
         return count;

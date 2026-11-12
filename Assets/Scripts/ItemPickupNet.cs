@@ -19,7 +19,24 @@ public class ItemPickupNet : NetworkBehaviour
     /// <summary>Where an item may be placed.</summary>
     public enum Mounting { Floor, Wall, FloorOrWall }
 
+    [Tooltip("Its catalog id. For a sized item (clothing, shoes) this is the item; which size it is is synced " +
+             "separately: read ItemId for the real id.")]
     [SerializeField] public int itemId;
+
+    // Which size this is (0 = not a size, else size + 1): one byte instead of a whole id.
+    private readonly NetworkVariable<byte> size =
+        new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    /// <summary>The catalog id of what this really is: a size of its item, or the item.</summary>
+    public int ItemId => size.Value == 0 ? itemId : Sizes.SizedId(itemId, size.Value - 1);
+
+    /// <summary>Host: make this the given id (one of its item's sizes). Before or after spawning.</summary>
+    public void ServerSetItemId(int id)
+    {
+        if (Sizes.TrySplit(id, out int baseId, out int index) && baseId == itemId) size.Value = (byte)(index + 1);
+        else if (id == itemId) size.Value = 0;
+        else Debug.LogWarning($"[ItemPickupNet] '{name}' (item {itemId}) can't become item {id}.", this);
+    }
     [Tooltip("Floor: stands on floors and shelves. Wall: hangs on walls (pictures, signs). FloorOrWall: either.\n" +
              "Wall items hang by their back, the side opposite their blue arrow, and never fall.")]
     [SerializeField] private Mounting mounting = Mounting.Floor;
@@ -427,7 +444,7 @@ public class ItemPickupNet : NetworkBehaviour
 
     // The middle of the item's model at a pose (its pivot may be anywhere).
     private Vector3 GetCenter(Vector3 position, Quaternion rotation) =>
-        ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(itemId, out var def) &&
+        ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(ItemId, out var def) &&
         PlacementCheck.GetTestBox(def, position, rotation, out Vector3 c, out _) ? c : position;
 
     /// <summary>Is it frozen in place (not falling)?</summary>

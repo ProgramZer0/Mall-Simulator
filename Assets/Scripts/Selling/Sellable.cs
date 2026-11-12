@@ -50,7 +50,7 @@ public class Sellable : NetworkBehaviour
     public bool IsForSale =>
         sellWhenLoose && priceCents.Value > 0 && !(TryGetComponent<StockContainer>(out var shelf) && shelf.HasStock);
 
-    public int ItemId => TryGetComponent<ItemPickupNet>(out var p) ? p.itemId : 0;
+    public int ItemId => TryGetComponent<ItemPickupNet>(out var p) ? p.ItemId : 0;
 
     public override void OnNetworkSpawn()
     {

@@ -123,7 +123,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (HeldItemId.Value != 0) return;
 
         // A delivery box gives you the item inside it.
-        int itemId = isBox ? box.ContainedItemId : pickup.itemId;
+        int itemId = isBox ? box.ContainedItemId : pickup.ItemId;
         if (itemId == 0) return;
         HeldItemId.Value = itemId;
         HeldPaint.Value = isBox ? box.ContainedPaint : pickup.Paint;
@@ -224,10 +224,10 @@ public class PlayerInventoryNet : NetworkBehaviour
         }
         else
         {
-            if (HeldItemId.Value != 0 || !target.TryGetComponent<ItemPickupNet>(out var item) || item.itemId == 0) return;
+            if (HeldItemId.Value != 0 || !target.TryGetComponent<ItemPickupNet>(out var item) || item.ItemId == 0) return;
             if (item.HasItemOnTopOnCart()) return;
             if (eco != null && eco.IsSpawned && !eco.ServerTrySpendCents(MallManager.GetTeamOf(buyer), price)) return;
-            id = item.itemId;
+            id = item.ItemId;
             HeldItemId.Value = id;
             HeldPaint.Value = item.Paint;
             HeldUnits.Value = StockContainer.GetUnitsPerCrate(id) == 0 ? 0 : item.Units;
@@ -344,6 +344,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (!onWall && cart == null) FreezeWhatsBelow(def, position, rotation);
 
         var spawned = Instantiate(def.worldNetworkPrefab, position, rotation);
+        if (def.IsSize && spawned.TryGetComponent<ItemPickupNet>(out var sized)) sized.ServerSetItemId(id);
         if (onWall && spawned.TryGetComponent<ItemPickupNet>(out var hung))
             hung.ServerPrepareFrozen(onWall: true); // hangs there; never falls
         else if (cart != null && spawned.TryGetComponent<ItemPickupNet>(out var load))
