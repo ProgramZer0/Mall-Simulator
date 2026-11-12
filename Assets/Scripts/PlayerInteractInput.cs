@@ -781,8 +781,16 @@ public class PlayerInteractInput : NetworkBehaviour
 
     /* ========================= PLACEMENT ========================= */
 
+    private int heldLogged = -1;
+    private string problemLogged;
+
     private void HandlePlacement()
     {
+        if (inventory.HeldItemId.Value != heldLogged)
+        {
+            heldLogged = inventory.HeldItemId.Value;
+            if (heldLogged != 0) ItemDebug.Log($"Now holding {ItemDebug.Describe(heldLogged)}.");
+        }
         if (inventory.HeldItemId.Value == 0)
         {
             DestroyGhost();
@@ -795,7 +803,10 @@ public class PlayerInteractInput : NetworkBehaviour
 
         // Right-click toggles the preview on/off; Esc also cancels it.
         if (Input.GetMouseButtonDown(1) && !placePending)
+        {
             previewActive = !previewActive;
+            ItemDebug.Log($"Place preview {(previewActive ? "on" : "off")} for {ItemDebug.Describe(inventory.HeldItemId.Value)}.");
+        }
         if (previewActive && Input.GetKeyDown(KeyCode.Escape))
             previewActive = false;
 
@@ -815,9 +826,15 @@ public class PlayerInteractInput : NetworkBehaviour
                 inventory.SetHandVisualHidden(false);
         }
 
+        if (confirmPlace && previewing && ghostPreview == null)
+            ItemDebug.Log("Click to place, but there's no preview (see the line above about the preview).");
         if (confirmPlace && ghostPreview != null)
         {
-            if (!IsPlacementValid(ghostPreview)) return;
+            if (!IsPlacementValid(ghostPreview))
+            {
+                ItemDebug.Log($"Can't place here: {PlacementProblem(ghostPreview)}.");
+                return;
+            }
 
             if (TryGetPlacementPose(out Vector3 pos, out Quaternion rot))
             {
@@ -851,6 +868,13 @@ public class PlayerInteractInput : NetworkBehaviour
 
         bool valid = IsPlacementValid(ghostPreview);
         UpdateGhostColor(valid);
+        // Why it's red, once each time the reason changes.
+        string problem = valid ? null : PlacementProblem(ghostPreview);
+        if (problem != problemLogged)
+        {
+            problemLogged = problem;
+            if (problem != null) ItemDebug.Log($"Preview red: {problem}" + (posed ? "" : " (no spot found under the crosshair)") + ".");
+        }
 
         if (debugPlacement)
             DebugPlacement(ghostPreview.transform.position, ghostPreview.transform.rotation, valid);
@@ -862,7 +886,10 @@ public class PlayerInteractInput : NetworkBehaviour
     private void CreateGhost(GameObject boxPrefab = null)
     {
         if (!ItemCatalog.Instance.TryGet(inventory.HeldItemId.Value, out var def))
+        {
+            ItemDebug.Log($"No preview: {ItemDebug.Describe(inventory.HeldItemId.Value)}.");
             return;
+        }
 
         GameObject prefab;
         if (boxPrefab != null)
@@ -871,7 +898,13 @@ public class PlayerInteractInput : NetworkBehaviour
                 BoxGhostTemplates[boxPrefab] = prefab = GhostBuilder.BuildTemplate(boxPrefab, validAlpha);
         }
         else prefab = def.GetGhostPrefab();
-        if (prefab == null) return;
+        if (prefab == null)
+        {
+            ItemDebug.Log($"No preview: couldn't build a ghost for {ItemDebug.Describe(def.id)}" +
+                          (boxPrefab != null ? $" (as its box '{boxPrefab.name}')" : "") + ".");
+            return;
+        }
+        ItemDebug.Log($"Preview made for {ItemDebug.Describe(def.id)}{(boxPrefab != null ? $" as its box '{boxPrefab.name}'" : "")}.");
         ghostIsBox = boxPrefab != null;
 
         ghostPreview = Instantiate(prefab);
@@ -1111,6 +1144,24 @@ public class PlayerInteractInput : NetworkBehaviour
             Debug.DrawLine(p[i + 4], p[(i + 1) % 4 + 4], col); // top
             Debug.DrawLine(p[i], p[i + 4], col); // sides
         }
+    }
+
+    // The first rule IsPlacementValid fails, in words (for logs).
+    private string PlacementProblem(GameObject ghost)
+    {
+        if (ghost == null) return "no preview";
+        Vector3 at = ghost.transform.position;
+        if (!MallManager.CanPickupOrPlace(OwnerClientId, transform.position, at)) return "store rules (not your store, or you're outside it)";
+        if (MallManager.IsOthersShipmentArea(OwnerClientId, at)) return "another store's shipment area";
+        if (MallManager.IsNoPlaceZone(at)) return "no-place zone (docks)";
+        if ((placingOnCart || placingBoxed) && cartBoxPrefab != null)
+            return FitsBoxAt(cartBoxPrefab, at, ghost.transform.rotation) ? "ok" : $"its box '{cartBoxPrefab.name}' doesn't fit";
+        int id = inventory.HeldItemId.Value;
+        if (!placingOnWall && !placingOnCart && ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(id, out var def) &&
+            PlacementCheck.GetMounting(def) == ItemPickupNet.Mounting.Wall) return "wall-only item not aimed at a wall";
+        return FitsAt(id, at, ghost.transform.rotation, placingOnWall)
+            ? "ok"
+            : $"blocked or no support {(placingOnWall ? "on the wall" : "on the floor")} (turn on Debug Placement for the boxes)";
     }
 
     private bool IsPlacementValid(GameObject ghost)

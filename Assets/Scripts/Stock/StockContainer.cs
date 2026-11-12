@@ -215,6 +215,18 @@ public class StockContainer : NetworkBehaviour
     public int GetCapacity(int zone, int itemId, int orient) =>
         Accepts(zone, itemId) && TryGetLayout(zone, itemId, OrientFor(zone, itemId, orient), out var l) ? l.capacity : 0;
 
+    /// <summary>Why one more of this product can't go in this zone (for logs); "ok" if it can.</summary>
+    public string WhyCantStock(int zone, int itemId, int orient)
+    {
+        if (zone < 0 || zone >= ZoneCount) return $"no zone {zone}";
+        var z = GetZone(zone);
+        if (z.count > 0 && z.itemId != itemId) return $"zone holds {ItemDebug.Describe(z.itemId)}";
+        if (!Accepts(zone, itemId)) return $"the crate has no {(IsHangRail(zone) ? "Hang" : "Shelf")} Prefab for this zone";
+        if (!TryGetLayout(zone, itemId, OrientFor(zone, itemId, orient), out var l)) return "the product doesn't fit this zone in that orientation";
+        if (z.count >= l.capacity) return $"full ({z.count}/{l.capacity})";
+        return "ok";
+    }
+
     /// <summary>Can one more of this product go in this zone? (orient: the pick, if the zone is empty.)</summary>
     public bool HasRoomFor(int zone, int itemId, int orient)
     {

@@ -124,6 +124,8 @@ public class PlayerInventoryNet : NetworkBehaviour
 
         // A delivery box gives you the item inside it.
         int itemId = isBox ? box.ContainedItemId : pickup.ItemId;
+        ItemDebug.Log($"Pick up by client {rpcParams.Receive.SenderClientId}: '{pickup.name}' " +
+                      $"{(isBox ? "(a box holding " : "(")}{ItemDebug.Describe(itemId)}).", pickup);
         if (itemId == 0) return;
         HeldItemId.Value = itemId;
         HeldPaint.Value = isBox ? box.ContainedPaint : pickup.Paint;
@@ -144,13 +146,16 @@ public class PlayerInventoryNet : NetworkBehaviour
     public void RequestStockServerRpc(NetworkObjectReference containerRef, int zone, int orient, ServerRpcParams rpcParams = default)
     {
         int id = HeldItemId.Value;
-        if (id == 0 || !StockContainer.IsStockCrate(id)) return;
-        if (!TryGetContainerZone(containerRef, zone, rpcParams.Receive.SenderClientId, out var container, out var at)) return;
+        ItemDebug.Log($"Stock {ItemDebug.Describe(id)} into zone {zone} (orient {orient}).");
+        if (id == 0 || !StockContainer.IsStockCrate(id)) { ItemDebug.Log("Stock refused: not holding a stock crate (or it has no Shelf/Hang Prefab)."); return; }
+        if (!TryGetContainerZone(containerRef, zone, rpcParams.Receive.SenderClientId, out var container, out var at))
+        { ItemDebug.Log("Stock refused: shelf missing, too far, bad zone, or not your store."); return; }
 
         // A shelf still settling after being put down stops where it is first, so its stock can't send it flying.
         if (container.TryGetComponent<ItemPickupNet>(out var shelf)) shelf.ServerFreezeNow();
 
-        if (!container.ServerAddOne(zone, id, orient)) return; // full, holds something else, or wrong kind of zone
+        if (!container.ServerAddOne(zone, id, orient)) // full, holds something else, or wrong kind of zone
+        { ItemDebug.Log($"Stock refused by '{container.name}': {container.WhyCantStock(zone, id, orient)}.", container); return; }
 
         // The empty crate goes away.
         int left = Mathf.Max(1, HeldUnits.Value) - 1;
@@ -301,27 +306,29 @@ public class PlayerInventoryNet : NetworkBehaviour
     public void RequestPlaceServerRpc(Vector3 position, Quaternion rotation, bool onWall, bool onCart,
                                       ServerRpcParams rpcParams = default)
     {
-        if (HeldItemId.Value == 0) return;
+        if (HeldItemId.Value == 0) { ItemDebug.Log("Place refused: holding nothing."); return; }
         int id = HeldItemId.Value;
+        ItemDebug.Log($"Place {ItemDebug.Describe(id)} at {position} (wall {onWall}, cart {onCart}).");
 
         var actor = NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject;
-        if (Vector3.Distance(actor.transform.position, position) > 5.0f) return;
+        if (Vector3.Distance(actor.transform.position, position) > 5.0f) { ItemDebug.Log("Place refused: too far."); return; }
 
         // Store rules: only from inside your own store, only onto a spot inside your own store.
         if (!MallManager.CanPickupOrPlace(rpcParams.Receive.SenderClientId,
-                actor.transform.position, position)) return;
+                actor.transform.position, position)) { ItemDebug.Log("Place refused: store rules (not your store, or you're outside it)."); return; }
 
         // Can't park things on another store's shipment spots, or anywhere at the docks (except on a cart).
-        if (MallManager.IsOthersShipmentArea(rpcParams.Receive.SenderClientId, position)) return;
-        if (MallManager.IsNoPlaceZone(position)) return;
+        if (MallManager.IsOthersShipmentArea(rpcParams.Receive.SenderClientId, position)) { ItemDebug.Log("Place refused: another store's shipment area."); return; }
+        if (MallManager.IsNoPlaceZone(position)) { ItemDebug.Log("Place refused: no-place zone (docks)."); return; }
 
-        if (!ItemCatalog.Instance.TryGet(id, out var def) || def.worldNetworkPrefab == null) return;
+        if (!ItemCatalog.Instance.TryGet(id, out var def) || def.worldNetworkPrefab == null) { ItemDebug.Log("Place refused: not in the catalog or no world prefab."); return; }
 
         // Set down on a cart: it goes on packed in its shipment box, to save room. Wall pieces always
         // go down in their box (they come out in edit mode).
         var boxPrefab = onCart || PlacementCheck.StaysBoxed(def) ? PlacementCheck.CartBoxOf(def) : null;
         if (boxPrefab != null)
         {
+            ItemDebug.Log($"Placing it in its box '{boxPrefab.name}' ({(onCart ? "on a cart" : "stays boxed")}).");
             ServerPlaceBox(def, boxPrefab, position, rotation, rpcParams.Receive.SenderClientId, onCart);
             return;
         }
@@ -330,9 +337,10 @@ public class PlayerInventoryNet : NetworkBehaviour
         // walls/other items, and two players can't drop things into the same spot at once.
         // Only wall items go on walls, and wall-only items only on walls.
         var mounting = PlacementCheck.GetMounting(def);
-        if (onWall ? mounting == ItemPickupNet.Mounting.Floor : mounting == ItemPickupNet.Mounting.Wall && !onCart) return;
+        if (onWall ? mounting == ItemPickupNet.Mounting.Floor : mounting == ItemPickupNet.Mounting.Wall && !onCart)
+        { ItemDebug.Log($"Place refused: mounting {mounting} doesn't allow {(onWall ? "walls" : "floors")}."); return; }
 
-        if (interact == null || !interact.FitsAt(id, position, rotation, onWall)) return;
+        if (interact == null || !interact.FitsAt(id, position, rotation, onWall)) { ItemDebug.Log("Place refused: doesn't fit there (host's check)."); return; }
 
         // Set down on a cart: it rides along from the start (no falling, so it can't be left behind).
         CartNet cart = null;
@@ -344,7 +352,11 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (!onWall && cart == null) FreezeWhatsBelow(def, position, rotation);
 
         var spawned = Instantiate(def.worldNetworkPrefab, position, rotation);
-        if (def.IsSize && spawned.TryGetComponent<ItemPickupNet>(out var sized)) sized.ServerSetItemId(id);
+        if (def.IsSize && spawned.TryGetComponent<ItemPickupNet>(out var sized))
+        {
+            sized.ServerSetItemId(id);
+            ItemDebug.Log($"Placed size: spawned '{spawned.name}' now reads {ItemDebug.Describe(sized.ItemId)}.", spawned);
+        }
         if (onWall && spawned.TryGetComponent<ItemPickupNet>(out var hung))
             hung.ServerPrepareFrozen(onWall: true); // hangs there; never falls
         else if (cart != null && spawned.TryGetComponent<ItemPickupNet>(out var load))
