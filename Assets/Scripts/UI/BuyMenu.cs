@@ -186,6 +186,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         eco.OrderResultReceived += OnOrderResult;
         subscribedTo = eco;
         if (ProgressionManager.Instance != null) ProgressionManager.Instance.LevelChanged += RefreshItems;
+        if (LicenseManager.Instance != null) LicenseManager.Instance.Changed += RefreshItems;
     }
 
     private void Unsubscribe()
@@ -195,6 +196,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         subscribedTo.OrderResultReceived -= OnOrderResult;
         subscribedTo = null;
         if (ProgressionManager.Instance != null) ProgressionManager.Instance.LevelChanged -= RefreshItems;
+        if (LicenseManager.Instance != null) LicenseManager.Instance.Changed -= RefreshItems;
     }
 
     /* ========================= ITEMS & PAGES ========================= */
@@ -385,9 +387,13 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         if (icon != null && def.icon != null) icon.sprite = def.icon;
         if (nameText != null) nameText.text = def.displayName;
         // Locked until the team's level reaches the item's Min Level.
-        bool locked = !ProgressionManager.CanOrder(LocalTeam, def);
+        bool levelLocked = !ProgressionManager.CanOrder(LocalTeam, def);
+        bool licenseLocked = !LicenseManager.CanOrder(LocalTeam, def, out var license);
+        bool locked = levelLocked || licenseLocked;
         if (priceText != null)
-            priceText.text = locked ? $"Level {def.minLevel}" : $"${MarketModifiers.OrderCost(def) + MarketModifiers.DeliveryFee(def):N0}";
+            priceText.text = levelLocked ? $"Level {def.minLevel}"
+                : licenseLocked ? $"Needs {license.displayName}"
+                : $"${MarketModifiers.OrderCost(def) + MarketModifiers.DeliveryFee(def):N0}";
         if (button != null)
         {
             button.onClick.RemoveAllListeners();
@@ -419,6 +425,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     {
         if (plot == null) return;
         if (!ProgressionManager.CanOrder(LocalTeam, def)) { ShowStatus($"Reach level {def.minLevel} to order {def.displayName}."); return; }
+        if (!LicenseManager.CanOrder(LocalTeam, def, out var needs)) { ShowStatus($"{def.displayName} needs the {needs.displayName} (Licenses tab)."); return; }
 
         // Paintable items come in the picked color; the rest ignore it.
         byte paint = paintBar != null && PaintParts.IsPaintable(def) ? paintBar.Selected : (byte)0;
@@ -517,6 +524,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         EconomyManager.OrderResult.UnknownItem => "One of those items can't be ordered.",
         EconomyManager.OrderResult.BadQuantity => "Too many items in one order.",
         EconomyManager.OrderResult.LevelTooLow => "Your team's level is too low for one of those items.",
+        EconomyManager.OrderResult.NeedsLicense => "One of those items needs a license (Licenses tab).",
         _ => r.ToString(),
     };
 
