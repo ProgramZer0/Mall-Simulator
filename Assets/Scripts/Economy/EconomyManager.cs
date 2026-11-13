@@ -403,6 +403,11 @@ public class EconomyManager : NetworkBehaviour
         if (cost > int.MaxValue || !ServerTrySpend(team, (int)cost))
             return OrderResult.NotEnoughMoney;
 
+        // Licenses used by this order (giving up an unused one earns a help point).
+        if (LicenseManager.Instance != null)
+            for (int i = 0; i < itemIds.Length; i++)
+                if (ItemCatalog.Instance.TryGet(itemIds[i], out var licensed)) LicenseManager.Instance.ServerNoteOrdered(team, licensed);
+
         // What was paid, for the store's profit when it sells (see ProgressionManager).
         var progression = ProgressionManager.Instance;
         if (progression != null)

@@ -244,5 +244,6 @@ public class MallVoteManager : NetworkBehaviour
         if (winner >= 0 && events != null) events.ServerStart(events.Events[winner]);
         lastWinner.Value = winner;
         open.Value = false;
+        if (HelpPoints.Instance != null) HelpPoints.Instance.ServerNewPeriod(); // help caps start over
     }
 }

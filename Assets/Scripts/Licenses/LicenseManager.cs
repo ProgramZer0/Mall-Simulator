@@ -6,8 +6,9 @@ using UnityEngine;
 /// <summary>
 /// Licenses (one in the scene, with a NetworkObject): a team needs the license for each licensed
 /// category of an item to order it. A limited number per mall; how many a team can hold goes up with
-/// its level; selling one back refunds part of its price and frees it for others. Items already on
-/// shelves can still be sold after a license is sold.
+/// its level. Giving one up frees it for others (no money back); giving up one the team never ordered
+/// anything with earns the player a help point (HelpPoints, capped per voting period). Items already
+/// on shelves can still be sold after a license is given up.
 ///
 /// Network: one small synced list of (license, team) pairs. The host checks every buy, sell and order.
 /// </summary>
@@ -25,10 +26,8 @@ public class LicenseManager : NetworkBehaviour
     }
 
     [SerializeField] private List<LicenseDef> licenses = new();
-    [Tooltip("Share of the price given back when a license is sold (0.5 = half).")]
-    [SerializeField, Range(0f, 1f)] private float sellBackShare = 0.5f;
     [Tooltip("Licenses a team can hold at level 1.")]
-    [SerializeField, Min(0)] private int licensesAtStart = 1;
+    [SerializeField, Min(0)] private int licensesAtStart = 2;
     [Tooltip("One more license every this many levels.")]
     [SerializeField, Min(1)] private int levelsPerExtraLicense = 5;
 
@@ -41,6 +40,7 @@ public class LicenseManager : NetworkBehaviour
 
     private NetworkList<Held> held;
     private readonly Dictionary<int, LicenseDef> byId = new();
+    private readonly HashSet<(int licenseId, ulong team)> used = new(); // host: ordered something with it
 
     private void Awake()
     {
@@ -102,8 +102,6 @@ public class LicenseManager : NetworkBehaviour
     /// <summary>How many licenses a team's level lets it hold.</summary>
     public int AllowedFor(ulong team) => licensesAtStart + (ProgressionManager.LevelOf(team) - 1) / levelsPerExtraLicense;
 
-    public int SellBackPrice(LicenseDef l) => Mathf.FloorToInt(l.price * sellBackShare);
-
     /// <summary>The first license this item needs that the team doesn't hold (null: it can be ordered).</summary>
     public LicenseDef MissingFor(ulong team, ItemDef item)
     {
@@ -136,7 +134,16 @@ public class LicenseManager : NetworkBehaviour
     /* ========================= BUY / SELL ========================= */
 
     public void RequestBuy(int licenseId) => BuyRpc(licenseId);
-    public void RequestSell(int licenseId) => SellRpc(licenseId);
+    /// <summary>Give a license back to the mall (no money back).</summary>
+    public void RequestGiveUp(int licenseId) => GiveUpRpc(licenseId);
+
+    /// <summary>Host: a team ordered this item: the licenses it needed have been used.</summary>
+    public void ServerNoteOrdered(ulong team, ItemDef item)
+    {
+        if (!IsServer || item == null) return;
+        foreach (var l in licenses)
+            if (l != null && item.HasCategory(l.category) && Holds(team, l.id)) used.Add((l.id, team));
+    }
 
     [Rpc(SendTo.Server, RequireOwnership = false)]
     private void BuyRpc(int licenseId, RpcParams rpcParams = default)
@@ -150,13 +157,14 @@ public class LicenseManager : NetworkBehaviour
         else
         {
             held.Add(new Held { licenseId = l.id, teamId = team });
+            used.Remove((l.id, team)); // a fresh license: not used yet
             result = "";
         }
         ResultRpc(result ?? "", RpcTarget.Single(sender, RpcTargetUse.Temp));
     }
 
     [Rpc(SendTo.Server, RequireOwnership = false)]
-    private void SellRpc(int licenseId, RpcParams rpcParams = default)
+    private void GiveUpRpc(int licenseId, RpcParams rpcParams = default)
     {
         ulong sender = rpcParams.Receive.SenderClientId;
         ulong team = MallManager.GetTeamOf(sender);
@@ -165,8 +173,9 @@ public class LicenseManager : NetworkBehaviour
         {
             if (held[i].teamId != team || held[i].licenseId != licenseId) continue;
             held.RemoveAt(i);
-            if (byId.TryGetValue(licenseId, out var l) && EconomyManager.Instance != null)
-                EconomyManager.Instance.ServerAddMoney(team, SellBackPrice(l));
+            // Never ordered anything with it: freeing it for others is a help.
+            if (!used.Remove((licenseId, team)) && HelpPoints.Instance != null)
+                HelpPoints.Instance.ServerAward(sender, HelpPoints.HelpAction.GaveUpUnusedLicense);
             result = "";
             break;
         }
@@ -181,5 +190,6 @@ public class LicenseManager : NetworkBehaviour
     {
         if (!IsServer) return;
         for (int i = held.Count - 1; i >= 0; i--) if (held[i].teamId == team) held.RemoveAt(i);
+        used.RemoveWhere(u => u.team == team);
     }
 }

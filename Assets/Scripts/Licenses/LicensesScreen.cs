@@ -5,7 +5,7 @@ using UnityEngine;
 /// <summary>
 /// The shop monitor's Licenses tab (make it a tab's screen on the ShopUIController): every license
 /// (LicenseManager → Licenses) as a card in a grid. Hover a card for its details; click to buy it, or
-/// (if your team holds it) click twice to sell it back. Cards that can't be bought are greyed out and
+/// (if your team holds it) click twice to give it up (no money back). Cards that can't be bought are greyed out and
 /// the pop-up says why.
 ///
 /// Setup, no layout groups: Card Parent is a Scroll View's Content (anchored top, stretched across);
@@ -33,8 +33,8 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
     private readonly List<LicenseDef> shown = new();
     private LicenseManager subscribedTo;
     private LicenseCard hovered;
-    private int sellArmed;          // license id waiting for its second click to sell (0 = none)
-    private float sellArmedUntil;
+    private int giveUpArmed;        // license id waiting for its second click to give up (0 = none)
+    private float giveUpArmedUntil;
     private bool dirty;
 
     private void Awake()
@@ -64,7 +64,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
     public void OnShopOpened(StorePlot plot)
     {
         Status("");
-        sellArmed = 0;
+        giveUpArmed = 0;
         Subscribe();
         Build();
     }
@@ -86,7 +86,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
 
     private void Update()
     {
-        if (sellArmed != 0 && Time.unscaledTime > sellArmedUntil) { sellArmed = 0; dirty = true; }
+        if (giveUpArmed != 0 && Time.unscaledTime > giveUpArmedUntil) { giveUpArmed = 0; dirty = true; }
         // Money changes what can be bought; cheap to check now and then.
         if (!dirty && Time.frameCount % 30 != 0) return;
         dirty = false;
@@ -157,17 +157,17 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
 
         if (lm.Holds(team, l.id))
         {
-            if (sellArmed != l.id)
+            if (giveUpArmed != l.id)
             {
-                sellArmed = l.id;
-                sellArmedUntil = Time.unscaledTime + 3f;
-                Status($"Click again to sell {l.displayName} for ${lm.SellBackPrice(l):N0}.");
+                giveUpArmed = l.id;
+                giveUpArmedUntil = Time.unscaledTime + 3f;
+                Status($"Click again to give up {l.displayName} (no money back).");
                 dirty = true;
                 return;
             }
-            sellArmed = 0;
-            lm.RequestSell(l.id);
-            Status($"Selling {l.displayName}...");
+            giveUpArmed = 0;
+            lm.RequestGiveUp(l.id);
+            Status($"Giving up {l.displayName}...");
             return;
         }
         if (!lm.CanBuy(team, l, out string why)) { Status(why); return; }
@@ -202,9 +202,9 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
             text += $"Unlocks: {l.category} items\nPrice: ${l.price:N0}";
             if (l.perMall > 0) text += $"\nHeld: {lm.HolderCount(l.id)} of {l.perMall} in the mall";
             if (l.minLevel > 1) text += $"\nNeeds level {l.minLevel}";
-            if (mine) text += sellArmed == l.id
-                ? $"\n\nClick again to sell for ${lm.SellBackPrice(l):N0}"
-                : $"\n\nYours. Click twice to sell for ${lm.SellBackPrice(l):N0}";
+            if (mine) text += giveUpArmed == l.id
+                ? "\n\nClick again to give it up (no money back)"
+                : "\n\nYours. Click twice to give it up (no money back; a help point if you never used it)";
             else text += lm.CanBuy(team, l, out string why) ? "\n\nClick to buy" : $"\n\nCan't buy: {why}";
             tooltipDescriptionText.text = text;
         }
