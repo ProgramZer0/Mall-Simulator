@@ -205,7 +205,7 @@ public class NotificationManager : NetworkBehaviour
                 if (l == null) continue;
                 bool now = licensesNow.Contains(l.id), before = licensesSeen.Contains(l.id);
                 if (now && !before) Notifications.Post($"License bought: {l.displayName}");
-                else if (!now && before) Notifications.Post($"License sold: {l.displayName}");
+                else if (!now && before) Notifications.Post($"License given up: {l.displayName}");
             }
         licensesSeen.Clear();
         licensesSeen.UnionWith(licensesNow);

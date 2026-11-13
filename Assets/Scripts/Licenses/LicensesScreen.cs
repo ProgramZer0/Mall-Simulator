@@ -5,13 +5,15 @@ using UnityEngine;
 /// <summary>
 /// The shop monitor's Licenses tab (make it a tab's screen on the ShopUIController): every license
 /// (LicenseManager → Licenses) as a card in a grid. Hover a card for its details; click to buy it, or
-/// (if your team holds it) click twice to sell it back. Cards that can't be bought are greyed out and
-/// the pop-up says why.
+/// (if your team holds it) click to give it up (no money back), after a Yes on the confirm pop-up.
+/// Cards that can't be bought are greyed out and the hover pop-up says why.
 ///
 /// Setup, no layout groups: Card Parent is a Scroll View's Content (anchored top, stretched across);
 /// Card Prefab (a LicenseCard) is laid out in a grid (Cell Size, Cell Spacing, Padding; as many columns
 /// as fit). Tooltip Root: a panel (hidden at start, last on the screen, Raycast Target off on its
 /// graphics) with Tooltip Name and Tooltip Description texts. Optional Summary Text and Status Text.
+/// Confirm Root (optional): a pop-up panel (hidden at start, last on the screen) asking before giving a
+/// license up, with Confirm Text, Yes and No buttons. Without it, giving up takes two clicks.
 /// </summary>
 public class LicensesScreen : MonoBehaviour, IShopScreen
 {
@@ -29,17 +31,26 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
     [SerializeField] private TMP_Text summaryText;
     [SerializeField] private TMP_Text statusText;
 
+    [Header("Give Up Pop-up")]
+    [SerializeField] private GameObject confirmRoot;
+    [SerializeField] private TMP_Text confirmText;
+    [SerializeField] private UnityEngine.UI.Button confirmYes;
+    [SerializeField] private UnityEngine.UI.Button confirmNo;
+
     private readonly List<LicenseCard> cards = new();
     private readonly List<LicenseDef> shown = new();
     private LicenseManager subscribedTo;
     private LicenseCard hovered;
-    private int sellArmed;          // license id waiting for its second click to sell (0 = none)
-    private float sellArmedUntil;
+    private int giveUpArmed;        // license id waiting for its second click to give up (0 = none)
+    private float giveUpArmedUntil;
     private bool dirty;
 
     private void Awake()
     {
         if (tooltipRoot != null) tooltipRoot.SetActive(false);
+        if (confirmRoot != null) confirmRoot.SetActive(false);
+        if (confirmYes != null) confirmYes.onClick.AddListener(ConfirmGiveUp);
+        if (confirmNo != null) confirmNo.onClick.AddListener(CloseConfirm);
         if (cardParent != null)
             foreach (var g in cardParent.GetComponents<UnityEngine.UI.LayoutGroup>()) g.enabled = false;
     }
@@ -59,12 +70,13 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
         }
         subscribedTo = null;
         HideTooltip();
+        CloseConfirm();
     }
 
     public void OnShopOpened(StorePlot plot)
     {
         Status("");
-        sellArmed = 0;
+        giveUpArmed = 0;
         Subscribe();
         Build();
     }
@@ -86,7 +98,9 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
 
     private void Update()
     {
-        if (sellArmed != 0 && Time.unscaledTime > sellArmedUntil) { sellArmed = 0; dirty = true; }
+        // Two-click give up times out (the pop-up waits for an answer).
+        if (giveUpArmed != 0 && (confirmRoot == null || !confirmRoot.activeSelf) && Time.unscaledTime > giveUpArmedUntil)
+        { giveUpArmed = 0; dirty = true; }
         // Money changes what can be bought; cheap to check now and then.
         if (!dirty && Time.frameCount % 30 != 0) return;
         dirty = false;
@@ -157,22 +171,50 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
 
         if (lm.Holds(team, l.id))
         {
-            if (sellArmed != l.id)
+            if (confirmRoot != null)
             {
-                sellArmed = l.id;
-                sellArmedUntil = Time.unscaledTime + 3f;
-                Status($"Click again to sell {l.displayName} for ${lm.SellBackPrice(l):N0}.");
+                // Ask first.
+                giveUpArmed = l.id;
+                if (confirmText != null)
+                    confirmText.text = $"Give up the {l.displayName}?\nNo money back, and no ordering " +
+                                       $"{l.category} items until you buy one again.";
+                HideTooltip();
+                confirmRoot.SetActive(true);
+                confirmRoot.transform.SetAsLastSibling();
+                return;
+            }
+            if (giveUpArmed != l.id)
+            {
+                giveUpArmed = l.id;
+                giveUpArmedUntil = Time.unscaledTime + 3f;
+                Status($"Click again to give up {l.displayName} (no money back).");
                 dirty = true;
                 return;
             }
-            sellArmed = 0;
-            lm.RequestSell(l.id);
-            Status($"Selling {l.displayName}...");
+            giveUpArmed = 0;
+            lm.RequestGiveUp(l.id);
+            Status($"Giving up {l.displayName}...");
             return;
         }
         if (!lm.CanBuy(team, l, out string why)) { Status(why); return; }
         lm.RequestBuy(l.id);
         Status($"Buying {l.displayName}...");
+    }
+
+    private void ConfirmGiveUp()
+    {
+        var lm = LicenseManager.Instance;
+        int id = giveUpArmed;
+        CloseConfirm();
+        if (lm == null || id == 0) return;
+        lm.RequestGiveUp(id);
+        Status("Giving up the license...");
+    }
+
+    private void CloseConfirm()
+    {
+        giveUpArmed = 0;
+        if (confirmRoot != null) confirmRoot.SetActive(false);
     }
 
     private void OnResult(string result) => Status(string.IsNullOrEmpty(result) ? "Done." : result);
@@ -202,9 +244,9 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
             text += $"Unlocks: {l.category} items\nPrice: ${l.price:N0}";
             if (l.perMall > 0) text += $"\nHeld: {lm.HolderCount(l.id)} of {l.perMall} in the mall";
             if (l.minLevel > 1) text += $"\nNeeds level {l.minLevel}";
-            if (mine) text += sellArmed == l.id
-                ? $"\n\nClick again to sell for ${lm.SellBackPrice(l):N0}"
-                : $"\n\nYours. Click twice to sell for ${lm.SellBackPrice(l):N0}";
+            if (mine) text += giveUpArmed == l.id
+                ? "\n\nClick again to give it up (no money back)"
+                : $"\n\nYours. Click{(confirmRoot != null ? "" : " twice")} to give it up (no money back; a help point if you haven't used it in a while)";
             else text += lm.CanBuy(team, l, out string why) ? "\n\nClick to buy" : $"\n\nCan't buy: {why}";
             tooltipDescriptionText.text = text;
         }
