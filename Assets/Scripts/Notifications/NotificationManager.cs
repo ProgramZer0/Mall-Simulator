@@ -12,6 +12,8 @@ using UnityEngine;
 /// - What only the host knows (a delivery arrived, the dock is full) goes as a short code and two
 ///   numbers, only to that team's players; each machine writes the text itself.
 /// - ServerNotifyTeamText sends text, for anything without a code yet.
+/// Titles say everything on their own (the phone and toasts can show just the title); the body is
+/// optional extra detail.
 /// </summary>
 public class NotificationManager : NetworkBehaviour
 {
@@ -106,11 +108,11 @@ public class NotificationManager : NetworkBehaviour
         switch (kind)
         {
             case Kind.Delivered:
-                title = "Delivery arrived";
+                title = $"{b} box{(b == 1 ? "" : "es")} at the dock for {store}";
                 body = $"{b} box{(b == 1 ? "" : "es")} for {store} at the loading dock.";
                 break;
             case Kind.DockFull:
-                title = "Delivery waiting";
+                title = $"Dock full: {store}'s delivery is waiting";
                 body = $"No room at the loading dock for {store}'s delivery. Clear some space.";
                 alarm = true;
                 break;
@@ -157,7 +159,7 @@ public class NotificationManager : NetworkBehaviour
         events.GetActive(activeNow);
         foreach (var def in activeNow)
             if (activeSeen.Add(def) && post)
-                Notifications.Post(def.displayName, string.IsNullOrEmpty(def.description) ? "A mall event has started." : def.description);
+                Notifications.Post($"Mall event: {def.displayName}", string.IsNullOrEmpty(def.description) ? "A mall event has started." : def.description);
         activeSeen.RemoveWhere(d => !activeNow.Contains(d));
     }
 
@@ -170,11 +172,11 @@ public class NotificationManager : NetworkBehaviour
         ballotWasOpen = open;
         if (!ballots) return;
         if (open)
-            Notifications.Post("Mall vote open", $"Vote at a kiosk: {vote.SecondsLeft / 60f:0.#} min left.");
+            Notifications.Post($"Mall vote open ({vote.SecondsLeft / 60f:0.#} min)", $"Vote at a kiosk: {vote.SecondsLeft / 60f:0.#} min left.");
         else
         {
             var winner = vote.LastWinner;
-            Notifications.Post("Mall vote closed", winner != null ? $"{winner.displayName} won." : "Nothing won this time.");
+            Notifications.Post(winner != null ? $"Vote won: {winner.displayName}" : "Mall vote closed: no winner", winner != null ? $"{winner.displayName} won." : "Nothing won this time.");
         }
     }
 
@@ -192,7 +194,7 @@ public class NotificationManager : NetworkBehaviour
         {
             int stores = ProgressionManager.StoresAllowed(team);
             int storesBefore = StoresAt(levelSeen);
-            Notifications.Post($"Level {level}!", stores > storesBefore && stores < int.MaxValue
+            Notifications.Post(stores > storesBefore && stores < int.MaxValue ? $"Level {level}! You can own {stores} stores" : $"Level {level}! New items may be unlocked", stores > storesBefore && stores < int.MaxValue
                 ? $"Your team can now own {stores} stores. New items may be unlocked in the shop."
                 : "New items may be unlocked in the shop.");
         }
@@ -205,7 +207,7 @@ public class NotificationManager : NetworkBehaviour
             int points = pm.GetPointsEarned(plot.PlotId);
             int had = pointsSeen.TryGetValue(plot.PlotId, out int h) ? h : first ? points : 0;
             if (points > had && post)
-                Notifications.Post("Perk point earned", $"{plot.DisplayName} has {pm.GetPointsAvailable(plot.PlotId)} to spend on the shop monitor's Perks tab.");
+                Notifications.Post($"{plot.DisplayName}: perk point earned", $"{plot.DisplayName} has {pm.GetPointsAvailable(plot.PlotId)} to spend on the shop monitor's Perks tab.");
             pointsSeen[plot.PlotId] = points;
         }
     }
