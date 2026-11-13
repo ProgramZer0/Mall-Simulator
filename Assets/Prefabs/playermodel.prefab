@@ -159,6 +159,7 @@ GameObject:
   - component: {fileID: 2803416138932026377}
   - component: {fileID: 5788814363474388794}
   - component: {fileID: 9197958977072773821}
+  - component: {fileID: 8280867193190613937}
   m_Layer: 7
   m_Name: playermodel
   m_TagString: Player
@@ -599,6 +600,28 @@ MonoBehaviour:
   range: 4
   storeBuffer: 0.75
   outlineColor: {r: 1, g: 0.85, b: 0.3, a: 1}
+--- !u!114 &8280867193190613937
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4772898928607901605}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c73c147cefa74ff584879369d9f09344, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PhoneController
+  phonePrefab: {fileID: 5336375860569609011, guid: 547e3193ba5dcdc488f33b69174000a6, type: 3}
+  holdOffset: {x: 0, y: -0.02, z: 0.32}
+  holdRotation: {x: 0, y: 180, z: 0}
+  raiseFrom: 1
+  raiseSeconds: 0.45
+  homeKey: 27
+  notificationsKey: 9
+  notificationsApp: Notifications
+  hintText: {fileID: 0}
+  hintFormat: 'Tab: Phone ({0})'
 --- !u!1 &5427521708554327154
 GameObject:
   m_ObjectHideFlags: 0
