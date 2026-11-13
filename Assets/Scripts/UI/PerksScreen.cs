@@ -205,8 +205,7 @@ public class PerksScreen : MonoBehaviour, IShopScreen
         }
 
         int cols = Mathf.Max(1, columns);
-        if (fitColumns && rowParent.rect.width > 0f)
-            cols = Mathf.Max(1, Mathf.FloorToInt((rowParent.rect.width - padding * 2f + cellSpacing.x) / (cellSize.x + cellSpacing.x)));
+        if (fitColumns && rowParent.rect.width > 0f) cols = UILayout.ColumnsThatFit(rowParent, cellSize, cellSpacing, padding);
 
         for (int i = 0; i < rows.Count; i++)
         {
@@ -215,17 +214,12 @@ public class PerksScreen : MonoBehaviour, IShopScreen
             if (!used) continue;
             var perk = shown[i].perk;
             var rt = (RectTransform)rows[i].transform;
-            rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
-            rt.pivot = new Vector2(0f, 1f);
-            rt.sizeDelta = cellSize;
-            rt.anchoredPosition = new Vector2(padding + (i % cols) * (cellSize.x + cellSpacing.x),
-                                              -(padding + (i / cols) * (cellSize.y + cellSpacing.y)));
+            UILayout.PlaceInGrid(rt, i, cols, cellSize, cellSpacing, padding);
             // The perk's picture; a perk without one keeps the prefab's (never hidden: it may be the button itself).
             if (rows[i].icon != null && perk.icon != null) rows[i].icon.sprite = perk.icon;
         }
 
-        int lines = (shown.Count + cols - 1) / cols;
-        float height = lines == 0 ? 0f : padding * 2f + lines * cellSize.y + (lines - 1) * cellSpacing.y;
+        float height = UILayout.GridHeight(shown.Count, cols, cellSize, cellSpacing, padding);
         rowParent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
         rowParent.anchoredPosition = new Vector2(rowParent.anchoredPosition.x, 0f); // back to the top
         HideTooltip();
@@ -310,20 +304,7 @@ public class PerksScreen : MonoBehaviour, IShopScreen
 
         tooltipRoot.SetActive(true);
         tooltipRoot.transform.SetAsLastSibling();
-        if (tooltipRoot.transform is RectTransform tip && tip.parent is RectTransform area)
-        {
-            // Beside the perk (right side, or left if it'd go off the screen), kept inside the screen.
-            var cell = (RectTransform)row.transform;
-            Vector3 corner = area.InverseTransformPoint(cell.TransformPoint(new Vector3(cell.rect.xMax, cell.rect.yMax)));
-            Vector3 left = area.InverseTransformPoint(cell.TransformPoint(new Vector3(cell.rect.xMin, cell.rect.yMax)));
-            Rect bounds = area.rect;
-            Vector2 size = tip.rect.size;
-            tip.pivot = new Vector2(0f, 1f);
-            float x = corner.x + tooltipOffset.x;
-            if (x + size.x > bounds.xMax) x = left.x - tooltipOffset.x - size.x;
-            float y = Mathf.Clamp(corner.y + tooltipOffset.y, bounds.yMin + size.y, bounds.yMax);
-            tip.localPosition = new Vector3(Mathf.Max(bounds.xMin, x), y, 0f);
-        }
+        UILayout.PlaceBeside(tooltipRoot.transform as RectTransform, (RectTransform)row.transform, tooltipOffset);
     }
 
     private void HideTooltip()

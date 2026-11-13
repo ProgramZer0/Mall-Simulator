@@ -132,6 +132,7 @@ public class NotificationManager : NetworkBehaviour
         MallEventManager.Changed += OnEventsChanged;
         MallVoteManager.Changed += OnBallotChanged;
         if (ProgressionManager.Instance != null) ProgressionManager.Instance.Changed += OnProgressChanged;
+        if (LicenseManager.Instance != null) LicenseManager.Instance.Changed += OnLicensesChanged;
 
         // What's already going on when we join isn't news.
         SnapshotEvents(post: false);
@@ -139,6 +140,8 @@ public class NotificationManager : NetworkBehaviour
         levelSeen = -1;
         pointsSeen.Clear();
         CheckProgress(post: false);
+        licensesSeen.Clear();
+        CheckLicenses(post: false);
     }
 
     private void Unwatch()
@@ -148,6 +151,7 @@ public class NotificationManager : NetworkBehaviour
         MallEventManager.Changed -= OnEventsChanged;
         MallVoteManager.Changed -= OnBallotChanged;
         if (ProgressionManager.Instance != null) ProgressionManager.Instance.Changed -= OnProgressChanged;
+        if (LicenseManager.Instance != null) LicenseManager.Instance.Changed -= OnLicensesChanged;
     }
 
     private void OnEventsChanged() => SnapshotEvents(post: mallEvents);
@@ -181,6 +185,31 @@ public class NotificationManager : NetworkBehaviour
     }
 
     private void OnProgressChanged() => CheckProgress(post: progression);
+
+    // Your team's licenses: bought (by anyone on the team) or sold.
+    private readonly HashSet<int> licensesSeen = new();
+    private readonly HashSet<int> licensesNow = new();
+
+    private void OnLicensesChanged() => CheckLicenses(post: true);
+
+    private void CheckLicenses(bool post)
+    {
+        var lm = LicenseManager.Instance;
+        if (lm == null || !lm.IsSpawned || NetworkManager == null) return;
+        ulong team = MallManager.GetTeamOf(NetworkManager.LocalClientId);
+        licensesNow.Clear();
+        foreach (var l in lm.Licenses) if (l != null && lm.Holds(team, l.id)) licensesNow.Add(l.id);
+        if (post)
+            foreach (var l in lm.Licenses)
+            {
+                if (l == null) continue;
+                bool now = licensesNow.Contains(l.id), before = licensesSeen.Contains(l.id);
+                if (now && !before) Notifications.Post($"License bought: {l.displayName}");
+                else if (!now && before) Notifications.Post($"License sold: {l.displayName}");
+            }
+        licensesSeen.Clear();
+        licensesSeen.UnionWith(licensesNow);
+    }
 
     private void CheckProgress(bool post)
     {

@@ -39,6 +39,7 @@ public class EconomyManager : NetworkBehaviour
         BadQuantity,
         NotEnoughMoney,
         LevelTooLow,     // an item needs a higher team level (ItemDef Min Level)
+        NeedsLicense,    // an item is in a licensed category the team doesn't hold (LicenseManager)
     }
 
     [Header("Deliveries")]
@@ -386,6 +387,7 @@ public class EconomyManager : NetworkBehaviour
                 return OrderResult.UnknownItem;
             if (quantities[i] < 1) return OrderResult.BadQuantity;
             if (!ProgressionManager.CanOrder(team, def)) return OrderResult.LevelTooLow;
+            if (!LicenseManager.CanOrder(team, def, out _)) return OrderResult.NeedsLicense;
 
             boxes += quantities[i];
             if (boxes > maxItemsPerOrder) return OrderResult.BadQuantity;
