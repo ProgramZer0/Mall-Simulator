@@ -6,9 +6,10 @@ using UnityEngine;
 /// <summary>
 /// Licenses (one in the scene, with a NetworkObject): a team needs the license for each licensed
 /// category of an item to order it. A limited number per mall; how many a team can hold goes up with
-/// its level. Giving one up frees it for others (no money back); giving up one the team never ordered
-/// anything with earns the player a help point (HelpPoints, capped per voting period). Items already
-/// on shelves can still be sold after a license is given up.
+/// its level. Giving one up frees it for others (no money back); giving up one the team hasn't ordered
+/// anything with for Unused For seconds (counting from when it was bought) earns the player a help
+/// point (HelpPoints, capped per voting period). Items already on shelves can still be sold after a
+/// license is given up.
 ///
 /// Network: one small synced list of (license, team) pairs. The host checks every buy, sell and order.
 /// </summary>
@@ -30,6 +31,9 @@ public class LicenseManager : NetworkBehaviour
     [SerializeField, Min(0)] private int licensesAtStart = 2;
     [Tooltip("One more license every this many levels.")]
     [SerializeField, Min(1)] private int levelsPerExtraLicense = 5;
+    [Tooltip("Giving up a license earns a help point if the team hasn't ordered anything with it for this " +
+             "long (seconds; counted from when it was bought, so buying and giving straight back doesn't count).")]
+    [SerializeField, Min(0f)] private float unusedFor = 600f;
 
     /// <summary>Who holds what changed.</summary>
     public event Action Changed;
@@ -40,7 +44,8 @@ public class LicenseManager : NetworkBehaviour
 
     private NetworkList<Held> held;
     private readonly Dictionary<int, LicenseDef> byId = new();
-    private readonly HashSet<(int licenseId, ulong team)> used = new(); // host: ordered something with it
+    // Host: when each held license was last used (an order needing it), or bought.
+    private readonly Dictionary<(int licenseId, ulong team), double> lastUsed = new();
 
     private void Awake()
     {
@@ -142,7 +147,7 @@ public class LicenseManager : NetworkBehaviour
     {
         if (!IsServer || item == null) return;
         foreach (var l in licenses)
-            if (l != null && item.HasCategory(l.category) && Holds(team, l.id)) used.Add((l.id, team));
+            if (l != null && item.HasCategory(l.category) && Holds(team, l.id)) lastUsed[(l.id, team)] = NetworkManager.ServerTime.Time;
     }
 
     [Rpc(SendTo.Server, RequireOwnership = false)]
@@ -157,7 +162,7 @@ public class LicenseManager : NetworkBehaviour
         else
         {
             held.Add(new Held { licenseId = l.id, teamId = team });
-            used.Remove((l.id, team)); // a fresh license: not used yet
+            lastUsed[(l.id, team)] = NetworkManager.ServerTime.Time; // the wait starts now
             result = "";
         }
         ResultRpc(result ?? "", RpcTarget.Single(sender, RpcTargetUse.Temp));
@@ -173,8 +178,11 @@ public class LicenseManager : NetworkBehaviour
         {
             if (held[i].teamId != team || held[i].licenseId != licenseId) continue;
             held.RemoveAt(i);
-            // Never ordered anything with it: freeing it for others is a help.
-            if (!used.Remove((licenseId, team)) && HelpPoints.Instance != null)
+            // Not used for a while: freeing it for others is a help.
+            bool idle = !lastUsed.TryGetValue((licenseId, team), out double last) ||
+                        NetworkManager.ServerTime.Time - last >= unusedFor;
+            lastUsed.Remove((licenseId, team));
+            if (idle && HelpPoints.Instance != null)
                 HelpPoints.Instance.ServerAward(sender, HelpPoints.HelpAction.GaveUpUnusedLicense);
             result = "";
             break;
@@ -190,6 +198,8 @@ public class LicenseManager : NetworkBehaviour
     {
         if (!IsServer) return;
         for (int i = held.Count - 1; i >= 0; i--) if (held[i].teamId == team) held.RemoveAt(i);
-        used.RemoveWhere(u => u.team == team);
+        var gone = new List<(int, ulong)>();
+        foreach (var key in lastUsed.Keys) if (key.team == team) gone.Add(key);
+        foreach (var key in gone) lastUsed.Remove(key);
     }
 }
