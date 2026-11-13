@@ -62,6 +62,13 @@ public class CartNet : NetworkBehaviour
     [Tooltip("Furthest a player can be from the Handle (or the cart's middle, without one) to start pushing, in meters.")]
     [SerializeField] private float grabRange = 1.5f;
 
+    // For carts made at runtime (StoreUpgrades' bigger carts): the store, synced so everyone knows.
+    private readonly NetworkVariable<int> homePlotId =
+        new(-1, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private bool hasHomePose;
+    private Vector3 homePos;
+    private Quaternion homeRot;
+
     /// <summary>Every spawned cart on this machine.</summary>
     public static readonly List<CartNet> All = new();
 
@@ -84,7 +91,39 @@ public class CartNet : NetworkBehaviour
     private int ignoredChildCount = -1;
     private int loadIgnoreCount = -1;
 
-    public StorePlot HomeStore => homeStore;
+    public StorePlot HomeStore
+    {
+        get
+        {
+            if (homeStore == null && homePlotId.Value >= 0 && MallManager.Instance != null)
+                MallManager.Instance.TryGetPlot(homePlotId.Value, out homeStore);
+            return homeStore;
+        }
+    }
+
+    /// <summary>Where Recall sends it.</summary>
+    public Pose HomePose => homeSpot != null ? new Pose(homeSpot.position, homeSpot.rotation)
+        : hasHomePose ? new Pose(homePos, homeRot) : new Pose(startPos, startRot);
+
+    /// <summary>Host, before spawning a cart made at runtime: its store and where Recall sends it.</summary>
+    public void ServerSetHome(StorePlot plot, Pose home)
+    {
+        homeStore = plot;
+        homePlotId.Value = plot != null ? plot.PlotId : -1;
+        hasHomePose = true;
+        homePos = home.position;
+        homeRot = home.rotation;
+    }
+
+    /// <summary>Host: move everything riding on this cart onto another (it keeps its place in the world).</summary>
+    public void ServerMoveLoadTo(CartNet other)
+    {
+        if (!IsServer || other == null) return;
+        var riders = new List<NetworkObject>();
+        foreach (Transform child in transform)
+            if (child.TryGetComponent<NetworkObject>(out var no) && no.IsSpawned) riders.Add(no);
+        foreach (var no in riders) no.TrySetParent(other.NetworkObject, true);
+    }
 
     /// <summary>Which way the cart faces (degrees around up), for lining things up with it.</summary>
     public float Yaw => FlatYaw(transform.forward);
@@ -176,7 +215,7 @@ public class CartNet : NetworkBehaviour
     /* ========================= QUERIES ========================= */
 
     /// <summary>Can this player push and load this cart? (Its home store's team.)</summary>
-    public bool CanUse(ulong clientId) => homeStore == null || homeStore.IsAuthorized(clientId);
+    public bool CanUse(ulong clientId) => HomeStore == null || HomeStore.IsAuthorized(clientId);
 
     /// <summary>Is this point inside the cart's load area?</summary>
     public bool InLoadArea(Vector3 worldPoint) => loadArea != null && StorePlot.BoxContains(loadArea, worldPoint);
@@ -201,7 +240,7 @@ public class CartNet : NetworkBehaviour
     public static IEnumerable<CartNet> GetCartsOf(StorePlot plot)
     {
         foreach (var cart in All)
-            if (cart != null && cart.homeStore == plot) yield return cart;
+            if (cart != null && cart.HomeStore == plot) yield return cart;
     }
 
     /* ========================= PUSH / LET GO ========================= */
@@ -250,8 +289,9 @@ public class CartNet : NetworkBehaviour
     {
         if (!IsServer) return;
         ServerRelease();
-        Vector3 pos = homeSpot != null ? homeSpot.position : startPos;
-        Quaternion rot = homeSpot != null ? homeSpot.rotation : startRot;
+        var home = HomePose;
+        Vector3 pos = home.position;
+        Quaternion rot = home.rotation;
         if (netTransform != null) netTransform.Teleport(pos, rot, transform.localScale);
         else transform.SetPositionAndRotation(pos, rot);
     }

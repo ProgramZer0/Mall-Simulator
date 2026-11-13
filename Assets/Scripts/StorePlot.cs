@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -160,7 +161,11 @@ public class StorePlot : NetworkBehaviour
     private readonly NetworkVariable<bool> closedByOwner =
         new(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    /// <summary>Raised on every client when the owner, purchased segments or edit state change.</summary>
+    // The name its owners gave it (empty = Display Name from the Inspector). See StoreUpgrades.
+    private readonly NetworkVariable<FixedString64Bytes> customName =
+        new(default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    /// <summary>Raised on every client when the owner, purchased segments, edit state or name change.</summary>
     public event Action<StorePlot> Changed;
 
     public ulong EditorClientId => editorClientId.Value;
@@ -172,7 +177,17 @@ public class StorePlot : NetworkBehaviour
     public bool IsOpen => HasOwner && !IsRenovating && !closedByOwner.Value;
 
     public int PlotId => plotId;
-    public string DisplayName => displayName;
+    /// <summary>The store's name: what its owners called it, or its default name.</summary>
+    public string DisplayName => customName.Value.Length > 0 ? customName.Value.ToString() : displayName;
+    /// <summary>The name set in the Inspector (before any rename).</summary>
+    public string DefaultName => displayName;
+
+    /// <summary>Host: rename the store (empty = back to its default name). See StoreUpgrades for the rules.</summary>
+    public void ServerSetName(string newName)
+    {
+        if (!IsServer) return;
+        customName.Value = new FixedString64Bytes(newName ?? "");
+    }
     public int Price => price;
     public bool IsStarterPlot => isStarterPlot;
     public int StartingMoney => startingMoney;
@@ -301,6 +316,7 @@ public class StorePlot : NetworkBehaviour
         purchasedSegments.OnValueChanged += OnSegmentsChanged;
         editorClientId.OnValueChanged += OnEditorChanged;
         closedByOwner.OnValueChanged += OnClosedChanged;
+        customName.OnValueChanged += OnNameChanged;
         frontOverrides.OnListChanged += OnFrontOverridesChanged;
         builtWalls.OnListChanged += OnBuiltWallsChanged;
         frontPaints.OnListChanged += OnFrontPaintChanged;
@@ -323,6 +339,7 @@ public class StorePlot : NetworkBehaviour
         purchasedSegments.OnValueChanged -= OnSegmentsChanged;
         editorClientId.OnValueChanged -= OnEditorChanged;
         closedByOwner.OnValueChanged -= OnClosedChanged;
+        customName.OnValueChanged -= OnNameChanged;
         frontOverrides.OnListChanged -= OnFrontOverridesChanged;
         builtWalls.OnListChanged -= OnBuiltWallsChanged;
         frontPaints.OnListChanged -= OnFrontPaintChanged;
@@ -333,6 +350,8 @@ public class StorePlot : NetworkBehaviour
 
         if (MallManager.Instance != null) MallManager.Instance.Unregister(this);
     }
+
+    private void OnNameChanged(FixedString64Bytes before, FixedString64Bytes now) => Changed?.Invoke(this);
 
     private void OnOwnerChanged(ulong prev, ulong next)
     {
@@ -417,6 +436,7 @@ public class StorePlot : NetworkBehaviour
         if (!IsServer) return;
         // A new owner starts this store's profit, perk points and perks over.
         if (ownerTeamId.Value != teamId && ProgressionManager.Instance != null) ProgressionManager.Instance.ServerForgetStore(plotId);
+        if (ownerTeamId.Value != teamId) customName.Value = default; // a new owner names it themselves
         ownerTeamId.Value = teamId;
     }
 
@@ -426,6 +446,7 @@ public class StorePlot : NetworkBehaviour
         if (!IsServer) return;
         ServerSetEditor(NoOwner);
         if (ProgressionManager.Instance != null) ProgressionManager.Instance.ServerForgetStore(plotId);
+        customName.Value = default;
         ownerTeamId.Value = NoOwner;
         purchasedSegments.Value = 0;
         closedByOwner.Value = false;
