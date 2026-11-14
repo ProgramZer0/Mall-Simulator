@@ -657,7 +657,14 @@ public class CheckoutCounter : NetworkBehaviour
             float len = LengthOf(it);
             if (!shown.TryGetValue(it.key, out var s))
             {
-                s = new Shown { go = MakeItemModel(it), offset = Mathf.Max(target, length - len) }; // comes in at the back
+                // Comes in at the back of the belt, once the one ahead has moved up enough to make room
+                // (until then it's still in the customer's hands, not hanging off the end).
+                if (target + len > length + 0.001f)
+                {
+                    for (int j = i + 1; j < items.Count; j++) present.Add(items[j].key);
+                    break;
+                }
+                s = new Shown { go = MakeItemModel(it), offset = length - len };
                 shown[it.key] = s;
             }
             s.offset = Mathf.Max(target, Mathf.MoveTowards(s.offset, target, step));
