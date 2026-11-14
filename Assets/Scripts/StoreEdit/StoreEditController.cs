@@ -189,6 +189,7 @@ public class StoreEditController : NetworkBehaviour
     private readonly Dictionary<EditLocalItem, ShipmentPackage> addedFrom = new();
     private ShipmentPackage placingBox;
     private readonly Dictionary<ShipmentPackage, List<(Renderer r, Collider c)>> hiddenBoxes = new();
+    private readonly Dictionary<ShipmentPackage, Rigidbody> heldStill = new(); // hidden boxes we stopped falling
     private string openingInfo;
 
     /// <summary>True while this player is in edit mode. PlayerController / PlayerInteractInput pause on it.</summary>
@@ -1184,6 +1185,14 @@ public class StoreEditController : NetworkBehaviour
         foreach (var r in box.GetComponentsInChildren<Renderer>()) if (r.enabled) { r.enabled = false; list.Add((r, null)); }
         foreach (var c in box.GetComponentsInChildren<Collider>()) if (c.enabled) { c.enabled = false; list.Add((null, c)); }
         hiddenBoxes[box] = list;
+
+        // Without its colliders a box that hasn't settled yet would fall through the floor (on the host,
+        // whose physics is the real one), and by save time it's no longer in the store. Hold it still.
+        if (box.TryGetComponent<Rigidbody>(out var rb) && !rb.isKinematic)
+        {
+            rb.isKinematic = true;
+            heldStill[box] = rb;
+        }
     }
 
     private void ShowBox(ShipmentPackage box)
@@ -1195,12 +1204,19 @@ public class StoreEditController : NetworkBehaviour
             if (c != null) c.enabled = true;
         }
         hiddenBoxes.Remove(box);
+        if (heldStill.TryGetValue(box, out var rb))
+        {
+            heldStill.Remove(box);
+            // Let it settle again (unless it was frozen in place meanwhile).
+            if (rb != null && !(box.TryGetComponent<ItemPickupNet>(out var p) && p.IsFrozen)) rb.isKinematic = false;
+        }
     }
 
     private void ShowAllBoxes()
     {
         foreach (var box in new List<ShipmentPackage>(hiddenBoxes.Keys)) ShowBox(box);
         hiddenBoxes.Clear();
+        heldStill.Clear();
     }
 
     /// <summary>
