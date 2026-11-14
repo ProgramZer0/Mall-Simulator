@@ -18,6 +18,10 @@ public class LicenseCard : MonoBehaviour, IPointerEnterHandler, IPointerExitHand
     public TMP_Text countText;
     [Tooltip("Optional: shown when your team holds it.")]
     public GameObject ownedMark;
+    [Tooltip("Optional: shown on cards that are a franchise your team holds (instead of a license).")]
+    public GameObject franchiseMark;
+    [Tooltip("Optional: tinted with the screen's Franchise Tint on franchise cards (e.g. the card's background).")]
+    public Graphic tintTarget;
 
     public event Action<LicenseCard, bool> Hovered;
 
