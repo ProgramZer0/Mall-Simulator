@@ -340,9 +340,13 @@ public class ItemPickupNet : NetworkBehaviour
         // below it is picked up (like one a player hung).
         if (IsServer && startsOnWall && !freeze.Value.frozen && !IsOnCart) ServerPrepareFrozen(onWall: true);
 
-        if (!Falls || rb == null) return;
-        if (freeze.Value.frozen) ApplyFrozen(freeze.Value);
-        else StartFalling();
+        if (Falls && rb != null)
+        {
+            if (freeze.Value.frozen) ApplyFrozen(freeze.Value);
+            else StartFalling();
+        }
+        // A shelf's stock models: snapped to where it's ended up (whichever spawned first).
+        if (TryGetComponent<StockContainer>(out var shelf)) shelf.OnMovedOrStopped();
     }
 
     // Loaded onto or taken off a cart: riding a cart isn't on display.
@@ -350,6 +354,7 @@ public class ItemPickupNet : NetworkBehaviour
     {
         base.OnNetworkObjectParentChanged(parentNetworkObject);
         StoreListing.Track(gameObject);
+        if (TryGetComponent<StockContainer>(out var shelf)) shelf.OnMovedOrStopped();
     }
 
     public override void OnNetworkDespawn()
@@ -367,9 +372,12 @@ public class ItemPickupNet : NetworkBehaviour
     private void OnFreezeChanged(FreezeState previous, FreezeState current)
     {
         StoreListing.Track(gameObject); // landed somewhere (maybe another store), or picked back up
-        if (!Falls || rb == null) return;
-        if (current.frozen) ApplyFrozen(current);
-        else if (!falling) StartFalling();
+        if (Falls && rb != null)
+        {
+            if (current.frozen) ApplyFrozen(current);
+            else if (!falling) StartFalling();
+        }
+        if (TryGetComponent<StockContainer>(out var shelf)) shelf.OnMovedOrStopped();
     }
 
     // Every machine runs the fall itself so it looks smooth; the host decides where it ends up.

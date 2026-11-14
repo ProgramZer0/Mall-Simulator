@@ -32,6 +32,19 @@ public class StockVisualFollower : MonoBehaviour
         if (Target != null) transform.SetPositionAndRotation(Target.position, Target.rotation);
     }
 
+    /// <summary>
+    /// The furniture may have started or stopped moving (landed, picked up, put on or taken off a cart):
+    /// snap to it, and only keep following every frame while it can move. Frozen furniture (nearly all
+    /// of it) costs nothing per frame.
+    /// </summary>
+    public void Refresh()
+    {
+        Sync();
+        bool canMove = Container == null || // an edit-mode copy: dragged around
+                       !Container.TryGetComponent<ItemPickupNet>(out var pickup) || !pickup.IsFrozen || pickup.IsOnCart;
+        enabled = canMove;
+    }
+
     private void LateUpdate()
     {
         if (Target == null) { Destroy(gameObject); return; } // the furniture is gone

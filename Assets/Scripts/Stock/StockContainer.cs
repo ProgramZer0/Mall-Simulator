@@ -89,6 +89,12 @@ public class StockContainer : NetworkBehaviour
     private ZoneStock[] pendingStock; // server: contents to restore when spawned (edit mode)
     private StockVisualFollower visualRoot; // unscaled holder that follows this furniture
 
+    /// <summary>This furniture started or stopped moving: its stock models follow only while it can.</summary>
+    public void OnMovedOrStopped()
+    {
+        if (visualRoot != null) visualRoot.Refresh();
+    }
+
     private int ShelfCount => stockZones != null ? stockZones.Length : 0;
     private int RailCount => hangRails != null ? hangRails.Length : 0;
 
@@ -175,7 +181,7 @@ public class StockContainer : NetworkBehaviour
     private Transform GetVisualRoot()
     {
         if (visualRoot == null) visualRoot = StockVisualFollower.Create(transform, this);
-        visualRoot.Sync();
+        visualRoot.Refresh();
         return visualRoot.transform;
     }
 
