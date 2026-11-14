@@ -115,7 +115,7 @@ public class MallVoteManager : NetworkBehaviour
     public int VoteOf(ulong clientId)
     {
         if (!IsSpawned) return -1;
-        foreach (var v in votes) if (v.clientId == clientId) return v.option;
+        foreach (var v in votes.Each()) if (v.clientId == clientId) return v.option;
         return -1;
     }
 
@@ -162,7 +162,7 @@ public class MallVoteManager : NetworkBehaviour
     {
         var counts = new int[options.Count];
         var connected = NetworkManager.ConnectedClients;
-        foreach (var v in votes)
+        foreach (var v in votes.Each())
             if (v.option >= 0 && v.option < counts.Length && connected.ContainsKey(v.clientId))
                 counts[v.option] += Mathf.Max(0, VoteWeight(v.clientId));
         for (int i = 0; i < counts.Length; i++)
@@ -253,7 +253,7 @@ public class MallVoteManager : NetworkBehaviour
         if (HelpPoints.Instance != null)
         {
             var voters = new List<ulong>();
-            foreach (var v in votes) voters.Add(v.clientId);
+            foreach (var v in votes.Each()) voters.Add(v.clientId);
             HelpPoints.Instance.ServerBallotClosed(voters); // extra votes used up, help caps start over
         }
     }

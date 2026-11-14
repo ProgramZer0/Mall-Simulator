@@ -81,7 +81,7 @@ public class SpecialMarket : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         deals.OnListChanged += OnDealsChanged;
-        foreach (var d in deals) seen.Add(d.dealId); // already up when we joined: not news
+        foreach (var d in deals.Each()) seen.Add(d.dealId); // already up when we joined: not news
         CopyView();
     }
 
@@ -106,7 +106,7 @@ public class SpecialMarket : NetworkBehaviour
     private void CopyView()
     {
         dealsView.Clear();
-        foreach (var d in deals) dealsView.Add(d);
+        foreach (var d in deals.Each()) dealsView.Add(d);
     }
 
     /// <summary>Seconds until a deal ends.</summary>
@@ -194,7 +194,7 @@ public class SpecialMarket : NetworkBehaviour
     // One deal per item (all sizes of a sized item count as one).
     private bool IsListed(int baseId)
     {
-        foreach (var d in deals)
+        foreach (var d in deals.Each())
             if (ItemCatalog.Instance.TryGet(d.itemId, out var def) && def.BaseId == baseId) return true;
         return false;
     }

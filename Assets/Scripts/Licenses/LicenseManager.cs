@@ -83,21 +83,21 @@ public class LicenseManager : NetworkBehaviour
 
     public bool Holds(ulong team, int licenseId)
     {
-        if (held != null) foreach (var h in held) if (h.teamId == team && h.licenseId == licenseId) return true;
+        if (held != null) foreach (var h in held.Each()) if (h.teamId == team && h.licenseId == licenseId) return true;
         return false;
     }
 
     public int HolderCount(int licenseId)
     {
         int n = 0;
-        if (held != null) foreach (var h in held) if (h.licenseId == licenseId) n++;
+        if (held != null) foreach (var h in held.Each()) if (h.licenseId == licenseId) n++;
         return n;
     }
 
     public int HeldBy(ulong team)
     {
         int n = 0;
-        if (held != null) foreach (var h in held) if (h.teamId == team) n++;
+        if (held != null) foreach (var h in held.Each()) if (h.teamId == team) n++;
         return n;
     }
 
@@ -105,7 +105,7 @@ public class LicenseManager : NetworkBehaviour
     public void GetHolders(int licenseId, List<ulong> into)
     {
         into.Clear();
-        if (held != null) foreach (var h in held) if (h.licenseId == licenseId) into.Add(h.teamId);
+        if (held != null) foreach (var h in held.Each()) if (h.licenseId == licenseId) into.Add(h.teamId);
     }
 
     /// <summary>How many licenses a team's level lets it hold.</summary>

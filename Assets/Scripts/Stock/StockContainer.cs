@@ -196,7 +196,7 @@ public class StockContainer : NetworkBehaviour
         get
         {
             if (!IsSpawned) return false;
-            foreach (var z in zones) if (z.count > 0) return true;
+            foreach (var z in zones.Each()) if (z.count > 0) return true;
             return false;
         }
     }

@@ -348,7 +348,7 @@ public class CheckoutCounter : NetworkBehaviour
         if (belt == null) return;
         GetBelt(out _, out _, out _, out float length, out _);
         float used = 0f;
-        foreach (var it in items) used += LengthOf(it) + itemGap;
+        foreach (var it in items.Each()) used += LengthOf(it) + itemGap;
 
         while (waiting.Count > 0)
         {
@@ -407,7 +407,7 @@ public class CheckoutCounter : NetworkBehaviour
         switch (part.action)
         {
             case CheckoutClickable.Action.ScanItem:
-                foreach (var it in items)
+                foreach (var it in items.Each())
                     if (it.key == part.value)
                         return it.customer == s.customer && !paying
                             ? $"Click: scan {NameOf(it.itemId)}{(it.tag != 0 ? " (tag)" : "")} {FormatAmount(it.priceCents)}"
@@ -569,7 +569,7 @@ public class CheckoutCounter : NetworkBehaviour
 
     private bool HasMoreFor(int customer)
     {
-        foreach (var it in items) if (it.customer == customer) return true;
+        foreach (var it in items.Each()) if (it.customer == customer) return true;
         foreach (var it in waiting) if (it.customer == customer) return true;
         return false;
     }

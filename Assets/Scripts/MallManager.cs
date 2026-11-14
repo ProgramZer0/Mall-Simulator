@@ -207,7 +207,7 @@ public class MallManager : NetworkBehaviour
     {
         var list = Instance != null ? Instance.teamMembers : null;
         if (list != null)
-            foreach (var m in list)
+            foreach (var m in list.Each())
                 if (m.clientId == clientId) return m.teamId;
         return clientId;
     }
@@ -216,7 +216,7 @@ public class MallManager : NetworkBehaviour
     public List<ulong> GetTeamMembers(ulong teamId)
     {
         var result = new List<ulong>();
-        foreach (var m in teamMembers)
+        foreach (var m in teamMembers.Each())
             if (m.teamId == teamId) result.Add(m.clientId);
         return result;
     }
@@ -415,7 +415,7 @@ public class MallManager : NetworkBehaviour
 
     private bool ContainsMember(ulong clientId)
     {
-        foreach (var m in teamMembers)
+        foreach (var m in teamMembers.Each())
             if (m.clientId == clientId) return true;
         return false;
     }
