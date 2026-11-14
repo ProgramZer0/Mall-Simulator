@@ -29,7 +29,10 @@ public class StockVisualFollower : MonoBehaviour
     /// <summary>Snap to the target now (call before placing models by world position).</summary>
     public void Sync()
     {
-        if (Target != null) transform.SetPositionAndRotation(Target.position, Target.rotation);
+        if (Target == null) return;
+        if (transform.position == Target.position && transform.rotation == Target.rotation) return;
+        transform.SetPositionAndRotation(Target.position, Target.rotation);
+        MoveBatched();
     }
 
     /// <summary>
@@ -49,5 +52,15 @@ public class StockVisualFollower : MonoBehaviour
     {
         if (Target == null) { Destroy(gameObject); return; } // the furniture is gone
         if (Target.position != transform.position || Target.rotation != transform.rotation) Sync();
+    }
+
+    // Batched products are drawn from where they were added: tell the batcher when they move.
+    private readonly System.Collections.Generic.List<StockModel> models = new();
+
+    private void MoveBatched()
+    {
+        models.Clear();
+        GetComponentsInChildren(models);
+        foreach (var m in models) StockBatcher.Move(m);
     }
 }

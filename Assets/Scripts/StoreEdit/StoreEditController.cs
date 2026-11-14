@@ -359,6 +359,7 @@ public class StoreEditController : NetworkBehaviour
     {
         LogStart($"entering edit view of '{plot.DisplayName}'.");
         editPlot = plot;
+        StockBatcher.Paused = true; // shelf stock outside the store isn't drawn in edit view (edit copies show this store's)
         checkedWallVersion = seenWallVersion = CuttableWall.Version; // only check after walls change during this session
         finishing = false;
         if (editCam == null) CreateEditCamera();
@@ -398,6 +399,7 @@ public class StoreEditController : NetworkBehaviour
 
     private void ExitView()
     {
+        StockBatcher.Paused = false;
         SetWallTool(false);
         Deselect();
         selectedSlot = -1;
