@@ -2441,7 +2441,16 @@ public class StoreEditController : NetworkBehaviour
     private void RequestStartEditRpc(RpcParams rpcParams = default)
     {
         if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+        ServerBeginEdit();
+    }
 
+    /// <summary>
+    /// Host: start this player's edit mode in the store they stand in, and send them its items (also
+    /// called by MallManager once a store has been cleared of other players).
+    /// </summary>
+    public void ServerBeginEdit()
+    {
+        if (!IsServer) return;
         var mall = MallManager.Instance;
         if (mall == null) return;
         if (!mall.ServerTryStartEdit(OwnerClientId, transform.position, out string reason))

@@ -320,6 +320,8 @@ public class PlayerInventoryNet : NetworkBehaviour
         // Can't park things on another store's shipment spots, or anywhere at the docks (except on a cart).
         if (MallManager.IsOthersShipmentArea(rpcParams.Receive.SenderClientId, position)) { ItemDebug.Log("Place refused: another store's shipment area."); return; }
         if (MallManager.IsNoPlaceZone(position)) { ItemDebug.Log("Place refused: no-place zone (docks)."); return; }
+        // A store being cleared for edit mode: nothing goes down in it until everyone's out.
+        if (MallManager.Instance != null && MallManager.Instance.IsClearingAt(position)) { ItemDebug.Log("Place refused: the store is being cleared for edit mode."); return; }
 
         if (!ItemCatalog.Instance.TryGet(id, out var def) || def.worldNetworkPrefab == null) { ItemDebug.Log("Place refused: not in the catalog or no world prefab."); return; }
 

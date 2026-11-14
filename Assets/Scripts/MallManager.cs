@@ -36,6 +36,11 @@ public class MallManager : NetworkBehaviour
     [Tooltip("Players allowed on one team. 1 = everyone plays solo (co-op off).")]
     [SerializeField] private int maxPlayersPerTeam = 1;
 
+    [Header("Clearing For Edit")]
+    [Tooltip("Starting edit mode with other players in the store gives them this long to leave; then anyone " +
+             "still inside is moved out and edit mode starts. No placing in the store meanwhile.")]
+    [SerializeField, Min(1f)] private float clearSeconds = 10f;
+
     [Header("Development")]
     [Tooltip("B = buy the next segment of the store you're standing in (no money check). " +
              "C = open/close your store (stand inside it or near one of its doors). " +
@@ -425,15 +430,21 @@ public class MallManager : NetworkBehaviour
             return false;
         }
 
-        // Editing takes everything in the store out and walls it off, so nobody else may be inside.
-        foreach (var client in NetworkManager.ConnectedClientsList)
+        // Editing takes everything in the store out and walls it off, so nobody else may be inside:
+        // they get Clear Seconds to leave (then they're moved out), and edit mode starts after that.
+        if (AnyoneElseInside(plot, clientId))
         {
-            if (client.ClientId == clientId || client.PlayerObject == null) continue;
-            if (plot.Contains(client.PlayerObject.transform.position))
+            if (!clearing.ContainsKey(plot.PlotId))
             {
-                reason = "Someone is still in the store. Edit once everyone else has left.";
-                return false;
+                clearing[plot.PlotId] = (NetworkManager.ServerTime.Time + clearSeconds, clientId);
+                foreach (var client in NetworkManager.ConnectedClientsList)
+                    if (client.ClientId != clientId && client.PlayerObject != null &&
+                        plot.Contains(client.PlayerObject.transform.position) && NotificationManager.Instance != null)
+                        NotificationManager.Instance.ServerNotifyClientText(client.ClientId,
+                            $"{plot.DisplayName} is closing for renovation", $"Leave within {clearSeconds:0} seconds.", true);
             }
+            reason = $"Everyone else must leave the store first: they have {clearSeconds:0} seconds. Edit mode starts after that.";
+            return false;
         }
 
         // Editing takes the counters away too, so customers at a checkout are served first.
@@ -447,6 +458,53 @@ public class MallManager : NetworkBehaviour
         ServerStopEdit(clientId); // one store at a time
         plot.ServerSetEditor(clientId);
         return true;
+    }
+
+    // Host: stores being cleared for edit mode: when the time's up, and who asked.
+    private readonly Dictionary<int, (double endsAt, ulong requester)> clearing = new();
+
+    private bool AnyoneElseInside(StorePlot plot, ulong except)
+    {
+        foreach (var client in NetworkManager.ConnectedClientsList)
+            if (client.ClientId != except && client.PlayerObject != null && plot.Contains(client.PlayerObject.transform.position))
+                return true;
+        return false;
+    }
+
+    /// <summary>Host: is this spot in a store being cleared for edit mode (no placing there meanwhile)?</summary>
+    public bool IsClearingAt(Vector3 position)
+    {
+        var plot = GetPlotAt(position);
+        return plot != null && clearing.ContainsKey(plot.PlotId);
+    }
+
+    // Host: a clearing store whose time is up (or that's empty already): move anyone left out, then start
+    // the requester's edit mode. Called from Update.
+    private void ServerTickClearing()
+    {
+        if (clearing.Count == 0) return;
+        double now = NetworkManager.ServerTime.Time;
+        List<int> done = null;
+        foreach (var kv in clearing)
+        {
+            if (!plots.TryGetValue(kv.Key, out var plot)) { (done ??= new()).Add(kv.Key); continue; }
+            ulong requester = kv.Value.requester;
+            var who = NetworkManager.ConnectedClients.TryGetValue(requester, out var c) ? c.PlayerObject : null;
+            // The one who asked left (or the store) : never mind.
+            if (who == null || !plot.Contains(who.transform.position)) { (done ??= new()).Add(kv.Key); continue; }
+            bool empty = !AnyoneElseInside(plot, requester);
+            if (!empty && now < kv.Value.endsAt) continue;
+
+            plot.GetSpawnPose(out Vector3 outside, out Quaternion facing);
+            foreach (var client in NetworkManager.ConnectedClientsList)
+                if (client.ClientId != requester && client.PlayerObject != null &&
+                    plot.Contains(client.PlayerObject.transform.position) &&
+                    client.PlayerObject.TryGetComponent<PlayerController3D>(out var mover))
+                    mover.TeleportOwnerRpc(outside, facing);
+            (done ??= new()).Add(kv.Key);
+            if (who.TryGetComponent<StoreEditController>(out var editor)) editor.ServerBeginEdit();
+        }
+        if (done != null) foreach (int id in done) clearing.Remove(id);
     }
 
     /// <summary>Server: end every edit session this player has open.</summary>
@@ -610,6 +668,7 @@ public class MallManager : NetworkBehaviour
 
     private void Update()
     {
+        if (IsServer && IsSpawned) ServerTickClearing();
         if (!devHotkeys || !IsSpawned || UIState.IsMenuOpen) return;
         bool editing = GetPlotEditedBy(NetworkManager.LocalClientId) != null; // edit mode uses B and C itself
         if (!editing && Input.GetKeyDown(KeyCode.C)) DevToggleClosed();

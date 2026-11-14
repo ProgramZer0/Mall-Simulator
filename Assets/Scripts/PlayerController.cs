@@ -177,6 +177,10 @@ public class PlayerController3D : NetworkBehaviour
         return any;
     }
 
+    /// <summary>Host: move this player (on their own machine, which moves them).</summary>
+    [Rpc(SendTo.Owner)]
+    public void TeleportOwnerRpc(Vector3 feetPosition, Quaternion facing) => Teleport(feetPosition, facing);
+
     /// <summary>Move the player (feet on the floor) and face a direction.</summary>
     public void Teleport(Vector3 feetPosition, Quaternion facing)
     {
