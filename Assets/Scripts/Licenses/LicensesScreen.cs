@@ -177,7 +177,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
                 giveUpArmed = l.id;
                 if (confirmText != null)
                     confirmText.text = $"Give up the {l.displayName}?\nNo money back, and no ordering " +
-                                       $"{l.category} items until you buy one again.";
+                                       $"{l.CategoryList} items until you buy one again.";
                 HideTooltip();
                 confirmRoot.SetActive(true);
                 confirmRoot.transform.SetAsLastSibling();
@@ -241,7 +241,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
         if (tooltipDescriptionText != null)
         {
             string text = string.IsNullOrEmpty(l.description) ? "" : l.description + "\n";
-            text += $"Unlocks: {l.category} items\nPrice: ${l.price:N0}";
+            text += $"Unlocks: {l.CategoryList} items\nPrice: ${l.price:N0}";
             if (l.perMall > 0) text += $"\nHeld: {lm.HolderCount(l.id)} of {l.perMall} in the mall";
             if (l.minLevel > 1) text += $"\nNeeds level {l.minLevel}";
             if (mine) text += giveUpArmed == l.id
