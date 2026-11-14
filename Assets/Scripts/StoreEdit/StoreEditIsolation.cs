@@ -24,7 +24,7 @@ public class StoreEditIsolation : MonoBehaviour
     /// <summary>Anything within this many meters of the store's space still shows (walls on the edge).</summary>
     public float Margin = 0.3f;
 
-    /// <summary>How often (seconds) to look for newly spawned objects.</summary>
+    /// <summary>How often (seconds) to work out again what's outside the store (new or moved objects).</summary>
     public float RefreshInterval = 0.5f;
 
     /// <summary>Objects under these are never hidden (e.g. the edit handles).</summary>
@@ -43,7 +43,8 @@ public class StoreEditIsolation : MonoBehaviour
     private bool warnedTooManyBoxes;
 
     private Camera cam;
-    private Renderer[] renderers = new Renderer[0];
+    private readonly List<Renderer> outside = new(); // found at the last refresh
+    private StorePlot foundFor;
     private float nextRefresh;
     private readonly List<Renderer> hidden = new();
     private readonly List<Bounds> areas = new();
@@ -88,12 +89,27 @@ public class StoreEditIsolation : MonoBehaviour
 
         SetPixelClip();
 
-        if (Time.unscaledTime >= nextRefresh)
+        // Which renderers are outside the store is worked out only every Refresh Interval (it means
+        // checking every renderer in the scene); each frame just switches that list off.
+        if (Time.unscaledTime >= nextRefresh || foundFor != Plot)
         {
-            renderers = FindObjectsByType<Renderer>(FindObjectsSortMode.None);
             nextRefresh = Time.unscaledTime + RefreshInterval;
+            foundFor = Plot;
+            FindOutside();
         }
 
+        foreach (var r in outside)
+        {
+            // Leave alone anything already off, so we only ever restore what we changed.
+            if (r == null || !r.enabled || r.forceRenderingOff || !r.gameObject.activeInHierarchy) continue;
+            r.forceRenderingOff = true;
+            hidden.Add(r);
+        }
+    }
+
+    private void FindOutside()
+    {
+        outside.Clear();
         areas.Clear();
         Plot.GetAreaBounds(areas);
         if (areas.Count == 0) return;
@@ -104,22 +120,14 @@ public class StoreEditIsolation : MonoBehaviour
             areas[i] = a;
         }
 
-        foreach (var r in renderers)
+        foreach (var r in FindObjectsByType<Renderer>(FindObjectsSortMode.None))
         {
-            // Leave alone anything already off, so we only ever restore what we changed.
-            if (r == null || !r.enabled || r.forceRenderingOff || !r.gameObject.activeInHierarchy) continue;
-            if (IsAlwaysShown(r.transform)) continue;
-
+            if (r == null || !r.enabled || !r.gameObject.activeInHierarchy || IsAlwaysShown(r.transform)) continue;
             Bounds b = r.bounds;
             bool inStore = false;
             foreach (var a in areas)
-            {
                 if (a.Intersects(b)) { inStore = true; break; }
-            }
-            if (inStore) continue;
-
-            r.forceRenderingOff = true;
-            hidden.Add(r);
+            if (!inStore) outside.Add(r);
         }
     }
 

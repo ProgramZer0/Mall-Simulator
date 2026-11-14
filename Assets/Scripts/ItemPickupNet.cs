@@ -245,7 +245,7 @@ public class ItemPickupNet : NetworkBehaviour
         new(default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     private Rigidbody rb;
-    private bool falling;
+    private bool falling;   // set only through SetFalling (it keeps the list of falling items)
     private bool touched;
     private float fallTime;
     private float stillTime;
@@ -347,6 +347,7 @@ public class ItemPickupNet : NetworkBehaviour
 
     public override void OnNetworkDespawn()
     {
+        SetFalling(false);
         units.OnValueChanged -= OnUnitsChanged;
         All.Remove(this);
         freeze.OnValueChanged -= OnFreezeChanged;
@@ -366,7 +367,7 @@ public class ItemPickupNet : NetworkBehaviour
     // Every machine runs the fall itself so it looks smooth; the host decides where it ends up.
     private void StartFalling()
     {
-        falling = true;
+        SetFalling(true);
         touched = false;
         fallTime = 0f;
         stillTime = 0f;
@@ -378,7 +379,7 @@ public class ItemPickupNet : NetworkBehaviour
 
     private void ApplyFrozen(FreezeState state)
     {
-        falling = false;
+        SetFalling(false);
         if (!rb.isKinematic)
         {
             rb.linearVelocity = Vector3.zero;
@@ -391,7 +392,51 @@ public class ItemPickupNet : NetworkBehaviour
         rb.rotation = state.rotation;
     }
 
-    private void FixedUpdate()
+    /* Only falling items need a physics-step check, and almost every item is frozen, so instead of every
+       item having FixedUpdate, falling ones go on a list that one hidden runner goes through. */
+
+    private static readonly List<ItemPickupNet> Falling = new();
+
+    private void SetFalling(bool on)
+    {
+        if (on == falling) return;
+        falling = on;
+        if (on)
+        {
+            Falling.Add(this);
+            FallRunner.Ensure();
+        }
+        else Falling.Remove(this);
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetFalling() => Falling.Clear();
+
+    private sealed class FallRunner : MonoBehaviour
+    {
+        private static FallRunner instance;
+
+        public static void Ensure()
+        {
+            if (instance != null) return;
+            var go = new GameObject("[FallingItems]") { hideFlags = HideFlags.HideInHierarchy };
+            DontDestroyOnLoad(go);
+            instance = go.AddComponent<FallRunner>();
+        }
+
+        private void FixedUpdate()
+        {
+            for (int i = Falling.Count - 1; i >= 0; i--)
+            {
+                if (i >= Falling.Count) continue; // one ended others this step
+                var item = Falling[i];
+                if (item == null) Falling.RemoveAt(i);
+                else item.TickFall();
+            }
+        }
+    }
+
+    private void TickFall()
     {
         if (!falling || !IsSpawned) return;
 
@@ -421,7 +466,7 @@ public class ItemPickupNet : NetworkBehaviour
 
     private void HoldAt(Vector3 position, Quaternion rotation)
     {
-        falling = false;
+        SetFalling(false);
         rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
         rb.isKinematic = true;
