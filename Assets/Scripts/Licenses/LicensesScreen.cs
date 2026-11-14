@@ -22,6 +22,9 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
     [Tooltip("Optional: a second Scroll View's Content for your team's licenses. They move there from Card Parent; " +
              "click one to give it up. Empty: they stay in Card Parent, marked owned.")]
     [SerializeField] private RectTransform ownedCardParent;
+    [Tooltip("Franchises your team holds also show in the owned list, as cards in this color (on the card's Tint " +
+             "Target); click one to give it up.")]
+    [SerializeField] private Color franchiseTint = new(1f, 0.8f, 0.3f, 1f);
     [SerializeField] private Vector2 cellSize = new(80f, 80f);
     [SerializeField] private Vector2 cellSpacing = new(8f, 8f);
     [SerializeField, Min(0f)] private float padding = 6f;
@@ -151,7 +154,9 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
             UILayout.PlaceInGrid((RectTransform)cards[i].transform, slot, owned ? colsOwned : colsMain, cellSize, cellSpacing, padding);
             if (cards[i].icon != null && shown[i].icon != null) cards[i].icon.sprite = shown[i].icon;
             if (cards[i].nameText != null) cards[i].nameText.text = shown[i].displayName;
+            if (cards[i].franchiseMark != null) cards[i].franchiseMark.SetActive(false);
         }
+        PlaceFranchiseCards(team, colsOwned, ref nOwned);
         cardParent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, UILayout.GridHeight(nMain, colsMain, cellSize, cellSpacing, padding));
         if (ownedCardParent != null)
             ownedCardParent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, UILayout.GridHeight(nOwned, colsOwned, cellSize, cellSpacing, padding));
@@ -176,7 +181,11 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
             if (cards[i].countText != null)
                 cards[i].countText.text = l.perMall > 0 ? $"{Mathf.Max(0, l.perMall - lm.HolderCount(l.id))} left" : "";
         }
-        if (hovered != null) ShowTooltip(hovered);
+        if (hovered != null)
+        {
+            if (franchiseCards.Contains(hovered)) OnFranchiseHovered(hovered, true);
+            else ShowTooltip(hovered);
+        }
     }
 
     /* ========================= CLICKS ========================= */
@@ -223,8 +232,14 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
     private void ConfirmGiveUp()
     {
         var lm = LicenseManager.Instance;
-        int id = giveUpArmed;
+        int id = giveUpArmed, franchise = franchiseArmed;
         CloseConfirm();
+        if (franchise != 0)
+        {
+            FranchiseManager.Instance?.RequestGiveUp(franchise);
+            Status("Giving up the franchise...");
+            return;
+        }
         if (lm == null || id == 0) return;
         lm.RequestGiveUp(id);
         Status("Giving up the license...");
@@ -233,7 +248,102 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
     private void CloseConfirm()
     {
         giveUpArmed = 0;
+        franchiseArmed = 0;
         if (confirmRoot != null) confirmRoot.SetActive(false);
+    }
+
+    /* ========================= FRANCHISES (OWNED LIST) ========================= */
+
+    private readonly List<LicenseCard> franchiseCards = new();
+    private readonly List<FranchiseDef> franchisesShown = new();
+    private int franchiseArmed;       // franchise id waiting for Yes (or a second click)
+    private float franchiseArmedUntil;
+
+    // Your team's franchises, after its licenses in the owned list, in the Franchise Tint.
+    private void PlaceFranchiseCards(ulong team, int cols, ref int slot)
+    {
+        franchisesShown.Clear();
+        var fm = FranchiseManager.Instance;
+        if (ownedCardParent != null && fm != null && fm.IsSpawned)
+            foreach (var f in fm.Franchises)
+                if (f != null && fm.TryGetState(f.id, out var s) && s.holder == team) franchisesShown.Add(f);
+
+        while (franchiseCards.Count < franchisesShown.Count && cardPrefab != null)
+        {
+            var card = Instantiate(cardPrefab, ownedCardParent);
+            int index = franchiseCards.Count;
+            if (card.button != null) card.button.onClick.AddListener(() => OnFranchiseClick(index));
+            card.Hovered += OnFranchiseHovered;
+            if (card.tintTarget != null) card.tintTarget.color = franchiseTint;
+            if (card.franchiseMark != null) card.franchiseMark.SetActive(true);
+            if (card.ownedMark != null) card.ownedMark.SetActive(true);
+            if (card.countText != null) card.countText.text = "";
+            franchiseCards.Add(card);
+        }
+        for (int i = 0; i < franchiseCards.Count; i++)
+        {
+            bool used = i < franchisesShown.Count;
+            franchiseCards[i].gameObject.SetActive(used);
+            if (!used) continue;
+            var f = franchisesShown[i];
+            UILayout.PlaceInGrid((RectTransform)franchiseCards[i].transform, slot++, cols, cellSize, cellSpacing, padding);
+            if (franchiseCards[i].icon != null && f.icon != null) franchiseCards[i].icon.sprite = f.icon;
+            if (franchiseCards[i].nameText != null) franchiseCards[i].nameText.text = f.displayName;
+            if (franchiseCards[i].button != null) franchiseCards[i].button.interactable = true;
+        }
+        if (franchiseArmed != 0 && (confirmRoot == null || !confirmRoot.activeSelf) && Time.unscaledTime > franchiseArmedUntil)
+            franchiseArmed = 0;
+    }
+
+    private void OnFranchiseClick(int index)
+    {
+        if (index >= franchisesShown.Count) return;
+        var f = franchisesShown[index];
+        if (confirmRoot != null)
+        {
+            franchiseArmed = f.id;
+            giveUpArmed = 0;
+            if (confirmText != null)
+                confirmText.text = $"Give up the {f.displayName} franchise?\nNo money back, bidding for it opens right away, " +
+                                   "and your team can't bid in that auction.";
+            HideTooltip();
+            confirmRoot.SetActive(true);
+            confirmRoot.transform.SetAsLastSibling();
+            return;
+        }
+        if (franchiseArmed != f.id)
+        {
+            franchiseArmed = f.id;
+            franchiseArmedUntil = Time.unscaledTime + 3f;
+            Status($"Click again to give up the {f.displayName} franchise.");
+            return;
+        }
+        franchiseArmed = 0;
+        FranchiseManager.Instance?.RequestGiveUp(f.id);
+        Status($"Giving up {f.displayName}...");
+    }
+
+    private void OnFranchiseHovered(LicenseCard card, bool over)
+    {
+        if (!over) { if (card == hovered) HideTooltip(); return; }
+        int index = franchiseCards.IndexOf(card);
+        var fm = FranchiseManager.Instance;
+        if (tooltipRoot == null || fm == null || index < 0 || index >= franchisesShown.Count) return;
+        hovered = card;
+        var f = franchisesShown[index];
+        fm.TryGetState(f.id, out var s);
+        if (tooltipNameText != null) tooltipNameText.text = $"{f.displayName} (franchise)";
+        if (tooltipDescriptionText != null)
+        {
+            string text = string.IsNullOrEmpty(f.description) ? "" : f.description + "\n";
+            int left = Mathf.Max(0, (int)(s.heldUntil - fm.Now));
+            text += $"Only your team can order: {f.CategoryList} items\nYours for {left / 60}:{left % 60:00} more";
+            text += "\n\nClick to give it up (no money back)";
+            tooltipDescriptionText.text = text;
+        }
+        tooltipRoot.SetActive(true);
+        tooltipRoot.transform.SetAsLastSibling();
+        UILayout.PlaceBeside(tooltipRoot.transform as RectTransform, (RectTransform)card.transform, tooltipOffset);
     }
 
     private void OnResult(string result) => Status(string.IsNullOrEmpty(result) ? "Done." : result);
