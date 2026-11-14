@@ -2,7 +2,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>One deal on the Market tab (see MarketScreen). Every part but the button is optional.</summary>
+/// <summary>One deal card on the Market tab (see MarketScreen). Every part but the button is optional.</summary>
 public class MarketDealRow : MonoBehaviour
 {
     public Button buyButton;
@@ -15,4 +15,8 @@ public class MarketDealRow : MonoBehaviour
     public TMP_Text leftText;
     [Tooltip("\"Ends in 4:32\".")]
     public TMP_Text timeText;
+    [Tooltip("Optional: shows the color it comes in (hidden for items in their own colors).")]
+    public Image colorSwatch;
+    [Tooltip("Optional: the color's name (\"Teal\"), empty for items in their own colors.")]
+    public TMP_Text colorText;
 }
