@@ -16,6 +16,8 @@ public interface IPhoneApp
     void OnAppOpened();
     /// <summary>The app is hidden (or the phone put away).</summary>
     void OnAppClosed();
+    /// <summary>Why it can't be opened yet ("Level 15"), or null when it can. Locked apps show greyed out.</summary>
+    string LockedReason => null;
 }
 
 /// <summary>
