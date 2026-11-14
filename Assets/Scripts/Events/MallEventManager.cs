@@ -333,8 +333,11 @@ public class MallEventManager : NetworkBehaviour
         if (ServerStart(e)) timesThisSeason[index]++;
     }
 
+    private System.Action drawHud;
+
     private void Update()
     {
+        ImGuiHost.Set(this, showDebugHud && Debug.isDebugBuild && IsSpawned && active.Count > 0 ? drawHud ??= DrawHud : null);
         if (!IsSpawned) return;
 
         if (IsServer && devHotkeys && !UIState.IsMenuOpen)
@@ -392,9 +395,9 @@ public class MallEventManager : NetworkBehaviour
 
     private readonly List<MallEventDef> hudList = new();
 
-    private void OnGUI()
+    private void DrawHud()
     {
-        if (!showDebugHud || !Debug.isDebugBuild || !IsSpawned || active.Count == 0) return;
+        if (!IsSpawned || active.Count == 0) return;
         GetActive(hudList);
         var season = CurrentSeason;
         if (season != null) { hudList.Remove(season); hudList.Insert(0, season); } // season on top

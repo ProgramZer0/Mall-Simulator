@@ -87,8 +87,12 @@ public class PlayerInteractInput : NetworkBehaviour
             cam = GetComponentInChildren<Camera>(true);
     }
 
+    private System.Action drawPrompt;
+
     private void Update()
     {
+        // Fallback prompt (only when there's no InteractPromptUI on the HUD).
+        ImGuiHost.Set(this, IsOwner && InteractPromptUI.Instance == null ? drawPrompt ??= DrawPrompt : null);
         if (!IsOwner || cam == null) return;
 
         // Store edit mode, an open menu, or a hand tool out (the paint brush or price scanner has the
@@ -526,7 +530,7 @@ public class PlayerInteractInput : NetworkBehaviour
     }
 
     /// <summary>Built-in prompt, only when there's no InteractPromptUI in the scene.</summary>
-    private void OnGUI()
+    private void DrawPrompt()
     {
         if (InteractPromptUI.Instance != null) return;
         string text = WithToolPrompt(CurrentPrompt());

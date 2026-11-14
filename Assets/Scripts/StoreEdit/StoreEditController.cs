@@ -229,8 +229,14 @@ public class StoreEditController : NetworkBehaviour
         base.OnDestroy();
     }
 
+    private System.Action drawHud;
+
     private void Update()
     {
+        // Built-in HUD, only without a StoreEditHud in the scene.
+        bool builtIn = IsOwner && StoreEditHud.Instance == null &&
+                       ((Time.time < refusalUntil && !string.IsNullOrEmpty(refusalMessage)) || (IsEditing && showHud));
+        ImGuiHost.Set(this, builtIn ? drawHud ??= DrawBuiltInHud : null);
         if (!IsOwner || !IsSpawned) return;
 
         // A menu is open: ignore edit-mode keys and mouse until it closes.
@@ -2383,7 +2389,7 @@ public class StoreEditController : NetworkBehaviour
         string.IsNullOrEmpty(s) ? "" : System.Text.RegularExpressions.Regex.Replace(s, "<.*?>", "");
 
     /// <summary>Built-in HUD, only when there's no StoreEditHud in the scene (and Show Hud is on).</summary>
-    private void OnGUI()
+    private void DrawBuiltInHud()
     {
         bool canvasHud = StoreEditHud.Instance != null;
         if (!canvasHud && IsOwner && Time.time < refusalUntil && !string.IsNullOrEmpty(refusalMessage))

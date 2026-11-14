@@ -70,7 +70,6 @@ public class MallBenchmark : MonoBehaviour
     private int gcAtStart;
     private float nextCount;
     private int renderers, stockModels;
-    private GUIStyle style;
 
     private static bool IsHost => NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer;
 
@@ -80,6 +79,7 @@ public class MallBenchmark : MonoBehaviour
     {
         RecordFrame();
         if (Input.GetKeyDown(statsKey)) showStats = !showStats;
+        UpdateOverlay();
         if (UIState.IsMenuOpen) return;
         if (Input.GetKeyDown(fillKey) || Input.GetKeyDown(clearKey))
         {
@@ -381,34 +381,62 @@ public class MallBenchmark : MonoBehaviour
         low1 = slow / n;
     }
 
-    private string overlayText = "";
+    // The overlay is a Canvas text (an OnGUI overlay makes garbage every frame, which is exactly what
+    // this tool is for measuring). Rebuilt 4 times a second.
+    private TMPro.TextMeshProUGUI overlay;
+    private GameObject overlayRoot;
     private float nextOverlayText;
-    private readonly GUIContent overlayContent = new();
 
-    private void OnGUI()
+    private void UpdateOverlay()
     {
-        if (!showStats) return;
-        style ??= new GUIStyle(GUI.skin.box) { alignment = TextAnchor.UpperLeft, fontSize = 13, richText = true };
+        if (overlayRoot == null) BuildOverlay();
+        if (overlayRoot.activeSelf != showStats) overlayRoot.SetActive(showStats);
+        if (!showStats || Time.unscaledTime < nextOverlayText) return;
+        nextOverlayText = Time.unscaledTime + 0.25f;
 
-        // The text is rebuilt 4 times a second, not every time the overlay is drawn (it'd show up in
-        // the profiler as garbage made every frame).
-        if (Time.unscaledTime >= nextOverlayText)
-        {
-            nextOverlayText = Time.unscaledTime + 0.25f;
-            FrameStats(out float avg, out float low1);
-            var nm = NetworkManager.Singleton;
-            int netObjects = nm != null && nm.SpawnManager != null ? nm.SpawnManager.SpawnedObjectsList.Count : 0;
-            overlayText =
-                $"<b>Benchmark</b>  {(IsHost ? $"{fillKey}: fill  {clearKey}: clear  " : "")}{statsKey}: hide\n" +
-                $"Frame: {avg:0.0} ms avg ({(avg > 0f ? 1000f / avg : 0f):0} fps), worst {worstLastSecond:0.0} ms, 1% low {low1:0.0} ms\n" +
-                $"Memory: {System.GC.GetTotalMemory(false) / (1024f * 1024f):0} MB managed, " +
-                $"{UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / (1024f * 1024f):0} MB total, " +
-                $"{System.GC.CollectionCount(0) - gcAtStart} GCs\n" +
-                $"Spawned: {netObjects} network objects, {StockContainer.All.Count} shelves, {stockModels} products, {renderers} renderers\n" +
-                (IsHost ? $"Shoppers: {buysShown} buys/s ({shopperMsShown:0.00} ms), {asksShown} appeal asks/s ({appealMsShown:0.00} ms)\n" : "") +
-                status;
-            overlayContent.text = overlayText;
-        }
-        GUI.Box(new Rect(10, 10, 560, IsHost ? 118 : 100), overlayContent, style);
+        FrameStats(out float avg, out float low1);
+        var nm = NetworkManager.Singleton;
+        int netObjects = nm != null && nm.SpawnManager != null ? nm.SpawnManager.SpawnedObjectsList.Count : 0;
+        overlay.text =
+            $"<b>Benchmark</b>  {(IsHost ? $"{fillKey}: fill  {clearKey}: clear  " : "")}{statsKey}: hide\n" +
+            $"Frame: {avg:0.0} ms avg ({(avg > 0f ? 1000f / avg : 0f):0} fps), worst {worstLastSecond:0.0} ms, 1% low {low1:0.0} ms\n" +
+            $"Memory: {System.GC.GetTotalMemory(false) / (1024f * 1024f):0} MB managed, " +
+            $"{UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / (1024f * 1024f):0} MB total, " +
+            $"{System.GC.CollectionCount(0) - gcAtStart} GCs\n" +
+            $"Spawned: {netObjects} network objects, {StockContainer.All.Count} shelves, {stockModels} products, {renderers} renderers\n" +
+            (IsHost ? $"Shoppers: {buysShown} buys/s ({shopperMsShown:0.00} ms), {asksShown} appeal asks/s ({appealMsShown:0.00} ms)\n" : "") +
+            status;
+    }
+
+    private void BuildOverlay()
+    {
+        overlayRoot = new GameObject("[Benchmark Overlay]", typeof(Canvas));
+        overlayRoot.transform.SetParent(transform, false);
+        var canvas = overlayRoot.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 1000;
+
+        var panel = new GameObject("Panel", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+        panel.transform.SetParent(overlayRoot.transform, false);
+        var bg = panel.GetComponent<UnityEngine.UI.Image>();
+        bg.color = new Color(0f, 0f, 0f, 0.6f);
+        bg.raycastTarget = false;
+        var rt = (RectTransform)panel.transform;
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0f, 1f);
+        rt.anchoredPosition = new Vector2(10f, -10f);
+        rt.sizeDelta = new Vector2(620f, 120f);
+
+        var textGo = new GameObject("Text", typeof(RectTransform), typeof(TMPro.TextMeshProUGUI));
+        textGo.transform.SetParent(panel.transform, false);
+        overlay = textGo.GetComponent<TMPro.TextMeshProUGUI>();
+        overlay.fontSize = 14f;
+        overlay.color = Color.white;
+        overlay.raycastTarget = false;
+        overlay.richText = true;
+        var trt = (RectTransform)textGo.transform;
+        trt.anchorMin = Vector2.zero;
+        trt.anchorMax = Vector2.one;
+        trt.offsetMin = new Vector2(8f, 6f);
+        trt.offsetMax = new Vector2(-8f, -6f);
     }
 }
