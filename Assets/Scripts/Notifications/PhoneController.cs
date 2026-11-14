@@ -31,7 +31,8 @@ public interface IPhoneApp
 /// - Tab: brings it up straight on the Notifications app; Tab again puts it away.
 /// While it's up the cursor is free and the player stands still, like other menus.
 ///
-/// Setup: put this on any always-on object (e.g. the HUD canvas). Phone Prefab: the phone model with a
+/// Setup: put this on any always-on object (e.g. the HUD canvas), or on the player prefab: there, only
+/// the local player's copy does anything (other players' copies on this machine stay out of it). Phone Prefab: the phone model with a
 /// PhoneScreen (and its world-space canvas) on it. It's made once, under the camera, at Hold Offset.
 /// Optional Hint Text on the HUD: "Tab: Phone (3)" while there are unread notifications.
 /// </summary>
@@ -57,28 +58,48 @@ public class PhoneController : MonoBehaviour
     [SerializeField] private string hintFormat = "Tab: Phone ({0})";
 
     private PhoneScreen phone;
+    private Unity.Netcode.NetworkObject owner; // on a player prefab: that player
+    private bool ownerChecked;
     private float raisedAt;
     private int closedFrame = -1; // the key that put it away mustn't bring it straight back up
 
-    private void Awake() => IsOpen = false;
+    // Reset once per play (not per copy: another player's copy appearing mustn't mark ours shut).
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetOnPlay() => IsOpen = false;
+
+    // On a player prefab every player has a copy on every machine; only the local player's may act
+    // (otherwise one copy closes, and loses track of, the phone the other opened).
+    private bool IsMine
+    {
+        get
+        {
+            if (!ownerChecked)
+            {
+                owner = GetComponentInParent<Unity.Netcode.NetworkObject>();
+                ownerChecked = true;
+            }
+            return owner == null || (owner.IsSpawned && owner.IsOwner);
+        }
+    }
 
     private void OnEnable()
     {
         Notifications.Changed += RefreshHint;
+        ownerChecked = false;
         RefreshHint();
     }
 
     private void OnDisable()
     {
         Notifications.Changed -= RefreshHint;
-        if (IsOpen) Close();
+        if (IsOpen && phone != null) Close();
     }
 
     // Open keys are read after everything else (LateUpdate), so an Esc something else used this
     // frame doesn't also bring the phone up.
     private void Update()
     {
-        if (!IsOpen) return;
+        if (!IsMine || phone == null || !IsOpen) return;
         if (Input.GetKeyDown(notificationsKey)) { Close(); return; }
         if (Input.GetKeyDown(homeKey))
         {
@@ -91,7 +112,7 @@ public class PhoneController : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (IsOpen || closedFrame == Time.frameCount || UIState.IsMenuOpen || !InGame()) return;
+        if (!IsMine || IsOpen || closedFrame == Time.frameCount || UIState.IsMenuOpen || !InGame()) return;
         if (Input.GetKeyDown(notificationsKey)) Open(notificationsApp);
         else if (Input.GetKeyDown(homeKey) && !(homeKey == KeyCode.Escape && UIState.EscapeTakenThisFrame)) Open(null);
     }
@@ -117,7 +138,7 @@ public class PhoneController : MonoBehaviour
 
     public void Close()
     {
-        if (!IsOpen) return;
+        if (!IsOpen || phone == null) return; // only the copy that opened it closes it
         IsOpen = false;
         closedFrame = Time.frameCount;
         if (phone != null)
@@ -154,13 +175,14 @@ public class PhoneController : MonoBehaviour
 
     private void RefreshHint()
     {
-        if (hintText == null) return;
+        if (hintText == null || !IsMine) return;
         int unread = Notifications.UnreadCount;
         hintText.text = unread > 0 ? string.Format(hintFormat, unread) : "";
     }
 
     private void OnDestroy()
     {
+        if (phone == null) return; // never this machine's phone
         if (IsOpen) UIState.CloseMenu(this);
         IsOpen = false;
     }
