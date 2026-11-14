@@ -86,6 +86,14 @@ public class NotificationManager : NetworkBehaviour
         TextRpc(new FixedString64Bytes(Trim(title, 60)), new FixedString128Bytes(Trim(body, 124)), alarm, target);
     }
 
+    /// <summary>Host: a written notification for one player.</summary>
+    public void ServerNotifyClientText(ulong clientId, string title, string body = "", bool alarm = false)
+    {
+        if (!IsServer) return;
+        TextRpc(new FixedString64Bytes(Trim(title, 60)), new FixedString128Bytes(Trim(body, 124)), alarm,
+                RpcTarget.Single(clientId, RpcTargetUse.Temp));
+    }
+
     private static string Trim(string s, int max) => string.IsNullOrEmpty(s) ? "" : s.Length <= max ? s : s.Substring(0, max);
 
     private bool TryGetTeamTarget(ulong team, out RpcParams target)
