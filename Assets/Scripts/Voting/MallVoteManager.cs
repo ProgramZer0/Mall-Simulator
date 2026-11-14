@@ -11,7 +11,7 @@ using UnityEngine;
 /// picks Options Per Ballot of them at random, leaving out ones already running or out of season.
 ///
 /// Votes: each player has one vote and can change it until the ballot closes. How much it counts is
-/// Vote Weight (1 for everyone for now; voting points can plug in there later). The most votes wins;
+/// Vote Weight: 1, plus extra votes from the player's help points (see HelpPoints). The most votes wins;
 /// a tie is settled at random; with no votes at all nothing happens (unless No Votes Picks Random).
 ///
 /// Setup: put this on a scene object with a NetworkObject (the MallManager's is fine), next to or
@@ -152,6 +152,12 @@ public class MallVoteManager : NetworkBehaviour
         ServerRecount();
     }
 
+    /// <summary>Host: count the votes again (e.g. a voter's weight changed).</summary>
+    public void ServerRecountVotes()
+    {
+        if (IsServer && open.Value) ServerRecount();
+    }
+
     private void ServerRecount()
     {
         var counts = new int[options.Count];
@@ -244,6 +250,11 @@ public class MallVoteManager : NetworkBehaviour
         if (winner >= 0 && events != null) events.ServerStart(events.Events[winner]);
         lastWinner.Value = winner;
         open.Value = false;
-        if (HelpPoints.Instance != null) HelpPoints.Instance.ServerNewPeriod(); // help caps start over
+        if (HelpPoints.Instance != null)
+        {
+            var voters = new List<ulong>();
+            foreach (var v in votes) voters.Add(v.clientId);
+            HelpPoints.Instance.ServerBallotClosed(voters); // extra votes used up, help caps start over
+        }
     }
 }
