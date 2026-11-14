@@ -9,7 +9,8 @@ using UnityEngine;
 /// in the last Extend Window seconds pushes the end back to that. The top bid when time runs out wins:
 /// that team alone can order the franchise's items for its Hold Seconds. Bidding for the next hold runs
 /// during the last Auction Seconds of the current one, so there's no gap. An auction with no bids just
-/// starts over. Items already in a store can still be sold after the franchise is lost.
+/// starts over. Items already in a store can still be sold after the franchise is lost. A holder can
+/// give a franchise up early: bidding for it opens right away, and that team can't bid in it.
 ///
 /// Network: one small synced list of franchise states. The host holds the money and checks every bid.
 /// Notifications (from the synced state, nothing extra sent): auctions starting, being outbid, winning
@@ -30,8 +31,10 @@ public class FranchiseManager : NetworkBehaviour
         public double auctionEnds;
         public ulong topTeam;       // Nobody = no bids yet
         public int topBid;
+        public ulong banned;        // gave it up: can't bid in its next auction (Nobody = no one)
         public bool Equals(State o) => franchiseId == o.franchiseId && holder == o.holder && heldUntil == o.heldUntil &&
-                                      bidding == o.bidding && auctionEnds == o.auctionEnds && topTeam == o.topTeam && topBid == o.topBid;
+                                      bidding == o.bidding && auctionEnds == o.auctionEnds && topTeam == o.topTeam &&
+                                      topBid == o.topBid && banned == o.banned;
         public override bool Equals(object obj) => obj is State o && Equals(o);
         public override int GetHashCode() => franchiseId * 397 ^ topBid;
     }
@@ -84,7 +87,7 @@ public class FranchiseManager : NetworkBehaviour
                 states.Add(new State
                 {
                     franchiseId = f.id, holder = Nobody, heldUntil = start + f.auctionSeconds,
-                    topTeam = Nobody,
+                    topTeam = Nobody, banned = Nobody,
                 });
             }
         }
@@ -149,6 +152,7 @@ public class FranchiseManager : NetworkBehaviour
         if (f == null || !TryGetState(f.id, out var s)) reason = "Unknown franchise";
         else if (!s.bidding) reason = "Bidding isn't open";
         else if (s.topTeam == team) reason = "You have the top bid";
+        else if (s.banned == team) reason = "You gave this one up";
         else if (f.minLevel > ProgressionManager.LevelOf(team)) reason = $"Needs level {f.minLevel}";
         else if (amount < MinimumBid(f, s)) reason = $"Bid at least ${MinimumBid(f, s):N0}";
         else if (EconomyManager.Instance != null && EconomyManager.Instance.GetTeamMoney(team) < amount) reason = "Not enough money";
@@ -210,6 +214,7 @@ public class FranchiseManager : NetworkBehaviour
                 }
                 s.topTeam = Nobody;
                 s.topBid = 0;
+                s.banned = Nobody; // sat out one auction
                 states[i] = s;
             }
         }
@@ -242,6 +247,37 @@ public class FranchiseManager : NetworkBehaviour
             break;
         }
         ResultRpc(result ?? "", RpcTarget.Single(sender, RpcTargetUse.Temp));
+    }
+
+    /// <summary>Give up a franchise your team holds: bidding opens now, and your team sits that auction out.</summary>
+    public void RequestGiveUp(int franchiseId) => GiveUpRpc(franchiseId);
+
+    [Rpc(SendTo.Server, RequireOwnership = false)]
+    private void GiveUpRpc(int franchiseId, RpcParams rpcParams = default)
+    {
+        ulong sender = rpcParams.Receive.SenderClientId;
+        ulong team = MallManager.GetTeamOf(sender);
+        string result = "Not yours";
+        double now = NetworkManager.ServerTime.Time;
+        for (int i = 0; i < states.Count; i++)
+        {
+            var s = states[i];
+            if (s.franchiseId != franchiseId || s.holder != team || !byId.TryGetValue(franchiseId, out var f)) continue;
+            s.holder = Nobody;
+            s.banned = team;
+            // Its own top bid for the next hold (if bidding is already open) is refunded.
+            if (s.topTeam == team)
+            {
+                if (EconomyManager.Instance != null) EconomyManager.Instance.ServerAddMoney(team, s.topBid);
+                s.topTeam = Nobody;
+                s.topBid = 0;
+            }
+            if (!s.bidding) s.heldUntil = now + f.auctionSeconds; // bidding opens on the next check
+            states[i] = s;
+            result = "";
+            break;
+        }
+        ResultRpc(result, RpcTarget.Single(sender, RpcTargetUse.Temp));
     }
 
     [Rpc(SendTo.SpecifiedInParams)]
@@ -291,7 +327,7 @@ public class FranchiseManager : NetworkBehaviour
             if (now.holder == me && was.holder != me)
                 Notifications.Post($"Franchise won: {f.displayName}");
             else if (was.holder == me && now.holder != me)
-                Notifications.Post($"Franchise lost: {f.displayName}");
+                Notifications.Post(now.banned == me ? $"Franchise given up: {f.displayName}" : $"Franchise lost: {f.displayName}");
         }
         Snapshot();
         Changed?.Invoke();

@@ -19,6 +19,9 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
 {
     [SerializeField] private LicenseCard cardPrefab;
     [SerializeField] private RectTransform cardParent;
+    [Tooltip("Optional: a second Scroll View's Content for your team's licenses. They move there from Card Parent; " +
+             "click one to give it up. Empty: they stay in Card Parent, marked owned.")]
+    [SerializeField] private RectTransform ownedCardParent;
     [SerializeField] private Vector2 cellSize = new(80f, 80f);
     [SerializeField] private Vector2 cellSpacing = new(8f, 8f);
     [SerializeField, Min(0f)] private float padding = 6f;
@@ -51,8 +54,9 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
         if (confirmRoot != null) confirmRoot.SetActive(false);
         if (confirmYes != null) confirmYes.onClick.AddListener(ConfirmGiveUp);
         if (confirmNo != null) confirmNo.onClick.AddListener(CloseConfirm);
-        if (cardParent != null)
-            foreach (var g in cardParent.GetComponents<UnityEngine.UI.LayoutGroup>()) g.enabled = false;
+        foreach (var parent in new[] { cardParent, ownedCardParent })
+            if (parent != null)
+                foreach (var g in parent.GetComponents<UnityEngine.UI.LayoutGroup>()) g.enabled = false;
     }
 
     private void OnEnable()
@@ -104,7 +108,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
         // Money changes what can be bought; cheap to check now and then.
         if (!dirty && Time.frameCount % 30 != 0) return;
         dirty = false;
-        if (shown.Count == 0) Build(); else Refresh();
+        Build(); // cheap: cards are reused, and owned ones move to the owned list
     }
 
     private static ulong LocalTeam =>
@@ -125,17 +129,32 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
             card.Hovered += OnHovered;
             cards.Add(card);
         }
-        int cols = UILayout.ColumnsThatFit(cardParent, cellSize, cellSpacing, padding);
+
+        // Each card in its list: yours in the owned list (if there is one), the rest in the main one.
+        ulong team = LocalTeam;
+        int colsMain = UILayout.ColumnsThatFit(cardParent, cellSize, cellSpacing, padding);
+        int colsOwned = ownedCardParent != null ? UILayout.ColumnsThatFit(ownedCardParent, cellSize, cellSpacing, padding) : colsMain;
+        int nMain = 0, nOwned = 0;
         for (int i = 0; i < cards.Count; i++)
         {
             bool used = i < shown.Count;
             cards[i].gameObject.SetActive(used);
             if (!used) continue;
-            UILayout.PlaceInGrid((RectTransform)cards[i].transform, i, cols, cellSize, cellSpacing, padding);
+            bool owned = ownedCardParent != null && lm != null && lm.IsSpawned && lm.Holds(team, shown[i].id);
+            var parent = owned ? ownedCardParent : cardParent;
+            if (cards[i].transform.parent != parent)
+            {
+                cards[i].transform.SetParent(parent, false);
+                if (hovered == cards[i]) HideTooltip();
+            }
+            int slot = owned ? nOwned++ : nMain++;
+            UILayout.PlaceInGrid((RectTransform)cards[i].transform, slot, owned ? colsOwned : colsMain, cellSize, cellSpacing, padding);
             if (cards[i].icon != null && shown[i].icon != null) cards[i].icon.sprite = shown[i].icon;
             if (cards[i].nameText != null) cards[i].nameText.text = shown[i].displayName;
         }
-        cardParent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, UILayout.GridHeight(shown.Count, cols, cellSize, cellSpacing, padding));
+        cardParent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, UILayout.GridHeight(nMain, colsMain, cellSize, cellSpacing, padding));
+        if (ownedCardParent != null)
+            ownedCardParent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, UILayout.GridHeight(nOwned, colsOwned, cellSize, cellSpacing, padding));
         Refresh();
     }
 
