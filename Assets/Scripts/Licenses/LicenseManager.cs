@@ -112,7 +112,7 @@ public class LicenseManager : NetworkBehaviour
     {
         if (item == null) return null;
         foreach (var l in licenses)
-            if (l != null && item.HasCategory(l.category) && !Holds(team, l.id)) return l;
+            if (l != null && l.Covers(item) && !Holds(team, l.id)) return l;
         return null;
     }
 
@@ -147,7 +147,7 @@ public class LicenseManager : NetworkBehaviour
     {
         if (!IsServer || item == null) return;
         foreach (var l in licenses)
-            if (l != null && item.HasCategory(l.category) && Holds(team, l.id)) lastUsed[(l.id, team)] = NetworkManager.ServerTime.Time;
+            if (l != null && l.Covers(item) && Holds(team, l.id)) lastUsed[(l.id, team)] = NetworkManager.ServerTime.Time;
     }
 
     [Rpc(SendTo.Server, RequireOwnership = false)]

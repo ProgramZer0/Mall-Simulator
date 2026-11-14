@@ -119,7 +119,7 @@ public class FranchiseManager : NetworkBehaviour
         if (item == null) return null;
         foreach (var f in franchises)
         {
-            if (f == null || !item.HasCategory(f.category)) continue;
+            if (f == null || !f.Covers(item)) continue;
             if (!TryGetState(f.id, out var s) || s.holder != team) return f;
         }
         return null;
@@ -136,7 +136,7 @@ public class FranchiseManager : NetworkBehaviour
     public static bool IsFranchiseItem(ItemDef item)
     {
         if (Instance == null || item == null) return false;
-        foreach (var f in Instance.franchises) if (f != null && item.HasCategory(f.category)) return true;
+        foreach (var f in Instance.franchises) if (f != null && f.Covers(item)) return true;
         return false;
     }
 
