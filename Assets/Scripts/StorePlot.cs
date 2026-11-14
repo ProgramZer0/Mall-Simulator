@@ -1881,11 +1881,22 @@ public class StorePlot : NetworkBehaviour
         var catalog = ItemCatalog.Instance;
         var econ = EconomyManager.Instance;
 
+        // Physics only needs to catch up with items respawned since the last check. With a big store
+        // (thousands of items, hundreds of thousands of colliders in the mall) syncing before every
+        // item was most of the freeze on leaving edit mode.
+        bool needSync = false;
+        void Sync()
+        {
+            if (!needSync) return;
+            Physics.SyncTransforms();
+            needSync = false;
+        }
+
         bool Allowed(ItemDef def, Vector3 p, Quaternion r)
         {
             if (WallOpening.IsOpening(def))
             {
-                Physics.SyncTransforms();
+                Sync();
                 if (!CanPlaceOpening(def, p, r, out string why))
                 {
                     if (log) Debug.LogWarning($"[StorePlot] '{def.displayName}' can't go at {p}: {why}.", this);
@@ -1898,50 +1909,61 @@ public class StorePlot : NetworkBehaviour
                                           $"(to {p}); it goes back to where it was.", this);
                 return false;
             }
-            Physics.SyncTransforms(); // see the items respawned earlier in this loop
+            Sync(); // see the items respawned earlier in this loop
             return isValid == null || isValid(def, p, r);
         }
 
+        // Two passes. First everything that didn't move (or got no pose from the editor): it was fine
+        // where it was, so it goes straight back with no checks. Then what moved, checked against all of
+        // that. Most of a big store is usually untouched, so this skips most of the work.
+        for (int pass = 0; pass < 2; pass++)
         for (int i = 0; i < editSession.Count; i++)
         {
             var entry = editSession[i];
             if (catalog == null || !catalog.TryGet(entry.itemId, out var def) || def.worldNetworkPrefab == null)
                 continue;
+            bool opening = WallOpening.IsOpening(def);
 
             // Taken out during the session (already refunded).
             if (entry.removed)
             {
-                sold++;
+                if (pass == 0) sold++;
                 continue;
             }
 
             Vector3 pos = entry.position;
             Quaternion rot = entry.rotation;
+            bool hasPose = false, samePlace = true;
+            Vector3 p = default;
+            Quaternion r = default;
 
-            if (positions != null && rotations != null && i < positions.Length && i < rotations.Length)
+            if (positions != null && rotations != null && i < positions.Length && i < rotations.Length &&
+                IsFinite(positions[i]) && IsFinite(rotations[i]))
             {
-                Vector3 p = positions[i];
-                Quaternion r = rotations[i];
-                if (IsFinite(p) && IsFinite(r))
-                {
-                    r = r.normalized;
-                    bool samePlace = (p - pos).sqrMagnitude < 1e-6f && Quaternion.Angle(r, rot) < 0.1f;
-                    if (Allowed(def, p, r))
-                    {
-                        if (samePlace) unchanged++; else moved++;
-                        pos = p;
-                        rot = r;
-                    }
-                    else rejected++;
-                }
-                else noPose++;
+                hasPose = true;
+                p = positions[i];
+                r = rotations[i].normalized;
+                samePlace = (p - pos).sqrMagnitude < 1e-6f && Quaternion.Angle(r, rot) < 0.1f;
             }
-            else noPose++;
+
+            // Windows and doors always go in the second pass: their wall may have changed.
+            bool quick = samePlace && !opening;
+            if ((pass == 0) != quick) continue;
+
+            if (!hasPose) noPose++;
+            else if (quick) unchanged++;
+            else if (Allowed(def, p, r))
+            {
+                if (samePlace) unchanged++; else moved++;
+                pos = p;
+                rot = r;
+            }
+            else rejected++;
 
             // A window or door whose wall is gone (and nowhere valid to go) is sold back, not left floating.
-            if (WallOpening.IsOpening(def))
+            if (opening)
             {
-                Physics.SyncTransforms();
+                Sync();
                 if (!CanPlaceOpening(def, pos, rot, out string why))
                 {
                     if (log) Debug.LogWarning($"[StorePlot] '{def.displayName}' has no wall to sit in ({why}); back in its box.", this);
@@ -1952,6 +1974,7 @@ public class StorePlot : NetworkBehaviour
             }
 
             SpawnEditItem(def, pos, rot, entry.units, entry.price, entry.stock, entry.paint);
+            needSync = true;
         }
 
         // Windows and doors taken out of their boxes in edit mode: each box is used up.
@@ -1981,6 +2004,7 @@ public class StorePlot : NetworkBehaviour
                 uint paint = box.ContainedPaint;
                 box.NetworkObject.Despawn(true);
                 SpawnEditItem(def, n.position, r, 0, 0, null, paint);
+                needSync = true;
                 bought++;
             }
         }
