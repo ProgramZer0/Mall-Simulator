@@ -30,13 +30,6 @@ public class PlayerInventoryNet : NetworkBehaviour
 
     private GameObject currentHandVisual;
     private bool handVisualHidden;
-    private PlayerInteractInput interact;
-
-    private void Awake()
-    {
-        interact = GetComponent<PlayerInteractInput>();
-    }
-
     /// <summary>
     /// Local-only: hides the held item's hand visual on this client (e.g. while
     /// previewing a placement). Other players still see the item in hand.
@@ -347,14 +340,12 @@ public class PlayerInventoryNet : NetworkBehaviour
             return;
         }
 
-        // Server re-runs the same fit test the client used, so a client can't place into
-        // walls/other items, and two players can't drop things into the same spot at once.
-        // Only wall items go on walls, and wall-only items only on walls.
+        // Whether it fits was checked by the placing player's machine (the green preview); the host takes
+        // its word rather than re-running the test (cheaper, and no refusals from the two machines seeing
+        // it a hair differently). Only wall items go on walls, and wall-only items only on walls.
         var mounting = PlacementCheck.GetMounting(def);
         if (onWall ? mounting == ItemPickupNet.Mounting.Floor : mounting == ItemPickupNet.Mounting.Wall && !onCart)
         { ItemDebug.Log($"Place refused: mounting {mounting} doesn't allow {(onWall ? "walls" : "floors")}."); return; }
-
-        if (interact == null || !interact.FitsAt(id, position, rotation, onWall)) { ItemDebug.Log("Place refused: doesn't fit there (host's check)."); return; }
 
         // Set down on a cart: it rides along from the start (no falling, so it can't be left behind).
         CartNet cart = null;
@@ -450,7 +441,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         var cart = CartNet.FindCartAt(PlacementCheck.PrefabCenter(boxPrefab.gameObject, position, rotation));
         if (cart != null && !cart.CanUse(sender)) return;
         if (onCart && cart == null) return;
-        if (interact == null || !interact.FitsBoxAt(boxPrefab.gameObject, position, rotation)) return;
+        // (Whether the box fits was checked by the placing player's machine.)
 
         int id = def.id;
         var spawned = Instantiate(boxPrefab, position, rotation);
