@@ -113,6 +113,7 @@ public class PlayerInteractInput : NetworkBehaviour
                 DestroyGhost();
                 inventory.SetHandVisualHidden(false);
             }
+            inventory.SetHandVisualFaded(false);
             return;
         }
 
@@ -121,6 +122,9 @@ public class PlayerInteractInput : NetworkBehaviour
         HandleInteract();
         HandleRotation();
         HandlePlacement();
+
+        // See-through while placing or stocking from the held crate, so it doesn't block the view.
+        inventory.SetHandVisualFaded(previewActive || (stockTarget != null && !stockTargetIsTake));
     }
 
     /* ========================= INTERACT ========================= */
@@ -875,7 +879,7 @@ public class PlayerInteractInput : NetworkBehaviour
         if (previewing && !placePending)
         {
             UpdateGhostPreview();
-            inventory.SetHandVisualHidden(true);
+            inventory.SetHandVisualHidden(false); // shown see-through (see Update), not hidden
         }
         else
         {
@@ -900,7 +904,8 @@ public class PlayerInteractInput : NetworkBehaviour
                 inventory.RequestPlaceServerRpc(pos, rot, placingOnWall, placingOnCart);
                 DestroyGhost();
                 previewActive = false;
-                // Stay hidden so the item doesn't flash back into the hand before the server confirms.
+                // Hidden so the item doesn't sit in the hand while the server confirms.
+                inventory.SetHandVisualHidden(true);
                 placePendingUntil = Time.time + placeResponseTimeout;
             }
         }

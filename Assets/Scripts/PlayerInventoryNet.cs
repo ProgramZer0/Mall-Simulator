@@ -1,4 +1,5 @@
-﻿using ProgramZer0.SoundSystem;
+﻿using System.Collections.Generic;
+using ProgramZer0.SoundSystem;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -54,6 +55,48 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (currentHandVisual) currentHandVisual.SetActive(!handVisualHidden);
     }
 
+    [Tooltip("How see-through the held item is while placing or stocking (0 = invisible, 1 = solid).")]
+    [SerializeField, Range(0f, 1f)] private float handFadeAlpha = 0.25f;
+    private bool handFaded;
+    private readonly List<(Renderer r, Material[] solid)> fadedRenderers = new();
+    private static readonly Dictionary<(Material, float), Material> FadedCopies = new();
+
+    /// <summary>
+    /// Local-only: the held item turns see-through (Hand Fade Alpha) so you can see where you're
+    /// placing or stocking. Other players still see it solid.
+    /// </summary>
+    public void SetHandVisualFaded(bool faded)
+    {
+        if (handFaded == faded) return;
+        handFaded = faded;
+        ApplyHandFade();
+    }
+
+    private void ApplyHandFade()
+    {
+        // Back to solid first (also drops renderers of a hand model that's gone).
+        foreach (var (r, solid) in fadedRenderers)
+            if (r != null) r.sharedMaterials = solid;
+        fadedRenderers.Clear();
+        if (!handFaded || currentHandVisual == null) return;
+
+        foreach (var r in currentHandVisual.GetComponentsInChildren<Renderer>(true))
+        {
+            var solid = r.sharedMaterials;
+            var see = new Material[solid.Length];
+            for (int i = 0; i < solid.Length; i++)
+            {
+                if (solid[i] == null) continue;
+                // One see-through copy per material, shared by everything that uses it.
+                if (!FadedCopies.TryGetValue((solid[i], handFadeAlpha), out var copy) || copy == null)
+                    FadedCopies[(solid[i], handFadeAlpha)] = copy = GhostBuilder.MakeTransparent(solid[i], handFadeAlpha);
+                see[i] = copy;
+            }
+            fadedRenderers.Add((r, solid));
+            r.sharedMaterials = see;
+        }
+    }
+
     private void OnEnable()
     {
         HeldItemId.OnValueChanged += OnHeldItemChanged;
@@ -95,6 +138,7 @@ public class PlayerInventoryNet : NetworkBehaviour
             currentHandVisual.transform.localPosition = Vector3.zero;
             currentHandVisual.transform.localRotation = Quaternion.identity;
             PaintHandVisual();
+            if (handFaded) ApplyHandFade(); // still placing / stocking: the new one starts see-through too
             // Your own held item gets a body, so walls push you back instead of it poking through.
             if (IsOwner) HeldItemBlocker.Add(currentHandVisual, transform, heldItemBlockedBy.value);
         }
