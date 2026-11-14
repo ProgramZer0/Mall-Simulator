@@ -40,6 +40,7 @@ public class EconomyManager : NetworkBehaviour
         NotEnoughMoney,
         LevelTooLow,     // an item needs a higher team level (ItemDef Min Level)
         NeedsLicense,    // an item is in a licensed category the team doesn't hold (LicenseManager)
+        NeedsFranchise,  // a franchise's item, and the team doesn't hold the franchise (FranchiseManager)
     }
 
     [Header("Deliveries")]
@@ -393,6 +394,7 @@ public class EconomyManager : NetworkBehaviour
             if (quantities[i] < 1) return OrderResult.BadQuantity;
             if (!ProgressionManager.CanOrder(team, def)) return OrderResult.LevelTooLow;
             if (!LicenseManager.CanOrder(team, def, out _)) return OrderResult.NeedsLicense;
+            if (!FranchiseManager.CanOrder(team, def, out _)) return OrderResult.NeedsFranchise;
 
             boxes += quantities[i];
             if (boxes > maxItemsPerOrder) return OrderResult.BadQuantity;

@@ -266,6 +266,7 @@ public class MallManager : NetworkBehaviour
 
         if (EconomyManager.Instance != null) EconomyManager.Instance.ServerForgetTeam(teamId);
         if (LicenseManager.Instance != null) LicenseManager.Instance.ServerForgetTeam(teamId);
+        if (FranchiseManager.Instance != null) FranchiseManager.Instance.ServerForgetTeam(teamId);
     }
 
     /// <summary>Server: charge a team, if there's an economy. With no EconomyManager everything is free.</summary>
