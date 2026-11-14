@@ -53,7 +53,7 @@ public class EconomyManager : NetworkBehaviour
     [SerializeField] private LayerMask shipmentBlockingMask = ~0;
     [Tooltip("How finely (meters) the zone floor is searched for a free spot. Smaller packs tighter but costs more.")]
     [SerializeField] private float packStep = 0.2f;
-    [Tooltip("How often (seconds) a waiting delivery re-checks whether it fits.")]
+    [Tooltip("A delivery that's due but has no room at the dock looks again this often (seconds).")]
     [SerializeField] private float fitCheckInterval = 1f;
 
     [Header("Development")]
@@ -92,7 +92,7 @@ public class EconomyManager : NetworkBehaviour
         public int boxCount;     // total items = boxes
         public float remaining;  // seconds left as of stampTime
         public double stampTime; // server time when remaining was recorded
-        public bool blocked;     // no room in the shipment zones: countdown paused
+        public bool blocked;     // due, but no room in the shipment zones yet: waiting
 
         public void NetworkSerialize<T>(BufferSerializer<T> s) where T : IReaderWriter
         {
@@ -240,11 +240,11 @@ public class EconomyManager : NetworkBehaviour
         return list;
     }
 
-    /// <summary>Seconds until a delivery arrives. Holds still while it's blocked.</summary>
+    /// <summary>Seconds until a delivery arrives (0 once it's due, including while it waits for room).</summary>
     public float SecondsUntil(OrderInfo order) =>
         IsSpawned ? order.RemainingAt(NetworkManager.ServerTime.Time) : order.remaining;
 
-    /// <summary>True while a delivery is paused because the store's shipment zones are too full.</summary>
+    /// <summary>True while a delivery is due but waiting for room in the store's shipment zones.</summary>
     public bool IsBlocked(OrderInfo order) => order.blocked;
 
     /* ========================= MONEY (SERVER) ========================= */
@@ -459,8 +459,9 @@ public class EconomyManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Pause or resume each delivery depending on whether its store has room for all its boxes,
-    /// and drop the whole delivery once its countdown is done.
+    /// Count each delivery down, and when it's due, set its boxes down if there's room. If there isn't,
+    /// it waits at the dock (re-checking every Fit Check Interval) until there is. Nothing checks for
+    /// room before then.
     /// </summary>
     private void ServerUpdateOrders()
     {
@@ -477,33 +478,7 @@ public class EconomyManager : NetworkBehaviour
                 continue;
             }
 
-            bool fits = CheckFits(o, plot, now);
             float left = o.RemainingAt(now);
-
-            if (!fits)
-            {
-                // Pause: freeze the time left until the spots clear.
-                if (!o.blocked)
-                {
-                    o.remaining = left;
-                    o.stampTime = now;
-                    o.blocked = true;
-                    orders[i] = o;
-                    // Once per order: it'd otherwise nag every check while the dock stays full.
-                    if (dockFullNoticed.Add(o.orderId) && NotificationManager.Instance != null)
-                        NotificationManager.Instance.ServerNotifyTeam(o.teamId, NotificationManager.Kind.DockFull, o.plotId);
-                }
-                continue;
-            }
-
-            if (o.blocked)
-            {
-                // Resume from where it paused.
-                o.blocked = false;
-                o.stampTime = now;
-                orders[i] = o;
-                continue;
-            }
 
             // A minute to go (only for deliveries that had longer than that).
             if (soonLeft.TryGetValue(o.orderId, out float before) && before > SoonSeconds && left <= SoonSeconds &&
@@ -513,29 +488,28 @@ public class EconomyManager : NetworkBehaviour
 
             if (left > 0f) continue;
 
-            // Due: find room for every box right now; if something moved in the way, wait.
+            // Due. Waiting for room: only look again every Fit Check Interval.
+            if (o.blocked && fitCache.TryGetValue(o.orderId, out var c) && now < c.nextCheck) continue;
+
             if (!ServerDeliver(o, plot))
             {
-                o.remaining = 0f;
-                o.stampTime = now;
-                o.blocked = true;
-                orders[i] = o;
+                if (!o.blocked)
+                {
+                    o.remaining = 0f;
+                    o.stampTime = now;
+                    o.blocked = true;
+                    orders[i] = o;
+                }
                 fitCache[o.orderId] = (now + fitCheckInterval, false);
+                // Once per order: it'd otherwise nag every check while the dock stays full.
+                if (dockFullNoticed.Add(o.orderId) && NotificationManager.Instance != null)
+                    NotificationManager.Instance.ServerNotifyTeam(o.teamId, NotificationManager.Kind.DockFull, o.plotId);
                 continue;
             }
             if (NotificationManager.Instance != null)
                 NotificationManager.Instance.ServerNotifyTeam(o.teamId, NotificationManager.Kind.Delivered, o.plotId, o.boxCount);
             ServerRemoveOrderAt(i);
         }
-    }
-
-    /// <summary>Does this delivery fit in its store's zones? Re-checked every Fit Check Interval.</summary>
-    private bool CheckFits(OrderInfo o, StorePlot plot, double now)
-    {
-        if (fitCache.TryGetValue(o.orderId, out var c) && now < c.nextCheck) return c.fits;
-        bool fits = PlanOrder(o, plot);
-        fitCache[o.orderId] = (now + fitCheckInterval, fits);
-        return fits;
     }
 
     /// <summary>Plans spots for all of a delivery's boxes (fills planItems + plan).</summary>
@@ -681,7 +655,7 @@ public class EconomyManager : NetworkBehaviour
             }
             hudSb.Clear().Append("  ");
             for (int p = 0; p < hudParts.Count; p++) hudSb.Append(p == 0 ? "" : ", ").Append(hudParts[p]);
-            hudSb.Append(": ").Append(o.blocked ? $"paused, no room ({SecondsUntil(o):0}s left)" : $"{SecondsUntil(o):0}s");
+            hudSb.Append(": ").Append(o.blocked ? "here, waiting for room at the dock" : $"{SecondsUntil(o):0}s");
             hudLines.Add(hudSb.ToString());
         }
 
