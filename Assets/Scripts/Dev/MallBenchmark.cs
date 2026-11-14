@@ -40,10 +40,6 @@ public class MallBenchmark : MonoBehaviour
     [SerializeField, Min(1)] private int spawnsPerFrame = 20;
     [Tooltip("Price = market price × this.")]
     [SerializeField, Min(0.01f)] private float priceMarkup = 1f;
-    [Tooltip("Layers a shelf may not overlap where it's placed.")]
-    [SerializeField] private LayerMask blockingMask = ~0;
-    [Tooltip("Layers a shelf may stand on.")]
-    [SerializeField] private LayerMask supportMask = ~0;
 
     [Header("Fake Shoppers (host)")]
     [SerializeField, Min(0f)] private float buysPerSecond = 0f;
@@ -84,17 +80,30 @@ public class MallBenchmark : MonoBehaviour
         RecordFrame();
         if (Input.GetKeyDown(statsKey)) showStats = !showStats;
         if (UIState.IsMenuOpen) return;
-        if (IsHost && Input.GetKeyDown(fillKey)) Fill();
-        if (IsHost && Input.GetKeyDown(clearKey)) Clear();
+        if (Input.GetKeyDown(fillKey) || Input.GetKeyDown(clearKey))
+        {
+            if (!IsHost) Report("Fill and Clear only work on the host.");
+            else if (job != null) Report("Still busy with the last fill or clear.");
+            else if (Input.GetKeyDown(fillKey)) Fill();
+            else Clear();
+        }
         if (IsHost) FakeShoppers();
     }
 
     /* ========================= FILL ========================= */
 
+    // Shown on the overlay and in the Console.
+    private void Report(string text)
+    {
+        status = text;
+        Debug.Log($"[MallBenchmark] {text}", this);
+    }
+
     [ContextMenu("Fill")]
     public void Fill()
     {
         if (!IsHost || job != null) return;
+        Report("Filling...");
         job = StartCoroutine(FillRoutine());
     }
 
@@ -102,6 +111,7 @@ public class MallBenchmark : MonoBehaviour
     public void Clear()
     {
         if (!IsHost || job != null) return;
+        Report("Clearing...");
         job = StartCoroutine(ClearRoutine());
     }
 
@@ -109,13 +119,19 @@ public class MallBenchmark : MonoBehaviour
     {
         var catalog = ItemCatalog.Instance;
         var mall = MallManager.Instance;
-        if (catalog == null || mall == null) { status = "No catalog or mall."; job = null; yield break; }
+        if (catalog == null || mall == null) { Report("No ItemCatalog or MallManager in the scene."); job = null; yield break; }
+
+        // The same fit test players use (their placement masks), from the host's own player.
+        var me = NetworkManager.Singleton.LocalClient?.PlayerObject;
+        var placer = me != null ? me.GetComponent<PlayerInteractInput>() : null;
+        if (placer == null) { Report("No host player yet (spawn in first)."); job = null; yield break; }
 
         var shelves = PickShelves(catalog);
         var products = PickProducts(catalog);
         if (shelves.Count == 0 || products.Count == 0)
         {
-            status = $"Nothing to place: {shelves.Count} shelf types, {products.Count} product types.";
+            Report($"Nothing to place: {shelves.Count} shelf types (catalog items with a StockContainer), " +
+                   $"{products.Count} product types (sellable stock crates with a Shelf or Hang Prefab).");
             job = null;
             yield break;
         }
@@ -124,14 +140,13 @@ public class MallBenchmark : MonoBehaviour
         if (allStores) stores.AddRange(mall.Plots);
         else
         {
-            var me = NetworkManager.Singleton.LocalClient?.PlayerObject;
-            var here = me != null ? mall.GetPlotAt(me.transform.position) : null;
+            var here = mall.GetPlotAt(me.transform.position);
             if (here != null) stores.Add(here);
         }
-        if (stores.Count == 0) { status = "No store to fill (stand in one, or tick All Stores)."; job = null; yield break; }
+        if (stores.Count == 0) { Report("No store to fill (stand in one, or tick All Stores)."); job = null; yield break; }
 
         var sw = Stopwatch.StartNew();
-        int placed = 0, thisFrame = 0;
+        int placed = 0, thisFrame = 0, outside = 0, blocked = 0;
         var areas = new List<Bounds>();
         foreach (var plot in stores)
         {
@@ -159,7 +174,8 @@ public class MallBenchmark : MonoBehaviour
                     {
                         var pos = new Vector3(x, floor, rowZ);
                         pos.y += PlacementCheck.PivotHeightAboveBase(def, rot);
-                        if (!plot.ContainsItem(def, pos, rot) || !PlacementCheck.Fits(def, pos, rot, blockingMask, supportMask)) continue;
+                        if (!plot.ContainsItem(def, pos, rot)) { outside++; continue; }
+                        if (!placer.FitsAt(def.id, pos, rot)) { blocked++; continue; }
 
                         if (Spawn(def, pos, rot, products)) { placed++; inStore++; }
                         if (++thisFrame >= spawnsPerFrame)
@@ -174,8 +190,8 @@ public class MallBenchmark : MonoBehaviour
                 }
             }
         }
-        status = $"Filled: {placed} shelves in {stores.Count} store(s), {sw.ElapsedMilliseconds} ms.";
-        Debug.Log($"[MallBenchmark] {status}", this);
+        Report($"Filled: {placed} shelves in {stores.Count} store(s), {sw.ElapsedMilliseconds} ms " +
+               $"(spots skipped: {outside} not inside the store, {blocked} blocked or nothing to stand on).");
         job = null;
     }
 
@@ -261,7 +277,7 @@ public class MallBenchmark : MonoBehaviour
         }
         spawned.Clear();
         filled.Clear();
-        status = $"Cleared {n}.";
+        Report($"Cleared {n}.");
         job = null;
     }
 
