@@ -9,7 +9,7 @@ using UnityEngine;
 /// player of the store's team clicks each one to scan it and it appears on the register screen with
 /// the running total. Then the customer pays:
 /// - Card: they put their card on the counter. Click it to take it, then click the card reader.
-/// - Cash: they put cash on the counter. Click it to take it (it's laid out so you can count it).
+/// - Cash: they put cash on the counter. Click it to take it. Cash lies in a pile per bill or coin; look at a pile to see how many ("$5 × 3").
 ///   The cash drawer pops open when you take the cash or press Enter (or click Drawer Toggle).
 ///   Optionally type what they gave on the keypad (2 5 0 0 = $25.00) and press Enter: the screen
 ///   shows the change due. Click the drawer's bills and coins to count out the change (it's laid
@@ -136,6 +136,8 @@ public class CheckoutCounter : NetworkBehaviour
     [Header("Money models (optional)")]
     [SerializeField] private List<MoneyModel> moneyPrefabs = new();
     [SerializeField] private GameObject cardPrefab;
+    [Tooltip("Cash is laid out in a pile per kind of bill or coin; this far apart (meters).")]
+    [SerializeField] private float pileSpacing = 0.09f;
 
     [Header("Testing")]
     [Tooltip("Host: sends a test customer to the nearest counter within Test Range.")]
@@ -412,7 +414,10 @@ public class CheckoutCounter : NetworkBehaviour
                             : "Next customer's";
                 return null;
             case CheckoutClickable.Action.CustomerMoney:
-                return paying && s.moneyTaken == 0 ? $"Click: take the {(cash ? "cash" : "card")}" : null;
+                if (!paying || s.moneyTaken != 0) return null;
+                return cash ? $"{Pile(part.value, CountIn(s.tenderedCents, part.value))}   Click: take the cash" : "Click: take the card";
+            case CheckoutClickable.Action.TakenCash:
+                return cash ? Pile(part.value, CountIn(s.tenderedCents, part.value)) : null;
             case CheckoutClickable.Action.CardReader:
                 return paying && !cash ? (s.moneyTaken != 0 ? "Click: swipe the card" : "Take the card first") : null;
             case CheckoutClickable.Action.Drawer:
@@ -422,7 +427,10 @@ public class CheckoutCounter : NetworkBehaviour
             case CheckoutClickable.Action.ClearChange:
                 return cash && s.changeCents > 0 ? "Click: put the change back" : null;
             case CheckoutClickable.Action.ReturnChange:
-                return !cash ? null : s.drawerOpen != 0 ? $"Click: put the {FormatAmount(part.value)} back in the drawer" : "Open the drawer first";
+                if (!cash) return null;
+                int given = 0;
+                foreach (int c in change) if (c == part.value) given++;
+                return $"{Pile(part.value, given)}   " + (s.drawerOpen != 0 ? "Click: put one back in the drawer" : "Open the drawer first");
             case CheckoutClickable.Action.Confirm:
                 return cash ? (s.moneyTaken != 0 ? $"Click: confirm (change {FormatAmount(s.changeCents)})" : "Take the cash first") : null;
             case CheckoutClickable.Action.KeypadDigit:
@@ -440,7 +448,7 @@ public class CheckoutCounter : NetworkBehaviour
     /// <summary>The player clicked a part of this counter.</summary>
     public void Click(CheckoutClickable part)
     {
-        if (part != null) RequestClickRpc(part.action, part.value);
+        if (part != null && part.action != CheckoutClickable.Action.TakenCash) RequestClickRpc(part.action, part.value);
     }
 
     [Rpc(SendTo.Server)]
@@ -738,7 +746,12 @@ public class CheckoutCounter : NetworkBehaviour
         if (s.method == PayMethod.Card)
             Lay(new List<GameObject> { MakeCard() }, where, clickable ? CheckoutClickable.Action.CustomerMoney : null);
         else
-            Lay(MakeCash(s.tenderedCents), where, clickable ? CheckoutClickable.Action.CustomerMoney : null);
+        {
+            var bills = Breakdown(s.tenderedCents);
+            var models = new List<GameObject>();
+            foreach (int c in bills) models.Add(MakeBillOrCoin(c));
+            Lay(models, where, clickable ? CheckoutClickable.Action.CustomerMoney : CheckoutClickable.Action.TakenCash, bills);
+        }
 
         // The change: exactly the bills and coins taken from the drawer, biggest first; click one to put it back.
         if (s.method == PayMethod.Cash && change.Count > 0)
@@ -772,25 +785,37 @@ public class CheckoutCounter : NetworkBehaviour
 
     private readonly Dictionary<float, Transform> fallbackSpots = new();
 
-    // Fan the models out in a row across the spot, lying on the counter top under it.
-    // Click: what clicking each one does (null: they can't be clicked); values: each one's Value.
+    // Lay the models across the spot on the counter top under it: one pile per kind of bill or coin
+    // (same Value), piles side by side. Click: what clicking each one does (null: they can't be
+    // clicked); values: each one's Value (null: each its own pile).
     private void Lay(List<GameObject> models, Transform spot, CheckoutClickable.Action? click, List<int> values = null)
     {
         bool onCounter = TrySurfaceBelow(spot.position, out float surface);
+        float floor = onCounter ? surface : spot.position.y;
+        var pileOf = new List<int>();   // each pile's value
+        var pileTop = new List<float>(); // how high each pile is so far
         for (int i = 0; i < models.Count; i++)
         {
             var go = models[i];
-            Vector3 pos = spot.position + spot.right * (i * 0.04f);
+            int value = values != null && i < values.Count ? values[i] : 0;
+            int pile = values != null ? pileOf.IndexOf(value) : -1;
+            if (pile < 0)
+            {
+                pile = pileOf.Count;
+                pileOf.Add(value);
+                pileTop.Add(floor);
+            }
+            Vector3 pos = spot.position + spot.right * (pile * pileSpacing);
             go.transform.SetPositionAndRotation(pos, spot.rotation);
-            // Bottom of the model on the counter (each one a hair above the last so they don't flicker).
+            // On top of the pile (a hair above the last one so they don't flicker).
             float bottom = BottomOf(go, pos.y);
-            float floor = onCounter ? surface : spot.position.y;
-            go.transform.position += Vector3.up * (floor - bottom + 0.0005f + i * 0.0008f);
+            go.transform.position += Vector3.up * (pileTop[pile] - bottom + 0.0005f);
+            pileTop[pile] = TopOf(go, pileTop[pile]);
             if (click.HasValue)
             {
                 var part = go.AddComponent<CheckoutClickable>();
                 part.action = click.Value;
-                part.value = values != null && i < values.Count ? values[i] : 0;
+                part.value = value;
                 part.Counter = this;
                 if (go.GetComponentInChildren<Collider>() == null) go.AddComponent<BoxCollider>();
             }
@@ -816,6 +841,14 @@ public class CheckoutCounter : NetworkBehaviour
         return found;
     }
 
+    private static float TopOf(GameObject go, float fallback)
+    {
+        float top = fallback;
+        foreach (var r in go.GetComponentsInChildren<Renderer>())
+            if (r.GetComponent<TextMeshPro>() == null && r.GetComponent<TMP_SubMesh>() == null) top = Mathf.Max(top, r.bounds.max.y);
+        return top;
+    }
+
     private static float BottomOf(GameObject go, float fallback)
     {
         bool any = false;
@@ -829,18 +862,30 @@ public class CheckoutCounter : NetworkBehaviour
         return bottom;
     }
 
-    // Bills and coins making up an amount, largest first.
-    private List<GameObject> MakeCash(int cents)
+    // Bills and coins (in cents) making up an amount, largest first.
+    private static List<int> Breakdown(int cents)
     {
-        var list = new List<GameObject>();
+        var list = new List<int>();
         foreach (int d in Denominations)
             while (cents >= d && list.Count < 40)
             {
                 cents -= d;
-                list.Add(MakeBillOrCoin(d));
+                list.Add(d);
             }
         return list;
     }
+
+    // How many of one bill or coin an amount is handed over in.
+    private static int CountIn(int cents, int bill)
+    {
+        int n = 0;
+        foreach (int c in Breakdown(cents)) if (c == bill) n++;
+        return n;
+    }
+
+    // "$20 × 2", "25¢ × 3".
+    private static string Pile(int cents, int count) =>
+        $"{(cents >= 100 ? $"${cents / 100}" : $"{cents}¢")} × {count}";
 
     private GameObject MakeBillOrCoin(int cents)
     {
