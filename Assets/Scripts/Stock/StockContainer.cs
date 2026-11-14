@@ -782,7 +782,8 @@ public class StockContainer : NetworkBehaviour
     public static GameObject MakeVisual(GameObject prefab, Vector3 position, Quaternion rotation, Transform parent,
                                        bool batched = false)
     {
-        var template = batched ? BatchedTemplateFor(prefab, out var shape) : TemplateFor(prefab);
+        List<StockBatcher.PartShape> shape = null;
+        var template = batched ? BatchedTemplateFor(prefab, out shape) : TemplateFor(prefab);
         var go = Instantiate(template, position, rotation, parent); // parent is unscaled, so the prefab keeps its size
         go.name = prefab.name;
         if (batched && shape != null)
