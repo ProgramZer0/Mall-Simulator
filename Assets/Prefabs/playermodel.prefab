@@ -66,7 +66,7 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.3
-  far clip plane: 1000
+  far clip plane: 400
   field of view: 60
   orthographic: 0
   orthographic size: 5
@@ -369,6 +369,9 @@ MonoBehaviour:
   maxPitch: 80
   spawnAtOwnStore: 1
   storeWaitTimeout: 10
+  waitForFloorSeconds: 5
+  fallRescueDistance: 15
+  killHeight: -50
   cameraRoot: {fileID: 4351029141827459660}
   freeLookButton: 1
   freeLookMaxAngle: 150
@@ -416,6 +419,7 @@ MonoBehaviour:
   stockLayKey: 116
   takeOutlineColor: {r: 1, g: 0.85, b: 0.2, a: 1}
   stockOutlineColor: {r: 0.3, g: 0.9, b: 1, a: 1}
+  blockedOutlineColor: {r: 1, g: 0.35, b: 0.3, a: 1}
   stockRepeatDelay: 0.4
   stockRepeatInterval: 0.2
 --- !u!143 &2986661850691434819
@@ -466,6 +470,8 @@ MonoBehaviour:
     m_InternalValue: 0
   HeldPaint:
     m_InternalValue: 0
+  HeldFromTeam:
+    m_InternalValue: 18446744073709551615
 --- !u!114 &1450381561150076667
 MonoBehaviour:
   m_ObjectHideFlags: 0
