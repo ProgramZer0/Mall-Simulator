@@ -69,6 +69,7 @@ public class MallBenchmark : MonoBehaviour
     private int buysDone, asksDone, buysShown, asksShown;
     private int gcAtStart;
     private float nextCount;
+    private bool countRenderers = true; // searching the scene for renderers stalls a full mall: only after a change
     private int renderers, stockModels;
 
     private static bool IsHost => NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer;
@@ -78,7 +79,7 @@ public class MallBenchmark : MonoBehaviour
     private void Update()
     {
         RecordFrame();
-        if (Input.GetKeyDown(statsKey)) showStats = !showStats;
+        if (Input.GetKeyDown(statsKey)) { showStats = !showStats; countRenderers |= showStats; }
         UpdateOverlay();
         if (UIState.IsMenuOpen) return;
         if (Input.GetKeyDown(fillKey) || Input.GetKeyDown(clearKey))
@@ -97,6 +98,7 @@ public class MallBenchmark : MonoBehaviour
     private void Report(string text)
     {
         status = text;
+        countRenderers = true; nextCount = 0f; // a fill or clear finished: recount
         Debug.Log($"[MallBenchmark] {text}", this);
     }
 
@@ -354,13 +356,19 @@ public class MallBenchmark : MonoBehaviour
             buysDone = asksDone = 0;
         }
 
-        // Counting renderers searches the scene: only now and then, and only while the overlay is up.
+        // Products every few seconds (cheap). Renderers only after a fill or clear, or when the overlay
+        // is opened: FindObjectsByType goes through every object in the scene, which on a full mall is a
+        // stutter of its own (likely the regular hitch in the frame times).
         if (showStats && Time.unscaledTime >= nextCount)
         {
             nextCount = Time.unscaledTime + 5f;
-            renderers = 0; // switched-on ones only (batched products keep a switched-off renderer)
-            foreach (var r in FindObjectsByType<Renderer>(FindObjectsSortMode.None))
-                if (r.enabled && r.gameObject.activeInHierarchy) renderers++;
+            if (countRenderers)
+            {
+                countRenderers = false;
+                renderers = 0; // switched-on ones only (batched products keep a switched-off renderer)
+                foreach (var r in FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+                    if (r.enabled && r.gameObject.activeInHierarchy) renderers++;
+            }
             stockModels = 0;
             foreach (var c in StockContainer.All)
                 for (int z = 0; c != null && z < c.ZoneCount; z++) stockModels += c.GetZone(z).count;
