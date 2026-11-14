@@ -238,6 +238,7 @@ public class PlayerInteractInput : NetworkBehaviour
     private int stockZone = -1;       // F: the zone to stock, or (empty hands) the zone to take from
     private bool stockTargetIsTake;   // true: F takes a product off; false: F puts one from the held crate on
     private int putBackZone = -1;     // G: a zone holding the held crate's product, to put one back into it
+    private int blockedZone = -1;     // holding a crate, no spot on this shelf takes it: the nearest one (to say why)
     private GameObject stockPreview;
     private GameObject stockPreviewSource;
     private static readonly Dictionary<GameObject, GameObject> StockGhostTemplates = new();
@@ -252,6 +253,7 @@ public class PlayerInteractInput : NetworkBehaviour
         stockTarget = null;
         stockZone = -1;
         putBackZone = -1;
+        blockedZone = -1;
 
         int held = inventory.HeldItemId.Value;
         bool holdingCrate = held != 0 && StockContainer.IsStockCrate(held);
@@ -276,6 +278,12 @@ public class PlayerInteractInput : NetworkBehaviour
                 if (holdingCrate && inventory.HeldUnits.Value < StockContainer.GetUnitsPerCrate(held))
                     putBackZone = container.FindNearestZone(hit.point, held, wantStock: true);
                 if (stockZone >= 0 || putBackZone >= 0) stockTarget = container;
+                else if (holdingCrate)
+                {
+                    // Nowhere on it takes this crate: say why (and let R / T find a way it fits).
+                    blockedZone = container.NearestZone(hit.point);
+                    if (blockedZone >= 0) stockTarget = container;
+                }
             }
         }
 
@@ -293,6 +301,7 @@ public class PlayerInteractInput : NetworkBehaviour
         stockTarget = null;
         stockZone = -1;
         putBackZone = -1;
+        blockedZone = -1;
         DestroyStockPreview();
         if (IsOwner) TargetOutline.For(this).Hide();
     }
@@ -301,12 +310,22 @@ public class PlayerInteractInput : NetworkBehaviour
     [SerializeField] private Color takeOutlineColor = new(1f, 0.85f, 0.2f, 1f);
     [Tooltip("Outline colour for the shelf space F would stock (or G would take back from).")]
     [SerializeField] private Color stockOutlineColor = new(0.3f, 0.9f, 1f, 1f);
+    [Tooltip("Outline colour for a shelf space the held crate's product can't go in.")]
+    [SerializeField] private Color blockedOutlineColor = new(1f, 0.35f, 0.3f, 1f);
 
     // Box what F (or G) would act on: the product it takes, or the space it stocks.
     private void UpdateStockOutline(int held)
     {
         var outline = TargetOutline.For(this);
         if (stockTarget == null) { outline.Hide(); return; }
+        if (stockZone < 0 && putBackZone < 0)
+        {
+            // Can't stock here: the nearest spot, in the "no" colour.
+            if (blockedZone >= 0 && stockTarget.TryGetZoneBox(blockedZone, out Vector3 bc, out Quaternion br, out Vector3 bs))
+                outline.ShowBox(bc, br, bs, blockedOutlineColor);
+            else outline.Hide();
+            return;
+        }
 
         if (stockTargetIsTake && stockZone >= 0)
         {
@@ -516,6 +535,7 @@ public class PlayerInteractInput : NetworkBehaviour
 
     private string StockPrompt()
     {
+        if (stockZone < 0 && putBackZone < 0) return CantStockNote() + OrientPrompt();
         if (stockTargetIsTake)
         {
             var z = stockTarget.GetZone(stockZone);
@@ -546,8 +566,32 @@ public class PlayerInteractInput : NetworkBehaviour
         return text;
     }
 
-    /// <summary>The spot R / T act on: the one being stocked (or taken from), else the put-back one.</summary>
-    private int OrientZone() => stockTarget == null ? -1 : stockZone >= 0 ? stockZone : putBackZone;
+    // Why the held crate's product can't go on the shelf being looked at.
+    private string CantStockNote()
+    {
+        int held = inventory.HeldItemId.Value;
+        var z = stockTarget.GetZone(blockedZone);
+        string kind = stockTarget.IsHangRail(blockedZone) ? "rack" : "shelf";
+        if (z.count > 0 && z.itemId != held) return $"This {kind} spot has {ItemName(z.itemId)}";
+        if (!stockTarget.Accepts(blockedZone, held)) return $"{ItemName(held)} can't go on a {kind}";
+        if (z.count > 0) return $"This {kind} spot is full ({z.count})";
+        return stockTarget.FitsAnyWay(blockedZone, held)
+            ? $"{ItemName(held)} doesn't fit this way"
+            : $"{ItemName(held)} doesn't fit on this {kind}";
+    }
+
+    /// <summary>
+    /// The spot R / T act on: the one being stocked (or taken from), else the put-back one, else an empty
+    /// spot the product would fit if it were turned.
+    /// </summary>
+    private int OrientZone()
+    {
+        if (stockTarget == null) return -1;
+        if (stockZone >= 0) return stockZone;
+        if (putBackZone >= 0) return putBackZone;
+        return blockedZone >= 0 && stockTarget.GetZone(blockedZone).count == 0 &&
+               stockTarget.FitsAnyWay(blockedZone, inventory.HeldItemId.Value) ? blockedZone : -1;
+    }
 
     [Tooltip("Holding F / G: wait this long after the first one before repeating, in seconds.")]
     [SerializeField] private float stockRepeatDelay = 0.4f;
