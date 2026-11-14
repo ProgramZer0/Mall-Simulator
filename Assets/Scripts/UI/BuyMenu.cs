@@ -516,7 +516,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         RefreshCart();
     }
 
-    private static string Describe(EconomyManager.OrderResult r) => r switch
+    public static string Describe(EconomyManager.OrderResult r) => r switch
     {
         EconomyManager.OrderResult.Ordered => "Ordered! It'll arrive at your shipment area.",
         EconomyManager.OrderResult.NotEnoughMoney => "Not enough money.",
