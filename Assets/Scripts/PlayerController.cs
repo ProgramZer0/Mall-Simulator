@@ -47,6 +47,15 @@ public class PlayerController3D : NetworkBehaviour
     [Tooltip("Give up waiting for a store after this many seconds (stay where you spawned).")]
     [SerializeField] private float storeWaitTimeout = 10f;
 
+    [Header("Falling")]
+    [Tooltip("Wait for the floor under you after spawning (it may not be loaded yet on a joining machine) " +
+             "before gravity starts, up to this many seconds.")]
+    [SerializeField] private float waitForFloorSeconds = 5f;
+    [Tooltip("Fell this far below the last place you stood: you're put back (at your store, or there).")]
+    [SerializeField] private float fallRescueDistance = 15f;
+    [Tooltip("Below this height you're always put back.")]
+    [SerializeField] private float killHeight = -50f;
+
     [Header("References")]
     [SerializeField] private Transform cameraRoot;
 
@@ -193,6 +202,8 @@ public class PlayerController3D : NetworkBehaviour
         if (cameraRoot != null) cameraRoot.localRotation = Quaternion.identity;
 
         if (controller != null) controller.enabled = wasEnabled;
+        lastSafe = pos; // a new place to fall from
+        hasSafe = true;
     }
 
     private void OnDestroy()
@@ -332,8 +343,54 @@ public class PlayerController3D : NetworkBehaviour
                                      QueryTriggerInteraction.Ignore);
     }
 
+    private Vector3 lastSafe;
+    private bool hasSafe;
+    private float floorWaitUntil = -1f;
+    private float nextSafeSample;
+
+    // Holds the player still until there's floor under them (after spawning), and puts them back if
+    // they fall out of the world.
+    private bool FallGuard()
+    {
+        if (floorWaitUntil < 0f) floorWaitUntil = Time.time + waitForFloorSeconds;
+        if (!hasSafe)
+        {
+            bool floor = Physics.Raycast(transform.position + Vector3.up * 0.5f, Vector3.down, out var hit, 50f,
+                                         Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore) &&
+                         !hit.collider.transform.IsChildOf(transform);
+            if (!floor && Time.time < floorWaitUntil)
+            {
+                velocity = Vector3.zero;
+                return false; // not yet: don't fall into nothing
+            }
+            lastSafe = transform.position;
+            hasSafe = true;
+        }
+
+        if (controller.isGrounded && Time.time >= nextSafeSample)
+        {
+            nextSafeSample = Time.time + 0.5f;
+            lastSafe = transform.position;
+        }
+
+        if (transform.position.y < killHeight || transform.position.y < lastSafe.y - fallRescueDistance)
+        {
+            var store = FindOwnStore();
+            if (store != null)
+            {
+                store.GetSpawnPose(out Vector3 pos, out Quaternion rot);
+                Teleport(pos, rot);
+            }
+            else Teleport(lastSafe, transform.rotation);
+            Debug.Log("[PlayerController] Fell out of the world: put back.", this);
+            return false;
+        }
+        return true;
+    }
+
     private void HandleMove(bool allowInput = true)
     {
+        if (!FallGuard()) return;
         bool grounded = controller.isGrounded;
 
         float h = allowInput ? Input.GetAxisRaw("Horizontal") : 0f;
