@@ -6849,8 +6849,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FranchiseManager
   ShowTopMostFoldoutHeaderGroup: 1
-  franchises: []
-  firstAuctionAfter: 120
+  franchises:
+  - {fileID: 11400000, guid: beb52dcafc2c2c142900754f9d70841b, type: 2}
+  - {fileID: 11400000, guid: 5befca0118a90aa4b8074dcc0b21272f, type: 2}
+  - {fileID: 11400000, guid: 2243bdc7655ad7340864808a9be1d55a, type: 2}
+  firstAuctionAfter: 60
   betweenFirstAuctions: 60
   extendWindow: 30
 --- !u!1 &451926993
@@ -23934,6 +23937,48 @@ MonoBehaviour:
     icon: {fileID: 0}
     categories:
     - shoe
+    category: 
+    price: 0
+    sizes: 2
+    sizePriceStep: 0.03
+    minLevel: 0
+    specialMarketWeight: 1
+    rarity: 0
+    marketPrice: 40
+    deliverySeconds: 0
+    shipmentPrefab: {fileID: 5976144729851372552, guid: 75b990fec1068f24d89ce150db927e28, type: 3}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
+  - id: 17
+    displayName: Test Rare Shoe box
+    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
+    worldNetworkPrefab: {fileID: 2919167297392315864, guid: 565a7df3bcfa9d44c8cb7982023d4af6, type: 3}
+    showInShop: 1
+    icon: {fileID: 0}
+    categories:
+    - shoes
+    - Rare Shoes
+    category: 
+    price: 500
+    sizes: 2
+    sizePriceStep: 0.03
+    minLevel: 0
+    specialMarketWeight: 1
+    rarity: 0
+    marketPrice: 70
+    deliverySeconds: 30
+    shipmentPrefab: {fileID: 5976144729851372552, guid: 75b990fec1068f24d89ce150db927e28, type: 3}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
+  - id: 18
+    displayName: 'Test Rare Shoes '
+    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
+    worldNetworkPrefab: {fileID: 2919167297392315864, guid: 565a7df3bcfa9d44c8cb7982023d4af6, type: 3}
+    showInShop: 0
+    icon: {fileID: 0}
+    categories:
+    - shoes
+    - Rare Shoes
     category: 
     price: 0
     sizes: 2

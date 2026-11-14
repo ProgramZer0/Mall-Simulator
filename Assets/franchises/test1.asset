@@ -16,9 +16,9 @@ MonoBehaviour:
   displayName: Franchise
   description: 
   icon: {fileID: 0}
-  category: Franchise
+  category: Rare Shoes
   startingBid: 2000
   minRaise: 100
-  holdSeconds: 1800
+  holdSeconds: 3600
   auctionSeconds: 180
   minLevel: 0
