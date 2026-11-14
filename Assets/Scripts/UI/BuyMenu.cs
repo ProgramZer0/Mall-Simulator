@@ -267,6 +267,8 @@ public class BuyMenu : MonoBehaviour, IShopScreen
             {
                 if (def == null || !def.showInShop || def.worldNetworkPrefab == null) continue;
                 if (!MatchesFilter(def)) continue;
+                // Items needing a license the team doesn't hold aren't listed at all.
+                if (!LicenseManager.CanOrder(LocalTeam, def, out _)) continue;
                 shown.Add(def);
             }
         }
