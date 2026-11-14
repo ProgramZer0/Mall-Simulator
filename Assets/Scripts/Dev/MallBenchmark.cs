@@ -146,14 +146,13 @@ public class MallBenchmark : MonoBehaviour
         if (stores.Count == 0) { Report("No store to fill (stand in one, or tick All Stores)."); job = null; yield break; }
 
         var sw = Stopwatch.StartNew();
-        int placed = 0, thisFrame = 0, outside = 0, blocked = 0;
+        int placed = 0, thisFrame = 0, outside = 0, blocked = 0, noFloor = 0;
         var areas = new List<Bounds>();
         foreach (var plot in stores)
         {
             if (plot == null) continue;
             areas.Clear();
             plot.GetAreaBounds(areas);
-            float floor = plot.FloorHeight;
             int inStore = 0, shelfTurn = 0;
 
             foreach (var area in areas)
@@ -172,7 +171,12 @@ public class MallBenchmark : MonoBehaviour
 
                     for (float x = area.min.x + half.x + 0.2f; x <= area.max.x - half.x - 0.2f && inStore < maxShelvesPerStore; x += half.x * 2f + 0.1f)
                     {
-                        var pos = new Vector3(x, floor, rowZ);
+                        // Stand it on the real floor there (found like the player's aim: straight down
+                        // onto the placement layers), not the bottom of the store's box.
+                        if (!Physics.Raycast(new Vector3(x, area.max.y - 0.05f, rowZ), Vector3.down, out RaycastHit floorHit,
+                                area.size.y + 1f, placer.PlacementMask, QueryTriggerInteraction.Ignore))
+                        { noFloor++; continue; }
+                        var pos = floorHit.point;
                         pos.y += PlacementCheck.PivotHeightAboveBase(def, rot);
                         if (!plot.ContainsItem(def, pos, rot)) { outside++; continue; }
                         if (!placer.FitsAt(def.id, pos, rot)) { blocked++; continue; }
@@ -191,7 +195,8 @@ public class MallBenchmark : MonoBehaviour
             }
         }
         Report($"Filled: {placed} shelves in {stores.Count} store(s), {sw.ElapsedMilliseconds} ms " +
-               $"(spots skipped: {outside} not inside the store, {blocked} blocked or nothing to stand on).");
+               $"(spots skipped: {outside} not inside the store, {blocked} blocked or nothing to stand on, " +
+               $"{noFloor} no floor found on the Placement Mask).");
         job = null;
     }
 
