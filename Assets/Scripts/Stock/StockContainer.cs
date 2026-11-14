@@ -811,8 +811,21 @@ public class StockContainer : NetworkBehaviour
         t.name = prefab.name + " (batched stock template)";
         t.transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
         shape = StockBatcher.TakeShape(t);
+        if (shape != null) StripToCollider(t);
         BatchedTemplates[prefab] = (t, shape);
         return t;
+    }
+
+    // A batched product is drawn by StockBatcher from its shape, so all a copy needs is its transform and
+    // the one box collider on the root (for looking at it). The mesh parts (a renderer, a mesh filter and
+    // often a child object each) would otherwise be copied into every product on every shelf: with a full
+    // mall that was ~260k renderers and filters and ~115k extra objects, a few hundred MB.
+    private static void StripToCollider(GameObject template)
+    {
+        var root = template.transform;
+        for (int i = root.childCount - 1; i >= 0; i--) DestroyImmediate(root.GetChild(i).gameObject);
+        if (template.TryGetComponent<MeshRenderer>(out var r)) DestroyImmediate(r);
+        if (template.TryGetComponent<MeshFilter>(out var f)) DestroyImmediate(f);
     }
 
     // The stripped copy every product of this prefab is copied from (kept under a hidden, switched-off
