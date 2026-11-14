@@ -24,8 +24,6 @@ public class StoreEditIsolation : MonoBehaviour
     /// <summary>Anything within this many meters of the store's space still shows (walls on the edge).</summary>
     public float Margin = 0.3f;
 
-    /// <summary>How often (seconds) to work out again what's outside the store (new or moved objects).</summary>
-    public float RefreshInterval = 0.5f;
 
     /// <summary>Objects under these are never hidden (e.g. the edit handles).</summary>
     public Transform[] AlwaysShow;
@@ -43,9 +41,8 @@ public class StoreEditIsolation : MonoBehaviour
     private bool warnedTooManyBoxes;
 
     private Camera cam;
-    private readonly List<Renderer> outside = new(); // found at the last refresh
+    private readonly HashSet<Renderer> outside = new(); // what to hide (kept up to date a bit each frame)
     private StorePlot foundFor;
-    private float nextRefresh;
     private readonly List<Renderer> hidden = new();
     private readonly List<Bounds> areas = new();
 
@@ -53,7 +50,8 @@ public class StoreEditIsolation : MonoBehaviour
 
     private void OnEnable()
     {
-        nextRefresh = 0f;
+        nextFullScan = 0f;
+        foundFor = null;
         RenderPipelineManager.beginCameraRendering += OnBeginCamera;
         RenderPipelineManager.endCameraRendering += OnEndCamera;
         Camera.onPreCull += OnPreCullBuiltIn;      // in case the project ever runs without URP
@@ -88,15 +86,7 @@ public class StoreEditIsolation : MonoBehaviour
         if (Plot == null) return;
 
         SetPixelClip();
-
-        // Which renderers are outside the store is worked out only every Refresh Interval (it means
-        // checking every renderer in the scene); each frame just switches that list off.
-        if (Time.unscaledTime >= nextRefresh || foundFor != Plot)
-        {
-            nextRefresh = Time.unscaledTime + RefreshInterval;
-            foundFor = Plot;
-            FindOutside();
-        }
+        UpdateOutside();
 
         foreach (var r in outside)
         {
@@ -107,28 +97,86 @@ public class StoreEditIsolation : MonoBehaviour
         }
     }
 
-    private void FindOutside()
-    {
-        outside.Clear();
-        areas.Clear();
-        Plot.GetAreaBounds(areas);
-        if (areas.Count == 0) return;
-        for (int i = 0; i < areas.Count; i++)
-        {
-            Bounds a = areas[i];
-            a.Expand(Margin * 2f);
-            areas[i] = a;
-        }
+    /* What to hide is kept up to date a little at a time, so a full mall (tens of thousands of
+       renderers) never costs much in one frame:
+       - every Full Scan Interval the scene's renderers are listed once;
+       - each frame Checks Per Frame of them are sorted into "hide" or "leave";
+       - only things that could come between the camera and the store are hidden: anything in the box
+         around the store and the camera. Everything else is either out of view or painted over by
+         the clip pass anyway, so it's left alone (that's most of the mall). */
 
-        foreach (var r in FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+    /// <summary>How often (seconds) the scene's renderers are listed again (to catch new objects).</summary>
+    public float FullScanInterval = 3f;
+    /// <summary>Renderers sorted into hide / leave each frame.</summary>
+    public int ChecksPerFrame = 3000;
+
+    private Renderer[] all = System.Array.Empty<Renderer>();
+    private int scanIndex;
+    private float nextFullScan;
+
+    private void UpdateOutside()
+    {
+        bool newStore = foundFor != Plot;
+        if (newStore || Time.unscaledTime >= nextFullScan)
         {
-            if (r == null || !r.enabled || !r.gameObject.activeInHierarchy || IsAlwaysShown(r.transform)) continue;
-            Bounds b = r.bounds;
-            bool inStore = false;
-            foreach (var a in areas)
-                if (a.Intersects(b)) { inStore = true; break; }
-            if (!inStore) outside.Add(r);
+            nextFullScan = Time.unscaledTime + FullScanInterval;
+            foundFor = Plot;
+            areas.Clear();
+            Plot.GetAreaBounds(areas);
+            for (int i = 0; i < areas.Count; i++)
+            {
+                Bounds a = areas[i];
+                a.Expand(Margin * 2f);
+                areas[i] = a;
+            }
+            all = FindObjectsByType<Renderer>(FindObjectsSortMode.None);
+            scanIndex = 0;
+            outside.RemoveWhere(r => r == null); // destroyed since
+            if (newStore)
+            {
+                // A different store: sort everything now, so the first frame is already right.
+                outside.Clear();
+                Bounds view0 = ViewVolume();
+                foreach (var r in all) Sort(r, view0);
+                return;
+            }
         }
+        if (all.Length == 0 || areas.Count == 0) return;
+
+        Bounds view = ViewVolume();
+        int n = Mathf.Min(ChecksPerFrame, all.Length);
+        for (int k = 0; k < n; k++)
+        {
+            Sort(all[scanIndex], view);
+            scanIndex = (scanIndex + 1) % all.Length;
+        }
+    }
+
+    // The box around the store and the camera: only things in it can block the view of the store.
+    private Bounds ViewVolume()
+    {
+        if (areas.Count == 0) return new Bounds(transform.position, Vector3.zero);
+        Bounds v = areas[0];
+        for (int i = 1; i < areas.Count; i++) v.Encapsulate(areas[i]);
+        v.Encapsulate(transform.position);
+        v.Expand(1f);
+        return v;
+    }
+
+    private void Sort(Renderer r, Bounds view)
+    {
+        if (r == null) return;
+        bool hide = r.enabled && r.gameObject.activeInHierarchy && !IsAlwaysShown(r.transform);
+        if (hide)
+        {
+            Bounds b = r.bounds;
+            hide = view.Intersects(b);
+            if (hide)
+                foreach (var a in areas)
+                    if (a.Intersects(b)) { hide = false; break; }
+        }
+        if (hide) outside.Add(r);
+        else outside.Remove(r);
     }
 
     private void Restore()
