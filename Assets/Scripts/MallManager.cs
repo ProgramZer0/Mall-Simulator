@@ -30,9 +30,6 @@ public class MallManager : NetworkBehaviour
     [SerializeField] private bool releaseOnDisconnect = true;
     [Tooltip("Stores one team may own, including its free starter store.")]
     [SerializeField] private int maxStoresPerTeam = 6;
-    [Tooltip("Players can unlock a store's segments by looking at the segment's wall and pressing F. " +
-             "Untick once segments are bought from the shop's license page instead.")]
-    [SerializeField] private bool buySegmentsFromWalls = true;
     [Tooltip("Players allowed on one team. 1 = everyone plays solo (co-op off).")]
     [SerializeField] private int maxPlayersPerTeam = 1;
 
@@ -67,7 +64,6 @@ public class MallManager : NetworkBehaviour
     public int MaxStoresPerTeam => maxStoresPerTeam;
 
     /// <summary>Can segments be unlocked by looking at their wall (F)? Set on the MallManager.</summary>
-    public bool BuySegmentsFromWalls => buySegmentsFromWalls;
 
     public IReadOnlyCollection<StorePlot> Plots => plots.Values;
 
@@ -515,6 +511,7 @@ public class MallManager : NetworkBehaviour
         if (!plot.IsAuthorized(clientId)) return false;
         if (segmentIndex < 0 || segmentIndex >= plot.SegmentCount) return false;
         if (plot.IsSegmentPurchased(segmentIndex)) return false;
+        if (!plot.CanBuySegmentNext(segmentIndex)) return false; // in order: the ones before it first
         // Its walls go away: nothing may be hung on them (and the store's items are put away while editing).
         if (plot.IsRenovating || plot.CountItemsOnSegmentWalls(segmentIndex) > 0) return false;
 
@@ -539,21 +536,6 @@ public class MallManager : NetworkBehaviour
     public void RequestBuySegmentServerRpc(int plotId, int segmentIndex, ServerRpcParams rpcParams = default)
     {
         ServerTryBuySegment(rpcParams.Receive.SenderClientId, plotId, segmentIndex);
-    }
-
-    /// <summary>Server: buy a segment from its wall (only while Buy Segments From Walls is on, and only standing at it).</summary>
-    public bool ServerTryBuySegmentFromWall(ulong clientId, int plotId, int segmentIndex)
-    {
-        if (!IsServer || !buySegmentsFromWalls || !plots.TryGetValue(plotId, out var plot)) return false;
-        var player = NetworkManager.ConnectedClients.TryGetValue(clientId, out var client) ? client.PlayerObject : null;
-        if (player == null || !plot.IsNearSegmentWall(segmentIndex, player.transform.position)) return false;
-        return ServerTryBuySegment(clientId, plotId, segmentIndex);
-    }
-
-    [ServerRpc(RequireOwnership = false)]
-    public void RequestBuySegmentFromWallServerRpc(int plotId, int segmentIndex, ServerRpcParams rpcParams = default)
-    {
-        ServerTryBuySegmentFromWall(rpcParams.Receive.SenderClientId, plotId, segmentIndex);
     }
 
     /// <summary>One segment a player's team could buy (for the license / buy menu).</summary>

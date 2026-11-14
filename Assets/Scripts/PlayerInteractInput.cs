@@ -97,7 +97,6 @@ public class PlayerInteractInput : NetworkBehaviour
             PriceScanner.LocalActive)
         {
             lookedAtSign = null;
-            lookedAtSegment = null;
             lookedAtMonitor = null;
             lookedAtVote = null;
             lookedAtCart = null;
@@ -127,7 +126,6 @@ public class PlayerInteractInput : NetworkBehaviour
     /* ========================= INTERACT ========================= */
 
     private ForSaleSign lookedAtSign;
-    private SegmentSign lookedAtSegment; // a segment wall of your store you could unlock with F
     private CartNet lookedAtCart; // a cart you could start pushing
     private DoorNet lookedAtDoor; // a door you can open/close with F (and maybe lock with L)
     private CheckoutCounter lookedAtCounter;        // your store's checkout counter
@@ -147,7 +145,6 @@ public class PlayerInteractInput : NetworkBehaviour
     private void UpdateLookedAtSign()
     {
         lookedAtSign = null;
-        lookedAtSegment = null;
         lookedAtMonitor = null;
         lookedAtVote = null;
         lookedAtCart = null;
@@ -189,12 +186,6 @@ public class PlayerInteractInput : NetworkBehaviour
 
             var sign = hit.collider.GetComponentInParent<ForSaleSign>();
             if (sign != null && sign.Plot != null && sign.Plot.IsForSale) lookedAtSign = sign;
-
-            var segment = hit.collider.GetComponentInParent<SegmentSign>();
-            if (segment != null && segment.Plot != null && MallManager.Instance != null &&
-                MallManager.Instance.BuySegmentsFromWalls && segment.Plot.IsAuthorized(OwnerClientId) &&
-                !segment.Plot.IsSegmentPurchased(segment.Index))
-                lookedAtSegment = segment;
 
             var monitor = hit.collider.GetComponentInParent<ShopMonitor>();
             if (monitor != null && monitor.CanUse(OwnerClientId)) lookedAtMonitor = monitor;
@@ -345,17 +336,6 @@ public class PlayerInteractInput : NetworkBehaviour
     private static GUIStyle promptStyle; // made once; a new GUIStyle every OnGUI call makes garbage
     private static readonly GUIContent PromptContent = new();
 
-    // Unlocking takes the segment's walls away, so anything hung on them has to come off first.
-    private string SegmentPrompt()
-    {
-        var plot = lookedAtSegment.Plot;
-        int i = lookedAtSegment.Index;
-        int onWall = plot.CountItemsOnSegmentWalls(i);
-        if (onWall > 0)
-            return $"Take the {onWall} thing{(onWall == 1 ? "" : "s")} off this wall to unlock {plot.GetSegmentName(i)}";
-        return $"F: Unlock {plot.GetSegmentName(i)} (${plot.GetSegmentPrice(i)})";
-    }
-
     // Something for sale in someone else's open store: a loose item (empty hands) or one product off a
     // shelf (empty hands, or a crate of it with room). Same price rule as the host's.
     private void FindBuyTarget()
@@ -442,7 +422,7 @@ public class PlayerInteractInput : NetworkBehaviour
     /// <summary>The F prompt right now (null: nothing to show).</summary>
     private string CurrentPrompt()
     {
-        if (!IsOwner || (lookedAtSign == null && lookedAtSegment == null && lookedAtMonitor == null && stockTarget == null &&
+        if (!IsOwner || (lookedAtSign == null && lookedAtMonitor == null && stockTarget == null &&
                          lookedAtCart == null && pushedCart == null && lookedAtDoor == null &&
                          lookedAtCounter == null && lookedAtPickup == null && lookedAtBuy == null && lookedAtVote == null &&
                          !lookedAtBuriedCartItem) ||
@@ -458,7 +438,6 @@ public class PlayerInteractInput : NetworkBehaviour
                     : lookedAtVote != null ? lookedAtVote.Prompt(OwnerClientId)
                     : lookedAtMonitor != null ? "F: Shop monitor"
                     : lookedAtSign != null ? SignPrompt()
-                    : lookedAtSegment != null ? SegmentPrompt()
                     : lookedAtBuy != null ? BuyPrompt()
                     : stockTarget != null ? StockPrompt()
                     : PickupPrompt();
@@ -632,7 +611,7 @@ public class PlayerInteractInput : NetworkBehaviour
             if (lookedAtCounter != null) return;
             if (stockTarget != null && stockZone >= 0 && stockTargetIsTake == fRepeatTakes &&
                 pushedCart == null && lookedAtCart == null && lookedAtDoor == null &&
-                lookedAtMonitor == null && lookedAtSign == null && lookedAtSegment == null)
+                lookedAtMonitor == null && lookedAtSign == null)
                 DoStockAction();
             return;
         }
@@ -705,14 +684,6 @@ public class PlayerInteractInput : NetworkBehaviour
         {
             if (MallManager.Instance != null)
                 MallManager.Instance.RequestBuyFromSignServerRpc(lookedAtSign.Plot.PlotId);
-            return;
-        }
-
-        // Unlocking a segment from its wall (while the mall allows that).
-        if (lookedAtSegment != null)
-        {
-            if (MallManager.Instance != null)
-                MallManager.Instance.RequestBuySegmentFromWallServerRpc(lookedAtSegment.Plot.PlotId, lookedAtSegment.Index);
             return;
         }
 

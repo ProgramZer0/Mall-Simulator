@@ -31,6 +31,8 @@ public class StoreUpgradesScreen : MonoBehaviour, IShopScreen
     [SerializeField] private Sprite recallIcon;
 
     [SerializeField] private TMP_Text statusText;
+    [Tooltip("Optional: a pop-up (ConfirmPopup) for 'take the things off this wall first'. Without it, the status says so.")]
+    [SerializeField] private ConfirmPopup popup;
 
     private StorePlot plot;
     private readonly List<UpgradeRow> rows = new();
@@ -109,20 +111,19 @@ public class StoreUpgradesScreen : MonoBehaviour, IShopScreen
         var up = StoreUpgrades.Instance;
         int money = EconomyManager.Instance != null ? EconomyManager.Instance.GetTeamMoney(plot.OwnerTeamId) : int.MaxValue;
 
-        // Expansions.
+        // Expansions, bought in order (top of the list first).
         for (int i = 0; i < plot.SegmentCount; i++)
         {
             int index = i;
             bool owned = plot.IsSegmentPurchased(i);
             int price = plot.GetSegmentPrice(i);
-            bool canBuy = !owned && money >= price;
+            int first = plot.FirstUnboughtBefore(i);
+            bool canBuy = !owned && first < 0 && money >= price;
+            string label = owned ? "Owned"
+                : first >= 0 ? $"Buy {plot.GetSegmentName(first)} first"
+                : money < price ? "Not enough money" : "Buy";
             Row(n++, plot.GetSegmentName(i), "More floor space for the store.", owned ? "" : $"${price:N0}",
-                owned ? "Owned" : canBuy ? "Buy" : "Not enough money", canBuy, expansionIcon,
-                () =>
-                {
-                    MallManager.Instance?.RequestBuySegmentServerRpc(plot.PlotId, index);
-                    Status($"Buying {plot.GetSegmentName(index)}...");
-                });
+                label, canBuy, expansionIcon, () => BuySegment(index));
         }
 
         // Cart.
@@ -179,6 +180,23 @@ public class StoreUpgradesScreen : MonoBehaviour, IShopScreen
         if (row.buttonText != null) row.buttonText.text = buttonLabel;
         if (row.button != null) row.button.interactable = interactable && onClick != null;
         if (row.icon != null && icon != null) row.icon.sprite = icon;
+    }
+
+    // The walls it opens up come down: anything hung on them has to come off first.
+    private void BuySegment(int index)
+    {
+        if (plot == null) return;
+        int onWall = plot.CountItemsOnSegmentWalls(index);
+        if (onWall > 0)
+        {
+            string message = $"Take the {onWall} thing{(onWall == 1 ? "" : "s")} off the wall first.\n" +
+                             $"The wall won't come down for {plot.GetSegmentName(index)} until it's clear.";
+            if (popup != null) popup.Show(message, null);
+            else Status(message);
+            return;
+        }
+        MallManager.Instance?.RequestBuySegmentServerRpc(plot.PlotId, index);
+        Status($"Buying {plot.GetSegmentName(index)}...");
     }
 
     /* ========================= NAME ========================= */

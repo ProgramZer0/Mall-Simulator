@@ -389,6 +389,22 @@ public class StorePlot : NetworkBehaviour
 
     /* ========================= QUERIES ========================= */
 
+    /// <summary>Segments are bought in order (top of the list first): is every one before it owned?</summary>
+    public bool CanBuySegmentNext(int index)
+    {
+        for (int i = 0; i < index && i < SegmentCount; i++)
+            if (!IsSegmentPurchased(i)) return false;
+        return true;
+    }
+
+    /// <summary>The first segment not bought yet before this one (-1 if none).</summary>
+    public int FirstUnboughtBefore(int index)
+    {
+        for (int i = 0; i < index && i < SegmentCount; i++)
+            if (!IsSegmentPurchased(i)) return i;
+        return -1;
+    }
+
     public bool IsSegmentPurchased(int index) =>
         index >= 0 && index < SegmentCount && (purchasedSegments.Value & (1 << index)) != 0;
 
