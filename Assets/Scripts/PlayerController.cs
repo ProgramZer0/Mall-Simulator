@@ -55,6 +55,12 @@ public class PlayerController3D : NetworkBehaviour
     [SerializeField] private float fallRescueDistance = 15f;
     [Tooltip("Below this height you're always put back.")]
     [SerializeField] private float killHeight = -50f;
+    [Tooltip("Still counts as standing this long after the floor was last touched. Running into something can " +
+             "leave a frame or two touching only its side; without this, gravity builds up in them and you dip.")]
+    [SerializeField, Min(0f)] private float groundedGrace = 0.15f;
+    [Tooltip("Log to the Console when you drop more than 0.3 m below where you last stood without jumping " +
+             "(what you were touching, and what's under you), to track down falling through the floor.")]
+    [SerializeField] private bool debugFalls;
 
     [Header("References")]
     [SerializeField] private Transform cameraRoot;
@@ -392,10 +398,21 @@ public class PlayerController3D : NetworkBehaviour
         return true;
     }
 
+    private float lastGroundedAt = -10f;
+    private float lastGroundY;
+    private bool jumped;
+    private CollisionFlags lastFlags;
+
     private void HandleMove(bool allowInput = true)
     {
         if (!FallGuard()) return;
-        bool grounded = controller.isGrounded;
+        if (controller.isGrounded)
+        {
+            lastGroundedAt = Time.time;
+            lastGroundY = transform.position.y;
+            jumped = false;
+        }
+        bool grounded = controller.isGrounded || (!jumped && Time.time - lastGroundedAt < groundedGrace);
 
         float h = allowInput ? Input.GetAxisRaw("Horizontal") : 0f;
         float v = allowInput ? Input.GetAxisRaw("Vertical") : 0f;
@@ -420,6 +437,7 @@ public class PlayerController3D : NetworkBehaviour
             {
                 if (pushedCart != null) pushedCart.RequestReleaseRpc();
                 velocity.y = Mathf.Sqrt(-2f * gravity * jumpHeight);
+                jumped = true;
             }
             else if (velocity.y < 0f)
             {
@@ -435,9 +453,32 @@ public class PlayerController3D : NetworkBehaviour
 
         Vector3 finalVel = new Vector3(horizontalVel.x, velocity.y, horizontalVel.z);
 
-        controller.Move(finalVel * Time.deltaTime);
+        lastFlags = controller.Move(finalVel * Time.deltaTime);
 
         velocity.x = horizontalVel.x;
         velocity.z = horizontalVel.z;
+
+        if (debugFalls && !jumped && transform.position.y < lastGroundY - 0.3f) LogDip();
+    }
+
+    private float nextDipLog;
+
+    private void LogDip()
+    {
+        if (Time.time < nextDipLog) return;
+        nextDipLog = Time.time + 0.5f;
+        string under = Physics.Raycast(transform.position + Vector3.up * 0.5f, Vector3.down, out var hit, 5f,
+                                       Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+            ? $"'{hit.collider.name}' (layer {LayerMask.LayerToName(hit.collider.gameObject.layer)}) {hit.distance - 0.5f:0.00} m below"
+            : "nothing within 5 m";
+        var near = Physics.OverlapCapsule(transform.position + controller.center + Vector3.up * (controller.height * 0.5f - controller.radius),
+                                          transform.position + controller.center - Vector3.up * (controller.height * 0.5f - controller.radius),
+                                          controller.radius + 0.1f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        var names = new System.Text.StringBuilder();
+        foreach (var c in near)
+            if (!c.transform.IsChildOf(transform)) names.Append($"'{c.name}' ");
+        Debug.Log($"[PlayerController] Dipped {lastGroundY - transform.position.y:0.00} m below where I last stood " +
+                  $"(at {transform.position}, grounded {controller.isGrounded}, last move hit {lastFlags}, " +
+                  $"velocity {velocity}). Under me: {under}. Touching: {(names.Length > 0 ? names.ToString() : "nothing")}.", this);
     }
 }
