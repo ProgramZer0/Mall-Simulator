@@ -421,7 +421,13 @@ public class CheckoutCounter : NetworkBehaviour
             case CheckoutClickable.Action.CardReader:
                 return paying && !cash ? (s.moneyTaken != 0 ? "Click: swipe the card" : "Take the card first") : null;
             case CheckoutClickable.Action.Drawer:
-                return !cash ? null : s.drawerOpen != 0 ? $"Click: {FormatAmount(part.value)} as change" : "Open the drawer first";
+            {
+                if (!cash) return null;
+                if (s.drawerOpen == 0) return "Open the drawer first";
+                int taken = 0; // how many of this bill or coin are in the change so far
+                foreach (int c in change) if (c == part.value) taken++;
+                return $"{Pile(part.value, taken)} in change   Click: add one";
+            }
             case CheckoutClickable.Action.DrawerToggle:
                 return s.drawerOpen != 0 ? "Click: close the drawer" : "Click: open the drawer";
             case CheckoutClickable.Action.ClearChange:
