@@ -578,10 +578,31 @@ public class PlayerInteractInput : NetworkBehaviour
 
         var z = stockTarget.GetZone(zone);
         int current = z.count > 0 ? z.orient : stockOrient;
-        int next = turn ? StockContainer.Orientation.Turn(current) : StockContainer.Orientation.ToggleLying(current);
+        int itemId = z.count > 0 ? z.itemId : inventory.HeldItemId.Value;
+
+        // The next way round that fits: R tries each further quarter turn, T lays it down (or stands it
+        // up) and then tries its turns. A way it doesn't fit is skipped; if none fits, nothing changes.
+        int next = -1;
+        for (int i = 1; i <= 4 && next < 0; i++)
+        {
+            int candidate = turn
+                ? StockContainer.Orientation.Make(StockContainer.Orientation.Turns(current) + i, StockContainer.Orientation.Lying(current))
+                : StockContainer.Orientation.Make(StockContainer.Orientation.Turns(current) + i - 1, !StockContainer.Orientation.Lying(current));
+            if (candidate == current) continue;
+            if (Fits(candidate)) next = candidate;
+        }
+        if (next < 0)
+        {
+            ItemDebug.Log($"R/T: no other way round fits for {ItemDebug.Describe(itemId)} in zone {zone}.");
+            return;
+        }
 
         if (z.count > 0) inventory.RequestOrientZoneServerRpc(stockTarget.NetworkObject, zone, next);
         stockOrient = next; // remember it for the next empty spot too
+
+        // Everything already there still fits that way (an empty spot: at least one does).
+        bool Fits(int orient) =>
+            itemId == 0 || stockTarget.CapacityAt(zone, itemId, orient) >= Mathf.Max(1, z.count);
     }
 
     private string DoorPrompt()

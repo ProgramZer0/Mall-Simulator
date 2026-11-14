@@ -215,6 +215,10 @@ public class StockContainer : NetworkBehaviour
     public int GetCapacity(int zone, int itemId, int orient) =>
         Accepts(zone, itemId) && TryGetLayout(zone, itemId, OrientFor(zone, itemId, orient), out var l) ? l.capacity : 0;
 
+    /// <summary>How many of this product fit in a zone turned exactly this way (0: not that way).</summary>
+    public int CapacityAt(int zone, int itemId, int orient) =>
+        Accepts(zone, itemId) && TryGetLayout(zone, itemId, orient, out var l) ? l.capacity : 0;
+
     /// <summary>Why one more of this product can't go in this zone (for logs); "ok" if it can.</summary>
     public string WhyCantStock(int zone, int itemId, int orient)
     {
