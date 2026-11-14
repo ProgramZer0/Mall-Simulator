@@ -1042,6 +1042,13 @@ public class PlayerInteractInput : NetworkBehaviour
         if (Physics.Raycast(rayStart, cam.transform.forward,
             out RaycastHit hit, 5f, placementMask, QueryTriggerInteraction.Ignore))
         {
+            // Out of a delivery box and aimed where deliveries go (or at the store it's for): it goes
+            // back down in its box, the same rule the host uses.
+            if (!boxed && inventory.HeldBoxed.Value && PlacementCheck.CartBoxOf(def) != null &&
+                (MallManager.IsDeliveryArea(hit.point) ||
+                 MallManager.IsDeliveringTo(OwnerClientId, inventory.HeldFromTeam.Value, transform.position, hit.point)))
+                boxed = true;
+
             // Wall items aimed at a wall hang on it: upright, thinnest side against the wall. R turns
             // them around.
             if (!boxed && mounting != ItemPickupNet.Mounting.Floor && PlacementCheck.IsWallNormal(hit.normal) &&
@@ -1213,7 +1220,7 @@ public class PlayerInteractInput : NetworkBehaviour
         bool dropOff = MallManager.IsDeliveringTo(OwnerClientId, inventory.HeldFromTeam.Value, transform.position, at);
         if (!dropOff && !MallManager.CanPickupOrPlace(OwnerClientId, transform.position, at)) return "store rules (not your store, or you're outside it)";
         if (!dropOff && MallManager.IsOthersShipmentArea(OwnerClientId, at)) return "another store's shipment area";
-        if (MallManager.IsNoPlaceZone(at)) return "no-place zone (docks)";
+        if (!PuttingBoxBack && MallManager.IsNoPlaceZone(at)) return "no-place zone (docks)";
         if ((placingOnCart || placingBoxed) && cartBoxPrefab != null)
             return FitsBoxAt(cartBoxPrefab, at, ghost.transform.rotation) ? "ok" : $"its box '{cartBoxPrefab.name}' doesn't fit";
         int id = inventory.HeldItemId.Value;
@@ -1223,6 +1230,9 @@ public class PlayerInteractInput : NetworkBehaviour
             ? "ok"
             : $"blocked or no support {(placingOnWall ? "on the wall" : "on the floor")} (turn on Debug Placement for the boxes)";
     }
+
+    // Setting something from a delivery box back down in its box (allowed at the docks).
+    private bool PuttingBoxBack => placingBoxed && inventory.HeldBoxed.Value;
 
     private bool IsPlacementValid(GameObject ghost)
     {
@@ -1235,7 +1245,7 @@ public class PlayerInteractInput : NetworkBehaviour
             return false;
         if (!dropOff && MallManager.IsOthersShipmentArea(OwnerClientId, ghost.transform.position))
             return false;
-        if (MallManager.IsNoPlaceZone(ghost.transform.position)) // the docks: pick up only
+        if (!PuttingBoxBack && MallManager.IsNoPlaceZone(ghost.transform.position)) // the docks: pick up only (or a box put back)
             return false;
 
         // Packed into its box on your cart, or a wall piece in its box.

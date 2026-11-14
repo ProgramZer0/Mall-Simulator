@@ -345,6 +345,19 @@ public class MallManager : NetworkBehaviour
     public static bool IsNoPlaceZone(Vector3 targetPosition) =>
         LoadingDockZone.GetDockAt(targetPosition) != null && CartNet.FindCartAt(targetPosition) == null;
 
+    /// <summary>
+    /// Where deliveries go: a loading dock or any store's shipment area. Something picked up out of a
+    /// delivery box goes back down there in its box (see PlayerInventoryNet.HeldBoxed).
+    /// </summary>
+    public static bool IsDeliveryArea(Vector3 position)
+    {
+        if (LoadingDockZone.GetDockAt(position) != null) return true;
+        if (Instance == null) return false;
+        foreach (var plot in Instance.plots.Values)
+            if (plot.IsOnShipmentArea(position)) return true;
+        return false;
+    }
+
     /// <summary>Server: send a store's carts back to their home spots (for the recall button).</summary>
     public void ServerRecallCarts(ulong clientId, int plotId)
     {
