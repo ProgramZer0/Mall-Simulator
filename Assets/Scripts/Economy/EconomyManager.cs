@@ -137,6 +137,8 @@ public class EconomyManager : NetworkBehaviour
     private NetworkList<OrderInfo> orders;
     private NetworkList<OrderLine> orderLines;
     private readonly HashSet<int> dockFullNoticed = new(); // host: orders already reported waiting for room
+    private readonly Dictionary<int, float> soonLeft = new(); // host: each order's time left at the last check
+    private const float SoonSeconds = 60f;
 
     /// <summary>Any team's money changed (on every machine).</summary>
     public event Action MoneyChanged;
@@ -503,6 +505,12 @@ public class EconomyManager : NetworkBehaviour
                 continue;
             }
 
+            // A minute to go (only for deliveries that had longer than that).
+            if (soonLeft.TryGetValue(o.orderId, out float before) && before > SoonSeconds && left <= SoonSeconds &&
+                NotificationManager.Instance != null)
+                NotificationManager.Instance.ServerNotifyTeam(o.teamId, NotificationManager.Kind.DeliverySoon, o.plotId, o.boxCount);
+            soonLeft[o.orderId] = left;
+
             if (left > 0f) continue;
 
             // Due: find room for every box right now; if something moved in the way, wait.
@@ -609,6 +617,7 @@ public class EconomyManager : NetworkBehaviour
         int id = orders[index].orderId;
         fitCache.Remove(id);
         dockFullNoticed.Remove(id);
+        soonLeft.Remove(id);
         for (int i = orderLines.Count - 1; i >= 0; i--)
             if (orderLines[i].orderId == id) orderLines.RemoveAt(i);
         orders.RemoveAt(index);

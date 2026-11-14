@@ -24,6 +24,7 @@ public class NotificationManager : NetworkBehaviour
     {
         Delivered,  // a = plot id, b = boxes
         DockFull,   // a = plot id (a delivery is waiting for room)
+        DeliverySoon, // a = plot id, b = boxes (a minute away)
     }
 
     [Tooltip("Notify about mall events starting.")]
@@ -32,6 +33,8 @@ public class NotificationManager : NetworkBehaviour
     [SerializeField] private bool ballots = true;
     [Tooltip("Notify on level ups and new perk points.")]
     [SerializeField] private bool progression = true;
+    [Tooltip("Log host-sent notifications (who they went to, and when they arrive) to the Console.")]
+    [SerializeField] private bool debugLogs = true;
 
     // Locally noticed state.
     private readonly List<MallEventDef> activeNow = new();
@@ -66,7 +69,13 @@ public class NotificationManager : NetworkBehaviour
     /// <summary>Host: a coded notification for every player on a team.</summary>
     public void ServerNotifyTeam(ulong team, Kind kind, int a = 0, int b = 0)
     {
-        if (!IsServer || !TryGetTeamTarget(team, out var target)) return;
+        if (!IsServer) return;
+        if (!TryGetTeamTarget(team, out var target))
+        {
+            if (debugLogs) Debug.LogWarning($"[NotificationManager] {kind} for team {team}: no players on that team to send to.", this);
+            return;
+        }
+        if (debugLogs) Debug.Log($"[NotificationManager] Sending {kind} ({a}, {b}) to team {team}.", this);
         NoteRpc(kind, a, b, target);
     }
 
@@ -94,6 +103,7 @@ public class NotificationManager : NetworkBehaviour
     private void NoteRpc(Kind kind, int a, int b, RpcParams rpcParams)
     {
         Describe(kind, a, b, out string title, out string body, out bool alarm);
+        if (debugLogs) Debug.Log($"[NotificationManager] Got {kind}: {title}", this);
         Notifications.Post(title, body, alarm);
     }
 
@@ -110,6 +120,10 @@ public class NotificationManager : NetworkBehaviour
             case Kind.Delivered:
                 title = $"{b} box{(b == 1 ? "" : "es")} at the dock for {store}";
                 body = $"{b} box{(b == 1 ? "" : "es")} for {store} at the loading dock.";
+                break;
+            case Kind.DeliverySoon:
+                title = $"Delivery for {store} in 1 minute ({b} box{(b == 1 ? "" : "es")})";
+                body = "";
                 break;
             case Kind.DockFull:
                 title = $"Dock full: {store}'s delivery is waiting";
@@ -134,8 +148,15 @@ public class NotificationManager : NetworkBehaviour
         if (ProgressionManager.Instance != null) ProgressionManager.Instance.Changed += OnProgressChanged;
         if (LicenseManager.Instance != null) LicenseManager.Instance.Changed += OnLicensesChanged;
 
-        // What's already going on when we join isn't news.
+        // What's already going on when we join (or the session starts): one note listing it, so a
+        // player joining late knows the season and events the host has.
         SnapshotEvents(post: false);
+        if (mallEvents && activeNow.Count > 0)
+        {
+            var names = new List<string>();
+            foreach (var def in activeNow) if (def != null) names.Add(def.displayName);
+            Notifications.Post($"In the mall now: {string.Join(", ", names)}");
+        }
         ballotWasOpen = MallVoteManager.Instance != null && MallVoteManager.Instance.IsOpen;
         levelSeen = -1;
         pointsSeen.Clear();
