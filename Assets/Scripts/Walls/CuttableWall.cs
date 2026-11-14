@@ -119,20 +119,44 @@ public class CuttableWall : MonoBehaviour
         foreach (var c in GetComponents<Collider>()) originalColliders.Add(c);
     }
 
+    /// <summary>Where walls appeared or went away (openings and stores re-check only near a change).</summary>
+    public static readonly ChangeLog Changes = new();
+
     /// <summary>Goes up whenever a wall appears or goes away.</summary>
-    public static int Version { get; private set; }
+    public static int Version => Changes.Version;
+
+    private Bounds area;         // the wall in the world, grown a little (where openings matter to it)
+    private Vector3 areaPos;
+    private Quaternion areaRot;
 
     private void OnEnable()
     {
         All.Add(this);
-        Version++;
+        UpdateArea();
+        Changes.Note(area);
         seenVersion = -1;
     }
 
     private void OnDisable()
     {
         All.Remove(this);
-        Version++;
+        Changes.Note(area);
+    }
+
+    private void UpdateArea()
+    {
+        areaPos = transform.position;
+        areaRot = transform.rotation;
+        Bounds local;
+        if (TryGetComponent<BoxCollider>(out var box)) local = new Bounds(box.center, box.size);
+        else if (TryGetComponent<MeshFilter>(out var mf) && mf.sharedMesh != null) local = mf.sharedMesh.bounds;
+        else { area = new Bounds(areaPos, Vector3.one * 2f); return; }
+        var m = transform.localToWorldMatrix;
+        area = new Bounds(m.MultiplyPoint3x4(local.center), Vector3.zero);
+        for (int i = 0; i < 8; i++)
+            area.Encapsulate(m.MultiplyPoint3x4(local.center + Vector3.Scale(local.extents,
+                new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1))));
+        area.Expand(0.5f);
     }
 
     private void OnDestroy()
@@ -144,8 +168,15 @@ public class CuttableWall : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (seenVersion == WallOpening.Version && built) return;
+        bool moved = transform.position != areaPos || transform.rotation != areaRot;
+        if (!moved && built && seenVersion == WallOpening.Version) return;
+
+        // Only openings that changed near this wall matter (dragging a window in one store doesn't make
+        // every wall in the mall measure itself again).
+        if (moved) UpdateArea();
+        bool check = !built || moved || WallOpening.Changes.ChangedNear(seenVersion, area);
         seenVersion = WallOpening.Version;
+        if (!check) return;
 
         Measure();
         FindHoles(holes);
