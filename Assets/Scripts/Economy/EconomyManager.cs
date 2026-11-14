@@ -366,8 +366,13 @@ public class EconomyManager : NetworkBehaviour
 
     /// <summary>Server: check, charge and start a delivery.</summary>
     public OrderResult ServerTryOrder(ulong clientId, int plotId, int[] itemIds, int[] quantities, float deliverySeconds,
-                                      byte[] paints = null)
+                                      byte[] paints = null, int[] unitPrices = null)
     {
+        // Unit Prices (optional, dollars per item, delivery included): a set price instead of the
+        // catalog's, e.g. a special market deal.
+        int UnitCost(int i, ItemDef d) => unitPrices != null && i < unitPrices.Length && unitPrices[i] >= 0
+            ? unitPrices[i]
+            : MarketModifiers.OrderCost(d) + MarketModifiers.DeliveryFee(d);
         var mall = MallManager.Instance;
         if (!IsServer || mall == null || !mall.TryGetPlot(plotId, out var plot) || !plot.IsAuthorized(clientId))
             return OrderResult.NotYourStore;
@@ -392,7 +397,7 @@ public class EconomyManager : NetworkBehaviour
             boxes += quantities[i];
             if (boxes > maxItemsPerOrder) return OrderResult.BadQuantity;
             // Running mall events can change the cost, add a delivery fee and change delivery time.
-            cost += (long)(MarketModifiers.OrderCost(def) + MarketModifiers.DeliveryFee(def)) * quantities[i];
+            cost += (long)UnitCost(i, def) * quantities[i];
             slowest = Mathf.Max(slowest, MarketModifiers.DeliverySeconds(def));
         }
 
@@ -413,8 +418,7 @@ public class EconomyManager : NetworkBehaviour
         if (progression != null)
             for (int i = 0; i < itemIds.Length; i++)
                 if (ItemCatalog.Instance.TryGet(itemIds[i], out var paidFor))
-                    progression.ServerRecordOrder(team, itemIds[i], quantities[i],
-                        (long)(MarketModifiers.OrderCost(paidFor) + MarketModifiers.DeliveryFee(paidFor)) * quantities[i]);
+                    progression.ServerRecordOrder(team, itemIds[i], quantities[i], (long)UnitCost(i, paidFor) * quantities[i]);
 
         // Logistics perks: sooner deliveries (at most 75% off).
         float sooner = 1f - Mathf.Clamp(ProgressionManager.StoreStat(plot, PerkStat.FasterDelivery), 0f, 0.75f);

@@ -195,6 +195,9 @@ public class ItemDef
     }
     [Tooltip("Team level needed to order it (0 or 1 = from the start). Shown locked in the shop until then.")]
     [Min(0)] public int minLevel = 0;
+    [Tooltip("How often it comes up as a special market deal (0 = never). Items with Show In Shop off and " +
+             "this above 0 can only be bought there.")]
+    [Min(0f)] public float specialMarketWeight = 1f;
     [Tooltip("How rare it is. Customers who love exotic things are drawn to rarer items.")]
     public Rarity rarity = Rarity.Common;
 
