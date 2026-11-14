@@ -12,7 +12,8 @@ using UnityEngine.Rendering;
 /// mesh and material, and each group is drawn with one call (per 1023), culled as one box.
 ///
 /// The product objects still exist (with their box collider), so looking at, taking and pricing
-/// products works as before; only their renderers are switched off. Shelf stock made by
+/// products works as before; they're just a transform and that collider, with no renderers or mesh
+/// parts of their own (see StockContainer.StripToCollider). Shelf stock made by
 /// StockContainer uses this; the checkout belt, cash and edit-mode copies keep ordinary renderers.
 ///
 /// Edit mode: the editing player's own screen doesn't draw these (their store's stock is shown with
