@@ -1064,8 +1064,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6124047019357395682}
+  - component: {fileID: 2220372671138841867}
   m_Layer: 0
-  m_Name: topBar
+  m_Name: FranchiseApp
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1090,6 +1091,21 @@ RectTransform:
   m_AnchoredPosition: {x: -1.2774506, y: -4.157135}
   m_SizeDelta: {x: -11.403442, y: -24.828934}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &2220372671138841867
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6338007705340063306}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0ad5d4f7e19b4dffbe40dd8d52c53eef, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FranchisesApp
+  appName: Franchises
+  icon: {fileID: 0}
+  unlockLevel: 15
 --- !u!1 &6808419940915964316
 GameObject:
   m_ObjectHideFlags: 0
