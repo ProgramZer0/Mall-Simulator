@@ -49,8 +49,11 @@ public class StorePlot : NetworkBehaviour
 
         public bool Contains(Vector3 worldPoint)
         {
-            foreach (var box in Areas)
-                if (BoxContains(box, worldPoint)) return true;
+            // (Not through Areas: this is called a lot, and an iterator makes garbage every call.)
+            if (area != null && BoxContains(area, worldPoint)) return true;
+            if (areas != null)
+                foreach (var box in areas)
+                    if (box != null && box != area && BoxContains(box, worldPoint)) return true;
             return false;
         }
     }
@@ -329,6 +332,7 @@ public class StorePlot : NetworkBehaviour
         ApplyOwnerVisuals();
         UpdateStatus();
         Changed += OnAnyChange;
+        InvalidateBounds(); // the synced segments are known now
 
         if (MallManager.Instance != null) MallManager.Instance.Register(this);
     }
@@ -383,6 +387,8 @@ public class StorePlot : NetworkBehaviour
 
     private void OnSegmentsChanged(int prev, int next)
     {
+        InvalidateBounds();
+        StoreListing.RetrackAll(); // things in the new space now count as this store's
         ApplyWalls();
         Changed?.Invoke(this);
     }
@@ -417,6 +423,10 @@ public class StorePlot : NetworkBehaviour
     /// <summary>True if the point is inside the base space or any purchased segment.</summary>
     public bool Contains(Vector3 worldPoint)
     {
+        // Quick no for points nowhere near (most of them: stores ask about the whole mall).
+        if (!boundsValid) BuildBounds();
+        if (!ownedBounds.Contains(worldPoint)) return false;
+
         foreach (var box in baseAreas)
             if (BoxContains(box, worldPoint)) return true;
 
@@ -2200,6 +2210,31 @@ public class StorePlot : NetworkBehaviour
         for (int i = 0; i < SegmentCount; i++)
             if (IsSegmentPurchased(i))
                 foreach (var box in segments[i].Areas) into.Add(box);
+    }
+
+    // A box around the store's owned space (base + bought segments), for Contains' quick no.
+    private Bounds ownedBounds;
+    private bool boundsValid;
+
+    private void InvalidateBounds() => boundsValid = false;
+
+    private void BuildBounds()
+    {
+        boundsValid = true;
+        bool any = false;
+        void Add(BoxCollider box)
+        {
+            if (box == null) return;
+            var b = BoxWorldBounds(box);
+            if (any) ownedBounds.Encapsulate(b);
+            else { ownedBounds = b; any = true; }
+        }
+        if (baseAreas != null) foreach (var box in baseAreas) Add(box);
+        for (int i = 0; i < SegmentCount; i++)
+            if (IsSegmentPurchased(i))
+                foreach (var box in segments[i].Areas) Add(box);
+        if (!any) ownedBounds = new Bounds(transform.position, Vector3.zero);
+        ownedBounds.Expand(0.02f);
     }
 
     private static Bounds BoxWorldBounds(BoxCollider box)

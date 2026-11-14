@@ -139,12 +139,16 @@ public class MallManager : NetworkBehaviour
             return;
         }
         plots.Add(plot.PlotId, plot);
+        StoreListing.RetrackAll(); // anything already spawned there is now in a store
     }
 
     public void Unregister(StorePlot plot)
     {
         if (plot != null && plots.TryGetValue(plot.PlotId, out var existing) && existing == plot)
+        {
             plots.Remove(plot.PlotId);
+            StoreListing.RetrackAll();
+        }
     }
 
     /* ========================= QUERIES ========================= */
