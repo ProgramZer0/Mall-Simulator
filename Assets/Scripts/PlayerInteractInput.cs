@@ -178,6 +178,7 @@ public class PlayerInteractInput : NetworkBehaviour
             // Checkout: a clickable part (belt items and the customer's money aren't children of the counter).
             var part = hit.collider.GetComponentInParent<CheckoutClickable>();
             var counter = part != null ? part.Counter : hit.collider.GetComponentInParent<CheckoutCounter>();
+            if (part == null && counter != null) part = CheckoutPartBehind(counter, hit.distance);
             if (counter != null && counter.IsSpawned && counter.CanUse(OwnerClientId))
             {
                 lookedAtCounter = counter;
@@ -193,6 +194,28 @@ public class PlayerInteractInput : NetworkBehaviour
             var vote = hit.collider.GetComponentInParent<VoteButton>();
             if (vote != null && vote.Prompt(OwnerClientId) != null) lookedAtVote = vote;
         }
+    }
+
+    private static readonly RaycastHit[] partHits = new RaycastHit[16];
+
+    // The counter's body hit first: a clickable part of it just behind (the card reader, a key...) inside
+    // the counter's own collider still counts, so overlapping colliders don't make parts unclickable.
+    private CheckoutClickable CheckoutPartBehind(CheckoutCounter counter, float bodyDistance)
+    {
+        int n = Physics.RaycastNonAlloc(cam.transform.position, cam.transform.forward, partHits, interactRange,
+            Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        CheckoutClickable best = null;
+        float bestDistance = float.MaxValue;
+        for (int i = 0; i < n; i++)
+        {
+            var h = partHits[i];
+            if (h.distance >= bestDistance || h.distance > bodyDistance + 0.25f) continue;
+            var p = h.collider.GetComponentInParent<CheckoutClickable>();
+            if (p == null || p.Counter != counter) continue;
+            best = p;
+            bestDistance = h.distance;
+        }
+        return best;
     }
 
     /* ========================= STOCKING ========================= */
