@@ -74,6 +74,8 @@ public class CuttableWall : MonoBehaviour
     private float upSign = 1f;         // -1 when that axis points down
 
     private readonly List<Rect> holes = new();      // in wall space (u along, v up), meters
+    private readonly List<Vector2[]> holeOutlines = new(); // each hole's outline (wall space, counter-clockwise)
+    private readonly List<bool> holeCurved = new();     // the outline isn't just its rectangle
     private readonly List<Rect> builtHoles = new();
     private int seenVersion = -1;
     private bool built;
@@ -212,7 +214,7 @@ public class CuttableWall : MonoBehaviour
             {
                 Vector3 w = ToWall(t.TransformPoint(v));
                 return new Vector2(w.x, w.y);
-            }, holes);
+            }, holeOutlines);
         }
     }
 
@@ -311,12 +313,40 @@ public class CuttableWall : MonoBehaviour
         return c.x > 0f && c.x < Length && c.y > 0f && c.y < Height;
     }
 
+    private readonly List<(Rect rect, Vector2[] outline, bool curved)> found = new();
+
     private void FindHoles(List<Rect> into)
     {
         into.Clear();
+        found.Clear();
         foreach (var o in WallOpening.All)
-            if (o != null && TryHole(o.Current, out Rect r)) into.Add(r);
-        into.Sort((a, b) => a.xMin != b.xMin ? a.xMin.CompareTo(b.xMin) : a.yMin.CompareTo(b.yMin));
+        {
+            if (o == null) continue;
+            var shape = o.Current;
+            if (TryHole(shape, out Rect r)) found.Add((r, OutlineOf(shape, r), shape.outline != null));
+        }
+        found.Sort((a, b) => a.rect.xMin != b.rect.xMin ? a.rect.xMin.CompareTo(b.rect.xMin) : a.rect.yMin.CompareTo(b.rect.yMin));
+        holeOutlines.Clear();
+        holeCurved.Clear();
+        foreach (var f in found)
+        {
+            into.Add(f.rect);
+            holeOutlines.Add(f.outline);
+            holeCurved.Add(f.curved);
+        }
+    }
+
+    // A hole's outline in wall space: its rectangle, or its model's outline (arches...).
+    private Vector2[] OutlineOf(WallOpening.Shape s, Rect r)
+    {
+        if (s.outline == null) return MeshHoleCutter.Outline(r);
+        var points = new Vector2[s.outline.Length];
+        for (int i = 0; i < points.Length; i++)
+        {
+            Vector3 w = ToWall(s.OutlinePoint(s.outline[i]));
+            points[i] = new Vector2(w.x, w.y);
+        }
+        return MeshHoleCutter.CounterClockwise(points);
     }
 
     private bool SameHoles()
@@ -503,6 +533,16 @@ public class CuttableWall : MonoBehaviour
         var tris = new List<int>();
         float t = Thickness * 0.5f;
         foreach (var r in boxes) AddBox(r, -t, t, verts, normals, uvs, tris);
+        // Curved holes (arches): the solid corners between the outline and its rectangle, front and back.
+        // Their sides stay open (the frame covers them); the colliders stay rectangular.
+        for (int i = 0; i < holes.Count && i < holeOutlines.Count; i++)
+        {
+            if (!holeCurved[i]) continue;
+            flat.Clear();
+            MeshHoleCutter.RectMinusHole(holes[i], holeOutlines[i], flat);
+            AddFlat(flat, t, +1, verts, normals, uvs, tris);
+            AddFlat(flat, -t, -1, verts, normals, uvs, tris);
+        }
 
         mesh.Clear();
         mesh.SetVertices(verts);
@@ -677,6 +717,35 @@ public class CuttableWall : MonoBehaviour
     }
 
     // A box from (u0, v0, w0) to (u1, v1, w1) in wall space, with all six faces.
+    private readonly List<Vector2> flat = new();
+
+    // Flat triangles (wall space, every 3 points one) as a face of the wall at depth W, facing Sign.
+    private void AddFlat(List<Vector2> triangles, float w, int sign, List<Vector3> verts, List<Vector3> normals,
+                         List<Vector2> uvs, List<int> tris)
+    {
+        float tm = Mathf.Max(0.01f, textureMeters);
+        Vector3 nm = Vector3.zero;
+        nm[thickAxis] = sign;
+        Vector3 n = Vector3.Scale(nm, scale).normalized;
+        Vector3 outward = new(0f, 0f, sign);
+        for (int k = 0; k + 2 < triangles.Count; k += 3)
+        {
+            int start = verts.Count;
+            for (int j = 0; j < 3; j++)
+            {
+                Vector2 p = triangles[k + j];
+                verts.Add(LocalOf(p.x, p.y, w));
+                normals.Add(n);
+                uvs.Add(p / tm);
+            }
+            Vector3 m0 = triangles[k], m1 = triangles[k + 1], m2 = triangles[k + 2];
+            bool keepOrder = Vector3.Dot(Vector3.Cross(m1 - m0, m2 - m0), outward) * Handedness > 0f;
+            tris.Add(start);
+            tris.Add(keepOrder ? start + 1 : start + 2);
+            tris.Add(keepOrder ? start + 2 : start + 1);
+        }
+    }
+
     private void AddBox(Rect r, float w0, float w1, List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> tris)
     {
         float u0 = r.xMin, u1 = r.xMax, v0 = r.yMin, v1 = r.yMax;

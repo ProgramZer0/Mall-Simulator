@@ -9,6 +9,9 @@ using UnityEngine;
 /// Building the prefab:
 /// - Width along X (red arrow), height along Y, front facing +Z (blue arrow). The pivot can be anywhere.
 /// - The hole is the size of the item's colliders (or meshes), unless Hole Size is set.
+/// - Hole Outline: Rectangle (default), or From Model for arches and rounded tops: the hole follows the
+///   model's outline seen from the front (its convex outline, worked out in the editor and saved in
+///   Outline). Use the context menu "Fit Outline To Model" after changing the model.
 /// - Doors go on the floor. A store's front wall needs at least one door before edit mode can be saved.
 /// - Door types are up to the prefab:
 ///     a plain doorway: no extra scripts.
@@ -57,6 +60,24 @@ public class WallOpening : MonoBehaviour
              "sits sideways, (0, 180, 0) if it faces the wrong way.")]
     public Vector3 modelRotation;
 
+    public enum HoleOutline
+    {
+        /// <summary>A plain rectangle the size of the hole.</summary>
+        Rectangle,
+        /// <summary>The model's convex outline seen from the front (arches, rounded tops...).</summary>
+        FromModel,
+    }
+
+    [Tooltip("Rectangle, or the model's outline seen from the front (arches, rounded tops). From Model fills Outline " +
+             "in the editor; use the context menu \"Fit Outline To Model\" after changing the model.")]
+    public HoleOutline holeOutline = HoleOutline.Rectangle;
+    [Tooltip("The hole's outline: points around it, as fractions of the hole's size from its middle (-0.5 to 0.5). " +
+             "Filled by From Model.")]
+    public Vector2[] outline;
+
+    /// <summary>The outline to cut (null = a plain rectangle).</summary>
+    public Vector2[] OutlineToCut => holeOutline == HoleOutline.FromModel && outline != null && outline.Length >= 3 ? outline : null;
+
     private Bounds bounds;        // root-local, before the root's scale
     private bool hasBounds;
     private Vector3 lastPos;
@@ -75,6 +96,11 @@ public class WallOpening : MonoBehaviour
         public Vector3 up;
         public Vector3 forward;  // its front
         public Vector2 size;     // width, height (meters)
+        /// <summary>Its outline (points as fractions of Size from the middle), or null for a rectangle.</summary>
+        public Vector2[] outline;
+
+        /// <summary>A point of the outline in world space.</summary>
+        public Vector3 OutlinePoint(Vector2 p) => center + right * (p.x * size.x) + up * (p.y * size.y);
     }
 
     private void Awake()
@@ -107,6 +133,7 @@ public class WallOpening : MonoBehaviour
             isDoor = false;
             UnityEditor.EditorUtility.SetDirty(this);
         }
+        if (holeOutline == HoleOutline.FromModel && (outline == null || outline.Length < 3)) FitOutlineToModel();
         foreach (var no in GetComponentsInChildren<NetworkObject>(true))
             if (no.gameObject != gameObject)
             {
@@ -115,6 +142,45 @@ public class WallOpening : MonoBehaviour
                                  "DoorMotion + DoorNet on this root instead, with the child's hinge as the leaf.", this);
                 break;
             }
+    }
+
+    /// <summary>
+    /// Editor: work out the hole's outline from the model: every mesh point seen from the front, wrapped
+    /// in its convex outline, as fractions of the hole's size.
+    /// </summary>
+    [ContextMenu("Fit Outline To Model")]
+    private void FitOutlineToModel()
+    {
+        hasBounds = false;
+        var local = PlacementCheck.ComputeLocalBounds(gameObject);
+        // How the model stands in the wall: its prefab root's rotation, then Model Rotation (as ModelFix).
+        var source = UnityEditor.PrefabUtility.GetCorrespondingObjectFromSource(gameObject);
+        var fixHere = FixOf(source != null ? source.transform : transform, modelRotation);
+        var size = Measure(local, Vector3.one, holeSize, fixHere, Vector3.zero, fixHere).size;
+        if (size.x <= 0f || size.y <= 0f) return;
+        // Hole size overrides are in meters of the scaled item; work in unscaled root space.
+        Vector3 s = transform.lossyScale;
+        if (holeSize.x > 0f && s.x != 0f) size.x = holeSize.x / Mathf.Abs(s.x);
+        if (holeSize.y > 0f && s.y != 0f) size.y = holeSize.y / Mathf.Abs(s.y);
+
+        var points = new List<Vector2>();
+        var toRoot = transform.worldToLocalMatrix;
+        foreach (var mf in GetComponentsInChildren<MeshFilter>(true))
+        {
+            var mesh = mf.sharedMesh;
+            if (mesh == null) continue;
+            var m = toRoot * mf.transform.localToWorldMatrix;
+            foreach (var v in mesh.vertices)
+            {
+                Vector3 q = fixHere * (m.MultiplyPoint3x4(v) - local.center);
+                points.Add(new Vector2(q.x / size.x, q.y / size.y));
+            }
+        }
+        var hull = ConvexHull(points);
+        if (hull.Count < 3) { Debug.LogWarning($"[WallOpening] '{name}': no model points to make an outline from.", this); return; }
+        UnityEditor.Undo.RecordObject(this, "Fit Outline To Model");
+        outline = Simplify(hull, 32).ToArray();
+        UnityEditor.EditorUtility.SetDirty(this);
     }
 
     /// <summary>Editor: set this opening into the nearest CuttableWall (for doors placed in the scene).</summary>
@@ -192,6 +258,8 @@ public class WallOpening : MonoBehaviour
         isDoor = other.isDoor;
         holeSize = other.holeSize;
         modelRotation = other.modelRotation;
+        holeOutline = other.holeOutline;
+        outline = other.outline;
         hasFix = false;
     }
 
@@ -202,7 +270,15 @@ public class WallOpening : MonoBehaviour
     public bool IsEditCopy => GetComponent<EditLocalItem>() != null;
 
     /// <summary>This opening as it is now.</summary>
-    public Shape Current => Measure(LocalBounds, transform.lossyScale, holeSize, ModelFix, transform.position, transform.rotation);
+    public Shape Current
+    {
+        get
+        {
+            var s = Measure(LocalBounds, transform.lossyScale, holeSize, ModelFix, transform.position, transform.rotation);
+            s.outline = OutlineToCut;
+            return s;
+        }
+    }
 
     /// <summary>Hole size (width, height) in meters.</summary>
     public Vector2 Size => Measure(LocalBounds, transform.lossyScale, holeSize, ModelFix, Vector3.zero, ModelFix).size;
@@ -252,8 +328,54 @@ public class WallOpening : MonoBehaviour
     {
         TryGet(def, out var o);
         var root = def.worldNetworkPrefab.transform;
-        return Measure(def.LocalBounds, root.localScale, o != null ? o.holeSize : Vector2.zero,
-                       FixOf(root, o != null ? o.modelRotation : Vector3.zero), position, rotation);
+        var s = Measure(def.LocalBounds, root.localScale, o != null ? o.holeSize : Vector2.zero,
+                        FixOf(root, o != null ? o.modelRotation : Vector3.zero), position, rotation);
+        s.outline = o != null ? o.OutlineToCut : null;
+        return s;
+    }
+
+    /* ========================= OUTLINE MATHS ========================= */
+
+    /// <summary>The convex outline of some points, counter-clockwise (monotone chain).</summary>
+    public static List<Vector2> ConvexHull(List<Vector2> points)
+    {
+        var p = new List<Vector2>(points);
+        p.Sort((a, b) => a.x != b.x ? a.x.CompareTo(b.x) : a.y.CompareTo(b.y));
+        var hull = new List<Vector2>();
+        if (p.Count < 3) return hull;
+        for (int pass = 0; pass < 2; pass++)
+        {
+            int start = hull.Count;
+            for (int i = 0; i < p.Count; i++)
+            {
+                var q = pass == 0 ? p[i] : p[p.Count - 1 - i];
+                while (hull.Count >= start + 2 && Cross(hull[hull.Count - 2], hull[hull.Count - 1], q) <= 1e-7f)
+                    hull.RemoveAt(hull.Count - 1);
+                hull.Add(q);
+            }
+            hull.RemoveAt(hull.Count - 1);
+        }
+        return hull;
+    }
+
+    private static float Cross(Vector2 o, Vector2 a, Vector2 b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+
+    // Fewer points: drop the ones that bend the outline least until at most Max are left.
+    private static List<Vector2> Simplify(List<Vector2> hull, int max)
+    {
+        var h = new List<Vector2>(hull);
+        while (h.Count > max)
+        {
+            int best = 0;
+            float least = float.MaxValue;
+            for (int i = 0; i < h.Count; i++)
+            {
+                float area = Mathf.Abs(Cross(h[(i + h.Count - 1) % h.Count], h[i], h[(i + 1) % h.Count]));
+                if (area < least) { least = area; best = i; }
+            }
+            h.RemoveAt(best);
+        }
+        return h;
     }
 
     /// <summary>
