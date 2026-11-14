@@ -261,6 +261,28 @@ public class StockContainer : NetworkBehaviour
         return best;
     }
 
+    /// <summary>The zone nearest a world position, whatever is in it (-1 if there are none).</summary>
+    public int NearestZone(Vector3 near)
+    {
+        int best = -1;
+        float bestDist = float.MaxValue;
+        for (int i = 0; i < ZoneCount; i++)
+        {
+            if (GetBox(i) == null) continue;
+            float d = DistanceToZone(i, near);
+            if (d < bestDist) { bestDist = d; best = i; }
+        }
+        return best;
+    }
+
+    /// <summary>Does this product fit in this zone in any orientation?</summary>
+    public bool FitsAnyWay(int zone, int itemId)
+    {
+        for (int o = 0; o < 8; o++)
+            if (CapacityAt(zone, itemId, o) > 0) return true;
+        return false;
+    }
+
     /// <summary>A zone holding this item, or -1. For customers looking for something to buy.</summary>
     public int FindStock(int itemId)
     {
