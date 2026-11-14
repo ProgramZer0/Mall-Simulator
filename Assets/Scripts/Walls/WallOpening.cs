@@ -32,8 +32,20 @@ public class WallOpening : MonoBehaviour
     /// <summary>Every opening in the scene (networked ones and edit-mode copies).</summary>
     public static readonly List<WallOpening> All = new();
 
-    /// <summary>Goes up whenever an opening appears, moves or goes away, so walls know to re-cut.</summary>
-    public static int Version { get; private set; }
+    /// <summary>Where openings appeared, moved or went away: walls re-cut only when a change was near them.</summary>
+    public static readonly ChangeLog Changes = new();
+
+    /// <summary>Goes up whenever an opening appears, moves or goes away.</summary>
+    public static int Version => Changes.Version;
+
+    private Bounds lastArea; // around the hole, where it was last noted
+
+    private Bounds AreaNow()
+    {
+        var s = Current;
+        float r = 0.5f * Mathf.Max(s.size.x, s.size.y) + 0.3f;
+        return new Bounds(s.center, Vector3.one * (r * 2f));
+    }
 
     public enum Kind
     {
@@ -216,13 +228,14 @@ public class WallOpening : MonoBehaviour
         All.Add(this);
         lastPos = transform.position;
         lastRot = transform.rotation;
-        Version++;
+        lastArea = AreaNow();
+        Changes.Note(lastArea);
     }
 
     private void OnDisable()
     {
         All.Remove(this);
-        Version++;
+        Changes.Note(lastArea);
         if (lastPlot != null) lastPlot.RefreshDoors();
         lastPlot = null;
     }
@@ -234,10 +247,16 @@ public class WallOpening : MonoBehaviour
         {
             lastPos = transform.position;
             lastRot = transform.rotation;
-            Version++;
+            var now = AreaNow();
+            var both = lastArea;
+            both.Encapsulate(now); // where it was and where it is
+            lastArea = now;
+            Changes.Note(both);
         }
         if (!moved && seenWalls == CuttableWall.Version) return;
+        bool wallsNear = CuttableWall.Changes.ChangedNear(seenWalls, lastArea);
         seenWalls = CuttableWall.Version;
+        if (!moved && !wallsNear) return;
 
         // Which store's wall it's in: doors the store opens and shuts need to know.
         var host = CuttableWall.HostOf(this);

@@ -22,8 +22,13 @@ public class Decor : MonoBehaviour
 
     public static readonly List<Decor> All = new();
 
+    /// <summary>Where decor appeared, moved or went away (stores re-check only near a change).</summary>
+    public static readonly ChangeLog Changes = new();
+
     /// <summary>Goes up when decor appears, moves or goes away.</summary>
-    public static int Version { get; private set; }
+    public static int Version => Changes.Version;
+
+    private static Bounds Around(Vector3 p) => new(p, Vector3.one * 2f);
 
     public List<Feature> features = new();
 
@@ -33,19 +38,21 @@ public class Decor : MonoBehaviour
     {
         All.Add(this);
         lastPos = transform.position;
-        Version++;
+        Changes.Note(Around(lastPos));
     }
 
     private void OnDisable()
     {
         All.Remove(this);
-        Version++;
+        Changes.Note(Around(lastPos));
     }
 
     private void LateUpdate()
     {
         if ((transform.position - lastPos).sqrMagnitude < 0.0025f) return;
+        var both = Around(lastPos);
+        both.Encapsulate(Around(transform.position));
         lastPos = transform.position;
-        Version++;
+        Changes.Note(both);
     }
 }

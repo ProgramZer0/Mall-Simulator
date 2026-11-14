@@ -262,10 +262,14 @@ public class StoreAppeal : MonoBehaviour
         if (plot == null || listing == null) return;
         if (seenOpenings != WallOpening.Version || seenWalls != CuttableWall.Version || seenDecor != Decor.Version)
         {
+            // Only changes in or around this store (its hallway too) redo it.
+            var near = StoreArea();
+            if (WallOpening.Changes.ChangedNear(seenOpenings, near) || CuttableWall.Changes.ChangedNear(seenWalls, near) ||
+                Decor.Changes.ChangedNear(seenDecor, near))
+                rebuildAll = true;
             seenOpenings = WallOpening.Version;
             seenWalls = CuttableWall.Version;
             seenDecor = Decor.Version;
-            rebuildAll = true;
         }
         Competition.Build();
         if (seenCompetition != Competition.Version)
@@ -328,6 +332,21 @@ public class StoreAppeal : MonoBehaviour
         sums.Clear();
         if (layoutChanged) nearCache.Clear();
         BuildQuality();
+    }
+
+    private readonly List<Bounds> areaBuffer = new();
+
+    // The store's space, grown to take in the hallway in front of it (where passers-by look in from).
+    private Bounds StoreArea()
+    {
+        areaBuffer.Clear();
+        plot.GetAreaBounds(areaBuffer);
+        if (areaBuffer.Count == 0) return new Bounds(plot.transform.position, Vector3.one * 1000f);
+        var b = areaBuffer[0];
+        for (int i = 1; i < areaBuffer.Count; i++) b.Encapsulate(areaBuffer[i]);
+        var settings = StoreAppealSettings.Instance;
+        b.Expand(2f * ((settings != null ? settings.viewerDistance : 2f) + 1f));
+        return b;
     }
 
     private float CompetitionFor(int itemId)
