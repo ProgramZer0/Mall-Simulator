@@ -259,6 +259,12 @@ public class ItemPickupNet : NetworkBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+
+        // Netcode checks every spawned object every frame for having moved to another scene (on by
+        // default). The mall is one scene, and with thousands of shelves that check alone was ~2 ms a
+        // frame. Set before spawning, so the object is never added to that check.
+        if (TryGetComponent<NetworkObject>(out var netObj)) netObj.SceneMigrationSynchronization = false;
+
         // Start still; OnNetworkSpawn decides whether it falls.
         if (rb != null && physicsMode != PhysicsMode.AlwaysSimulate) rb.isKinematic = true;
     }
