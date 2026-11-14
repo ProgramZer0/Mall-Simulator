@@ -8,7 +8,8 @@ using UnityEngine;
 /// whole mall. Each deal is one item at its own price with a limited amount and an end time; when it
 /// ends or sells out, a new one replaces it after a short wait. Deals are picked from the catalog by
 /// each item's Special Market Weight: normal shop items come up cheaper than usual, and items with
-/// Show In Shop off (market only) can only be bought here. Bought on the shop monitor's Market tab
+/// Show In Shop off (market only) can only be bought here. Each deal is one size (a random one, for
+/// sized items) and one color (random, for paintable items), and that's what you get: no switching. Bought on the shop monitor's Market tab
 /// (MarketScreen); they're delivered like any order.
 ///
 /// Network: one small synced list of deals. The host checks every buy (amount left, level, license,
@@ -26,6 +27,7 @@ public class SpecialMarket : NetworkBehaviour
         public int usualPrice; // what the shop charges (0 = market only)
         public int left;
         public int total;
+        public byte paint;     // PaintPalette id it comes in (0 = its own colors)
         public double endsAt;  // server time
         public bool Equals(Deal o) => dealId == o.dealId && left == o.left && price == o.price && endsAt == o.endsAt;
         public override bool Equals(object obj) => obj is Deal o && Equals(o);
@@ -34,7 +36,7 @@ public class SpecialMarket : NetworkBehaviour
     }
 
     [Header("Deals")]
-    [SerializeField, Min(1)] private int dealCount = 8;
+    [SerializeField, Min(1)] private int dealCount = 9;
     [Tooltip("How long a deal lasts, in seconds (random between).")]
     [SerializeField] private Vector2 dealSeconds = new(300f, 900f);
     [Tooltip("Seconds before an ended or sold-out deal is replaced.")]
@@ -169,6 +171,10 @@ public class SpecialMarket : NetworkBehaviour
         Vector2 range = marketOnly ? marketOnlyPrice : shopItemPrice;
         int price = Mathf.Max(1, Mathf.RoundToInt(usual * UnityEngine.Random.Range(range.x, range.y)));
         int count = UnityEngine.Random.Range(Mathf.Max(1, amount.x), Mathf.Max(amount.x, amount.y) + 1);
+        // A paintable item: a random color (its own colors count as one of them).
+        byte paint = PaintParts.IsPaintable(item) && PaintPalette.Instance != null
+            ? (byte)UnityEngine.Random.Range(0, PaintPalette.Instance.Count + 1)
+            : (byte)0;
 
         deals.Add(new Deal
         {
@@ -178,6 +184,7 @@ public class SpecialMarket : NetworkBehaviour
             usualPrice = marketOnly ? 0 : usual,
             left = count,
             total = count,
+            paint = paint,
             endsAt = now + UnityEngine.Random.Range(dealSeconds.x, Mathf.Max(dealSeconds.x, dealSeconds.y)),
         });
         return true;
@@ -212,7 +219,7 @@ public class SpecialMarket : NetworkBehaviour
             }
             var eco = EconomyManager.Instance;
             if (eco == null) break;
-            result = eco.ServerTryOrder(sender, plotId, new[] { d.itemId }, new[] { quantity }, -1f, null, new[] { d.price });
+            result = eco.ServerTryOrder(sender, plotId, new[] { d.itemId }, new[] { quantity }, -1f, new[] { d.paint }, new[] { d.price });
             if (result == EconomyManager.OrderResult.Ordered)
             {
                 d.left -= quantity;
