@@ -60,6 +60,7 @@ public class MallBenchmark : MonoBehaviour
 
     // Stats.
     private readonly float[] frames = new float[600]; // the last 600 frame times (ms)
+    private readonly float[] sorted = new float[600]; // (reused, so the overlay makes no garbage)
     private int frameIndex, frameCount;
     private float worstThisSecond, worstLastSecond, secondStarted;
     private double shopperMs, appealMs;        // this second
@@ -369,11 +370,10 @@ public class MallBenchmark : MonoBehaviour
     {
         avg = low1 = 0f;
         if (frameCount == 0) return;
-        var sorted = new float[frameCount];
         System.Array.Copy(frames, sorted, frameCount);
-        System.Array.Sort(sorted);
+        System.Array.Sort(sorted, 0, frameCount);
         float sum = 0f;
-        foreach (var f in sorted) sum += f;
+        for (int i = 0; i < frameCount; i++) sum += sorted[i];
         avg = sum / frameCount;
         int n = Mathf.Max(1, frameCount / 100);
         float slow = 0f;
