@@ -28,6 +28,14 @@ public class PlayerInventoryNet : NetworkBehaviour
     /// </summary>
     public NetworkVariable<ulong> HeldFromTeam = new(ulong.MaxValue, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    /// <summary>
+    /// What's held came out of a delivery box. Set down at a dock or a shipment area, or dropped off in
+    /// the store that ordered it, it goes back in its box (so a box picked up by mistake can be put
+    /// back, and deliveries carried for someone arrive still boxed). Anywhere else it comes out.
+    /// </summary>
+    public NetworkVariable<bool> HeldBoxed = new(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private ulong heldOrderedBy = ulong.MaxValue; // server: the team that ordered the box it came from
+
     private GameObject currentHandVisual;
     private bool handVisualHidden;
     /// <summary>
@@ -74,6 +82,7 @@ public class PlayerInventoryNet : NetworkBehaviour
     private void OnHeldItemChanged(int prev, int next)
     {
         if (IsServer && next == 0 && HeldFromTeam.Value != ulong.MaxValue) HeldFromTeam.Value = ulong.MaxValue;
+        if (IsServer && next == 0 && HeldBoxed.Value) HeldBoxed.Value = false;
         if (currentHandVisual) Destroy(currentHandVisual);
 
         // A new held item always starts visible; an active preview re-hides it next frame.
@@ -130,6 +139,8 @@ public class PlayerInventoryNet : NetworkBehaviour
         HeldPaint.Value = isBox ? box.ContainedPaint : pickup.Paint;
         ulong pickerTeam = MallManager.GetTeamOf(rpcParams.Receive.SenderClientId);
         HeldFromTeam.Value = isBox && box.OrderedBy != pickerTeam ? box.OrderedBy : ulong.MaxValue;
+        HeldBoxed.Value = isBox;
+        heldOrderedBy = isBox ? box.OrderedBy : ulong.MaxValue;
         // A crate on the floor remembers how much is left; one from a delivery box is full.
         int perCrate = StockContainer.GetUnitsPerCrate(itemId);
         HeldUnits.Value = perCrate == 0 ? 0
@@ -321,17 +332,22 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (!dropOff && !MallManager.CanPickupOrPlace(sender,
                 actor.transform.position, position)) { ItemDebug.Log("Place refused: store rules (not your store, or you're outside it)."); return; }
 
+        if (!ItemCatalog.Instance.TryGet(id, out var def) || def.worldNetworkPrefab == null) { ItemDebug.Log("Place refused: not in the catalog or no world prefab."); return; }
+
+        // Out of a delivery box and set down where deliveries go (or dropped off for its store): back in
+        // its box. That's allowed at the docks too, so a box picked up by mistake can go back.
+        bool backInBox = HeldBoxed.Value && PlacementCheck.CartBoxOf(def) != null &&
+                         (dropOff || MallManager.IsDeliveryArea(position));
+
         // Can't park things on another store's shipment spots, or anywhere at the docks (except on a cart).
         if (!dropOff && MallManager.IsOthersShipmentArea(sender, position)) { ItemDebug.Log("Place refused: another store's shipment area."); return; }
-        if (MallManager.IsNoPlaceZone(position)) { ItemDebug.Log("Place refused: no-place zone (docks)."); return; }
+        if (!backInBox && MallManager.IsNoPlaceZone(position)) { ItemDebug.Log("Place refused: no-place zone (docks)."); return; }
         // A store being cleared for edit mode: nothing goes down in it until everyone's out.
         if (MallManager.Instance != null && MallManager.Instance.IsClearingAt(position)) { ItemDebug.Log("Place refused: the store is being cleared for edit mode."); return; }
 
-        if (!ItemCatalog.Instance.TryGet(id, out var def) || def.worldNetworkPrefab == null) { ItemDebug.Log("Place refused: not in the catalog or no world prefab."); return; }
-
         // Set down on a cart: it goes on packed in its shipment box, to save room. Wall pieces always
         // go down in their box (they come out in edit mode).
-        var boxPrefab = onCart || PlacementCheck.StaysBoxed(def) ? PlacementCheck.CartBoxOf(def) : null;
+        var boxPrefab = onCart || backInBox || PlacementCheck.StaysBoxed(def) ? PlacementCheck.CartBoxOf(def) : null;
         if (boxPrefab != null)
         {
             ItemDebug.Log($"Placing it in its box '{boxPrefab.name}' ({(onCart ? "on a cart" : "stays boxed")}).");
@@ -456,6 +472,9 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (cart != null && spawned.TryGetComponent<ItemPickupNet>(out var pickup)) pickup.ServerPrepareFrozen(carried: true);
         spawned.Spawn(true);
         if (cart != null) cart.ServerLoad(spawned); // on the floor it settles like anything else
+        // Still the delivery of the team that ordered it (not held for them any more, just marked theirs).
+        if (box != null && heldOrderedBy != ulong.MaxValue) box.ServerReserve(heldOrderedBy, 0f);
+        heldOrderedBy = ulong.MaxValue;
 
         HeldItemId.Value = 0;
         HeldPaint.Value = 0;
