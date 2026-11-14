@@ -31,7 +31,8 @@ public class StoreUpgradesScreen : MonoBehaviour, IShopScreen
     [SerializeField] private Sprite recallIcon;
 
     [SerializeField] private TMP_Text statusText;
-    [Tooltip("Optional: a pop-up (ConfirmPopup) for 'take the things off this wall first'. Without it, the status says so.")]
+    [Tooltip("Optional: this screen's own pop-up (one in the scene, or a prefab). Empty: the shared ConfirmPopup " +
+             "prefab (Resources/ConfirmPopup). With neither, the status says it instead.")]
     [SerializeField] private ConfirmPopup popup;
 
     private StorePlot plot;
@@ -191,7 +192,8 @@ public class StoreUpgradesScreen : MonoBehaviour, IShopScreen
         {
             string message = $"Take the {onWall} thing{(onWall == 1 ? "" : "s")} off the wall first.\n" +
                              $"The wall won't come down for {plot.GetSegmentName(index)} until it's clear.";
-            if (popup != null) popup.Show(message, null);
+            var p = ConfirmPopup.For(transform, popup);
+            if (p != null) p.Show(message, null);
             else Status(message);
             return;
         }

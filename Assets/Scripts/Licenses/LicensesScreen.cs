@@ -12,8 +12,8 @@ using UnityEngine;
 /// Card Prefab (a LicenseCard) is laid out in a grid (Cell Size, Cell Spacing, Padding; as many columns
 /// as fit). Tooltip Root: a panel (hidden at start, last on the screen, Raycast Target off on its
 /// graphics) with Tooltip Name and Tooltip Description texts. Optional Summary Text and Status Text.
-/// Confirm Root (optional): a pop-up panel (hidden at start, last on the screen) asking before giving a
-/// license up, with Confirm Text, Yes and No buttons. Without it, giving up takes two clicks.
+/// Giving something up asks first on the shared ConfirmPopup prefab (Resources/ConfirmPopup), or Popup if
+/// set. With neither, giving up takes two clicks.
 /// </summary>
 public class LicensesScreen : MonoBehaviour, IShopScreen
 {
@@ -37,11 +37,26 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
     [SerializeField] private TMP_Text summaryText;
     [SerializeField] private TMP_Text statusText;
 
-    [Header("Give Up Pop-up")]
-    [SerializeField] private GameObject confirmRoot;
-    [SerializeField] private TMP_Text confirmText;
-    [SerializeField] private UnityEngine.UI.Button confirmYes;
-    [SerializeField] private UnityEngine.UI.Button confirmNo;
+    [Tooltip("Optional: this screen's own pop-up (one in the scene, or a prefab). Empty: the shared ConfirmPopup prefab.")]
+    [SerializeField] private ConfirmPopup popup;
+    private ConfirmPopup popupInstance;
+    private bool popupLooked;
+
+    // The pop-up to ask with (null: none, so two clicks instead).
+    private ConfirmPopup Popup
+    {
+        get
+        {
+            if (popupInstance == null && !popupLooked)
+            {
+                popupLooked = true;
+                popupInstance = ConfirmPopup.For(transform, popup);
+            }
+            return popupInstance;
+        }
+    }
+
+    private bool PopupOpen => popupInstance != null && popupInstance.IsOpen;
 
     private readonly List<LicenseCard> cards = new();
     private readonly List<LicenseDef> shown = new();
@@ -54,9 +69,6 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
     private void Awake()
     {
         if (tooltipRoot != null) tooltipRoot.SetActive(false);
-        if (confirmRoot != null) confirmRoot.SetActive(false);
-        if (confirmYes != null) confirmYes.onClick.AddListener(ConfirmGiveUp);
-        if (confirmNo != null) confirmNo.onClick.AddListener(CloseConfirm);
         foreach (var parent in new[] { cardParent, ownedCardParent })
             if (parent != null)
                 foreach (var g in parent.GetComponents<UnityEngine.UI.LayoutGroup>()) g.enabled = false;
@@ -106,7 +118,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
     private void Update()
     {
         // Two-click give up times out (the pop-up waits for an answer).
-        if (giveUpArmed != 0 && (confirmRoot == null || !confirmRoot.activeSelf) && Time.unscaledTime > giveUpArmedUntil)
+        if (giveUpArmed != 0 && !PopupOpen && Time.unscaledTime > giveUpArmedUntil)
         { giveUpArmed = 0; dirty = true; }
         // Money changes what can be bought; cheap to check now and then.
         if (!dirty && Time.frameCount % 30 != 0) return;
@@ -199,16 +211,17 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
 
         if (lm.Holds(team, l.id))
         {
-            if (confirmRoot != null)
+            if (Popup != null)
             {
                 // Ask first.
-                giveUpArmed = l.id;
-                if (confirmText != null)
-                    confirmText.text = $"Give up the {l.displayName}?\nNo money back, and no ordering " +
-                                       $"{l.CategoryList} items until you buy one again.";
+                int id = l.id;
                 HideTooltip();
-                confirmRoot.SetActive(true);
-                confirmRoot.transform.SetAsLastSibling();
+                Popup.Show($"Give up the {l.displayName}?\nNo money back, and no ordering " +
+                           $"{l.CategoryList} items until you buy one again.", () =>
+                {
+                    LicenseManager.Instance?.RequestGiveUp(id);
+                    Status("Giving up the license...");
+                });
                 return;
             }
             if (giveUpArmed != l.id)
@@ -229,27 +242,11 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
         Status($"Buying {l.displayName}...");
     }
 
-    private void ConfirmGiveUp()
-    {
-        var lm = LicenseManager.Instance;
-        int id = giveUpArmed, franchise = franchiseArmed;
-        CloseConfirm();
-        if (franchise != 0)
-        {
-            FranchiseManager.Instance?.RequestGiveUp(franchise);
-            Status("Giving up the franchise...");
-            return;
-        }
-        if (lm == null || id == 0) return;
-        lm.RequestGiveUp(id);
-        Status("Giving up the license...");
-    }
-
     private void CloseConfirm()
     {
         giveUpArmed = 0;
         franchiseArmed = 0;
-        if (confirmRoot != null) confirmRoot.SetActive(false);
+        if (PopupOpen) popupInstance.Close();
     }
 
     /* ========================= FRANCHISES (OWNED LIST) ========================= */
@@ -291,7 +288,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
             if (franchiseCards[i].nameText != null) franchiseCards[i].nameText.text = f.displayName;
             if (franchiseCards[i].button != null) franchiseCards[i].button.interactable = true;
         }
-        if (franchiseArmed != 0 && (confirmRoot == null || !confirmRoot.activeSelf) && Time.unscaledTime > franchiseArmedUntil)
+        if (franchiseArmed != 0 && !PopupOpen && Time.unscaledTime > franchiseArmedUntil)
             franchiseArmed = 0;
     }
 
@@ -299,16 +296,16 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
     {
         if (index >= franchisesShown.Count) return;
         var f = franchisesShown[index];
-        if (confirmRoot != null)
+        if (Popup != null)
         {
-            franchiseArmed = f.id;
-            giveUpArmed = 0;
-            if (confirmText != null)
-                confirmText.text = $"Give up the {f.displayName} franchise?\nNo money back, bidding for it opens right away, " +
-                                   "and your team can't bid in that auction.";
+            int id = f.id;
             HideTooltip();
-            confirmRoot.SetActive(true);
-            confirmRoot.transform.SetAsLastSibling();
+            Popup.Show($"Give up the {f.displayName} franchise?\nNo money back, bidding for it opens right away, " +
+                       "and your team can't bid in that auction.", () =>
+            {
+                FranchiseManager.Instance?.RequestGiveUp(id);
+                Status("Giving up the franchise...");
+            });
             return;
         }
         if (franchiseArmed != f.id)
@@ -375,7 +372,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
             if (l.minLevel > 1) text += $"\nNeeds level {l.minLevel}";
             if (mine) text += giveUpArmed == l.id
                 ? "\n\nClick again to give it up (no money back)"
-                : $"\n\nYours. Click{(confirmRoot != null ? "" : " twice")} to give it up (no money back; a help point if you haven't used it in a while)";
+                : $"\n\nYours. Click{(Popup != null ? "" : " twice")} to give it up (no money back; a help point if you haven't used it in a while)";
             else text += lm.CanBuy(team, l, out string why) ? "\n\nClick to buy" : $"\n\nCan't buy: {why}";
             tooltipDescriptionText.text = text;
         }
