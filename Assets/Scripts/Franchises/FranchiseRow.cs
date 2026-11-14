@@ -14,4 +14,6 @@ public class FranchiseRow : MonoBehaviour
     public TMP_Text statusText;
     [Tooltip("Optional: shown while your team holds it.")]
     public GameObject heldMark;
+    [Tooltip("Optional: shown while your team holds it; gives it up (after the pop-up).")]
+    public Button giveUpButton;
 }

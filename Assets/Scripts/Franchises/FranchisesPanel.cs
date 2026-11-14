@@ -9,8 +9,12 @@ using UnityEngine.UI;
 /// left. Bid offers the lowest bid that wins (hold Shift: Shift Raises times the minimum raise more).
 /// The money is taken now and given back if someone outbids you.
 ///
+/// Your team's franchise can be given up (the row's Give Up Button, after the Confirm pop-up): bidding
+/// opens right away and your team can't bid in that auction.
+///
 /// Setup, no layout groups: Row Parent is a Scroll View's Content (anchored top, stretched across);
-/// Row Prefab (a FranchiseRow) is stacked by code (Row Height, Row Spacing, Padding). Optional Status Text.
+/// Row Prefab (a FranchiseRow) is stacked by code (Row Height, Row Spacing, Padding). Optional Status
+/// Text and Confirm (a ConfirmPopup; without it, giving up happens on the first click).
 /// </summary>
 public class FranchisesPanel : MonoBehaviour
 {
@@ -21,6 +25,7 @@ public class FranchisesPanel : MonoBehaviour
     [SerializeField, Min(0f)] private float padding = 6f;
     [SerializeField, Min(1)] private int shiftRaises = 5;
     [SerializeField] private TMP_Text statusText;
+    [SerializeField] private ConfirmPopup confirm;
 
     private readonly List<FranchiseRow> rows = new();
     private float nextTick;
@@ -74,6 +79,7 @@ public class FranchisesPanel : MonoBehaviour
             var row = Instantiate(rowPrefab, rowParent);
             var def = f;
             if (row.bidButton != null) row.bidButton.onClick.AddListener(() => Bid(def));
+            if (row.giveUpButton != null) row.giveUpButton.onClick.AddListener(() => GiveUp(def));
             if (row.icon != null && f.icon != null) row.icon.sprite = f.icon;
             if (row.nameText != null) row.nameText.text = f.displayName;
 
@@ -119,6 +125,7 @@ public class FranchisesPanel : MonoBehaviour
             }
             if (row.statusText != null) row.statusText.text = text;
             if (row.heldMark != null) row.heldMark.SetActive(s.holder == me);
+            if (row.giveUpButton != null) row.giveUpButton.gameObject.SetActive(s.holder == me);
 
             int amount = BidAmount(fm, f, s);
             bool can = fm.CanBid(me, f, amount, out string why);
@@ -140,7 +147,19 @@ public class FranchisesPanel : MonoBehaviour
         Status($"Bidding ${amount:N0} on {f.displayName}...");
     }
 
-    private void OnResult(string result) => Status(string.IsNullOrEmpty(result) ? "You have the top bid." : result);
+    private void GiveUp(FranchiseDef f)
+    {
+        void Do()
+        {
+            FranchiseManager.Instance?.RequestGiveUp(f.id);
+            Status($"Giving up {f.displayName}...");
+        }
+        if (confirm != null)
+            confirm.Show($"Give up {f.displayName}?\nNo money back, bidding opens right away, and your team can't bid in it.", Do);
+        else Do();
+    }
+
+    private void OnResult(string result) => Status(string.IsNullOrEmpty(result) ? "Done." : result);
 
     private static string Clock(double seconds)
     {
