@@ -147,6 +147,7 @@ public class SpecialMarket : NetworkBehaviour
         foreach (var def in catalog.Items)
         {
             if (def == null || def.worldNetworkPrefab == null || def.specialMarketWeight <= 0f || IsListed(def.id)) continue;
+            if (FranchiseManager.IsFranchiseItem(def)) continue; // only its franchise holder gets those
             pool.Add(def);
             total += def.specialMarketWeight;
         }

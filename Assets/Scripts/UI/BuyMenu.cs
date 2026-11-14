@@ -187,6 +187,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         subscribedTo = eco;
         if (ProgressionManager.Instance != null) ProgressionManager.Instance.LevelChanged += RefreshItems;
         if (LicenseManager.Instance != null) LicenseManager.Instance.Changed += RefreshItems;
+        if (FranchiseManager.Instance != null) FranchiseManager.Instance.Changed += RefreshItems;
     }
 
     private void Unsubscribe()
@@ -197,6 +198,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         subscribedTo = null;
         if (ProgressionManager.Instance != null) ProgressionManager.Instance.LevelChanged -= RefreshItems;
         if (LicenseManager.Instance != null) LicenseManager.Instance.Changed -= RefreshItems;
+        if (FranchiseManager.Instance != null) FranchiseManager.Instance.Changed -= RefreshItems;
     }
 
     /* ========================= ITEMS & PAGES ========================= */
@@ -269,6 +271,8 @@ public class BuyMenu : MonoBehaviour, IShopScreen
                 if (!MatchesFilter(def)) continue;
                 // Items needing a license the team doesn't hold aren't listed at all.
                 if (!LicenseManager.CanOrder(LocalTeam, def, out _)) continue;
+                // Franchise items: only for the team holding the franchise.
+                if (!FranchiseManager.CanOrder(LocalTeam, def, out _)) continue;
                 shown.Add(def);
             }
         }
@@ -428,6 +432,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         if (plot == null) return;
         if (!ProgressionManager.CanOrder(LocalTeam, def)) { ShowStatus($"Reach level {def.minLevel} to order {def.displayName}."); return; }
         if (!LicenseManager.CanOrder(LocalTeam, def, out var needs)) { ShowStatus($"{def.displayName} needs the {needs.displayName} (Licenses tab)."); return; }
+        if (!FranchiseManager.CanOrder(LocalTeam, def, out var franchise)) { ShowStatus($"{def.displayName} belongs to the {franchise.displayName} franchise."); return; }
 
         // Paintable items come in the picked color; the rest ignore it.
         byte paint = paintBar != null && PaintParts.IsPaintable(def) ? paintBar.Selected : (byte)0;
@@ -527,6 +532,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         EconomyManager.OrderResult.BadQuantity => "Too many items in one order.",
         EconomyManager.OrderResult.LevelTooLow => "Your team's level is too low for one of those items.",
         EconomyManager.OrderResult.NeedsLicense => "One of those items needs a license (Licenses tab).",
+        EconomyManager.OrderResult.NeedsFranchise => "One of those items belongs to a franchise your team doesn't hold.",
         _ => r.ToString(),
     };
 

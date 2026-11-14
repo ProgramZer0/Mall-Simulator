@@ -85,13 +85,18 @@ public class PhoneScreen : MonoBehaviour
     public bool ShowApp(string appName)
     {
         for (int i = 0; i < apps.Count; i++)
-            if (((IPhoneApp)apps[i]).AppName == appName) { ShowApp(i); return true; }
+            if (((IPhoneApp)apps[i]).AppName == appName)
+            {
+                if (((IPhoneApp)apps[i]).LockedReason != null) return false;
+                ShowApp(i);
+                return true;
+            }
         return false;
     }
 
     public void ShowApp(int index)
     {
-        if (index < 0 || index >= apps.Count) return;
+        if (index < 0 || index >= apps.Count || ((IPhoneApp)apps[index]).LockedReason != null) return;
         CloseCurrent();
         if (home != null) home.SetActive(false);
         current = index;
@@ -117,8 +122,14 @@ public class PhoneScreen : MonoBehaviour
     {
         for (int i = 0; i < buttons.Count && i < apps.Count; i++)
         {
+            // Locked apps: greyed out, with why under the name.
+            var app = (IPhoneApp)apps[i];
+            string locked = app.LockedReason;
+            if (buttons[i].button != null) buttons[i].button.interactable = locked == null;
+            if (buttons[i].label != null) buttons[i].label.text = locked == null ? app.AppName : $"{app.AppName}\n{locked}";
+
             if (buttons[i].badge == null) continue;
-            int n = ((IPhoneApp)apps[i]).Badge;
+            int n = locked == null ? app.Badge : 0;
             buttons[i].badge.text = n > 0 ? n.ToString() : "";
             if (buttons[i].badgeRoot != null) buttons[i].badgeRoot.SetActive(n > 0);
         }
