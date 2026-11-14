@@ -586,8 +586,8 @@ public class PlayerInteractInput : NetworkBehaviour
 
     private string DoorPrompt()
     {
-        string text = lookedAtDoor.IsOpen ? "F: Close door"
-                    : lookedAtDoor.CanOpen(OwnerClientId) ? "F: Open door" : "Locked";
+        string text = !lookedAtDoor.CanOpen(OwnerClientId) ? "Locked"
+                    : lookedAtDoor.IsOpen ? "F: Close door" : "F: Open door";
         if (lookedAtDoor.CanLock(OwnerClientId))
             text += $"   {doorLockKey}: {(lookedAtDoor.IsLocked ? "Unlock" : "Lock")}";
         return text;

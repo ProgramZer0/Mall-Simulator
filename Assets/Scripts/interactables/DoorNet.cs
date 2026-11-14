@@ -183,8 +183,9 @@ public class DoorNet : NetworkBehaviour
         ulong sender = rpcParams.Receive.SenderClientId;
         if (trigger != Trigger.Manual || !InUseRange(sender, out Vector3 pos)) return;
 
-        if (IsOpen) ServerSetGroupOpen(false, pos); // anyone can close it
-        else if (CanOpen(sender)) ServerSetGroupOpen(true, pos);
+        // Locked: only the store's team can open or close it (an unlocked door: anyone can).
+        if (!CanOpen(sender)) return;
+        ServerSetGroupOpen(!IsOpen, pos);
     }
 
     [Rpc(SendTo.Server, RequireOwnership = false)]
