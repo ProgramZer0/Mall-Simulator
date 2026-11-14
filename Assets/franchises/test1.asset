@@ -13,9 +13,11 @@ MonoBehaviour:
   m_Name: test1
   m_EditorClassIdentifier: Assembly-CSharp::FranchiseDef
   id: 1
-  displayName: Franchise
+  displayName: rare shooes
   description: 
   icon: {fileID: 0}
+  categories:
+  - Rare Shoes
   category: Rare Shoes
   startingBid: 2000
   minRaise: 100

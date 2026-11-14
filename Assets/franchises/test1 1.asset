@@ -13,9 +13,10 @@ MonoBehaviour:
   m_Name: test1 1
   m_EditorClassIdentifier: Assembly-CSharp::FranchiseDef
   id: 1
-  displayName: Franchise
+  displayName: test1
   description: 
   icon: {fileID: 0}
+  categories: []
   category: 1
   startingBid: 2000
   minRaise: 100
