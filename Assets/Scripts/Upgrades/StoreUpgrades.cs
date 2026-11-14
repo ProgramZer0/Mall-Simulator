@@ -128,7 +128,7 @@ public class StoreUpgrades : NetworkBehaviour
     /// <summary>The store's cart tier: 0 = its starting cart, 1 = Cart Tiers[0]...</summary>
     public int GetCartTier(int plotId)
     {
-        if (upgrades != null) foreach (var u in upgrades) if (u.plotId == plotId) return u.cartTier;
+        if (upgrades != null) foreach (var u in upgrades.Each()) if (u.plotId == plotId) return u.cartTier;
         return 0;
     }
 

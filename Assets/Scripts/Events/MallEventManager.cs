@@ -192,7 +192,7 @@ public class MallEventManager : NetworkBehaviour
     {
         into.Clear();
         if (!IsSpawned) return;
-        foreach (var a in active)
+        foreach (var a in active.Each())
             if (a.eventIndex >= 0 && a.eventIndex < events.Count && events[a.eventIndex] != null) into.Add(events[a.eventIndex]);
     }
 
@@ -201,7 +201,7 @@ public class MallEventManager : NetworkBehaviour
     {
         int index = events.IndexOf(def);
         if (index < 0 || !IsSpawned) return false;
-        foreach (var a in active) if (a.eventIndex == index) return true;
+        foreach (var a in active.Each()) if (a.eventIndex == index) return true;
         return false;
     }
 
@@ -211,7 +211,7 @@ public class MallEventManager : NetworkBehaviour
         int index = events.IndexOf(def);
         if (index < 0 || !IsSpawned) return 0f;
         double now = NetworkManager.ServerTime.Time;
-        foreach (var a in active) if (a.eventIndex == index) return (float)Math.Max(0d, a.endTime - now);
+        foreach (var a in active.Each()) if (a.eventIndex == index) return (float)Math.Max(0d, a.endTime - now);
         return 0f;
     }
 

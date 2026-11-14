@@ -381,23 +381,34 @@ public class MallBenchmark : MonoBehaviour
         low1 = slow / n;
     }
 
+    private string overlayText = "";
+    private float nextOverlayText;
+    private readonly GUIContent overlayContent = new();
+
     private void OnGUI()
     {
         if (!showStats) return;
         style ??= new GUIStyle(GUI.skin.box) { alignment = TextAnchor.UpperLeft, fontSize = 13, richText = true };
-        FrameStats(out float avg, out float low1);
-        var nm = NetworkManager.Singleton;
-        int netObjects = nm != null && nm.SpawnManager != null ? nm.SpawnManager.SpawnedObjectsList.Count : 0;
 
-        string text =
-            $"<b>Benchmark</b>  {(IsHost ? $"{fillKey}: fill  {clearKey}: clear  " : "")}{statsKey}: hide\n" +
-            $"Frame: {avg:0.0} ms avg ({(avg > 0f ? 1000f / avg : 0f):0} fps), worst {worstLastSecond:0.0} ms, 1% low {low1:0.0} ms\n" +
-            $"Memory: {System.GC.GetTotalMemory(false) / (1024f * 1024f):0} MB managed, " +
-            $"{UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / (1024f * 1024f):0} MB total, " +
-            $"{System.GC.CollectionCount(0) - gcAtStart} GCs\n" +
-            $"Spawned: {netObjects} network objects, {StockContainer.All.Count} shelves, {stockModels} products, {renderers} renderers\n" +
-            (IsHost ? $"Shoppers: {buysShown} buys/s ({shopperMsShown:0.00} ms), {asksShown} appeal asks/s ({appealMsShown:0.00} ms)\n" : "") +
-            status;
-        GUI.Box(new Rect(10, 10, 560, IsHost ? 118 : 100), text, style);
+        // The text is rebuilt 4 times a second, not every time the overlay is drawn (it'd show up in
+        // the profiler as garbage made every frame).
+        if (Time.unscaledTime >= nextOverlayText)
+        {
+            nextOverlayText = Time.unscaledTime + 0.25f;
+            FrameStats(out float avg, out float low1);
+            var nm = NetworkManager.Singleton;
+            int netObjects = nm != null && nm.SpawnManager != null ? nm.SpawnManager.SpawnedObjectsList.Count : 0;
+            overlayText =
+                $"<b>Benchmark</b>  {(IsHost ? $"{fillKey}: fill  {clearKey}: clear  " : "")}{statsKey}: hide\n" +
+                $"Frame: {avg:0.0} ms avg ({(avg > 0f ? 1000f / avg : 0f):0} fps), worst {worstLastSecond:0.0} ms, 1% low {low1:0.0} ms\n" +
+                $"Memory: {System.GC.GetTotalMemory(false) / (1024f * 1024f):0} MB managed, " +
+                $"{UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / (1024f * 1024f):0} MB total, " +
+                $"{System.GC.CollectionCount(0) - gcAtStart} GCs\n" +
+                $"Spawned: {netObjects} network objects, {StockContainer.All.Count} shelves, {stockModels} products, {renderers} renderers\n" +
+                (IsHost ? $"Shoppers: {buysShown} buys/s ({shopperMsShown:0.00} ms), {asksShown} appeal asks/s ({appealMsShown:0.00} ms)\n" : "") +
+                status;
+            overlayContent.text = overlayText;
+        }
+        GUI.Box(new Rect(10, 10, 560, IsHost ? 118 : 100), overlayContent, style);
     }
 }

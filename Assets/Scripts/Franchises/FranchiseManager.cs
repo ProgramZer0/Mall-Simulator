@@ -113,7 +113,7 @@ public class FranchiseManager : NetworkBehaviour
     public bool TryGetState(int franchiseId, out State s)
     {
         if (states != null)
-            foreach (var st in states) if (st.franchiseId == franchiseId) { s = st; return true; }
+            foreach (var st in states.Each()) if (st.franchiseId == franchiseId) { s = st; return true; }
         s = default;
         return false;
     }
@@ -342,6 +342,6 @@ public class FranchiseManager : NetworkBehaviour
     private void Snapshot()
     {
         before.Clear();
-        foreach (var s in states) before[s.franchiseId] = s;
+        foreach (var s in states.Each()) before[s.franchiseId] = s;
     }
 }

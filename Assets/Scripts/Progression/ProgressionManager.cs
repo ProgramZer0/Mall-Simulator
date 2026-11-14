@@ -363,7 +363,7 @@ public class ProgressionManager : NetworkBehaviour
     public int GetPointsSpent(int plotId)
     {
         int spent = 0;
-        foreach (var r in ranks)
+        foreach (var r in ranks.Each())
             if (r.plotId == plotId && perkById.TryGetValue(r.perkId, out var p)) spent += r.rank * p.costPerRank;
         return spent;
     }
@@ -396,7 +396,7 @@ public class ProgressionManager : NetworkBehaviour
     public int GetRank(int plotId, int perkId)
     {
         if (ranks != null)
-            foreach (var r in ranks) if (r.plotId == plotId && r.perkId == perkId) return r.rank;
+            foreach (var r in ranks.Each()) if (r.plotId == plotId && r.perkId == perkId) return r.rank;
         return 0;
     }
 
@@ -423,7 +423,7 @@ public class ProgressionManager : NetworkBehaviour
         if (statCache.TryGetValue((plotId, stat), out float v)) return v;
         v = 0f;
         if (ranks != null)
-            foreach (var r in ranks)
+            foreach (var r in ranks.Each())
             {
                 if (r.plotId != plotId || !perkById.TryGetValue(r.perkId, out var p)) continue;
                 foreach (var e in p.effects) if (e.stat == stat) v += e.perRank * r.rank;

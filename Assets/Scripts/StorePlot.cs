@@ -514,7 +514,7 @@ public class StorePlot : NetworkBehaviour
         cents = 0;
         if (storePrices == null) return false;
         int l = loose ? 1 : 0;
-        foreach (var p in storePrices)
+        foreach (var p in storePrices.Each())
             if (p.itemId == itemId && p.loose == l) { cents = p.cents; return cents > 0; }
         return false;
     }
@@ -607,7 +607,7 @@ public class StorePlot : NetworkBehaviour
         const float tol = 0.01f;
 
         float lo = 0f, hi = length, covered = 0f;
-        foreach (var w in builtWalls)
+        foreach (var w in builtWalls.Each())
         {
             Vector3 d = Flat(w.b - w.a);
             if (d == Vector3.zero || Mathf.Abs(Cross2(d, dir)) > 0.01f) continue; // crossing: fine
@@ -771,7 +771,7 @@ public class StorePlot : NetworkBehaviour
 
     public bool TryGetBuiltWallById(int id, out BuiltWall wall)
     {
-        foreach (var w in builtWalls)
+        foreach (var w in builtWalls.Each())
             if (w.id == id) { wall = w; return true; }
         wall = default;
         return false;
@@ -805,7 +805,7 @@ public class StorePlot : NetworkBehaviour
         if (e == Vector3.zero) return;
         static float Cross2(Vector3 x, Vector3 y) => x.x * y.z - x.z * y.x;
 
-        foreach (var w in builtWalls)
+        foreach (var w in builtWalls.Each())
         {
             Vector3 d = Flat(w.b - w.a);
             if (d == Vector3.zero || Mathf.Abs(Cross2(d, e)) > 0.01f) continue;          // not parallel
@@ -868,7 +868,7 @@ public class StorePlot : NetworkBehaviour
         if (builtWallRoot == null) builtWallRoot = new GameObject($"[Built Walls] {displayName}").transform;
 
         float half = settings.Thickness * 0.5f;
-        foreach (var w in builtWalls)
+        foreach (var w in builtWalls.Each())
         {
             // Where exactly one other wall of the same height meets an end, both are cut at an angle so
             // the corner is clean on both sides. Elsewhere the end reaches half a thickness past its
@@ -905,7 +905,7 @@ public class StorePlot : NetworkBehaviour
 
         Vector3 into = Vector3.zero;
         int found = 0;
-        foreach (var o in builtWalls)
+        foreach (var o in builtWalls.Each())
         {
             if (o.id == w.id) continue;
             bool atA = Flat(o.a - p, false).sqrMagnitude < 0.0004f;

@@ -105,7 +105,7 @@ public class HelpPoints : NetworkBehaviour
 
     public int GetPoints(ulong clientId)
     {
-        if (points != null) foreach (var p in points) if (p.clientId == clientId) return p.points;
+        if (points != null) foreach (var p in points.Each()) if (p.clientId == clientId) return p.points;
         return 0;
     }
 

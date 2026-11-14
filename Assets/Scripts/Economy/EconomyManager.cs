@@ -209,7 +209,7 @@ public class EconomyManager : NetworkBehaviour
     /// <summary>A team's money (0 if it has none yet).</summary>
     public int GetTeamMoney(ulong teamId)
     {
-        foreach (var m in money)
+        foreach (var m in money.Each())
             if (m.teamId == teamId) return m.money;
         return 0;
     }
@@ -225,7 +225,7 @@ public class EconomyManager : NetworkBehaviour
     {
         double now = IsSpawned ? NetworkManager.ServerTime.Time : 0d;
         var list = new List<OrderInfo>();
-        foreach (var o in orders)
+        foreach (var o in orders.Each())
             if (o.teamId == teamId) list.Add(o);
         list.Sort((a, b) => a.RemainingAt(now).CompareTo(b.RemainingAt(now)));
         return list;
@@ -235,7 +235,7 @@ public class EconomyManager : NetworkBehaviour
     public List<OrderLine> GetOrderLines(int orderId)
     {
         var list = new List<OrderLine>();
-        foreach (var l in orderLines)
+        foreach (var l in orderLines.Each())
             if (l.orderId == orderId) list.Add(l);
         return list;
     }
