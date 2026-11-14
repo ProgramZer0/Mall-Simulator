@@ -5,21 +5,25 @@ using UnityEngine.UI;
 
 /// <summary>
 /// The shop monitor's Market tab (make it a tab's screen on the ShopUIController): the special
-/// market's deals (see SpecialMarket). Buy takes one (hold Shift for Shift Amount); it's delivered to
-/// this store like any order. Deals your team isn't licensed for aren't shown; ones that need a higher
-/// level show locked.
+/// market's deals (see SpecialMarket) as cards in a grid (9 deals: 3 × 3). Each deal is a set size and
+/// color. Buy takes one (hold Shift for Shift Amount); it's delivered to this store like any order.
+/// Deals your team isn't licensed for aren't shown; ones that need a higher level show locked.
 ///
-/// Setup, no layout groups: Row Parent is a Scroll View's Content (anchored top, stretched across);
-/// Row Prefab (a MarketDealRow) is stacked by code (Row Height, Row Spacing, Padding). Optional Empty
-/// Text ("No deals right now") and Status Text.
+/// Setup, no layout groups: Card Parent is a Scroll View's Content, or any panel (anchored top);
+/// Card Prefab (a MarketDealRow) is laid out in a grid by code (Cell Size, Cell Spacing, Padding;
+/// Columns, or as many as fit). Optional Empty Text ("No deals right now") and Status Text.
 /// </summary>
 public class MarketScreen : MonoBehaviour, IShopScreen
 {
-    [SerializeField] private MarketDealRow rowPrefab;
-    [SerializeField] private RectTransform rowParent;
-    [SerializeField, Min(1f)] private float rowHeight = 70f;
-    [SerializeField, Min(0f)] private float rowSpacing = 6f;
+    [UnityEngine.Serialization.FormerlySerializedAs("cardPrefab")]
+    [SerializeField] private MarketDealRow cardPrefab;
+    [UnityEngine.Serialization.FormerlySerializedAs("cardParent")]
+    [SerializeField] private RectTransform cardParent;
+    [SerializeField] private Vector2 cellSize = new(160f, 200f);
+    [SerializeField] private Vector2 cellSpacing = new(8f, 8f);
     [SerializeField, Min(0f)] private float padding = 6f;
+    [Tooltip("Columns in the grid (0 = as many as fit).")]
+    [SerializeField, Min(0)] private int columns = 3;
     [SerializeField, Min(1)] private int shiftAmount = 5;
     [SerializeField] private GameObject emptyText;
     [SerializeField] private TMP_Text statusText;
@@ -32,10 +36,10 @@ public class MarketScreen : MonoBehaviour, IShopScreen
 
     private void Awake()
     {
-        if (rowParent != null)
+        if (cardParent != null)
         {
-            foreach (var g in rowParent.GetComponents<LayoutGroup>()) g.enabled = false;
-            foreach (var f in rowParent.GetComponents<ContentSizeFitter>()) f.enabled = false;
+            foreach (var g in cardParent.GetComponents<LayoutGroup>()) g.enabled = false;
+            foreach (var f in cardParent.GetComponents<ContentSizeFitter>()) f.enabled = false;
         }
     }
 
@@ -84,16 +88,17 @@ public class MarketScreen : MonoBehaviour, IShopScreen
                 if (d.left > 0 && catalog.TryGet(d.itemId, out var def) && LicenseManager.CanOrder(LocalTeam, def, out _))
                     shown.Add(d);
 
-        if (rowPrefab != null && rowParent != null)
+        if (cardPrefab != null && cardParent != null)
         {
             while (rows.Count < shown.Count)
             {
-                var row = Instantiate(rowPrefab, rowParent);
+                var row = Instantiate(cardPrefab, cardParent);
                 int index = rows.Count;
                 if (row.buyButton != null) row.buyButton.onClick.AddListener(() => Buy(index));
                 rows.Add(row);
             }
             int money = EconomyManager.Instance != null ? EconomyManager.Instance.GetTeamMoney(LocalTeam) : int.MaxValue;
+            int cols = columns > 0 ? columns : UILayout.ColumnsThatFit(cardParent, cellSize, cellSpacing, padding);
             for (int i = 0; i < rows.Count; i++)
             {
                 bool used = i < shown.Count;
@@ -103,27 +108,27 @@ public class MarketScreen : MonoBehaviour, IShopScreen
                 catalog.TryGet(d.itemId, out var def);
                 var row = rows[i];
 
-                var rt = (RectTransform)row.transform;
-                float top = padding + i * (rowHeight + rowSpacing);
-                rt.anchorMin = new Vector2(0f, 1f);
-                rt.anchorMax = new Vector2(1f, 1f);
-                rt.pivot = new Vector2(0.5f, 1f);
-                rt.offsetMin = new Vector2(padding, -(top + rowHeight));
-                rt.offsetMax = new Vector2(-padding, -top);
+                UILayout.PlaceInGrid((RectTransform)row.transform, i, cols, cellSize, cellSpacing, padding);
 
                 if (row.icon != null && def.icon != null) row.icon.sprite = def.icon;
                 if (row.nameText != null) row.nameText.text = def.displayName;
                 if (row.priceText != null)
                     row.priceText.text = d.MarketOnly ? $"${d.price:N0}  Market only" : $"${d.price:N0}  (was ${d.usualPrice:N0})";
                 if (row.leftText != null) row.leftText.text = $"{d.left} of {d.total} left";
+                // The color it comes in (no picking another).
+                if (row.colorSwatch != null)
+                {
+                    row.colorSwatch.gameObject.SetActive(d.paint != 0);
+                    if (d.paint != 0) PaintPalette.StyleSwatch(row.colorSwatch, d.paint, Color.white);
+                }
+                if (row.colorText != null) row.colorText.text = d.paint != 0 ? PaintPalette.NameOf(d.paint) : "";
 
                 bool levelOk = ProgressionManager.CanOrder(LocalTeam, def);
                 bool can = levelOk && money >= d.price;
                 if (row.buyButton != null) row.buyButton.interactable = can;
                 if (row.buttonText != null) row.buttonText.text = !levelOk ? $"Level {def.minLevel}" : money < d.price ? "Not enough money" : "Buy";
             }
-            float height = shown.Count == 0 ? 0f : padding * 2f + shown.Count * rowHeight + (shown.Count - 1) * rowSpacing;
-            rowParent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
+            cardParent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, UILayout.GridHeight(shown.Count, cols, cellSize, cellSpacing, padding));
         }
         if (emptyText != null) emptyText.SetActive(shown.Count == 0);
         RefreshTimes();
