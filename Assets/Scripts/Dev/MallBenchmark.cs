@@ -358,7 +358,9 @@ public class MallBenchmark : MonoBehaviour
         if (showStats && Time.unscaledTime >= nextCount)
         {
             nextCount = Time.unscaledTime + 5f;
-            renderers = FindObjectsByType<Renderer>(FindObjectsSortMode.None).Length;
+            renderers = 0; // switched-on ones only (batched products keep a switched-off renderer)
+            foreach (var r in FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+                if (r.enabled && r.gameObject.activeInHierarchy) renderers++;
             stockModels = 0;
             foreach (var c in StockContainer.All)
                 for (int z = 0; c != null && z < c.ZoneCount; z++) stockModels += c.GetZone(z).count;

@@ -27,6 +27,19 @@ public sealed class StockBatcher : MonoBehaviour
     /// <summary>Don't draw (the local player is in edit mode).</summary>
     public static bool Paused;
 
+    /// <summary>
+    /// Areas farther than this (metres) from a camera aren't drawn for it. Every copy that is drawn is
+    /// sent to the GPU again each frame, so this is what keeps a full mall cheap.
+    /// </summary>
+    public static float DrawDistance = 60f;
+
+    /// <summary>
+    /// Light products from light probes. Off: they get the scene's ambient light instead, which is
+    /// much cheaper (with probes on, Unity looks up a probe for every copy, every frame).
+    /// Read when an area group is made, so set it before products are spawned.
+    /// </summary>
+    public static bool UseLightProbes = false;
+
     private const float CellSize = 16f;
     private const int MaxPerCall = 1023;
 
@@ -65,6 +78,8 @@ public sealed class StockBatcher : MonoBehaviour
     private static readonly Dictionary<(Vector3Int, Mesh, Material, int, int, ShadowCastingMode), Batch> Batches = new();
     private static readonly List<Batch> All = new();
     private static readonly Dictionary<Material, Material> Instanced = new();
+    private static Camera[] cameras = new Camera[4];
+    private static readonly Plane[] Planes = new Plane[6];
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetOnPlay()
@@ -191,7 +206,7 @@ public sealed class StockBatcher : MonoBehaviour
                     receiveShadows = s.receiveShadows,
                     layer = s.layer,
                     renderingLayerMask = s.renderingLayers,
-                    lightProbeUsage = LightProbeUsage.BlendProbes,
+                    lightProbeUsage = UseLightProbes ? LightProbeUsage.BlendProbes : LightProbeUsage.Off,
                     reflectionProbeUsage = ReflectionProbeUsage.BlendProbes,
                 },
             };
@@ -234,17 +249,39 @@ public sealed class StockBatcher : MonoBehaviour
         instance = go.AddComponent<StockBatcher>();
     }
 
+    // Each camera only gets the area groups in front of it and within DrawDistance: everything handed
+    // to RenderMeshInstanced is copied and uploaded that frame even if the camera then culls it.
+    // (The Scene view isn't a game camera, so products only show in the Game view.)
     private void LateUpdate()
     {
-        if (Paused) return;
-        for (int b = 0; b < All.Count; b++)
+        if (Paused || All.Count == 0) return;
+        if (cameras.Length < Camera.allCamerasCount) cameras = new Camera[Camera.allCamerasCount * 2];
+        int camCount = Camera.GetAllCameras(cameras);
+        float maxSq = DrawDistance * DrawDistance;
+
+        for (int c = 0; c < camCount; c++)
         {
-            var batch = All[b];
-            int count = batch.matrices.Count;
-            if (count == 0) continue;
-            for (int start = 0; start < count; start += MaxPerCall)
-                Graphics.RenderMeshInstanced(batch.rp, batch.shape.mesh, batch.shape.submesh, batch.matrices,
-                                             Mathf.Min(MaxPerCall, count - start), start);
+            var cam = cameras[c];
+            cameras[c] = null;
+            if (cam == null) continue;
+            GeometryUtility.CalculateFrustumPlanes(cam, Planes);
+            Vector3 eye = cam.transform.position;
+            int mask = cam.cullingMask;
+
+            for (int b = 0; b < All.Count; b++)
+            {
+                var batch = All[b];
+                int count = batch.matrices.Count;
+                if (count == 0 || (mask & (1 << batch.shape.layer)) == 0) continue;
+                var bounds = batch.rp.worldBounds;
+                if (bounds.SqrDistance(eye) > maxSq || !GeometryUtility.TestPlanesAABB(Planes, bounds)) continue;
+
+                var rp = batch.rp;
+                rp.camera = cam;
+                for (int start = 0; start < count; start += MaxPerCall)
+                    Graphics.RenderMeshInstanced(rp, batch.shape.mesh, batch.shape.submesh, batch.matrices,
+                                                 Mathf.Min(MaxPerCall, count - start), start);
+            }
         }
     }
 
