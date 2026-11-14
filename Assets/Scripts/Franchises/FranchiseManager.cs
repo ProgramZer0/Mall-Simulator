@@ -64,12 +64,18 @@ public class FranchiseManager : NetworkBehaviour
         }
         Instance = this;
         states = new NetworkList<State>(null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+        // Each franchise once, by its own Id: one with Id 0 or another's Id is left out (it'd otherwise
+        // run its own auction under the same Id).
+        var usable = new List<FranchiseDef>();
         foreach (var f in franchises)
         {
             if (f == null) continue;
-            if (f.id == 0 || byId.ContainsKey(f.id)) Debug.LogWarning($"[FranchiseManager] Franchise '{f.name}' needs its own Id.", f);
-            else byId[f.id] = f;
+            if (f.id == 0 || byId.ContainsKey(f.id))
+                Debug.LogError($"[FranchiseManager] Franchise '{f.name}' is left out: it needs its own Id (not 0, not " +
+                               $"{f.id}, which '{(byId.TryGetValue(f.id, out var other) ? other.name : "")}' has).", f);
+            else { byId[f.id] = f; usable.Add(f); }
         }
+        franchises = usable;
     }
 
     public override void OnNetworkSpawn()

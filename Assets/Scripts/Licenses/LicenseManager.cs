@@ -56,12 +56,16 @@ public class LicenseManager : NetworkBehaviour
         }
         Instance = this;
         held = new NetworkList<Held>(null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+        // Each license once, by its own Id: one with Id 0 or another's Id is left out.
+        var usable = new List<LicenseDef>();
         foreach (var l in licenses)
         {
             if (l == null) continue;
-            if (l.id == 0 || byId.ContainsKey(l.id)) Debug.LogWarning($"[LicenseManager] License '{l.name}' needs its own Id (not 0, not shared).", l);
-            else byId[l.id] = l;
+            if (l.id == 0 || byId.ContainsKey(l.id))
+                Debug.LogError($"[LicenseManager] License '{l.name}' is left out: it needs its own Id (not 0, not shared).", l);
+            else { byId[l.id] = l; usable.Add(l); }
         }
+        licenses = usable;
     }
 
     public override void OnNetworkSpawn() => held.OnListChanged += OnHeldChanged;
