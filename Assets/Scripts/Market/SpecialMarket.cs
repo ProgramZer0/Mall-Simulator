@@ -7,8 +7,8 @@ using UnityEngine;
 /// The special market (one in the scene, with a NetworkObject): a few deals at a time, shared by the
 /// whole mall. Each deal is one item at its own price with a limited amount and an end time; when it
 /// ends or sells out, a new one replaces it after a short wait. Deals are picked from the catalog by
-/// each item's Special Market Weight: normal shop items come up cheaper than usual, and items with
-/// Show In Shop off (market only) can only be bought here. Each deal is one size (a random one, for
+/// each item's Special Market Weight: shop items come up cheaper than usual, and items with Show In
+/// Shop off but In Special Market ticked (market only) can only be bought here. Each deal is one size (a random one, for
 /// sized items) and one color (random, for paintable items), and that's what you get: no switching. Bought on the shop monitor's Market tab
 /// (MarketScreen); they're delivered like any order.
 ///
@@ -148,7 +148,7 @@ public class SpecialMarket : NetworkBehaviour
         float total = 0f;
         foreach (var def in catalog.Items)
         {
-            if (def == null || def.worldNetworkPrefab == null || def.specialMarketWeight <= 0f || IsListed(def.id)) continue;
+            if (def == null || def.worldNetworkPrefab == null || !def.CanBeInSpecialMarket || IsListed(def.id)) continue;
             if (FranchiseManager.IsFranchiseItem(def)) continue; // only its franchise holder gets those
             pool.Add(def);
             total += def.specialMarketWeight;
