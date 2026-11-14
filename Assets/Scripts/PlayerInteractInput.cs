@@ -1151,8 +1151,9 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         if (ghost == null) return "no preview";
         Vector3 at = ghost.transform.position;
-        if (!MallManager.CanPickupOrPlace(OwnerClientId, transform.position, at)) return "store rules (not your store, or you're outside it)";
-        if (MallManager.IsOthersShipmentArea(OwnerClientId, at)) return "another store's shipment area";
+        bool dropOff = MallManager.IsDeliveringTo(OwnerClientId, inventory.HeldFromTeam.Value, transform.position, at);
+        if (!dropOff && !MallManager.CanPickupOrPlace(OwnerClientId, transform.position, at)) return "store rules (not your store, or you're outside it)";
+        if (!dropOff && MallManager.IsOthersShipmentArea(OwnerClientId, at)) return "another store's shipment area";
         if (MallManager.IsNoPlaceZone(at)) return "no-place zone (docks)";
         if ((placingOnCart || placingBoxed) && cartBoxPrefab != null)
             return FitsBoxAt(cartBoxPrefab, at, ghost.transform.rotation) ? "ok" : $"its box '{cartBoxPrefab.name}' doesn't fit";
@@ -1168,10 +1169,12 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         if (ghost == null) return false;
 
-        // Same store rule the server applies, so the ghost goes red before you even click.
-        if (!MallManager.CanPickupOrPlace(OwnerClientId, transform.position, ghost.transform.position))
+        // Same store rule the server applies, so the ghost goes red before you even click (dropping
+        // another team's delivery off in their store is allowed).
+        bool dropOff = MallManager.IsDeliveringTo(OwnerClientId, inventory.HeldFromTeam.Value, transform.position, ghost.transform.position);
+        if (!dropOff && !MallManager.CanPickupOrPlace(OwnerClientId, transform.position, ghost.transform.position))
             return false;
-        if (MallManager.IsOthersShipmentArea(OwnerClientId, ghost.transform.position))
+        if (!dropOff && MallManager.IsOthersShipmentArea(OwnerClientId, ghost.transform.position))
             return false;
         if (MallManager.IsNoPlaceZone(ghost.transform.position)) // the docks: pick up only
             return false;

@@ -54,6 +54,9 @@ public class ShipmentPackage : NetworkBehaviour
         return teamId != ulong.MaxValue && secondsLeft > 0d;
     }
 
+    /// <summary>The team that ordered this delivery (ulong.MaxValue if none), even after its hold runs out.</summary>
+    public ulong OrderedBy => reservedTeam.Value;
+
     /// <summary>True if this delivery is still held for a different team.</summary>
     public bool IsReservedAgainst(ulong teamId) =>
         TryGetReservation(out ulong holder, out _) && holder != teamId;

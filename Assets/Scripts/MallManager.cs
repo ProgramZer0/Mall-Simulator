@@ -322,6 +322,18 @@ public class MallManager : NetworkBehaviour
     }
 
     /// <summary>
+    /// Dropping off another team's delivery: holding something from a box that team ordered, standing
+    /// in one of that team's stores and setting it down in the same store. Allowed even though it's
+    /// not your store (it earns a help point and tells them).
+    /// </summary>
+    public static bool IsDeliveringTo(ulong clientId, ulong heldFromTeam, Vector3 playerPosition, Vector3 targetPosition)
+    {
+        if (Instance == null || heldFromTeam == ulong.MaxValue || heldFromTeam == GetTeamOf(clientId)) return false;
+        var plot = Instance.GetPlotAt(targetPosition);
+        return plot != null && plot.HasOwner && plot.OwnerTeamId == heldFromTeam && Instance.GetPlotAt(playerPosition) == plot;
+    }
+
+    /// <summary>
     /// Nobody may set things down here: the loading docks (deliveries are only picked up there),
     /// unless it's onto a cart standing at the dock.
     /// </summary>
