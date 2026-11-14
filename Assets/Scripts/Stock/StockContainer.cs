@@ -745,29 +745,106 @@ public class StockContainer : NetworkBehaviour
     }
 
     private static Transform builder;
+    private static readonly Dictionary<GameObject, GameObject> Templates = new();
 
-    /// <summary>A plain copy of the prefab: looks and colliders only, no scripts, physics or networking.</summary>
+    /// <summary>
+    /// A plain copy of the prefab: looks and one box collider (for looking at it), no scripts, physics
+    /// or networking. Each prefab is stripped once; after that a copy is a single Instantiate.
+    /// </summary>
     public static GameObject MakeVisual(GameObject prefab, Vector3 position, Quaternion rotation, Transform parent)
     {
+        var go = Instantiate(TemplateFor(prefab), position, rotation, parent); // parent is unscaled, so the prefab keeps its size
+        go.name = prefab.name;
+        return go;
+    }
+
+    // The stripped copy every product of this prefab is copied from (kept under a hidden, switched-off
+    // object, so nothing on it ever runs).
+    private static GameObject TemplateFor(GameObject prefab)
+    {
+        if (Templates.TryGetValue(prefab, out var t) && t != null) return t;
         if (builder == null)
         {
-            var b = new GameObject("[StockVisualBuilder]");
-            b.SetActive(false); // nothing on the copy wakes up while we strip it
+            var b = new GameObject("[StockVisualTemplates]");
+            b.SetActive(false);
             b.hideFlags = HideFlags.HideInHierarchy;
             DontDestroyOnLoad(b);
             builder = b.transform;
         }
 
-        var go = Instantiate(prefab, builder);
-        DestroyAll<NetworkBehaviour>(go);
-        DestroyAll<MonoBehaviour>(go);
-        DestroyAll<NetworkObject>(go);
-        DestroyAll<Rigidbody>(go);
-        DestroyAll<AudioSource>(go);
+        t = Instantiate(prefab, builder);
+        t.name = prefab.name + " (stock template)";
+        t.transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+        bool hadCollider = TryGetColliderBounds(t, out Bounds box);
+        DestroyAll<NetworkBehaviour>(t);
+        DestroyAll<MonoBehaviour>(t);
+        DestroyAll<NetworkObject>(t);
+        DestroyAll<Rigidbody>(t);
+        DestroyAll<AudioSource>(t);
+        DestroyAll<Collider>(t);
 
-        go.transform.SetParent(parent, true); // parent is unscaled, so the prefab keeps its own size and shape
-        go.transform.SetPositionAndRotation(position, rotation);
-        return go;
+        // One box around what the colliders covered (the model, if it had none): cheaper for physics than
+        // a copy of every collider, and enough to look at, price or click it.
+        if (hadCollider || TryGetMeshBounds(t, out box))
+        {
+            var c = t.AddComponent<BoxCollider>();
+            c.center = box.center;
+            c.size = Vector3.Max(box.size, Vector3.one * 0.01f);
+        }
+        Templates[prefab] = t;
+        return t;
+    }
+
+    // Bounds of the solid colliders, in the root's own (unscaled) space. Read from their shapes, since
+    // switched-off objects have no world bounds.
+    private static bool TryGetColliderBounds(GameObject root, out Bounds bounds)
+    {
+        bounds = default;
+        bool any = false;
+        var toRoot = root.transform.worldToLocalMatrix;
+        foreach (var c in root.GetComponentsInChildren<Collider>(true))
+        {
+            if (c.isTrigger || !c.enabled) continue;
+            Bounds local;
+            switch (c)
+            {
+                case BoxCollider b: local = new Bounds(b.center, b.size); break;
+                case SphereCollider sp: local = new Bounds(sp.center, Vector3.one * sp.radius * 2f); break;
+                case CapsuleCollider cap:
+                    var size = Vector3.one * cap.radius * 2f;
+                    size[cap.direction] = Mathf.Max(cap.height, cap.radius * 2f);
+                    local = new Bounds(cap.center, size);
+                    break;
+                case MeshCollider mc when mc.sharedMesh != null: local = mc.sharedMesh.bounds; break;
+                default: continue;
+            }
+            Encapsulate(ref bounds, ref any, toRoot * c.transform.localToWorldMatrix, local);
+        }
+        return any;
+    }
+
+    private static bool TryGetMeshBounds(GameObject root, out Bounds bounds)
+    {
+        bounds = default;
+        bool any = false;
+        var toRoot = root.transform.worldToLocalMatrix;
+        foreach (var mf in root.GetComponentsInChildren<MeshFilter>(true))
+            if (mf.sharedMesh != null) Encapsulate(ref bounds, ref any, toRoot * mf.transform.localToWorldMatrix, mf.sharedMesh.bounds);
+        foreach (var sk in root.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            Encapsulate(ref bounds, ref any, toRoot * sk.transform.localToWorldMatrix, sk.localBounds);
+        return any;
+    }
+
+    private static void Encapsulate(ref Bounds bounds, ref bool any, Matrix4x4 m, Bounds local)
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            Vector3 corner = local.center + Vector3.Scale(local.extents,
+                new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+            Vector3 p = m.MultiplyPoint3x4(corner);
+            if (!any) { bounds = new Bounds(p, Vector3.zero); any = true; }
+            else bounds.Encapsulate(p);
+        }
     }
 
     private static void DestroyAll<T>(GameObject root) where T : Component
