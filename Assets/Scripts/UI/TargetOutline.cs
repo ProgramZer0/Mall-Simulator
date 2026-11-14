@@ -84,11 +84,21 @@ public class TargetOutline : MonoBehaviour
         {
             if (go == null) continue;
             if (frame == null) frame = go.transform;
+            bool drawn = false;
             foreach (var r in go.GetComponentsInChildren<Renderer>())
             {
-                if (r is LineRenderer || r is ParticleSystemRenderer) continue;
-                Bounds b = r.localBounds;
-                Matrix4x4 m = frame.worldToLocalMatrix * r.transform.localToWorldMatrix;
+                if (!r.enabled || r is LineRenderer || r is ParticleSystemRenderer) continue;
+                drawn = true;
+                Add(r.localBounds, r.transform);
+            }
+            // Shelf products are drawn by StockBatcher (their renderers are off): outline their box.
+            if (!drawn)
+                foreach (var c in go.GetComponentsInChildren<BoxCollider>())
+                    Add(new Bounds(c.center, c.size), c.transform);
+
+            void Add(Bounds b, Transform t)
+            {
+                Matrix4x4 m = frame.worldToLocalMatrix * t.localToWorldMatrix;
                 for (int i = 0; i < 8; i++)
                 {
                     Vector3 corner = b.center + Vector3.Scale(b.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));

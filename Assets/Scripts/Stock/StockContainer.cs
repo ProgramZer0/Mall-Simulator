@@ -768,7 +768,7 @@ public class StockContainer : NetworkBehaviour
         {
             GetSlotPose(box, IsHangRail(zone), layout, list.Count, out Vector3 pos, out Quaternion rot);
             var model = GetVariantPrefab(state.itemId, IsHangRail(zone), state.seed, list.Count) ?? prefab;
-            list.Add(MakeVisual(model, pos, rot, root));
+            list.Add(MakeVisual(model, pos, rot, root, batched: true));
         }
     }
 
@@ -779,11 +779,39 @@ public class StockContainer : NetworkBehaviour
     /// A plain copy of the prefab: looks and one box collider (for looking at it), no scripts, physics
     /// or networking. Each prefab is stripped once; after that a copy is a single Instantiate.
     /// </summary>
-    public static GameObject MakeVisual(GameObject prefab, Vector3 position, Quaternion rotation, Transform parent)
+    public static GameObject MakeVisual(GameObject prefab, Vector3 position, Quaternion rotation, Transform parent,
+                                       bool batched = false)
     {
-        var go = Instantiate(TemplateFor(prefab), position, rotation, parent); // parent is unscaled, so the prefab keeps its size
+        var template = batched ? BatchedTemplateFor(prefab, out var shape) : TemplateFor(prefab);
+        var go = Instantiate(template, position, rotation, parent); // parent is unscaled, so the prefab keeps its size
         go.name = prefab.name;
+        if (batched && shape != null)
+        {
+            // Drawn with the rest of its kind nearby (StockBatcher); its own renderers are off.
+            var model = go.AddComponent<StockModel>();
+            model.Shape = shape;
+            StockBatcher.Add(model);
+        }
         return go;
+    }
+
+    // Shelf stock: the template with its renderers off, and the parts StockBatcher draws instead (null
+    // parts: it can't be batched, and keeps its renderers).
+    private static readonly Dictionary<GameObject, (GameObject template, List<StockBatcher.PartShape> shape)> BatchedTemplates = new();
+
+    private static GameObject BatchedTemplateFor(GameObject prefab, out List<StockBatcher.PartShape> shape)
+    {
+        if (BatchedTemplates.TryGetValue(prefab, out var entry) && entry.template != null)
+        {
+            shape = entry.shape;
+            return entry.template;
+        }
+        var t = Instantiate(TemplateFor(prefab), builder);
+        t.name = prefab.name + " (batched stock template)";
+        t.transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+        shape = StockBatcher.TakeShape(t);
+        BatchedTemplates[prefab] = (t, shape);
+        return t;
     }
 
     // The stripped copy every product of this prefab is copied from (kept under a hidden, switched-off
