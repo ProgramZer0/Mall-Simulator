@@ -117,10 +117,15 @@ public class PhoneController : MonoBehaviour
         else if (Input.GetKeyDown(homeKey) && !(homeKey == KeyCode.Escape && UIState.EscapeTakenThisFrame)) Open(null);
     }
 
-    private static bool InGame()
+    // Playing (not in store edit mode: its own camera is on and the player's, which holds the phone, is
+    // off, so the phone would come up unseen and freeze the edit controls until put away).
+    private bool InGame()
     {
         var nm = Unity.Netcode.NetworkManager.Singleton;
-        return nm != null && nm.IsListening && nm.LocalClient?.PlayerObject != null;
+        if (nm == null || !nm.IsListening || nm.LocalClient?.PlayerObject == null) return false;
+        if (phone != null) return phone.transform.parent != null && phone.transform.parent.TryGetComponent(out Camera held) && held.isActiveAndEnabled;
+        var cam = Camera.main;
+        return cam != null && cam.isActiveAndEnabled;
     }
 
     /// <summary>Bring the phone up on an app (by App Name), or its home screen (null).</summary>
