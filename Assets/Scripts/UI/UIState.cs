@@ -62,6 +62,16 @@ public static class UIState
 
     public static bool EscapeTakenThisFrame => EscapeTakenFrame == Time.frameCount;
 
+    /// <summary>What's open, for logs ("PhoneController (Player), ShopUIController").</summary>
+    public static string Describe()
+    {
+        if (!IsMenuOpen) return "nothing";
+        var names = new List<string>();
+        foreach (var m in openMenus)
+            names.Add(m is Component c ? $"{c.GetType().Name} ({c.gameObject.name})" : m.GetType().Name);
+        return string.Join(", ", names);
+    }
+
     /// <summary>Close everything (e.g. on disconnect).</summary>
     public static void CloseAll()
     {

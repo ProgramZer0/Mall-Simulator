@@ -58,6 +58,14 @@ public class StoreEditController : NetworkBehaviour
     [SerializeField] private KeyCode removeKey = KeyCode.Delete;
     [Tooltip("Log (on the host) which items couldn't keep their new spot when edit mode is saved, and why.")]
     [SerializeField] private bool logEditSave = true;
+    [Tooltip("Log each step of starting edit mode (key press, checks on this machine, the host's answer), and why " +
+             "the key was ignored, to track down edit mode not starting.")]
+    [SerializeField] private bool logEditStart = true;
+
+    private void LogStart(string text)
+    {
+        if (logEditStart) Debug.Log($"[StoreEdit] Start (client {OwnerClientId}): {text}", this);
+    }
     [Tooltip("Wall items dragged onto a wall from the floor view hang this high (their middle), in meters above the floor.")]
     [SerializeField] private float wallHangHeight = 1.5f;
     [Tooltip("Dragging a wall item: the mouse within this many meters of a wall (on the floor) snaps it onto the wall.")]
@@ -228,7 +236,10 @@ public class StoreEditController : NetworkBehaviour
         // A menu is open: ignore edit-mode keys and mouse until it closes.
         bool menuOpen = UIState.IsMenuOpen;
 
-        if (!menuOpen && !PriceScanner.LocalTyping && (Input.GetKeyDown(toggleKey) || (toggleKey == KeyCode.Alpha0 && Input.GetKeyDown(KeyCode.Keypad0))))
+        bool togglePressed = Input.GetKeyDown(toggleKey) || (toggleKey == KeyCode.Alpha0 && Input.GetKeyDown(KeyCode.Keypad0));
+        if (togglePressed && menuOpen) LogStart($"key ignored: a menu counts as open ({UIState.Describe()}).");
+        else if (togglePressed && PriceScanner.LocalTyping) LogStart("key ignored: typing a price into the scanner.");
+        else if (togglePressed)
         {
             if (IsEditing) Finish();
             else TryStart();
@@ -263,14 +274,19 @@ public class StoreEditController : NetworkBehaviour
         if (plot == null || !plot.IsAuthorized(OwnerClientId))
         {
             Debug.Log("[StoreEdit] Stand inside your own store to edit it.");
+            LogStart(plot == null
+                ? $"not in any store (at {transform.position})."
+                : $"'{plot.DisplayName}' isn't yours (owner team {plot.OwnerTeamId}, mine {MallManager.GetTeamOf(OwnerClientId)}).");
             return;
         }
         if (plot.IsRenovating && plot.EditorClientId != OwnerClientId)
         {
             Debug.Log("[StoreEdit] Someone else is already editing this store.");
+            LogStart($"'{plot.DisplayName}' is being edited by client {plot.EditorClientId}.");
             return;
         }
 
+        LogStart($"asking the host to edit '{plot.DisplayName}' (finishing {finishing}).");
         RequestStartEditRpc();
     }
 
@@ -341,6 +357,7 @@ public class StoreEditController : NetworkBehaviour
 
     private void EnterView(StorePlot plot)
     {
+        LogStart($"entering edit view of '{plot.DisplayName}'.");
         editPlot = plot;
         checkedWallVersion = seenWallVersion = CuttableWall.Version; // only check after walls change during this session
         finishing = false;
@@ -2241,6 +2258,7 @@ public class StoreEditController : NetworkBehaviour
     [Rpc(SendTo.Owner)]
     private void EditRefusedRpc(string reason)
     {
+        LogStart($"the host said no: {reason}");
         finishing = false; // e.g. a save the host turned down: keep editing
         ShowEditMessage(reason);
     }
@@ -2456,7 +2474,12 @@ public class StoreEditController : NetworkBehaviour
     [Rpc(SendTo.Server)]
     private void RequestStartEditRpc(RpcParams rpcParams = default)
     {
-        if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+        if (rpcParams.Receive.SenderClientId != OwnerClientId)
+        {
+            LogStart($"host: ignored, sent by client {rpcParams.Receive.SenderClientId} for someone else's controller.");
+            return;
+        }
+        LogStart("host: got the request.");
         ServerBeginEdit();
     }
 
@@ -2468,15 +2491,17 @@ public class StoreEditController : NetworkBehaviour
     {
         if (!IsServer) return;
         var mall = MallManager.Instance;
-        if (mall == null) return;
+        if (mall == null) { LogStart("host: no MallManager."); return; }
         if (!mall.ServerTryStartEdit(OwnerClientId, transform.position, out string reason))
         {
+            LogStart($"host: refused at {transform.position}: {(string.IsNullOrEmpty(reason) ? "(no reason given)" : reason)}");
             if (!string.IsNullOrEmpty(reason)) EditRefusedRpc(reason);
             return;
         }
 
         var plot = mall.GetPlotEditedBy(OwnerClientId);
-        if (plot == null) return;
+        if (plot == null) { LogStart("host: started, but no store shows this player as its editor."); return; }
+        LogStart($"host: editing '{plot.DisplayName}', sending {plot.ServerEditSession.Count} items.");
 
         // Hand the editor the list of items that were taken out, a chunk at a time.
         var session = plot.ServerEditSession;
