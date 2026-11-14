@@ -151,16 +151,16 @@ public class StockContainer : NetworkBehaviour
         }
 
         zones.OnListChanged += OnZonesChanged;
-        StoreListing.MarkAllDirty();
-        for (int i = 0; i < ZoneCount; i++) RefreshVisuals(i);
         All.Add(this);
+        StoreListing.Track(gameObject);
+        for (int i = 0; i < ZoneCount; i++) RefreshVisuals(i);
     }
 
     public override void OnNetworkDespawn()
     {
         All.Remove(this);
         zones.OnListChanged -= OnZonesChanged;
-        StoreListing.MarkAllDirty();
+        StoreListing.Untrack(this);
         for (int i = 0; i < ZoneCount; i++) SetVisuals(i, default);
         if (visualRoot != null) Destroy(visualRoot.gameObject);
         visualRoot = null;
@@ -689,9 +689,19 @@ public class StockContainer : NetworkBehaviour
 
     private void OnZonesChanged(NetworkListEvent<ZoneStock> change)
     {
-        StoreListing.MarkAllDirty();
-        if (change.Type == NetworkListEvent<ZoneStock>.EventType.Value) RefreshVisuals(change.Index);
-        else for (int i = 0; i < ZoneCount; i++) RefreshVisuals(i);
+        // Only this spot's entry in its store's listing changes (and this shelf itself, which is only for
+        // sale while it's empty).
+        if (change.Type == NetworkListEvent<ZoneStock>.EventType.Value)
+        {
+            StoreListing.Track(this, change.Index);
+            if (TryGetComponent<Sellable>(out var self)) StoreListing.Track(self);
+            RefreshVisuals(change.Index);
+        }
+        else
+        {
+            StoreListing.Track(gameObject);
+            for (int i = 0; i < ZoneCount; i++) RefreshVisuals(i);
+        }
     }
 
     private void RefreshVisuals(int zone)

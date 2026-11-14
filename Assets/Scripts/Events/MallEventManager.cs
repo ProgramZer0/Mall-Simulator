@@ -178,8 +178,7 @@ public class MallEventManager : NetworkBehaviour
     private void OnActiveChanged(NetworkListEvent<ActiveEvent> change)
     {
         MarketModifiers.Invalidate();
-        StoreListing.MarkAllDirty();
-        Changed?.Invoke();
+        Changed?.Invoke(); // store appeal revalues (prices and demand), without redoing listings
     }
 
     private void OnSeasonChanged(int before, int now) => Changed?.Invoke();

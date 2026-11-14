@@ -56,17 +56,17 @@ public class Sellable : NetworkBehaviour
     {
         All.Add(this);
         priceCents.OnValueChanged += OnPriceChanged;
-        StoreListing.MarkAllDirty();
+        StoreListing.Track(this);
     }
 
     public override void OnNetworkDespawn()
     {
         All.Remove(this);
         priceCents.OnValueChanged -= OnPriceChanged;
-        StoreListing.MarkAllDirty();
+        StoreListing.Untrack(this);
     }
 
-    private void OnPriceChanged(int previous, int current) => StoreListing.MarkAllDirty();
+    private void OnPriceChanged(int previous, int current) => StoreListing.Track(this);
 
     /// <summary>
     /// Server: set the price in cents (0 = not for sale). Before Spawn works too. Returns false if it

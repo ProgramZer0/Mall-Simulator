@@ -222,10 +222,10 @@ public class ItemPickupNet : NetworkBehaviour
     /// <summary>Server: how many products are left in this crate. Call after Instantiate, before Spawn.</summary>
     public void ServerSetUnits(int count) => units.Value = count >= UnitsPerCrate ? 0 : Mathf.Max(1, count);
 
-    // A part-used crate for sale is worth less: the store's listing needs redoing when its count changes.
+    // A part-used crate for sale is worth less: its entry in the store's listing changes with its count.
     private void OnUnitsChanged(int before, int now)
     {
-        if (TryGetComponent<Sellable>(out _)) StoreListing.MarkAllDirty();
+        if (TryGetComponent<Sellable>(out var s)) StoreListing.Track(s);
     }
 
     /// <summary>Every spawned item on this machine (stores use it to find their contents).</summary>
@@ -345,6 +345,13 @@ public class ItemPickupNet : NetworkBehaviour
         else StartFalling();
     }
 
+    // Loaded onto or taken off a cart: riding a cart isn't on display.
+    public override void OnNetworkObjectParentChanged(NetworkObject parentNetworkObject)
+    {
+        base.OnNetworkObjectParentChanged(parentNetworkObject);
+        StoreListing.Track(gameObject);
+    }
+
     public override void OnNetworkDespawn()
     {
         units.OnValueChanged -= OnUnitsChanged;
@@ -358,6 +365,7 @@ public class ItemPickupNet : NetworkBehaviour
 
     private void OnFreezeChanged(FreezeState previous, FreezeState current)
     {
+        StoreListing.Track(gameObject); // landed somewhere (maybe another store), or picked back up
         if (!Falls || rb == null) return;
         if (current.frozen) ApplyFrozen(current);
         else if (!falling) StartFalling();

@@ -5,7 +5,9 @@ using UnityEngine;
 /// <summary>
 /// How appealing one store is. Added to every StorePlot automatically (read it with plot.Appeal).
 /// Worked out on every machine from things that are already synced, so it costs no network traffic.
-/// It's redone at most once a second, and only when stock, prices, events, decor or walls changed.
+/// It's updated at most once a second, and only for what changed: a shelf spot or item changing updates
+/// just that one offer (no visibility checks for count or price changes); walls, windows and decor
+/// moving redo everything.
 ///
 /// What it knows:
 /// - Quality (0-1): how well the store's decor covers what its categories want
@@ -43,6 +45,7 @@ public class StoreAppeal : MonoBehaviour
         public int priceCents;
         public int marketCents;  // for the same amount (a whole crate sold loose is many products)
         public int quantity;
+        public int products;     // products in one (a whole crate: its units)
         public bool seenFromOutside;
         public Vector3 position;
         public float competition; // 1 = nobody else sells it
@@ -58,23 +61,39 @@ public class StoreAppeal : MonoBehaviour
 
     private static readonly List<StoreAppeal> AllAppeals = new();
 
-    /// <summary>Something changed that affects every store (settings, events): work them all out again.</summary>
+    /// <summary>
+    /// Something changed that affects every store's values (settings, events, a store opening or
+    /// closing): work out prices and competition again. Cheap: no visibility checks.
+    /// </summary>
     public static void MarkAllDirty()
     {
-        foreach (var a in AllAppeals) a.dirty = true;
+        foreach (var a in AllAppeals) a.revalue = true;
     }
 
     private StorePlot plot;
-    private readonly List<Offer> offers = new();
+    private StoreListing listing;
+    private readonly Dictionary<StoreListing.Key, Offer> offers = new();
     private readonly Dictionary<string, float> features = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, float> categoryShare = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> hints = new();
     private readonly List<DecorPiece> decor = new();
-    private bool dirty = true;
-    private float nextAllowed;
-    private int seenOpenings = -1, seenWalls = -1, seenDecor = -1;
     private float quality;
     private int forSale, seenOutside;
+
+    // What needs working out again (see Refresh). Only what changed is redone.
+    private bool rebuildAll = true;  // walls, windows or decor changed: every offer, seen from outside again
+    private bool revalue;            // events, settings or competition changed: values again, no raycasts
+    private readonly HashSet<StoreListing.Key> pending = new(); // these sources changed
+    private float nextAllowed;
+    private int seenOpenings = -1, seenWalls = -1, seenDecor = -1, seenCompetition = -1;
+
+    // Kept between refreshes.
+    private readonly List<Vector3> viewers = new();
+    private readonly Dictionary<StoreListing.Key, (Vector3 at, bool seen)> seenCache = new();
+    private readonly Dictionary<CustomerPersonality, (float outside, float inside)> sums = new();
+    private readonly Dictionary<(string feature, string category), float> nearCache = new();
+    private readonly List<StoreListing.Key> keyBuffer = new();
+    private readonly List<StoreListing.Source> sourceBuffer = new();
 
     public StorePlot Plot => plot;
 
@@ -94,9 +113,10 @@ public class StoreAppeal : MonoBehaviour
     private void Awake()
     {
         plot = GetComponent<StorePlot>();
+        listing = GetComponent<StoreListing>();
         AllAppeals.Add(this);
-        StoreListing.StockOrPricesChanged += MarkDirty;
-        MallEventManager.Changed += MarkDirty;
+        if (listing != null) listing.SourceChanged += OnSourceChanged;
+        MallEventManager.Changed += OnEventsChanged;
         // Opening, closing or changing hands changes who competes with whom: everyone re-checks.
         if (plot != null) plot.Changed += OnPlotChanged;
     }
@@ -110,12 +130,13 @@ public class StoreAppeal : MonoBehaviour
     private void OnDestroy()
     {
         AllAppeals.Remove(this);
-        StoreListing.StockOrPricesChanged -= MarkDirty;
-        MallEventManager.Changed -= MarkDirty;
+        if (listing != null) listing.SourceChanged -= OnSourceChanged;
+        MallEventManager.Changed -= OnEventsChanged;
         if (plot != null) plot.Changed -= OnPlotChanged;
     }
 
-    private void MarkDirty() => dirty = true;
+    private void OnSourceChanged(StoreListing.Key key) => pending.Add(key);
+    private void OnEventsChanged() => revalue = true;
 
     /* ========================= PER PERSONALITY ========================= */
 
@@ -129,15 +150,20 @@ public class StoreAppeal : MonoBehaviour
         float outSat = settings != null ? settings.outsideSaturation : 10f;
         float inSat = settings != null ? settings.insideSaturation : 30f;
 
-        float outside = 0f, inside = 0f;
-        foreach (var o in offers)
+        // The sum over everything for sale is kept per personality until something changes, so many
+        // customers asking costs one pass per change, not one per customer.
+        if (!sums.TryGetValue(p, out var sum))
         {
-            float v = ValueFor(p, o) * o.quantity;
-            inside += v;
-            if (o.seenFromOutside) outside += v;
+            foreach (var o in offers.Values)
+            {
+                float v = ValueFor(p, o) * o.quantity;
+                sum.inside += v;
+                if (o.seenFromOutside) sum.outside += v;
+            }
+            sums[p] = sum;
         }
-        r.outsideDraw = 1f - Mathf.Exp(-outside / outSat);
-        r.insideDraw = 1f - Mathf.Exp(-inside / inSat);
+        r.outsideDraw = 1f - Mathf.Exp(-sum.outside / outSat);
+        r.insideDraw = 1f - Mathf.Exp(-sum.inside / inSat);
 
         // Store perks: quality points, more walk-ins, more interest.
         float q = Mathf.Clamp01(quality + ProgressionManager.StoreStat(plot, PerkStat.Quality));
@@ -149,6 +175,16 @@ public class StoreAppeal : MonoBehaviour
             : 0f;
         r.interest = Mathf.Clamp01(r.insideDraw * looks * interest);
         return r;
+    }
+
+    /// <summary>
+    /// How much this kind of customer wants one of what's at this source (0 = not at all). For a
+    /// customer browsing the store: pick what's worth the most to them.
+    /// </summary>
+    public float WorthTo(CustomerPersonality p, StoreListing.Source s)
+    {
+        Refresh();
+        return p != null && offers.TryGetValue(s.Key, out var o) ? ValueFor(p, o) : 0f;
     }
 
     /// <summary>How much one of this product, at this price, is worth to this kind of customer.</summary>
@@ -175,7 +211,9 @@ public class StoreAppeal : MonoBehaviour
     {
         private static readonly Dictionary<int, int> StoresSelling = new();
         private static bool dirty = true;
-        private static float builtAt = -10f;
+
+        /// <summary>Goes up each time the table changes (stores compare it to know when to revalue).</summary>
+        public static int Version { get; private set; }
 
         public static void MarkDirty() => dirty = true;
 
@@ -188,88 +226,148 @@ public class StoreAppeal : MonoBehaviour
             return Mathf.Max(0, n);
         }
 
-        private static void Build()
+        // Only rebuilt when a store starts or stops selling something, or opens or closes; counts
+        // going up and down don't matter here.
+        public static void Build()
         {
-            if (!dirty && Time.unscaledTime - builtAt < 2f) return;
-            if (Time.unscaledTime - builtAt < 0.25f) return; // many stores asking in the same moment
+            if (!dirty) return;
             dirty = false;
-            builtAt = Time.unscaledTime;
+            Version++;
             StoresSelling.Clear();
             var mall = MallManager.Instance;
             if (mall == null) return;
-            var seen = new HashSet<int>();
             foreach (var plot in mall.Plots)
             {
                 if (plot == null || !plot.IsOpen) continue;
-                seen.Clear();
-                foreach (var e in plot.Listing.Entries)
-                    if (seen.Add(e.itemId))
-                    {
-                        StoresSelling.TryGetValue(e.itemId, out int n);
-                        StoresSelling[e.itemId] = n + 1;
-                    }
+                foreach (int itemId in plot.Listing.ProductIds)
+                {
+                    StoresSelling.TryGetValue(itemId, out int n);
+                    StoresSelling[itemId] = n + 1;
+                }
             }
         }
 
-        static Competition() => StoreListing.StockOrPricesChanged += MarkDirty;
+        static Competition() => StoreListing.ProductsSoldChanged += MarkDirty;
     }
 
     /* ========================= WORKING IT OUT ========================= */
 
+    // At most once a second, and only what changed:
+    // - walls, windows or decor moved: everything again, including what's seen from outside
+    // - a shelf spot or item changed: just that offer (a new spot is checked for being seen; counts and
+    //   prices aren't)
+    // - events, settings, competition: values again, no visibility checks
     private void Refresh()
     {
-        if (plot == null) return;
+        if (plot == null || listing == null) return;
         if (seenOpenings != WallOpening.Version || seenWalls != CuttableWall.Version || seenDecor != Decor.Version)
         {
             seenOpenings = WallOpening.Version;
             seenWalls = CuttableWall.Version;
             seenDecor = Decor.Version;
-            dirty = true;
+            rebuildAll = true;
         }
-        if (!dirty || Time.unscaledTime < nextAllowed) return;
-        dirty = false;
+        Competition.Build();
+        if (seenCompetition != Competition.Version)
+        {
+            seenCompetition = Competition.Version;
+            revalue = true;
+        }
+        if (!rebuildAll && !revalue && pending.Count == 0) return;
+        if (Time.unscaledTime < nextAllowed) return;
         nextAllowed = Time.unscaledTime + 1f;
 
-        BuildOffers();
-        BuildFeatures();
+        bool layoutChanged = false; // offers added, removed or moved (decor-near-it needs redoing)
+        if (rebuildAll)
+        {
+            rebuildAll = false;
+            revalue = false;
+            pending.Clear();
+            offers.Clear();
+            seenCache.Clear();
+            viewers.Clear();
+            FindViewers(viewers);
+            sourceBuffer.Clear();
+            sourceBuffer.AddRange(listing.Sources);
+            foreach (var s in sourceBuffer) SetOffer(s.Key, s);
+            BuildFeatures();
+            layoutChanged = true;
+        }
+        else
+        {
+            keyBuffer.Clear();
+            keyBuffer.AddRange(pending); // (a copy: working one out can't change the set mid-loop)
+            pending.Clear();
+            foreach (var key in keyBuffer)
+            {
+                if (listing.TryGetSource(key, out var s)) layoutChanged |= SetOffer(key, s);
+                else layoutChanged |= offers.Remove(key);
+            }
+
+            if (revalue)
+            {
+                revalue = false;
+                keyBuffer.Clear();
+                keyBuffer.AddRange(offers.Keys);
+                foreach (var key in keyBuffer)
+                {
+                    var o = offers[key];
+                    o.marketCents = MarketModifiers.MarketPriceCents(o.def) * o.products;
+                    o.competition = CompetitionFor(o.def.id);
+                    offers[key] = o;
+                }
+            }
+        }
+
+        forSale = seenOutside = 0;
+        foreach (var o in offers.Values)
+        {
+            forSale += o.quantity;
+            if (o.seenFromOutside) seenOutside += o.quantity;
+        }
+        sums.Clear();
+        if (layoutChanged) nearCache.Clear();
         BuildQuality();
     }
 
-    private void BuildOffers()
+    private float CompetitionFor(int itemId)
     {
-        offers.Clear();
-        forSale = seenOutside = 0;
+        var settings = StoreAppealSettings.Instance;
+        return settings != null ? settings.CompetitionFactor(Competition.Others(itemId, plot)) : 1f;
+    }
+
+    // Add or update one offer. True if it's new, gone or moved, or now a different product.
+    private bool SetOffer(StoreListing.Key key, StoreListing.Source s)
+    {
         var catalog = ItemCatalog.Instance;
-        if (catalog == null) return;
+        if (catalog == null || !catalog.TryGet(s.itemId, out var def)) return offers.Remove(key);
 
-        var viewers = new List<Vector3>();
-        FindViewers(viewers);
+        // A whole crate sold loose holds many products; its market value is theirs together.
+        int products = 1;
+        if (s.item != null && s.item.TryGetComponent<ItemPickupNet>(out var pickup) && pickup.IsStockCrate)
+            products = pickup.Units;
 
-        foreach (var s in plot.Listing.Sources)
+        // Seen from outside: only checked for something new or moved (not when a count or price changes).
+        Vector3 at = s.Position;
+        if (!seenCache.TryGetValue(key, out var seen) || (seen.at - at).sqrMagnitude > 0.0025f)
         {
-            int itemId = s.item != null ? s.item.ItemId : s.container.GetZone(s.zone).itemId;
-            if (!catalog.TryGet(itemId, out var def)) continue;
-
-            // A whole crate sold loose holds many products; its market value is theirs together.
-            int products = 1;
-            if (s.item != null && s.item.TryGetComponent<ItemPickupNet>(out var pickup) && pickup.IsStockCrate)
-                products = pickup.Units;
-
-            bool seen = viewers.Count > 0 && IsSeen(s, viewers);
-            var settings = StoreAppealSettings.Instance;
-            offers.Add(new Offer
-            {
-                def = def,
-                priceCents = s.priceCents,
-                marketCents = MarketModifiers.MarketPriceCents(def) * products,
-                quantity = s.quantity,
-                seenFromOutside = seen,
-                position = s.Position,
-                competition = settings != null ? settings.CompetitionFactor(Competition.Others(itemId, plot)) : 1f,
-            });
-            forSale += s.quantity;
-            if (seen) seenOutside += s.quantity;
+            seen = (at, viewers.Count > 0 && IsSeen(s, viewers));
+            seenCache[key] = seen;
         }
+
+        bool had = offers.TryGetValue(key, out var before);
+        offers[key] = new Offer
+        {
+            def = def,
+            products = products,
+            priceCents = s.priceCents,
+            marketCents = MarketModifiers.MarketPriceCents(def) * products,
+            quantity = s.quantity,
+            seenFromOutside = seen.seen,
+            position = at,
+            competition = CompetitionFor(s.itemId),
+        };
+        return !had || before.def != def || (before.position - at).sqrMagnitude > 0.0025f;
     }
 
     // Where passers-by look in from: in front of each window and door in the store's front walls.
@@ -356,13 +454,15 @@ public class StoreAppeal : MonoBehaviour
 
     // How much of a feature is close enough to help a category: within Decor Reach (across the floor) of
     // something for sale in that category.
+    // Kept until decor or what's where in the store changes (counts and prices don't matter here).
     private float FeatureNear(string feature, string category, float reach)
     {
+        if (nearCache.TryGetValue((feature, category), out float cached)) return cached;
         float have = 0f, reach2 = reach * reach;
         foreach (var d in decor)
         {
             if (!string.Equals(d.feature, feature, StringComparison.OrdinalIgnoreCase)) continue;
-            foreach (var o in offers)
+            foreach (var o in offers.Values)
             {
                 if (!o.def.HasCategory(category)) continue;
                 float dx = d.position.x - o.position.x, dz = d.position.z - o.position.z;
@@ -371,6 +471,7 @@ public class StoreAppeal : MonoBehaviour
                 break;
             }
         }
+        nearCache[(feature, category)] = have;
         return have;
     }
 
@@ -399,7 +500,7 @@ public class StoreAppeal : MonoBehaviour
         // How much of what's for sale is in each category.
         categoryShare.Clear();
         float total = 0f;
-        foreach (var o in offers)
+        foreach (var o in offers.Values)
             foreach (var c in o.def.Categories)
             {
                 categoryShare.TryGetValue(c, out float n);
@@ -445,7 +546,7 @@ public class StoreAppeal : MonoBehaviour
     [ContextMenu("Log Appeal")]
     private void LogAppeal()
     {
-        dirty = true;
+        rebuildAll = true;
         nextAllowed = 0f;
         Debug.Log(Describe(), this);
     }
