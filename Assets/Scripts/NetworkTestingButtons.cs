@@ -3,7 +3,18 @@ using Unity.Netcode;
 
 public class NetworkTestingButtons : MonoBehaviour
 {
-    private void OnGUI()
+    private System.Action drawButtons;
+
+    // Only while not connected (an OnGUI method would cost every frame even when drawing nothing).
+    private void Update()
+    {
+        var nm = NetworkManager.Singleton;
+        ImGuiHost.Set(this, nm != null && !nm.IsClient && !nm.IsServer ? drawButtons ??= DrawButtons : null);
+    }
+
+    private void OnDisable() => ImGuiHost.Set(this, null);
+
+    private void DrawButtons()
     {
         // The NetworkManager can be gone (e.g. while Play mode is stopping); draw nothing then.
         var nm = NetworkManager.Singleton;

@@ -452,8 +452,11 @@ public class EconomyManager : NetworkBehaviour
 
     /* ========================= DELIVERY (SERVER) ========================= */
 
+    private System.Action drawHud;
+
     private void Update()
     {
+        ImGuiHost.Set(this, showDebugHud && Debug.isDebugBuild && IsSpawned ? drawHud ??= DrawHud : null);
         if (IsServer && IsSpawned) ServerUpdateOrders();
         if (devHotkeys && IsSpawned && !UIState.IsMenuOpen) DevKeys();
     }
@@ -663,9 +666,8 @@ public class EconomyManager : NetworkBehaviour
             hudLines.Add($"Last order: {lastResult.Value}");
     }
 
-    private void OnGUI()
+    private void DrawHud()
     {
-        if (!showDebugHud || !Debug.isDebugBuild || !IsSpawned) return;
 
         if (Event.current.type == EventType.Layout && Time.unscaledTime >= hudNextRefresh)
         {
