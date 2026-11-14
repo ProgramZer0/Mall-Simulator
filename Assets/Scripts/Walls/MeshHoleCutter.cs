@@ -4,12 +4,13 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 /// <summary>
-/// Cuts rectangular holes straight through a mesh (for CuttableWall's Cut Models): triangles inside a
-/// hole go, triangles across its edge are trimmed along it (positions, normals, tangents, UVs and
-/// colours carried along), the rest stay as they are. The hole's sides aren't filled in (a window or
-/// door frame covers them).
+/// Cuts holes straight through a mesh (for CuttableWall's Cut Models): triangles inside a hole go,
+/// triangles across its edge are trimmed along it (positions, normals, tangents, UVs and colours
+/// carried along), the rest stay as they are. The hole's sides aren't filled in (a window or door
+/// frame covers them).
 ///
-/// Holes are rectangles in wall space (u along, v up); To Wall gives each vertex's (u, v).
+/// Holes are convex outlines in wall space (u along, v up): rectangles, arches, rounded tops. To Wall
+/// gives each vertex's (u, v).
 /// </summary>
 public static class MeshHoleCutter
 {
@@ -45,6 +46,33 @@ public static class MeshHoleCutter
     /// With no holes touching it, Into is a plain copy.
     /// </summary>
     public static void Cut(Mesh source, Mesh into, Func<Vector3, Vector2> toWall, IReadOnlyList<Rect> holes)
+    {
+        var outlines = new List<Vector2[]>(holes.Count);
+        foreach (var r in holes) outlines.Add(Outline(r));
+        Cut(source, into, toWall, outlines);
+    }
+
+    /// <summary>A rectangle as an outline (counter-clockwise).</summary>
+    public static Vector2[] Outline(Rect r) =>
+        new[] { new Vector2(r.xMin, r.yMin), new Vector2(r.xMax, r.yMin), new Vector2(r.xMax, r.yMax), new Vector2(r.xMin, r.yMax) };
+
+    /// <summary>The same outline counter-clockwise (holes are cut assuming that way round).</summary>
+    public static Vector2[] CounterClockwise(Vector2[] outline)
+    {
+        float area = 0f;
+        for (int i = 0; i < outline.Length; i++)
+        {
+            Vector2 a = outline[i], b = outline[(i + 1) % outline.Length];
+            area += a.x * b.y - b.x * a.y;
+        }
+        if (area >= 0f) return outline;
+        var r = (Vector2[])outline.Clone();
+        Array.Reverse(r);
+        return r;
+    }
+
+    /// <summary>Fill Into with Source minus the holes (convex outlines, counter-clockwise, in wall space).</summary>
+    public static void Cut(Mesh source, Mesh into, Func<Vector3, Vector2> toWall, IReadOnlyList<Vector2[]> holes)
     {
         into.Clear();
         if (source == null) return;
@@ -147,37 +175,46 @@ public static class MeshHoleCutter
         }
     }
 
-    private static bool TouchesAny(Vector2 a, Vector2 b, Vector2 c, IReadOnlyList<Rect> holes)
+    private static Rect BoundsOf(Vector2[] outline)
+    {
+        float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
+        foreach (var p in outline)
+        {
+            minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x);
+            minY = Mathf.Min(minY, p.y); maxY = Mathf.Max(maxY, p.y);
+        }
+        return Rect.MinMaxRect(minX, minY, maxX, maxY);
+    }
+
+    private static bool TouchesAny(Vector2 a, Vector2 b, Vector2 c, IReadOnlyList<Vector2[]> holes)
     {
         float minX = Mathf.Min(a.x, Mathf.Min(b.x, c.x)), maxX = Mathf.Max(a.x, Mathf.Max(b.x, c.x));
         float minY = Mathf.Min(a.y, Mathf.Min(b.y, c.y)), maxY = Mathf.Max(a.y, Mathf.Max(b.y, c.y));
         foreach (var h in holes)
-            if (maxX > h.xMin && minX < h.xMax && maxY > h.yMin && minY < h.yMax) return true;
+        {
+            var r = BoundsOf(h);
+            if (maxX > r.xMin && minX < r.xMax && maxY > r.yMin && minY < r.yMax) return true;
+        }
         return false;
     }
 
-    // Each piece: the parts left of, right of, below and above the hole are kept; the part inside goes.
-    private static List<List<V>> CutHole(List<List<V>> pieces, Rect hole)
+    // Each piece: what's outside each edge of the hole is kept; what's inside every edge (in the hole) goes.
+    private static List<List<V>> CutHole(List<List<V>> pieces, Vector2[] hole)
     {
         var result = new List<List<V>>();
+        var r = BoundsOf(hole);
         foreach (var piece in pieces)
         {
-            if (!Overlaps(piece, hole)) { result.Add(piece); continue; }
-            Split(piece, 0, hole.xMin, out var left, out var rest);
-            Keep(left);
-            Split(rest, 0, hole.xMax, out var inX, out var right);
-            Keep(right);
-            Split(inX, 1, hole.yMin, out var below, out var restY);
-            Keep(below);
-            Split(restY, 1, hole.yMax, out _, out var above);
-            Keep(above);
+            if (!Overlaps(piece, r)) { result.Add(piece); continue; }
+            var rest = piece;
+            for (int i = 0; i < hole.Length && rest.Count >= 3; i++)
+            {
+                Split(rest, hole[i], hole[(i + 1) % hole.Length], out var inside, out var outside);
+                if (outside.Count >= 3) result.Add(outside);
+                rest = inside;
+            }
         }
         return result;
-
-        void Keep(List<V> p)
-        {
-            if (p.Count >= 3) result.Add(p);
-        }
     }
 
     private static bool Overlaps(List<V> piece, Rect hole)
@@ -191,22 +228,46 @@ public static class MeshHoleCutter
         return maxX > hole.xMin && minX < hole.xMax && maxY > hole.yMin && minY < hole.yMax;
     }
 
-    // A convex polygon cut by a line (axis 0: u = value, 1: v = value) into the part below and above.
-    private static void Split(List<V> poly, int axis, float value, out List<V> below, out List<V> above)
+    // A convex polygon cut by the line through A and B: the part on its left (inside a counter-clockwise
+    // hole) and on its right.
+    private static void Split(List<V> poly, Vector2 a, Vector2 b, out List<V> inside, out List<V> outside)
     {
-        below = new List<V>(poly.Count + 1);
-        above = new List<V>(poly.Count + 1);
+        inside = new List<V>(poly.Count + 1);
+        outside = new List<V>(poly.Count + 1);
+        Vector2 d = b - a;
         for (int i = 0; i < poly.Count; i++)
         {
-            V a = poly[i], b = poly[(i + 1) % poly.Count];
-            float da = a.w[axis] - value, db = b.w[axis] - value;
-            if (da < 0f) below.Add(a); else above.Add(a);
-            if ((da < 0f && db > 0f) || (da > 0f && db < 0f))
+            V p = poly[i], q = poly[(i + 1) % poly.Count];
+            float sp = d.x * (p.w.y - a.y) - d.y * (p.w.x - a.x);
+            float sq = d.x * (q.w.y - a.y) - d.y * (q.w.x - a.x);
+            if (sp >= 0f) inside.Add(p); // on the line: both sides
+            if (sp <= 0f) outside.Add(p);
+            if ((sp > 0f && sq < 0f) || (sp < 0f && sq > 0f))
             {
-                V m = V.Lerp(a, b, da / (da - db));
-                below.Add(m);
-                above.Add(m);
+                V m = V.Lerp(p, q, sp / (sp - sq));
+                inside.Add(m);
+                outside.Add(m);
             }
         }
+    }
+
+    /* ========================= FLAT (2D) ========================= */
+
+    /// <summary>
+    /// A rectangle minus a hole (convex, counter-clockwise), as triangles (every 3 points one triangle,
+    /// counter-clockwise), all in wall space. For the solid corners around an arch in a plain box wall.
+    /// </summary>
+    public static void RectMinusHole(Rect rect, Vector2[] hole, List<Vector2> triangles)
+    {
+        var start = new List<V>(4);
+        foreach (var p in Outline(rect)) start.Add(new V { w = p });
+        var pieces = CutHole(new List<List<V>> { start }, hole);
+        foreach (var piece in pieces)
+            for (int i = 1; i + 1 < piece.Count; i++)
+            {
+                triangles.Add(piece[0].w);
+                triangles.Add(piece[i].w);
+                triangles.Add(piece[i + 1].w);
+            }
     }
 }
