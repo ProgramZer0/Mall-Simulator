@@ -1172,7 +1172,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.8975837}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -0.08001709, y: 1.0715942}
+  m_AnchoredPosition: {x: -0.08000183, y: 1.0715942}
   m_SizeDelta: {x: 0.17, y: -1.9813004}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &64478364
@@ -5240,7 +5240,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.8707408}
   m_AnchorMax: {x: 0.2503851, y: 1}
-  m_AnchoredPosition: {x: -2.3327026, y: 2.3234863}
+  m_AnchoredPosition: {x: -2.3326416, y: 2.3234863}
   m_SizeDelta: {x: -2.7052002, y: -4.3699036}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &383177323
@@ -6814,12 +6814,6 @@ MonoBehaviour:
   aisle: 1
   spawnsPerFrame: 20
   priceMarkup: 1
-  blockingMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  supportMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
   buysPerSecond: 0
   restock: 1
   appealAsksPerSecond: 0
@@ -23412,7 +23406,7 @@ MonoBehaviour:
   - id: 17
     displayName: Test Rare Shoe box
     handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 2919167297392315864, guid: 565a7df3bcfa9d44c8cb7982023d4af6, type: 3}
+    worldNetworkPrefab: {fileID: 5976144729851372552, guid: 3c2f0eaa3c055a247b419c8469ea03bd, type: 3}
     showInShop: 1
     icon: {fileID: 0}
     categories:
@@ -23434,7 +23428,7 @@ MonoBehaviour:
   - id: 18
     displayName: 'Test Rare Shoes '
     handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 2919167297392315864, guid: 565a7df3bcfa9d44c8cb7982023d4af6, type: 3}
+    worldNetworkPrefab: {fileID: 2919167297392315864, guid: 87d1a5c29cbf53b4f94e4e1c9bdb070e, type: 3}
     showInShop: 0
     icon: {fileID: 0}
     categories:
@@ -23508,7 +23502,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0.3273914, y: 0.1605837}
-  m_AnchoredPosition: {x: -1.3308105, y: -1.1000061}
+  m_AnchoredPosition: {x: -1.3307953, y: -1.1000061}
   m_SizeDelta: {x: -2.0058975, y: -2.9649963}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1462428801
@@ -25335,7 +25329,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.785}
   m_AnchorMax: {x: 0.82500005, y: 1}
-  m_AnchoredPosition: {x: -4.3379517, y: 2.769928}
+  m_AnchoredPosition: {x: -4.3379517, y: 2.7698822}
   m_SizeDelta: {x: -8.6759, y: -6.8029995}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1557418836
