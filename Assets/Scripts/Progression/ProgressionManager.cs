@@ -123,13 +123,16 @@ public class ProgressionManager : NetworkBehaviour
         stores = new NetworkList<StoreProgress>(null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
         ranks = new NetworkList<PerkRank>(null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+        // Each perk once, by its own Id: one with Id 0 or another's Id is left out.
+        var usable = new List<PerkDef>();
         foreach (var p in perks)
         {
             if (p == null) continue;
             if (p.id == 0 || perkById.ContainsKey(p.id))
-                Debug.LogWarning($"[ProgressionManager] Perk '{p.name}' needs its own Id (not 0, not shared).", p);
-            else perkById[p.id] = p;
+                Debug.LogError($"[ProgressionManager] Perk '{p.name}' is left out: it needs its own Id (not 0, not shared).", p);
+            else { perkById[p.id] = p; usable.Add(p); }
         }
+        perks = usable;
 
         // Total XP at the start of each level (index = level).
         levelStartXp = new int[maxLevel + 2];
