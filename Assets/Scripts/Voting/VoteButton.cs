@@ -52,7 +52,10 @@ public class VoteButton : MonoBehaviour
         if (votes == null || !votes.IsOpen) return "No mall vote right now";
         var option = votes.GetOption(Option);
         if (option == null) return null;
-        return votes.VoteOf(clientId) == Option ? $"You voted for {option.displayName}" : $"F: Vote for {option.displayName}";
+        // Help points make a vote count more.
+        int weight = HelpPoints.Instance != null && HelpPoints.Instance.IsSpawned ? HelpPoints.Instance.VoteWeightOf(clientId) : 1;
+        string counts = weight > 1 ? $" (counts x{weight})" : "";
+        return votes.VoteOf(clientId) == Option ? $"You voted for {option.displayName}{counts}" : $"F: Vote for {option.displayName}{counts}";
     }
 
     public void Press()
