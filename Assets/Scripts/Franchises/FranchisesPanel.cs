@@ -14,7 +14,8 @@ using UnityEngine.UI;
 ///
 /// Setup, no layout groups: Row Parent is a Scroll View's Content (anchored top, stretched across);
 /// Row Prefab (a FranchiseRow) is stacked by code (Row Height, Row Spacing, Padding). Optional Status
-/// Text and Confirm (a ConfirmPopup; without it, giving up happens on the first click).
+/// Text. Confirm: optional, this panel's own pop-up; empty uses the shared ConfirmPopup prefab (and with
+/// neither, giving up happens on the first click).
 /// </summary>
 public class FranchisesPanel : MonoBehaviour
 {
@@ -154,8 +155,9 @@ public class FranchisesPanel : MonoBehaviour
             FranchiseManager.Instance?.RequestGiveUp(f.id);
             Status($"Giving up {f.displayName}...");
         }
-        if (confirm != null)
-            confirm.Show($"Give up {f.displayName}?\nNo money back, bidding opens right away, and your team can't bid in it.", Do);
+        var p = ConfirmPopup.For(transform, confirm);
+        if (p != null)
+            p.Show($"Give up {f.displayName}?\nNo money back, bidding opens right away, and your team can't bid in it.", Do);
         else Do();
     }
 
