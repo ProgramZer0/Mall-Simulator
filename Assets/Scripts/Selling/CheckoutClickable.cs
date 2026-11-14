@@ -34,6 +34,8 @@ public class CheckoutClickable : MonoBehaviour
         CustomerMoney,
         /// <summary>Added by the counter: a bill or coin of the change counted out (Value = cents); back to the drawer.</summary>
         ReturnChange,
+        /// <summary>Added by the counter: a pile of the cash you've taken (Value = cents); hover shows how many.</summary>
+        TakenCash,
     }
 
     public Action action;
