@@ -22,6 +22,11 @@ public class PlayerInventoryNet : NetworkBehaviour
 
     /// <summary>Paint colors of the held item (PaintSet, 0 = its own colors); it keeps them when put down.</summary>
     public NetworkVariable<uint> HeldPaint = new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    /// <summary>
+    /// The team whose delivery the held thing came out of (ulong.MaxValue: none, or your own). It can be
+    /// dropped off in their store (MallManager.IsDeliveringTo).
+    /// </summary>
+    public NetworkVariable<ulong> HeldFromTeam = new(ulong.MaxValue, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     private GameObject currentHandVisual;
     private bool handVisualHidden;
@@ -75,6 +80,7 @@ public class PlayerInventoryNet : NetworkBehaviour
 
     private void OnHeldItemChanged(int prev, int next)
     {
+        if (IsServer && next == 0 && HeldFromTeam.Value != ulong.MaxValue) HeldFromTeam.Value = ulong.MaxValue;
         if (currentHandVisual) Destroy(currentHandVisual);
 
         // A new held item always starts visible; an active preview re-hides it next frame.
@@ -129,6 +135,8 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (itemId == 0) return;
         HeldItemId.Value = itemId;
         HeldPaint.Value = isBox ? box.ContainedPaint : pickup.Paint;
+        ulong pickerTeam = MallManager.GetTeamOf(rpcParams.Receive.SenderClientId);
+        HeldFromTeam.Value = isBox && box.OrderedBy != pickerTeam ? box.OrderedBy : ulong.MaxValue;
         // A crate on the floor remembers how much is left; one from a delivery box is full.
         int perCrate = StockContainer.GetUnitsPerCrate(itemId);
         HeldUnits.Value = perCrate == 0 ? 0
@@ -313,12 +321,15 @@ public class PlayerInventoryNet : NetworkBehaviour
         var actor = NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject;
         if (Vector3.Distance(actor.transform.position, position) > 5.0f) { ItemDebug.Log("Place refused: too far."); return; }
 
-        // Store rules: only from inside your own store, only onto a spot inside your own store.
-        if (!MallManager.CanPickupOrPlace(rpcParams.Receive.SenderClientId,
+        // Store rules: only from inside your own store, only onto a spot inside your own store. Except
+        // dropping another team's delivery off in their store.
+        ulong sender = rpcParams.Receive.SenderClientId;
+        bool dropOff = MallManager.IsDeliveringTo(sender, HeldFromTeam.Value, actor.transform.position, position);
+        if (!dropOff && !MallManager.CanPickupOrPlace(sender,
                 actor.transform.position, position)) { ItemDebug.Log("Place refused: store rules (not your store, or you're outside it)."); return; }
 
         // Can't park things on another store's shipment spots, or anywhere at the docks (except on a cart).
-        if (MallManager.IsOthersShipmentArea(rpcParams.Receive.SenderClientId, position)) { ItemDebug.Log("Place refused: another store's shipment area."); return; }
+        if (!dropOff && MallManager.IsOthersShipmentArea(sender, position)) { ItemDebug.Log("Place refused: another store's shipment area."); return; }
         if (MallManager.IsNoPlaceZone(position)) { ItemDebug.Log("Place refused: no-place zone (docks)."); return; }
 
         if (!ItemCatalog.Instance.TryGet(id, out var def) || def.worldNetworkPrefab == null) { ItemDebug.Log("Place refused: not in the catalog or no world prefab."); return; }
@@ -330,6 +341,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         {
             ItemDebug.Log($"Placing it in its box '{boxPrefab.name}' ({(onCart ? "on a cart" : "stays boxed")}).");
             ServerPlaceBox(def, boxPrefab, position, rotation, rpcParams.Receive.SenderClientId, onCart);
+            if (dropOff && HeldItemId.Value == 0) ServerDroppedOff(sender, def, position);
             return;
         }
 
@@ -372,11 +384,28 @@ public class PlayerInventoryNet : NetworkBehaviour
         spawned.Spawn(true);
         if (cart != null) cart.ServerLoad(spawned);
 
+        ulong fromTeam = HeldFromTeam.Value;
         HeldItemId.Value = 0;
         HeldPaint.Value = 0;
         HeldUnits.Value = 0;
+        HeldFromTeam.Value = ulong.MaxValue;
+        if (dropOff) ServerDroppedOff(sender, def, position, fromTeam);
 
         PlayItemSoundClientRpc(id, position, true);
+    }
+
+    // Another team's delivery set down in their store: a help point, and they're told.
+    private void ServerDroppedOff(ulong helper, ItemDef def, Vector3 position, ulong team = ulong.MaxValue)
+    {
+        if (team == ulong.MaxValue) team = HeldFromTeam.Value;
+        HeldFromTeam.Value = ulong.MaxValue;
+        var plot = MallManager.Instance != null ? MallManager.Instance.GetPlotAt(position) : null;
+        if (plot == null || !plot.HasOwner) return;
+        if (HelpPoints.Instance != null) HelpPoints.Instance.ServerAward(helper, HelpPoints.HelpAction.DeliveredForOthers);
+        if (NotificationManager.Instance != null)
+            NotificationManager.Instance.ServerNotifyTeamText(plot.OwnerTeamId,
+                $"Delivery dropped off: {def.displayName}", $"Another player brought it to {plot.DisplayName}.");
+        ItemDebug.Log($"Drop-off: client {helper} brought {def.displayName} to '{plot.DisplayName}'.", plot);
     }
 
     /// <summary>
