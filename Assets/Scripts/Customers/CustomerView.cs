@@ -65,7 +65,7 @@ public class CustomerView : MonoBehaviour
     {
         if (bubble == null)
         {
-            bubble = new GameObject("Reaction").transform;
+            bubble = new GameObject("Reaction", typeof(RectTransform)).transform; // TextMeshPro needs a RectTransform; adding it to a plain Transform swaps (destroys) the cached one
             bubble.SetParent(transform, false);
             bubble.localPosition = Vector3.up * (2.15f - lift);
             bubbleText = bubble.gameObject.AddComponent<TMPro.TextMeshPro>();

@@ -180,7 +180,7 @@ public class CustomerManager : NetworkBehaviour
             t[(int)r]++;
         }
         if (!showReactions) return; // still counted above, just not shown (nothing sent)
-        ShowReaction(c.id, r);
+        try { ShowReaction(c.id, r); } catch (Exception e) { Debug.LogException(e); } // a visual must never break their thinking
         ReactRpc(c.id, r);
     }
 
@@ -1002,7 +1002,7 @@ public class CustomerManager : NetworkBehaviour
                 }
                 break;
             case Mode.Looking:
-                if (Time.time >= c.until) { Decide(c); c.mode = Mode.Browsing; }
+                if (Time.time >= c.until) { c.mode = Mode.Browsing; Decide(c); } // mode first, so an error in Decide can't repeat it every think
                 break;
             case Mode.ToQueue:
             case Mode.Queued: ThinkQueue(c); break;
