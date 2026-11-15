@@ -237,7 +237,6 @@ public class CustomerManager : NetworkBehaviour
     private void Update()
     {
         bool spawnPressed = (spawnKey != KeyCode.None) && Input.GetKeyDown(spawnKey);
-        bool spawnPressed = spawnKey != KeyCode.None && Input.GetKeyDown(spawnKey);
         if (spawnPressed && UIState.IsMenuOpen)
         {
             Debug.Log($"[Customers] {spawnKey} ignored: a menu counts as open ({UIState.Describe()}).", this);
