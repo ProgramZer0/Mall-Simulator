@@ -1737,12 +1737,14 @@ public class CustomerManager : NetworkBehaviour
             var plot = c.robbed ?? c.store;
             taken.Clear();
             Log(c, $"CAUGHT by client {sender}: {what}, {back} back on the shelves");
-            if (HelpPoints.Instance != null) HelpPoints.Instance.ServerAward(sender, HelpPoints.HelpAction.StoppedThief);
+            // A help point only for helping another team: catching your own store's thief is just business.
+            bool helped = plot != null && plot.HasOwner && TeamOf(sender) != plot.OwnerTeamId;
+            if (helped && HelpPoints.Instance != null) HelpPoints.Instance.ServerAward(sender, HelpPoints.HelpAction.StoppedThief);
             if (notes != null)
             {
                 notes.ServerNotifyClientText(sender, "You caught a shoplifter!",
                     $"They had {what}{(plot != null ? $" from {plot.DisplayName}" : "")}. {back} went back on the shelves.");
-                if (plot != null && plot.HasOwner && TeamOf(sender) != plot.OwnerTeamId)
+                if (helped)
                     notes.ServerNotifyTeamText(plot.OwnerTeamId, "Shoplifter caught",
                         $"Another player stopped someone leaving {plot.DisplayName} with {what}. {back} went back on the shelves.");
             }
