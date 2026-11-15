@@ -716,6 +716,12 @@ public class PlayerInteractInput : NetworkBehaviour
         return text;
     }
 
+    // Something left behind on the counter that would go into the held crate (same product, room left).
+    private bool CanTopUpFrom(CheckoutClickable part) =>
+        part.action == CheckoutClickable.Action.ScanItem && inventory.CanTopUpHeldCrate &&
+        inventory.HeldPaint.Value == 0 && part.Counter != null &&
+        part.Counter.TryGetLeftBehind(part.value, out int itemId) && itemId == inventory.HeldItemId.Value;
+
     private void DoStockAction()
     {
         if (stockTargetIsTake) inventory.RequestUnstockServerRpc(stockTarget.NetworkObject, stockZone);
@@ -761,7 +767,7 @@ public class PlayerInteractInput : NetworkBehaviour
         }
 
         // Checkout: click (or F) the part you're looking at, with empty hands.
-        if (lookedAtCheckoutPart != null && inventory.HeldItemId.Value == 0 &&
+        if (lookedAtCheckoutPart != null && (inventory.HeldItemId.Value == 0 || CanTopUpFrom(lookedAtCheckoutPart)) &&
             (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.F)))
         {
             lookedAtCheckoutPart.Counter.Click(lookedAtCheckoutPart);

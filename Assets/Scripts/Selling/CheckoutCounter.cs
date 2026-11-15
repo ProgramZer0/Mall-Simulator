@@ -605,6 +605,15 @@ public class CheckoutCounter : NetworkBehaviour
         }
     }
 
+    /// <summary>The product of something left behind on the belt (false: that isn't left behind).</summary>
+    public bool TryGetLeftBehind(int key, out int itemId)
+    {
+        itemId = 0;
+        foreach (var it in items.Each())
+            if (it.key == key && it.customer == LeftBehind) { itemId = it.itemId; return true; }
+        return false;
+    }
+
     private bool IsLeftBehind(int key)
     {
         foreach (var it in items.Each()) if (it.key == key) return it.customer == LeftBehind;
@@ -693,7 +702,19 @@ public class CheckoutCounter : NetworkBehaviour
             if (it.key != key || it.customer != LeftBehind) continue;
             var player = NetworkManager.ConnectedClients.TryGetValue(clientId, out var client) ? client.PlayerObject : null;
             if (player == null || !player.TryGetComponent<PlayerInventoryNet>(out var inventory)) return;
-            if (!inventory.ServerTryTake(it.itemId, it.whole != 0 ? it.units : 1, it.whole != 0)) return;
+            // A whole crate into a held crate of it with room: what fits goes in, the rest stays here.
+            if (it.whole != 0 && inventory.HeldItemId.Value != 0)
+            {
+                int moved = inventory.ServerTopUpWith(it.itemId, it.units);
+                if (moved <= 0) return;
+                if (moved < it.units)
+                {
+                    it.units -= moved;
+                    items[i] = it;
+                    return;
+                }
+            }
+            else if (!inventory.ServerTryTake(it.itemId, it.whole != 0 ? it.units : 1, it.whole != 0)) return;
             items.RemoveAt(i);
             ServerFill();
             return;

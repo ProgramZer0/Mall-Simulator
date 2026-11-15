@@ -233,6 +233,20 @@ public class PlayerInventoryNet : NetworkBehaviour
         return pickup.Units;
     }
 
+    /// <summary>
+    /// Server: put up to this many products into the held crate (same product, plain colors, with room).
+    /// How many went in (0: none fit, or it's not the same thing).
+    /// </summary>
+    public int ServerTopUpWith(int itemId, int units)
+    {
+        if (!IsServer || itemId == 0 || HeldItemId.Value != itemId || HeldPaint.Value != 0 || !CanTopUpHeldCrate) return 0;
+        int moved = Mathf.Min(StockContainer.GetUnitsPerCrate(itemId) - HeldUnits.Value, Mathf.Max(1, units));
+        if (moved <= 0) return 0;
+        HeldUnits.Value += moved;
+        PlayItemSoundClientRpc(itemId, transform.position, false);
+        return moved;
+    }
+
     // Server: move what fits from a crate or delivery box into the held crate; it goes away once empty.
     private void ServerTopUp(ItemPickupNet pickup, ShipmentPackage box, ulong sender)
     {
