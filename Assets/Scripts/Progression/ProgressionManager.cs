@@ -442,7 +442,7 @@ public class ProgressionManager : NetworkBehaviour
     /// <summary>Take back every perk of a store (free).</summary>
     public void RequestResetPerks(int plotId) => ResetPerksRpc(plotId);
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void BuyPerkRpc(int plotId, int perkId, RpcParams rpcParams = default)
     {
         if (!ServerCanManage(rpcParams, plotId) || !perkById.TryGetValue(perkId, out var perk)) return;
@@ -458,7 +458,7 @@ public class ProgressionManager : NetworkBehaviour
         ranks.Add(new PerkRank { plotId = plotId, perkId = perkId, rank = 1 });
     }
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void ResetPerksRpc(int plotId, RpcParams rpcParams = default)
     {
         if (!ServerCanManage(rpcParams, plotId)) return;
@@ -478,7 +478,7 @@ public class ProgressionManager : NetworkBehaviour
         if (Input.GetKeyDown(devProfitKey)) DevRpc(true);
     }
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void DevRpc(bool profit, RpcParams rpcParams = default)
     {
         if (!devHotkeys) return; // the host's setting decides

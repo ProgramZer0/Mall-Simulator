@@ -135,7 +135,7 @@ public class MallVoteManager : NetworkBehaviour
     /// <summary>Vote for an option of the open ballot (again to change it).</summary>
     public void Cast(int option) => CastRpc(option);
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void CastRpc(int option, RpcParams rpcParams = default)
     {
         if (!open.Value || option < 0 || option >= options.Count) return;

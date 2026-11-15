@@ -350,7 +350,7 @@ public class EconomyManager : NetworkBehaviour
     public void Order(int plotId, int itemId, int quantity, float deliverySeconds = -1f) =>
         RequestOrderRpc(plotId, new[] { itemId }, new[] { quantity }, new byte[0], deliverySeconds);
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void RequestOrderRpc(int plotId, int[] itemIds, int[] quantities, byte[] paints, float deliverySeconds,
                                  RpcParams rpcParams = default)
     {
@@ -622,7 +622,7 @@ public class EconomyManager : NetworkBehaviour
         }
     }
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void DevGiveMoneyRpc(int amount, RpcParams rpcParams = default)
     {
         if (!devHotkeys) return; // the host's setting decides

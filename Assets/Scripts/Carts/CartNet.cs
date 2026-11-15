@@ -245,7 +245,7 @@ public class CartNet : NetworkBehaviour
 
     /* ========================= PUSH / LET GO ========================= */
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     public void RequestPushRpc(RpcParams rpcParams = default)
     {
         ulong sender = rpcParams.Receive.SenderClientId;
@@ -269,7 +269,7 @@ public class CartNet : NetworkBehaviour
         NetworkObject.ChangeOwnership(sender);
     }
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     public void RequestReleaseRpc(RpcParams rpcParams = default)
     {
         if (pusher.Value != rpcParams.Receive.SenderClientId) return;

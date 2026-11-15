@@ -366,8 +366,8 @@ public class MallManager : NetworkBehaviour
     }
 
     /// <summary>For the recall-cart button: MallManager.Instance.RequestRecallCartsServerRpc(plot.PlotId).</summary>
-    [ServerRpc(RequireOwnership = false)]
-    public void RequestRecallCartsServerRpc(int plotId, ServerRpcParams rpcParams = default)
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void RequestRecallCartsServerRpc(int plotId, RpcParams rpcParams = default)
     {
         ServerRecallCarts(rpcParams.Receive.SenderClientId, plotId);
     }
@@ -585,8 +585,8 @@ public class MallManager : NetworkBehaviour
         return ServerTryClaimPlot(clientId, plotId);
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    public void RequestBuyFromSignServerRpc(int plotId, ServerRpcParams rpcParams = default)
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void RequestBuyFromSignServerRpc(int plotId, RpcParams rpcParams = default)
     {
         ServerTryBuyFromSign(rpcParams.Receive.SenderClientId, plotId);
     }
@@ -608,8 +608,8 @@ public class MallManager : NetworkBehaviour
         return true;
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    public void RequestClaimPlotServerRpc(int plotId, ServerRpcParams rpcParams = default)
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void RequestClaimPlotServerRpc(int plotId, RpcParams rpcParams = default)
     {
         ServerTryClaimPlot(rpcParams.Receive.SenderClientId, plotId);
     }
@@ -619,8 +619,8 @@ public class MallManager : NetworkBehaviour
     /// buy menu: MallManager.Instance.RequestBuySegmentServerRpc(plot.PlotId, index). Use
     /// GetSegmentOffers to list what can be bought.
     /// </summary>
-    [ServerRpc(RequireOwnership = false)]
-    public void RequestBuySegmentServerRpc(int plotId, int segmentIndex, ServerRpcParams rpcParams = default)
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void RequestBuySegmentServerRpc(int plotId, int segmentIndex, RpcParams rpcParams = default)
     {
         ServerTryBuySegment(rpcParams.Receive.SenderClientId, plotId, segmentIndex);
     }
@@ -648,8 +648,8 @@ public class MallManager : NetworkBehaviour
     }
 
     /// <summary>Dev hotkey B: segment for free (only while the host has Dev Hotkeys on).</summary>
-    [ServerRpc(RequireOwnership = false)]
-    private void DevBuySegmentServerRpc(int plotId, int segmentIndex, ServerRpcParams rpcParams = default)
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    private void DevBuySegmentServerRpc(int plotId, int segmentIndex, RpcParams rpcParams = default)
     {
         if (devHotkeys) ServerTryBuySegment(rpcParams.Receive.SenderClientId, plotId, segmentIndex, charge: false);
     }
@@ -669,8 +669,8 @@ public class MallManager : NetworkBehaviour
     /// Open or close one of your stores, from any client. This is the call for the store menu:
     /// MallManager.Instance.RequestSetStoreClosedServerRpc(plot.PlotId, true).
     /// </summary>
-    [ServerRpc(RequireOwnership = false)]
-    public void RequestSetStoreClosedServerRpc(int plotId, bool closed, ServerRpcParams rpcParams = default)
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void RequestSetStoreClosedServerRpc(int plotId, bool closed, RpcParams rpcParams = default)
     {
         ServerTrySetStoreClosed(rpcParams.Receive.SenderClientId, plotId, closed);
     }

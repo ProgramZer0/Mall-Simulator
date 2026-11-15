@@ -154,7 +154,7 @@ public class LicenseManager : NetworkBehaviour
             if (l != null && l.Covers(item) && Holds(team, l.id)) lastUsed[(l.id, team)] = NetworkManager.ServerTime.Time;
     }
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void BuyRpc(int licenseId, RpcParams rpcParams = default)
     {
         ulong sender = rpcParams.Receive.SenderClientId;
@@ -172,7 +172,7 @@ public class LicenseManager : NetworkBehaviour
         ResultRpc(result ?? "", RpcTarget.Single(sender, RpcTargetUse.Temp));
     }
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void GiveUpRpc(int licenseId, RpcParams rpcParams = default)
     {
         ulong sender = rpcParams.Receive.SenderClientId;
