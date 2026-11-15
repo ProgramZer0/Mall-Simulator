@@ -79,10 +79,15 @@ public class DoorNet : NetworkBehaviour
     public bool IsManual => trigger == Trigger.Manual;
 
     /// <summary>
-    /// Customers walk through it: unlocked, and automatic or public (they open public manual doors
-    /// themselves). Other doors (staff, back rooms, docks) are walls to them.
+    /// Customers walk through it: unlocked, and automatic, public, or a door in a store's front wall
+    /// (they open manual ones themselves and shut them behind them). Other doors (staff, back rooms,
+    /// docks) are walls to them.
     /// </summary>
-    public bool CustomersCanUse => !IsLocked && (trigger == Trigger.Automatic || isPublic);
+    public bool CustomersCanUse => !IsLocked && (trigger == Trigger.Automatic || isPublic || IsStorefrontDoor);
+
+    /// <summary>A door players put in a store's front wall (the way customers come in).</summary>
+    public bool IsStorefrontDoor =>
+        TryGetComponent<WallOpening>(out var o) && CuttableWall.HostOf(o) is { IsStorefront: true };
 
     /// <summary>Goes up when any door's lock or shut-by-store state changes (customer paths update).</summary>
     public static int CustomerVersion { get; private set; }
@@ -270,7 +275,7 @@ public class DoorNet : NetworkBehaviour
         if (!IsSpawned || !IsServer || Time.time < nextSense) return;
         if (trigger != Trigger.Automatic)
         {
-            if (isPublic) UpdatePublicManual();
+            if (isPublic || IsStorefrontDoor) UpdatePublicManual();
             return;
         }
         nextSense = Time.time + 0.2f;
@@ -304,7 +309,7 @@ public class DoorNet : NetworkBehaviour
         }
     }
 
-    // A public manual door: customers open it as they reach it and shut it after them (if it was shut).
+    // A public or storefront manual door: customers open it as they reach it and shut it after them (if it was shut).
     // Players use it with F as always; a door a player opened stays open.
     private void UpdatePublicManual()
     {
