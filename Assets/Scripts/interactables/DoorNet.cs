@@ -266,6 +266,9 @@ public class DoorNet : NetworkBehaviour
             if (isPlayer ? CanOpen(player.OwnerClientId) : !IsLocked) who = hit.transform.position;
         }
 
+        // Customers aren't physics objects: ask the customer manager (they only get through unlocked doors).
+        if (who == null && !IsLocked && CustomerManager.AnyNear(transform.position, sensorRange)) who = transform.position;
+
         if (who.HasValue)
         {
             clearSince = -1f;

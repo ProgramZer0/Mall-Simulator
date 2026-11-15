@@ -101,6 +101,12 @@ public class CheckoutCounter : NetworkBehaviour
     }
 
     public static readonly List<CheckoutCounter> All = new();
+
+    /// <summary>Host: a counter was spawned (customer AI listens to it).</summary>
+    public static event Action<CheckoutCounter> Spawned;
+
+    /// <summary>Host: a customer (the number ServerAddCustomer gave) has paid.</summary>
+    public event Action<CheckoutCounter, int> ServerCustomerPaid;
     private static readonly int[] Denominations = { 10000, 5000, 2000, 1000, 500, 100, 25, 10, 5, 1 };
 
     [Header("Belt")]
@@ -126,6 +132,9 @@ public class CheckoutCounter : NetworkBehaviour
     [SerializeField] private Transform customerSpot;
     [Tooltip("Where cash you've taken is laid out to count.")]
     [SerializeField] private Transform countingSpot;
+    [Tooltip("Optional: where the first customer in line stands (on the floor), blue arrow (+Z) pointing back " +
+             "along the line. Empty = beside the Customer Spot, the line running away from the scanner end.")]
+    [SerializeField] private Transform queueStart;
     [Tooltip("Where the change you count out is laid out.")]
     [SerializeField] private Transform changeSpot;
 
@@ -203,6 +212,7 @@ public class CheckoutCounter : NetworkBehaviour
             Debug.LogError($"[CheckoutCounter] '{name}' has no Belt set, so nothing can go on it. Drag the belt's " +
                            "BoxCollider into Belt on the counter prefab.", this);
         All.Add(this);
+        if (IsServer) Spawned?.Invoke(this);
         lines.OnListChanged += _ => screenDirty = true;
         change.OnListChanged += _ => moneyDirty = true;
         state.OnValueChanged += (_, now) =>
@@ -592,6 +602,7 @@ public class CheckoutCounter : NetworkBehaviour
 
     private void Complete(int receivedCents, string text)
     {
+        int paidBy = state.Value.customer;
         var plot = Plot;
         var econ = EconomyManager.Instance;
         if (plot != null && plot.HasOwner && econ != null) econ.ServerAddCents(plot.OwnerTeamId, receivedCents);
@@ -602,6 +613,54 @@ public class CheckoutCounter : NetworkBehaviour
         state.Value = new State { phase = Phase.Scanning, customer = items.Count > 0 ? items[0].customer : 0 };
         MessageRpc($"{text}: {FormatAmount(receivedCents)}");
         ServerFill();
+        if (paidBy != 0) ServerCustomerPaid?.Invoke(this, paidBy);
+    }
+
+    /// <summary>
+    /// Server: a customer gives up before being served: their things come off the belt. False if
+    /// they're already being served (something scanned, or paying), so they stay.
+    /// </summary>
+    public bool ServerCancelCustomer(int customer)
+    {
+        if (!IsServer || customer == 0) return false;
+        var s = state.Value;
+        if (s.customer == customer && (lines.Count > 0 || s.phase == Phase.AwaitingPayment)) return false;
+        for (int i = items.Count - 1; i >= 0; i--) if (items[i].customer == customer) items.RemoveAt(i);
+        waiting.RemoveAll(it => it.customer == customer);
+        if (s.customer == customer)
+            state.Value = new State { phase = Phase.Scanning, customer = items.Count > 0 ? items[0].customer : 0 };
+        ServerFill();
+        return true;
+    }
+
+    /// <summary>
+    /// Where a customer waiting in line stands (Place 0 = at the counter), on the floor, and which way
+    /// they face.
+    /// </summary>
+    public void GetQueueSpot(int place, float spacing, out Vector3 position, out Vector3 facing)
+    {
+        if (queueStart != null)
+        {
+            Vector3 back = queueStart.forward;
+            back.y = 0f;
+            back = back.sqrMagnitude > 1e-4f ? back.normalized : Vector3.back;
+            position = queueStart.position + back * (spacing * place);
+            facing = -back;
+            return;
+        }
+
+        Vector3 lineBack = belt != null ? -belt.transform.forward : -transform.forward; // away from the scanner
+        lineBack.y = 0f;
+        lineBack = lineBack.sqrMagnitude > 1e-4f ? lineBack.normalized : Vector3.back;
+        Vector3 middle = belt != null ? belt.bounds.center : transform.position;
+        Vector3 anchor = customerSpot != null ? customerSpot.position : middle;
+        Vector3 side = Vector3.Cross(Vector3.up, lineBack);
+        if (Vector3.Dot(anchor - middle, side) < 0f) side = -side; // the customers' side of the counter
+        position = anchor + side * 0.6f + lineBack * (spacing * place);
+        facing = -side;
+        if (Physics.Raycast(position + Vector3.up * 0.5f, Vector3.down, out var hit, 4f, Physics.DefaultRaycastLayers,
+                            QueryTriggerInteraction.Ignore))
+            position.y = hit.point.y;
     }
 
     [Rpc(SendTo.Everyone)]

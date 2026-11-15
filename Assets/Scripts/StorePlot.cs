@@ -987,6 +987,14 @@ public class StorePlot : NetworkBehaviour
 
     private bool doorsApplied;
 
+    /// <summary>The bounds of every door of this store (customers come in through them).</summary>
+    public void GetDoorBounds(List<Bounds> into)
+    {
+        into.Clear();
+        foreach (var d in AllDoors())
+            if (d != null) into.Add(WallModule.GeometryBounds(d)); // (a plain door is hidden while open: still its doorway)
+    }
+
     /// <summary>A door was added to or taken out of this store: open or shut it to match the store.</summary>
     public void RefreshDoors()
     {
@@ -2041,6 +2049,7 @@ public class StorePlot : NetworkBehaviour
         editSession.Clear();
         editSessionObjects.Clear();
         editorClientId.Value = NoOwner;
+        if (CustomerNavMesh.Instance != null) CustomerNavMesh.Instance.MarkDirty(); // the layout may have changed
     }
 
     // The real item went away during the session (shouldn't happen; then it's spawned again from what

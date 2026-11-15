@@ -256,6 +256,9 @@ public class ItemPickupNet : NetworkBehaviour
 
     public bool IsFalling => falling;
 
+    /// <summary>Goes up whenever an item is spawned, despawned, lands or is picked up (customer paths update).</summary>
+    public static int LayoutVersion { get; private set; }
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
@@ -338,6 +341,7 @@ public class ItemPickupNet : NetworkBehaviour
     {
         units.OnValueChanged += OnUnitsChanged;
         All.Add(this);
+        LayoutVersion++;
         freeze.OnValueChanged += OnFreezeChanged;
         paint.OnValueChanged += OnPaintChanged;
         if (paint.Value != 0) ApplyPaint();
@@ -368,6 +372,7 @@ public class ItemPickupNet : NetworkBehaviour
         SetFalling(false);
         units.OnValueChanged -= OnUnitsChanged;
         All.Remove(this);
+        LayoutVersion++;
         freeze.OnValueChanged -= OnFreezeChanged;
         paint.OnValueChanged -= OnPaintChanged;
 
@@ -377,6 +382,7 @@ public class ItemPickupNet : NetworkBehaviour
 
     private void OnFreezeChanged(FreezeState previous, FreezeState current)
     {
+        LayoutVersion++;
         StoreListing.Track(gameObject); // landed somewhere (maybe another store), or picked back up
         if (Falls && rb != null)
         {
