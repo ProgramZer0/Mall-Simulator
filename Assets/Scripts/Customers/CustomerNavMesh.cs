@@ -58,6 +58,7 @@ public class CustomerNavMesh : MonoBehaviour
     private NavMeshBuildSettings settings;
     private AsyncOperation building;
     private readonly Stopwatch buildTimer = new();
+    private double prepMs;
     private readonly List<NavMeshBuildSource> sources = new();
     private readonly List<NavMeshBuildMarkup> markups = new();
     private bool pending = true;
@@ -107,7 +108,7 @@ public class CustomerNavMesh : MonoBehaviour
             building = null;
             Ready = true;
             if (logBuilds)
-                Debug.Log($"[CustomerNavMesh] Updated in {buildTimer.ElapsedMilliseconds} ms ({sources.Count} colliders).", this);
+                Debug.Log($"[CustomerNavMesh] Updated in {buildTimer.ElapsedMilliseconds} ms ({prepMs:0.0} ms of it on the main thread, {sources.Count} colliders).", this);
         }
         if (pending && Time.time - lastChange >= (Ready ? rebuildDelay : 0f)) Build();
     }
@@ -126,6 +127,7 @@ public class CustomerNavMesh : MonoBehaviour
         Bounds bounds = BuildBounds();
         BuiltBounds = bounds;
         NavMeshBuilder.CollectSources(bounds, layers, NavMeshCollectGeometry.PhysicsColliders, 0, markups, sources);
+        AddedAsItem.Clear();
         sources.RemoveAll(Skip);
         AddItems(bounds);
         AddDoorBlockers(bounds);
@@ -138,6 +140,7 @@ public class CustomerNavMesh : MonoBehaviour
             dataInstance = NavMesh.AddNavMeshData(data);
         }
         building = NavMeshBuilder.UpdateNavMeshDataAsync(data, settings, sources, bounds);
+        prepMs = buildTimer.Elapsed.TotalMilliseconds; // the part on the main thread (the rest runs in the background)
     }
 
     private static bool Skip(NavMeshBuildSource s)
@@ -155,8 +158,18 @@ public class CustomerNavMesh : MonoBehaviour
     }
 
     // Windows and doors keep their real colliders (a doorway's gap matters); other placed things are boxes.
-    private static bool IsAddedAsItem(ItemPickupNet item) =>
-        item != null && item.GetComponentInChildren<WallOpening>(true) == null && item.GetComponentInChildren<DoorNet>(true) == null;
+    private static bool IsAddedAsItem(ItemPickupNet item)
+    {
+        if (item == null) return false;
+        if (!AddedAsItem.TryGetValue(item, out bool yes))
+            AddedAsItem[item] = yes = item.GetComponentInChildren<WallOpening>(true) == null &&
+                                      item.GetComponentInChildren<DoorNet>(true) == null;
+        return yes;
+    }
+
+    // Per build: whether each item is added as boxes (many of its colliders ask).
+    private static readonly Dictionary<ItemPickupNet, bool> AddedAsItem = new();
+    private readonly List<Collider> itemColliders = new();
     }
 
     // Placed things (furniture, shelves, boxes on the floor) as solid shapes, whatever layer they're on and
@@ -166,9 +179,10 @@ public class CustomerNavMesh : MonoBehaviour
     {
         foreach (var item in ItemPickupNet.All)
         {
-            if (!IsAddedAsItem(item) || item.IsOnCart || item.GetComponentInParent<CartNet>() != null ||
+            if (!IsAddedAsItem(item) || item.IsOnCart ||
                 item.GetComponentInParent<EditLocalItem>() != null) continue;
-            foreach (var col in item.GetComponentsInChildren<Collider>(true))
+            item.GetComponentsInChildren(true, itemColliders);
+            foreach (var col in itemColliders)
             {
                 if (col.isTrigger || col.GetComponentInParent<StockModel>() != null) continue;
                 if (!TryLocalBox(col, out Vector3 center, out Vector3 size)) continue;
