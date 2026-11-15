@@ -6608,7 +6608,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: af254f6042dfdce498bab654a64f1cb0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StoreAppealSettings
-  personalities: []
+  personalities:
+  - {fileID: 11400000, guid: 2152fd844ad76604982e9bf1fbc1cad9, type: 2}
   halfPriceScoreAtSensitivity0: 1.5
   halfPriceScoreAtSensitivity2: 2
   rarityScores:
@@ -6933,7 +6934,7 @@ MonoBehaviour:
   sendRate: 10
   logDecisions: 1
   drawPaths: 1
-  spawnKey: 8
+  spawnKey: 107
 --- !u!114 &451575866
 MonoBehaviour:
   m_ObjectHideFlags: 0

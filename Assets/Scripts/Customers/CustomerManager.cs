@@ -237,6 +237,7 @@ public class CustomerManager : NetworkBehaviour
     private void Update()
     {
         bool spawnPressed = (spawnKey != KeyCode.None) && Input.GetKeyDown(spawnKey);
+        bool spawnPressed = spawnKey != KeyCode.None && Input.GetKeyDown(spawnKey);
         if (spawnPressed && UIState.IsMenuOpen)
         {
             Debug.Log($"[Customers] {spawnKey} ignored: a menu counts as open ({UIState.Describe()}).", this);
@@ -262,7 +263,6 @@ public class CustomerManager : NetworkBehaviour
         if (Time.time >= nextEntrances) RefreshEntrances();
         if (spawnPressed || testRequested)
         {
-            Debug.Log("spawn requested");
             testRequested = false;
             SpawnTestCustomer(testAt ?? LocalPlayerPosition());
             testAt = null;
@@ -367,14 +367,12 @@ public class CustomerManager : NetworkBehaviour
     {
         CustomerSpawnPoint best = null;
         float bestD = float.MaxValue;
-        Debug.Log("entered test");
         foreach (var sp in CustomerSpawnPoint.All)
         {
             if (sp == null) continue;
             float d = (sp.transform.position - at).sqrMagnitude;
             if (d < bestD) { bestD = d; best = sp; }
         }
-        Debug.Log("after for each");
         if (best == null)
         {
             Debug.LogWarning("[Customers] No CustomerSpawnPoint in the scene: put some at the mall's entrances.", this);
