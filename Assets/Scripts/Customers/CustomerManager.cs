@@ -70,6 +70,9 @@ public class CustomerManager : NetworkBehaviour
     [SerializeField] private float queueSpacing = 0.8f;
     [Tooltip("Seconds a customer waits in line before giving up (Patience perks add to it).")]
     [SerializeField] private float patienceSeconds = 120f;
+    [Tooltip("First guess at seconds per item to get through a checkout (scanning plus paying, spread over the " +
+             "items). Each counter learns its real pace from then on.")]
+    [SerializeField] private float secondsPerItemGuess = 6f;
 
     [Header("Thinking (host)")]
     [Tooltip("Decisions per second per customer (walking is smooth regardless).")]
@@ -172,6 +175,8 @@ public class CustomerManager : NetworkBehaviour
 
         // Checkout
         public CheckoutCounter counter;
+        public int itemsAtCounter;  // how many things they put on the belt
+        public float frontSince;    // when they reached the front (for the counter's pace)
         public Vector3 queueSpot;  // the place in line they're walking to
         public int ticket;         // the counter's customer number once their things are on the belt
         public bool paid;
@@ -1103,13 +1108,14 @@ public class CustomerManager : NetworkBehaviour
 
     private void GoToCheckout(Customer c)
     {
+        // The line that looks quickest: everyone's things ahead of them, at that counter's pace.
         CheckoutCounter best = null;
-        int bestLine = int.MaxValue;
+        float bestWait = float.MaxValue;
         foreach (var counter in CheckoutCounter.All)
         {
             if (counter == null || !counter.IsSpawned || counter.IsForSale || counter.Plot != c.store) continue;
-            int n = lines.TryGetValue(counter, out var l) ? l.Count : 0;
-            if (n < bestLine) { bestLine = n; best = counter; }
+            float wait = ExpectedWait(counter);
+            if (wait < bestWait) { bestWait = wait; best = counter; }
         }
         if (best == null)
         {
@@ -1117,19 +1123,115 @@ public class CustomerManager : NetworkBehaviour
             LeaveStore(c, -0.6f);
             return;
         }
+
+        // Is it worth the wait? The longer past their patience, the likelier they put it all back.
+        float patience = patienceSeconds * (1f + ProgressionManager.StoreStat(c.store, PerkStat.Patience));
+        if (bestWait > patience && Random.value < Mathf.Clamp01(bestWait / patience - 0.5f))
+        {
+            Log(c, $"line looks like {bestWait:0} s (patience {patience:0} s): put things back and left");
+            LeaveStore(c, -0.4f);
+            return;
+        }
+
         if (!lines.TryGetValue(best, out var line)) lines[best] = line = new List<Customer>();
         line.Add(c);
         c.counter = best;
         c.queueSpot = Vector3.positiveInfinity;
-        c.until = Time.time + patienceSeconds * (1f + ProgressionManager.StoreStat(c.store, PerkStat.Patience));
+        c.until = Time.time + patience;
         c.mode = Mode.ToQueue;
+        Log(c, $"joined a line of {line.Count - 1} (about {bestWait:0} s)");
         WalkToPlaceInLine(c);
+    }
+
+    // Seconds per item each counter has actually been taking (learned as customers pay).
+    private readonly Dictionary<CheckoutCounter, float> counterPace = new();
+
+    private float PaceOf(CheckoutCounter counter) =>
+        counterPace.TryGetValue(counter, out float pace) ? pace : secondsPerItemGuess;
+
+    // How long someone joining this line now would wait: the things of everyone in it.
+    private float ExpectedWait(CheckoutCounter counter)
+    {
+        if (!lines.TryGetValue(counter, out var line) || line.Count == 0) return 0f;
+        float pace = PaceOf(counter), wait = 0f;
+        foreach (var o in line)
+        {
+            int things = o.ticket != 0 ? o.itemsAtCounter : o.basket.Count;
+            float theirs = Mathf.Max(1, things) * pace;
+            if (o.ticket != 0) theirs = Mathf.Max(0f, theirs - (Time.time - o.frontSince)); // part done already
+            wait += theirs;
+        }
+        return wait;
+    }
+
+    // Where each place in a counter's line is: back from the counter, bending round walls and shelves
+    // so places don't end up on top of each other. Worked out again every couple of seconds.
+    private readonly Dictionary<CheckoutCounter, (float at, List<Vector3> spots, Vector3 front)> lineShapes = new();
+
+    private Vector3 QueueSpot(CheckoutCounter counter, int place, out Vector3 facing)
+    {
+        if (!lineShapes.TryGetValue(counter, out var shape) || Time.time - shape.at > 2f)
+        {
+            shape = (Time.time, new List<Vector3>(), Vector3.zero);
+            counter.GetQueueSpot(0, queueSpacing, out Vector3 p0, out Vector3 frontFacing);
+            counter.GetQueueSpot(1, queueSpacing, out Vector3 p1, out _);
+            if (NavMesh.SamplePosition(p0, out var h0, 1.5f, NavMesh.AllAreas)) p0 = h0.position;
+            shape.front = frontFacing;
+            shape.spots.Add(p0);
+            Vector3 dir = p1 - p0;
+            dir.y = 0f;
+            dir = dir.sqrMagnitude > 1e-4f ? dir.normalized : -frontFacing;
+            ExtendLine(shape.spots, ref dir, 12);
+            lineShapes[counter] = shape;
+        }
+        var spots = shape.spots;
+        if (place >= spots.Count)
+        {
+            Vector3 d = spots.Count > 1 ? (spots[^1] - spots[^2]).normalized : -shape.front;
+            ExtendLine(spots, ref d, place - spots.Count + 1);
+        }
+        int i = Mathf.Min(place, spots.Count - 1);
+        Vector3 ahead = i == 0 ? spots[0] + shape.front : spots[i - 1];
+        facing = ahead - spots[i];
+        facing.y = 0f;
+        return spots[i];
+    }
+
+    private static readonly float[] Bends = { 0f, 30f, -30f, 60f, -60f, 90f, -90f, 135f, -135f };
+
+    // Add places to the end of a line: Spacing on from the last one, turning if the way on is blocked
+    // or would land near an earlier place.
+    private void ExtendLine(List<Vector3> spots, ref Vector3 dir, int count)
+    {
+        for (int k = 0; k < count; k++)
+        {
+            Vector3 last = spots[^1];
+            bool placed = false;
+            foreach (float bend in Bends)
+            {
+                Vector3 d = Quaternion.Euler(0f, bend, 0f) * dir;
+                Vector3 want = last + d * queueSpacing;
+                if (!NavMesh.SamplePosition(want, out var hit, 0.4f, NavMesh.AllAreas)) continue;
+                if (NavMesh.Raycast(last, hit.position, out _, NavMesh.AllAreas)) continue;
+                bool clear = true;
+                for (int j = 0; j < spots.Count - 1 && clear; j++)
+                    if (FlatDistance(spots[j], hit.position) < queueSpacing * 0.8f) clear = false;
+                if (!clear) continue;
+                spots.Add(hit.position);
+                Vector3 nd = hit.position - last;
+                nd.y = 0f;
+                if (nd.sqrMagnitude > 1e-4f) dir = nd.normalized;
+                placed = true;
+                break;
+            }
+            if (!placed) spots.Add(last + dir * queueSpacing); // nowhere good: straight on (they'll spread)
+        }
     }
 
     private void WalkToPlaceInLine(Customer c)
     {
         int place = lines.TryGetValue(c.counter, out var line) ? line.IndexOf(c) : 0;
-        c.counter.GetQueueSpot(Mathf.Max(0, place), queueSpacing, out Vector3 spot, out Vector3 facing);
+        Vector3 spot = QueueSpot(c.counter, Mathf.Max(0, place), out Vector3 facing);
         if ((c.queueSpot - spot).sqrMagnitude < 0.09f) // same place as before: on the way, or there
         {
             if (c.arrived) Face(c, c.pos + facing);
@@ -1172,6 +1274,8 @@ public class CustomerManager : NetworkBehaviour
             if (purchases.Count == 0) { LeaveStore(c, c.satisfaction); return; }
             c.ticket = counter.ServerAddCustomer(purchases);
             if (c.ticket == 0) { LeaveStore(c, -0.4f); return; }
+            c.itemsAtCounter = purchases.Count;
+            c.frontSince = Time.time;
             c.basket.Clear(); // on the belt now: theirs to pay for
             Log(c, $"put {purchases.Count} thing(s) on the belt");
             return;
@@ -1192,6 +1296,9 @@ public class CustomerManager : NetworkBehaviour
         {
             if (c.ticket != ticket) continue;
             c.paid = true;
+            // The counter's pace: how long they took from reaching the front, per thing.
+            float perItem = (Time.time - c.frontSince) / Mathf.Max(1, c.itemsAtCounter);
+            counterPace[counter] = Mathf.Lerp(PaceOf(counter), Mathf.Clamp(perItem, 1f, 120f), 0.3f);
             c.nextThink = Time.time;
             Log(c, "paid");
             return;
