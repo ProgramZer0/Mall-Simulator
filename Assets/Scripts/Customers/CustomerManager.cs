@@ -51,6 +51,8 @@ public class CustomerManager : NetworkBehaviour
     [Tooltip("Walking customers steer around other customers and players within this distance (meters), " +
              "keeping to the right to pass.")]
     [SerializeField] private float avoidRange = 1.1f;
+    [Tooltip("Someone leaving is out of the mall once this close to the exit (meters), crowd or not.")]
+    [SerializeField] private float exitReach = 1.5f;
     [Tooltip("Customers keep to their own lane, up to this far either side of the shortest path (meters), " +
              "so a hallway fills out instead of everyone walking one line.")]
     [SerializeField] private float laneSpread = 0.7f;
@@ -754,6 +756,8 @@ public class CustomerManager : NetworkBehaviour
         // Close to the end, people in the way matter less (someone may be standing near their spot).
         float toEnd = FlatDistance(c.pos, c.destination);
         float avoidWeight = Mathf.Clamp01(toEnd - 0.3f);
+        if (c.mode == Mode.Exiting && toEnd < exitReach) { Arrive(c); return; } // out the door
+        if (CustomerSpawnPoint.InAnyDoorway(c.pos)) avoidWeight = 0f; // coming and going: straight through
         Vector3 vel = dir * c.speed + Avoidance(c, dir) * (c.speed * avoidWeight);
         vel = Vector3.ClampMagnitude(vel, c.speed * 1.15f);
         if (vel.magnitude * dt > left && Vector3.Dot(vel, dir) > 0.5f * vel.magnitude)

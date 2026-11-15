@@ -15,6 +15,24 @@ public class CustomerSpawnPoint : MonoBehaviour
     [Tooltip("Customers can also leave the mall here.")]
     public bool isExit = true;
 
+    [Tooltip("Around the entrance, customers coming in and going out don't steer around each other (they'd " +
+             "only jam the doorway): they walk straight through, and someone leaving is out once inside it " +
+             "and close to the door (Exit Reach on the CustomerManager). Meters; 0 = off.")]
+    [Min(0f)] public float doorwayRadius = 3f;
+
+    /// <summary>Is this point within any entrance's doorway (see Doorway Radius)?</summary>
+    public static bool InAnyDoorway(Vector3 p)
+    {
+        foreach (var sp in All)
+        {
+            Vector3 d = sp.transform.position - p;
+            if (Mathf.Abs(d.y) > 2f) continue;
+            d.y = 0f;
+            if (d.sqrMagnitude < sp.doorwayRadius * sp.doorwayRadius) return true;
+        }
+        return false;
+    }
+
     private void OnEnable() => All.Add(this);
     private void OnDisable() => All.Remove(this);
 
@@ -23,5 +41,10 @@ public class CustomerSpawnPoint : MonoBehaviour
         Gizmos.color = new Color(0.2f, 0.8f, 1f);
         Gizmos.DrawWireSphere(transform.position, 0.4f);
         Gizmos.DrawLine(transform.position, transform.position + Vector3.up * 1.8f);
+        if (doorwayRadius > 0f)
+        {
+            Gizmos.color = new Color(0.2f, 0.8f, 1f, 0.35f);
+            Gizmos.DrawWireSphere(transform.position, doorwayRadius);
+        }
     }
 }
