@@ -503,7 +503,14 @@ public class PlayerInteractInput : NetworkBehaviour
             return $"F: Add {add} to your box ({inventory.HeldUnits.Value + add}/{per})";
         }
         if (lookedAtPickup.TryGetComponent<ShipmentPackage>(out var box) && box.ContainedItemId != 0)
-            return $"F: Pick up {ItemName(box.ContainedItemId)} (box)";
+        {
+            int boxPer = StockContainer.GetUnitsPerCrate(box.ContainedItemId);
+            string count = boxPer > 0
+                ? $", {(box.ContainedUnits > 0 ? Mathf.Min(box.ContainedUnits, boxPer) : boxPer)}/{boxPer}" : "";
+            return $"F: Pick up {ItemName(box.ContainedItemId)} (box{count})";
+        }
+        if (lookedAtPickup.IsStockCrate)
+            return $"F: Pick up {ItemName(lookedAtPickup.ItemId)} ({lookedAtPickup.Units}/{lookedAtPickup.UnitsPerCrate})";
         return $"F: Pick up {ItemName(lookedAtPickup.ItemId)}";
     }
 
