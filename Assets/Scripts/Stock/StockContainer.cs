@@ -665,15 +665,40 @@ public class StockContainer : NetworkBehaviour
     }
 
     /// <summary>
-    /// Lays out the stock models on an edit-mode copy, under a holder that follows it so they move
-    /// with it. Their colliders are off so clicks reach the copy. Returns what was made (destroy it
-    /// all to clear).
+    /// The stock shown on an edit-mode copy. Drawn by StockBatcher with no object per product (a big
+    /// store has tens of thousands); products that can't be batched get ordinary copies instead.
+    /// Follow it when the copy moves; Clear it when the copy goes.
     /// </summary>
-    public List<GameObject> BuildStockOnCopy(Transform copyRoot, int[] itemIds, int[] counts, int[] orients, int[] seeds)
+    public sealed class EditStock
     {
-        var made = new List<GameObject>();
-        var holder = StockVisualFollower.Create(copyRoot, null);
-        made.Add(holder.gameObject);
+        internal readonly List<(StockBatcher.Copy copy, Matrix4x4 local)> batched = new();
+        internal readonly List<GameObject> objects = new();
+
+        /// <summary>The copy moved: draw its products where they are now.</summary>
+        public void Follow(Transform copyRoot)
+        {
+            var frame = Matrix4x4.TRS(copyRoot.position, copyRoot.rotation, Vector3.one);
+            foreach (var (copy, local) in batched) StockBatcher.MoveCopy(copy, frame * local);
+        }
+
+        public void Clear()
+        {
+            foreach (var (copy, _) in batched) StockBatcher.RemoveCopy(copy);
+            batched.Clear();
+            foreach (var o in objects) if (o != null) UnityEngine.Object.Destroy(o);
+            objects.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Lays out the stock on an edit-mode copy, so it moves with it (see EditStock). Nothing of it can be
+    /// clicked, so clicks reach the copy.
+    /// </summary>
+    public EditStock BuildStockOnCopy(Transform copyRoot, int[] itemIds, int[] counts, int[] orients, int[] seeds)
+    {
+        var made = new EditStock();
+        Transform holder = null; // only for products that can't be batched
+        var frameInv = Matrix4x4.TRS(copyRoot.position, copyRoot.rotation, Vector3.one).inverse;
         var copyZones = FindZonesOnCopy(copyRoot);
         for (int i = 0; i < copyZones.Length && i < itemIds.Length && i < counts.Length; i++)
         {
@@ -687,12 +712,35 @@ public class StockContainer : NetworkBehaviour
             for (int k = 0; k < counts[i] && k < layout.capacity; k++)
             {
                 GetSlotPose(box, IsHangRail(i), layout, k, out Vector3 pos, out Quaternion rot);
-                var model = MakeVisual(GetVariantPrefab(itemIds[i], IsHangRail(i), seed, k) ?? prefab, pos, rot, holder.transform);
-                foreach (var c in model.GetComponentsInChildren<Collider>()) c.enabled = false;
-                made.Add(model);
+                var model = GetVariantPrefab(itemIds[i], IsHangRail(i), seed, k) ?? prefab;
+                var template = BatchedTemplateFor(model, out var shape);
+                if (shape != null)
+                {
+                    var world = Matrix4x4.TRS(pos, rot, template.transform.localScale);
+                    made.batched.Add((StockBatcher.AddCopy(shape, world, editView: true), frameInv * world));
+                    continue;
+                }
+                if (holder == null)
+                {
+                    holder = StockVisualFollower.Create(copyRoot, null).transform;
+                    made.objects.Add(holder.gameObject);
+                }
+                var go = MakeVisual(model, pos, rot, holder);
+                foreach (var c in go.GetComponentsInChildren<Collider>()) c.enabled = false;
+                made.objects.Add(go);
             }
         }
         return made;
+    }
+
+    /// <summary>
+    /// This player's screen only: show or hide this shelf's own (non-batched) stock objects, colliders
+    /// included (edit mode hides the real items while their copies are edited). Batched stock is hidden
+    /// by StockBatcher.Paused.
+    /// </summary>
+    public void SetLocalVisualsShown(bool shown)
+    {
+        if (visualRoot != null) visualRoot.gameObject.SetActive(shown);
     }
 
     private static List<int> PathFrom(Transform root, Transform target)
