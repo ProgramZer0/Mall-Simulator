@@ -88,6 +88,9 @@ public class CustomerManager : NetworkBehaviour
     [SerializeField] private List<GameObject> looks = new();
 
     [Header("Reactions")]
+    [Tooltip("Show reactions over customers' heads (for tuning). Off: players have to work out from sales why " +
+             "something sells; reactions are still counted per store (StoreReport, benchmark overlay).")]
+    [SerializeField] private bool showReactions = true;
     [Tooltip("What shows over a customer's head when something happens (text, colour, optional icon). " +
              "Kinds left out use their defaults.")]
     [SerializeField] private List<ReactionLook> reactionLooks = new();
@@ -160,6 +163,7 @@ public class CustomerManager : NetworkBehaviour
             if (!storeTally.TryGetValue(c.store, out var t)) storeTally[c.store] = t = new int[Enum.GetValues(typeof(Reaction)).Length];
             t[(int)r]++;
         }
+        if (!showReactions) return; // still counted above, just not shown (nothing sent)
         ShowReaction(c.id, r);
         ReactRpc(c.id, r);
     }
