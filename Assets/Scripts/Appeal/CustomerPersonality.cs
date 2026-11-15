@@ -45,6 +45,12 @@ public class CustomerPersonality : ScriptableObject
     [Tooltip("Chance they wander into an open store even if nothing in the window catches their eye.")]
     [Range(0f, 1f)] public float curiosity = 0.1f;
 
+    [Header("Shopping")]
+    [Tooltip("Dollars they bring to the mall (random between).")]
+    public Vector2 budgetDollars = new(20f, 150f);
+    [Tooltip("How many things they'd like to buy on this visit (random between, inclusive).")]
+    public Vector2Int wantItems = new(1, 4);
+
     /// <summary>How much they like this item (the best match among its categories).</summary>
     public float LikeOf(ItemDef def)
     {
