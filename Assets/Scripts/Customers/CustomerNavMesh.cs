@@ -10,7 +10,8 @@ using Debug = UnityEngine.Debug;
 /// it's updated in the background (only the parts that changed are rebuilt).
 ///
 /// Left out: shelf products, players, carts, doors (customers walk through doorways), edit-mode
-/// copies and trigger colliders. Put this on the same object as the CustomerManager; it's added
+/// copies and trigger colliders. Placed items are added as boxes of their colliders' shapes on any
+/// layer (see AddItems). Put this on the same object as the CustomerManager; it's added
 /// automatically if missing.
 /// </summary>
 public class CustomerNavMesh : MonoBehaviour
@@ -126,6 +127,7 @@ public class CustomerNavMesh : MonoBehaviour
         BuiltBounds = bounds;
         NavMeshBuilder.CollectSources(bounds, layers, NavMeshCollectGeometry.PhysicsColliders, 0, markups, sources);
         sources.RemoveAll(Skip);
+        AddItems(bounds);
         AddDoorBlockers(bounds);
         foreach (var zone in CustomerNoWalkZone.All)
             if (zone != null && bounds.Intersects(zone.WorldBounds)) sources.Add(zone.ToSource());
@@ -148,7 +150,67 @@ public class CustomerNavMesh : MonoBehaviour
                c.GetComponentInParent<CartNet>() != null ||
                c.GetComponentInParent<DoorMotion>() != null ||
                c.GetComponentInParent<EditLocalItem>() != null ||
-               c.GetComponentInParent<CustomerView>() != null;
+               c.GetComponentInParent<CustomerView>() != null ||
+               IsAddedAsItem(c.GetComponentInParent<ItemPickupNet>()); // added by AddItems instead
+    }
+
+    // Windows and doors keep their real colliders (a doorway's gap matters); other placed things are boxes.
+    private static bool IsAddedAsItem(ItemPickupNet item) =>
+        item != null && item.GetComponentInChildren<WallOpening>(true) == null && item.GetComponentInChildren<DoorNet>(true) == null;
+    }
+
+    // Placed things (furniture, shelves, boxes on the floor) as solid shapes, whatever layer they're on and
+    // even while their colliders are switched off (hidden on the host during store edit mode), so customers
+    // always walk around them. Flat things (rugs, mats) stay walkable.
+    private void AddItems(Bounds area)
+    {
+        foreach (var item in ItemPickupNet.All)
+        {
+            if (!IsAddedAsItem(item) || item.IsOnCart || item.GetComponentInParent<CartNet>() != null ||
+                item.GetComponentInParent<EditLocalItem>() != null) continue;
+            foreach (var col in item.GetComponentsInChildren<Collider>(true))
+            {
+                if (col.isTrigger || col.GetComponentInParent<StockModel>() != null) continue;
+                if (!TryLocalBox(col, out Vector3 center, out Vector3 size)) continue;
+                Matrix4x4 m = col.transform.localToWorldMatrix * Matrix4x4.Translate(center);
+                Vector3 world = Vector3.Scale(size, col.transform.lossyScale);
+                Vector3 pos = m.GetColumn(3);
+                if (Mathf.Abs(world.y) < maxStep * 0.5f) continue; // flat: walk on it
+                if (!area.Contains(pos)) continue;
+                sources.Add(new NavMeshBuildSource
+                {
+                    shape = NavMeshBuildSourceShape.Box,
+                    size = size,
+                    transform = m,
+                    area = 0,
+                    component = col,
+                });
+            }
+        }
+    }
+
+    // A collider's shape as a box in its own space (works while it's switched off).
+    private static bool TryLocalBox(Collider col, out Vector3 center, out Vector3 size)
+    {
+        switch (col)
+        {
+            case BoxCollider b: center = b.center; size = b.size; return true;
+            case SphereCollider sp: center = sp.center; size = Vector3.one * sp.radius * 2f; return true;
+            case CapsuleCollider cap:
+            {
+                center = cap.center;
+                float d = cap.radius * 2f;
+                size = new Vector3(d, d, d);
+                size[cap.direction] = Mathf.Max(d, cap.height);
+                return true;
+            }
+            case MeshCollider mc when mc.sharedMesh != null:
+                center = mc.sharedMesh.bounds.center;
+                size = mc.sharedMesh.bounds.size;
+                return true;
+        }
+        center = size = Vector3.zero;
+        return false;
     }
 
     // Door leaves are left out above (doorways are walkable). Doors customers mustn't use (locked,
