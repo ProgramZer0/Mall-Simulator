@@ -28,13 +28,35 @@ public class ItemPickupNet : NetworkBehaviour
         new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     /// <summary>The catalog id of what this really is: a size of its item, or the item.</summary>
-    public int ItemId => size.Value == 0 ? itemId : Sizes.SizedId(itemId, size.Value - 1);
+    public int ItemId => Size == 0 ? itemId : Sizes.SizedId(itemId, Size - 1);
+
+    // Set before spawning (Netcode warns about writing a NetworkVariable then): kept here and written in
+    // OnNetworkSpawn, before anyone is sent it. The getters read these until then.
+    private int pendingSize = -1, pendingUnits = -1;
+    private uint? pendingPaint;
+    private FreezeState? pendingFreeze;
+
+    private byte Size => !IsSpawned && pendingSize >= 0 ? (byte)pendingSize : size.Value;
+
+    private void SetSize(byte v) { if (IsSpawned) size.Value = v; else pendingSize = v; }
+
+    // Server, first thing on spawning: what was set before it.
+    private void ApplyPending()
+    {
+        if (pendingSize >= 0) size.Value = (byte)pendingSize;
+        if (pendingUnits >= 0) units.Value = pendingUnits;
+        if (pendingPaint.HasValue) paint.Value = pendingPaint.Value;
+        if (pendingFreeze.HasValue) freeze.Value = pendingFreeze.Value;
+        pendingSize = pendingUnits = -1;
+        pendingPaint = null;
+        pendingFreeze = null;
+    }
 
     /// <summary>Host: make this the given id (one of its item's sizes). Before or after spawning.</summary>
     public void ServerSetItemId(int id)
     {
-        if (Sizes.TrySplit(id, out int baseId, out int index) && baseId == itemId) size.Value = (byte)(index + 1);
-        else if (id == itemId) size.Value = 0;
+        if (Sizes.TrySplit(id, out int baseId, out int index) && baseId == itemId) SetSize((byte)(index + 1));
+        else if (id == itemId) SetSize(0);
         else Debug.LogWarning($"[ItemPickupNet] '{name}' (item {itemId}) can't become item {id}.", this);
     }
     [Tooltip("Floor: stands on floors and shelves. Wall: hangs on walls (pictures, signs). FloorOrWall: either.\n" +
@@ -194,25 +216,36 @@ public class ItemPickupNet : NetworkBehaviour
         new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     /// <summary>Products left in this crate (meaningless for items that aren't stock crates).</summary>
-    public int Units => units.Value > 0 ? Mathf.Min(units.Value, UnitsPerCrate) : UnitsPerCrate;
+    public int Units
+    {
+        get
+        {
+            int v = !IsSpawned && pendingUnits >= 0 ? pendingUnits : units.Value;
+            return v > 0 ? Mathf.Min(v, UnitsPerCrate) : UnitsPerCrate;
+        }
+    }
 
     // The colors of its paint zones (PaintSet: one PaintPalette id per PaintParts zone, 0 = own colors).
     private readonly NetworkVariable<uint> paint =
         new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     /// <summary>The colors of its paint zones (see PaintSet).</summary>
-    public uint Paint => paint.Value;
+    public uint Paint => !IsSpawned && pendingPaint.HasValue ? pendingPaint.Value : paint.Value;
 
     /// <summary>Server: set every zone's color. Call after Instantiate (before Spawn is fine).</summary>
     public void ServerSetPaint(uint set)
     {
-        if (PaintSet.IsValid(set)) paint.Value = set;
+        if (!PaintSet.IsValid(set)) return;
+        if (IsSpawned) paint.Value = set;
+        else pendingPaint = set;
     }
 
     /// <summary>Server: paint one zone.</summary>
     public void ServerSetZonePaint(int zone, byte id)
     {
-        if (PaintPalette.IsValid(id)) paint.Value = PaintSet.With(paint.Value, zone, id);
+        if (!PaintPalette.IsValid(id)) return;
+        if (IsSpawned) paint.Value = PaintSet.With(paint.Value, zone, id);
+        else pendingPaint = PaintSet.With(Paint, zone, id);
     }
 
     private void OnPaintChanged(uint before, uint now) => ApplyPaint();
@@ -220,7 +253,12 @@ public class ItemPickupNet : NetworkBehaviour
     private void ApplyPaint() => PaintParts.ApplySet(gameObject, paint.Value);
 
     /// <summary>Server: how many products are left in this crate. Call after Instantiate, before Spawn.</summary>
-    public void ServerSetUnits(int count) => units.Value = count >= UnitsPerCrate ? 0 : Mathf.Max(1, count);
+    public void ServerSetUnits(int count)
+    {
+        int v = count >= UnitsPerCrate ? 0 : Mathf.Max(1, count);
+        if (IsSpawned) units.Value = v;
+        else pendingUnits = v;
+    }
 
     // A part-used crate for sale is worth less: its entry in the store's listing changes with its count.
     private void OnUnitsChanged(int before, int now)
@@ -278,11 +316,13 @@ public class ItemPickupNet : NetworkBehaviour
     /// </summary>
     public void ServerPrepareFrozen(bool onWall = false, bool carried = false)
     {
-        freeze.Value = new FreezeState
+        var state = new FreezeState
         {
             frozen = true, onWall = onWall, carried = carried,
             position = transform.position, rotation = transform.rotation,
         };
+        if (IsSpawned) freeze.Value = state;
+        else pendingFreeze = state;
     }
 
     /// <summary>Is this item riding on a cart?</summary>
@@ -339,6 +379,7 @@ public class ItemPickupNet : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        if (IsServer) ApplyPending();
         units.OnValueChanged += OnUnitsChanged;
         All.Add(this);
         LayoutVersion++;
