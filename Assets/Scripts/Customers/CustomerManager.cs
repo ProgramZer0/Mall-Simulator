@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using Unity.Netcode;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.AI;
 using Debug = UnityEngine.Debug;
@@ -408,8 +409,27 @@ public class CustomerManager : NetworkBehaviour
         return false;
     }
 
+    // Profiler markers (show up under CustomerManager.Update without Deep Profile).
+    private static readonly ProfilerMarker WalkMarker = new("Customers.Walk");
+    private static readonly ProfilerMarker ThinkMarker = new("Customers.Think");
+    private static readonly ProfilerMarker ApartMarker = new("Customers.KeepApart");
+    private static readonly ProfilerMarker GridMarker = new("Customers.Grid");
+    private static readonly ProfilerMarker ViewsMarker = new("Customers.Views");
+    private static readonly ProfilerMarker SendMarker = new("Customers.Send");
+    private static readonly ProfilerMarker ArrivalsMarker = new("Customers.Arrivals");
+
+    // Every machine: ease each customer's view toward where they are, all in one loop.
+    private void TickViews()
+    {
+        using var _ = ViewsMarker.Auto();
+        float dt = Time.deltaTime;
+        float ease = 1f - Mathf.Exp(-dt * 10f), settle = 1f - Mathf.Exp(-dt * 8f);
+        foreach (var v in views.Values) if (v != null) v.Tick(dt, ease, settle);
+    }
+
     private void Update()
     {
+        TickViews();
         bool spawnPressed = (spawnKey != KeyCode.None) && Input.GetKeyDown(spawnKey);
         if (spawnPressed && UIState.IsMenuOpen)
         {
@@ -440,14 +460,19 @@ public class CustomerManager : NetworkBehaviour
             SpawnTestCustomer(testAt ?? LocalPlayerPosition());
             testAt = null;
         }
-        UpdateArrivals();
+        using (ArrivalsMarker.Auto()) UpdateArrivals();
 
         float dt = Time.deltaTime;
-        FillGrid();
-        GatherPlayers();
-        foreach (var c in customers) Walk(c, dt);
+        using (GridMarker.Auto())
+        {
+            FillGrid();
+            GatherPlayers();
+        }
+        using (WalkMarker.Auto())
+            foreach (var c in customers) Walk(c, dt);
 
         // Decisions, a few customers a frame, within the budget.
+        var thinking = ThinkMarker.Auto();
         thinkTimer.Restart();
         int n = customers.Count;
         for (int k = 0; k < n && thinkTimer.Elapsed.TotalMilliseconds < thinkBudgetMs; k++)
@@ -463,13 +488,15 @@ public class CustomerManager : NetworkBehaviour
             if (thinkCursor < customers.Count && customers[thinkCursor] == c) thinkCursor++;
         }
 
-        KeepApart(dt);
+        thinking.Dispose();
+
+        using (ApartMarker.Auto()) KeepApart(dt);
 
         // Host draws its own straight from the simulation.
         foreach (var c in customers)
             if (views.TryGetValue(c.id, out var v) && v != null) v.SetTarget(c.pos, c.yaw);
 
-        SendMoves();
+        using (SendMarker.Auto()) SendMoves();
     }
 
     /* ========================= ARRIVING AND LEAVING ========================= */
