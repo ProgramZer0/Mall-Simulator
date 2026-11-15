@@ -6610,6 +6610,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::StoreAppealSettings
   personalities:
   - {fileID: 11400000, guid: 2152fd844ad76604982e9bf1fbc1cad9, type: 2}
+  - {fileID: 11400000, guid: 32a768bd95304dc88733b9f1d789ff1c, type: 2}
+  - {fileID: 11400000, guid: 9f0029e0fae5426f869efce49829c325, type: 2}
+  - {fileID: 11400000, guid: cd40254913914871a1d60291475ee705, type: 2}
+  - {fileID: 11400000, guid: f5cbd863c30a4c87bbf5e9f3f643e7c7, type: 2}
+  - {fileID: 11400000, guid: 275d5843035e4ec4a9bf14bb21b83ba8, type: 2}
   halfPriceScoreAtSensitivity0: 1.5
   halfPriceScoreAtSensitivity2: 2
   rarityScores:
@@ -6934,7 +6939,7 @@ MonoBehaviour:
   sendRate: 10
   logDecisions: 1
   drawPaths: 1
-  spawnKey: 107
+  spawnKey: 284
 --- !u!114 &451575866
 MonoBehaviour:
   m_ObjectHideFlags: 0
