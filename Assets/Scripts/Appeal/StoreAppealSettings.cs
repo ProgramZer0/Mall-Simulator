@@ -104,6 +104,16 @@ public class StoreAppealSettings : MonoBehaviour
             return;
         }
         Instance = this;
+
+        // None set up yet: use the test ones (Resources/Customer Personalities) so customers can come.
+        personalities.RemoveAll(p => p == null);
+        if (personalities.Count == 0)
+        {
+            personalities.AddRange(Resources.LoadAll<CustomerPersonality>("Customer Personalities"));
+            if (personalities.Count > 0)
+                Debug.Log($"[StoreAppealSettings] No Personalities set: using the {personalities.Count} test ones in " +
+                          "Resources/Customer Personalities.", this);
+        }
     }
 
     private void OnDestroy()

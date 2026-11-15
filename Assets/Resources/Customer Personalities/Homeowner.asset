@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1935de5f9b8ced64eac44570e09d675c, type: 3}
+  m_Name: Homeowner
+  m_EditorClassIdentifier: Assembly-CSharp::CustomerPersonality
+  displayName: Homeowner
+  description: Here for appliances. Careful with money, buys one or two big things.
+  spawnWeight: 1.0
+  likes:
+  - category: Appliance
+    weight: 1.5
+  otherThings: 0.2
+  priceSensitivity: 1.2
+  exoticLove: 0.3
+  looksMatter: 0.7
+  curiosity: 0.1
+  budgetDollars: {x: 200, y: 1500}
+  wantItems: {x: 1, y: 2}
