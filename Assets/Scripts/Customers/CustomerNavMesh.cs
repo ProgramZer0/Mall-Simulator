@@ -62,7 +62,7 @@ public class CustomerNavMesh : MonoBehaviour
     private bool pending = true;
     private float lastChange = -999f;
     private float nextPoll;
-    private int seenItems = -1, seenWalls = -1, seenOpenings = -1, seenDoors = -1;
+    private int seenItems = -1, seenWalls = -1, seenOpenings = -1, seenDoors = -1, seenZones = -1;
 
     private void Awake() => Instance = this;
 
@@ -88,13 +88,15 @@ public class CustomerNavMesh : MonoBehaviour
         {
             nextPoll = Time.time + 0.5f;
             if (ItemPickupNet.LayoutVersion != seenItems || CuttableWall.Version != seenWalls ||
-                WallOpening.Version != seenOpenings || DoorNet.CustomerVersion != seenDoors)
+                WallOpening.Version != seenOpenings || DoorNet.CustomerVersion != seenDoors ||
+                CustomerNoWalkZone.Version != seenZones)
             {
                 if (seenItems >= 0) MarkDirty();
                 seenItems = ItemPickupNet.LayoutVersion;
                 seenWalls = CuttableWall.Version;
                 seenOpenings = WallOpening.Version;
                 seenDoors = DoorNet.CustomerVersion;
+                seenZones = CustomerNoWalkZone.Version;
             }
         }
 
@@ -125,6 +127,8 @@ public class CustomerNavMesh : MonoBehaviour
         NavMeshBuilder.CollectSources(bounds, layers, NavMeshCollectGeometry.PhysicsColliders, 0, markups, sources);
         sources.RemoveAll(Skip);
         AddDoorBlockers(bounds);
+        foreach (var zone in CustomerNoWalkZone.All)
+            if (zone != null && bounds.Intersects(zone.WorldBounds)) sources.Add(zone.ToSource());
 
         if (data == null)
         {
