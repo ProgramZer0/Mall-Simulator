@@ -5318,7 +5318,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.8707408}
   m_AnchorMax: {x: 0.2503851, y: 1}
-  m_AnchoredPosition: {x: -2.3327026, y: 2.3234863}
+  m_AnchoredPosition: {x: -2.332672, y: 2.3234863}
   m_SizeDelta: {x: -2.7052002, y: -4.3699036}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &383177323
@@ -6512,7 +6512,7 @@ MonoBehaviour:
   devOrderItemId: 1
   devOrderQuantity: 1
   devDeliverySeconds: 10
-  devMoneyAmount: 1000
+  devMoneyAmount: 100000
   showDebugHud: 0
 --- !u!114 &451575852
 MonoBehaviour:
@@ -6741,7 +6741,7 @@ MonoBehaviour:
   devHotkeys: 1
   devHappyCustomerKey: 292
   devProfitKey: 293
-  devProfit: 1000
+  devProfit: 1000000
 --- !u!114 &451575858
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6878,8 +6878,8 @@ MonoBehaviour:
   - {fileID: 11400000, guid: beb52dcafc2c2c142900754f9d70841b, type: 2}
   - {fileID: 11400000, guid: 5befca0118a90aa4b8074dcc0b21272f, type: 2}
   - {fileID: 11400000, guid: 2243bdc7655ad7340864808a9be1d55a, type: 2}
-  firstAuctionAfter: 60
-  betweenFirstAuctions: 60
+  firstAuctionAfter: 1800
+  betweenFirstAuctions: 600
   extendWindow: 30
 --- !u!114 &451575864
 MonoBehaviour:
@@ -6932,7 +6932,7 @@ MonoBehaviour:
   personalSpace: 0.68
   avoidRange: 1.43
   laneSpread: 1
-  roamChance: 0.57
+  roamChance: 0.96
   browseSamples: 60
   maxLooksPerStore: 10
   lookSeconds: {x: 1.5, y: 8}
@@ -6945,6 +6945,7 @@ MonoBehaviour:
   sendRate: 10
   logDecisions: 1
   drawPaths: 1
+  drawLabels: 1
   spawnKey: 284
 --- !u!114 &451575866
 MonoBehaviour:
@@ -6959,11 +6960,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CustomerNavMesh
   area: {fileID: 0}
-  margin: 35
+  margin: 40
   layers:
     serializedVersion: 2
     m_Bits: 6015
-  agentRadius: 0.4
+  agentRadius: 0.43
   agentHeight: 1.8
   maxStep: 0.35
   maxSlope: 40
@@ -13866,7 +13867,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0.27600002}
-  m_AnchoredPosition: {x: -0.00020599365, y: -0.8731985}
+  m_AnchoredPosition: {x: -0.00020599365, y: -0.87319946}
   m_SizeDelta: {x: -0.27600098, y: -2.2707005}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &901036962
