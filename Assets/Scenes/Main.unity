@@ -6933,7 +6933,7 @@ MonoBehaviour:
   sendRate: 10
   logDecisions: 1
   drawPaths: 1
-  spawnKey: 284
+  spawnKey: 8
 --- !u!114 &451575866
 MonoBehaviour:
   m_ObjectHideFlags: 0
