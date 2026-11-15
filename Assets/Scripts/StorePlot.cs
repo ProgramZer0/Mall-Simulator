@@ -2087,7 +2087,13 @@ public class StorePlot : NetworkBehaviour
         if (live == null || !live.IsSpawned) return;
         foreach (var c in live.GetComponentsInChildren<Collider>()) c.enabled = false;
         foreach (var o in live.GetComponentsInChildren<WallOpening>()) o.enabled = false;
-        live.NetworkObject.Despawn(true);
+        // Placed in the scene: Netcode wants those despawned, not destroyed (late joiners get told it's gone).
+        if (live.NetworkObject.IsSceneObject == true)
+        {
+            live.NetworkObject.Despawn(false);
+            live.gameObject.SetActive(false);
+        }
+        else live.NetworkObject.Despawn(true);
     }
 
     /// <summary>Can this item be taken out (sold back) in edit mode? Windows, doors and wall items.</summary>
