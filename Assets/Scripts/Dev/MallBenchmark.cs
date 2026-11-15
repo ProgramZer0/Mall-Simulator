@@ -415,6 +415,7 @@ public class MallBenchmark : MonoBehaviour
             $"{System.GC.CollectionCount(0) - gcAtStart} GCs\n" +
             $"Spawned: {netObjects} network objects, {StockContainer.All.Count} shelves, {stockModels} products, {renderers} renderers\n" +
             (IsHost ? $"Shoppers: {buysShown} buys/s ({shopperMsShown:0.00} ms), {asksShown} appeal asks/s ({appealMsShown:0.00} ms)\n" : "") +
+            (CustomerManager.Instance != null ? CustomerManager.Instance.DebugSummary() + "\n" : "") +
             status;
     }
 
