@@ -308,6 +308,34 @@ public class PlayerInventoryNet : NetworkBehaviour
     }
 
     /// <summary>
+    /// Server: put something into this player's hands (e.g. left behind at a checkout). Whole: a loose
+    /// item (empty hands only, with its units if it's a crate). Otherwise one product: into empty hands
+    /// as a crate holding one, or into a held crate of the same product that has room. False if their
+    /// hands are full.
+    /// </summary>
+    public bool ServerTryTake(int itemId, int units, bool whole)
+    {
+        if (!IsServer || itemId == 0) return false;
+        if (whole)
+        {
+            if (HeldItemId.Value != 0) return false;
+            HeldItemId.Value = itemId;
+            HeldPaint.Value = 0;
+            HeldUnits.Value = StockContainer.GetUnitsPerCrate(itemId) == 0 ? 0 : Mathf.Max(1, units);
+        }
+        else if (HeldItemId.Value == 0)
+        {
+            HeldItemId.Value = itemId;
+            HeldPaint.Value = 0;
+            HeldUnits.Value = 1;
+        }
+        else if (HeldItemId.Value == itemId && HeldUnits.Value < StockContainer.GetUnitsPerCrate(itemId)) HeldUnits.Value++;
+        else return false;
+        PlayItemSoundClientRpc(itemId, transform.position, false);
+        return true;
+    }
+
+    /// <summary>
     /// Take one product out of a container's zone: into empty hands (as a crate holding one),
     /// or back into a held crate of the same product that has room.
     /// </summary>

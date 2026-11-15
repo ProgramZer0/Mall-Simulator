@@ -1125,10 +1125,9 @@ public class CustomerManager : NetworkBehaviour
         }
 
         // Waited too long (and not being served yet): give up.
-        if (Time.time >= c.until && (c.ticket == 0 || counter.ServerCancelCustomer(c.ticket)))
+        if (Time.time >= c.until)
         {
-            Log(c, "waited too long in line: left");
-            c.ticket = 0;
+            Log(c, "waited too long in line: left their things on the counter");
             LeaveStore(c, -0.6f);
         }
     }
@@ -1156,7 +1155,13 @@ public class CustomerManager : NetworkBehaviour
             line.Remove(c);
             foreach (var other in line) if (other.mode == Mode.Queued || other.mode == Mode.ToQueue) other.nextThink = Time.time;
         }
-        if (c.ticket != 0 && c.counter != null && c.counter.IsSpawned) c.counter.ServerCancelCustomer(c.ticket); // not paid: off the belt
+        // Walking off from the checkout line: their things stay on the counter for a player to put back.
+        if (c.counter != null && c.counter.IsSpawned && !c.paid)
+        {
+            if (c.ticket != 0) c.counter.ServerCustomerWalkedOff(c.ticket);
+            else if (c.basket.Count > 0) c.counter.ServerLeaveOnCounter(ToPurchases(c));
+            if (c.ticket != 0 || c.basket.Count > 0) c.basket.Clear();
+        }
         c.ticket = 0;
         c.counter = null;
         foreach (var t in c.basket)
@@ -1165,6 +1170,15 @@ public class CustomerManager : NetworkBehaviour
         c.basket.Clear();
         if (c.counted && c.store != null && inside.TryGetValue(c.store, out int n)) inside[c.store] = Mathf.Max(0, n - 1);
         c.counted = false;
+    }
+
+    // What's in their hands, as things to put on a counter (loose items were never picked up: they stay put).
+    private static List<CheckoutCounter.Purchase> ToPurchases(Customer c)
+    {
+        var list = new List<CheckoutCounter.Purchase>();
+        foreach (var t in c.basket)
+            if (t.loose == null) list.Add(new CheckoutCounter.Purchase { itemId = t.itemId, priceCents = t.priceCents, units = 1 });
+        return list;
     }
 
     private void LeaveStore(Customer c, float satisfaction)
