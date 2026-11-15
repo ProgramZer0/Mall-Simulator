@@ -1253,6 +1253,7 @@ public class CustomerManager : NetworkBehaviour
         {
             var s = all[(start + k * stride) % count];
             if (s.quantity <= 0 || c.seen.Contains(s.Key) || (!c.thief && s.priceCents > c.budgetCents)) continue;
+            if (Heading(s.Key) >= s.quantity && !LastOfIt(plot, s)) continue; // others already have it covered; there's more elsewhere
             if (c.thief && s.container == null) continue; // a shoplifter only takes what fits in a bag
             float w = plot.Appeal.WorthTo(c.personality, s) * tolerance;
             if (c.thief) w *= 1f + s.priceCents / 10000f; // and likes it pricey
@@ -1276,6 +1277,31 @@ public class CustomerManager : NetworkBehaviour
             return true;
         }
         return false;
+    }
+
+    // Who's already walking to (or standing at) each shelf spot, counted once a frame when someone asks.
+    private readonly Dictionary<StoreListing.Key, int> heading = new();
+    private int headingFrame = -1;
+
+    private int Heading(StoreListing.Key key)
+    {
+        if (headingFrame != Time.frameCount)
+        {
+            headingFrame = Time.frameCount;
+            heading.Clear();
+            foreach (var o in customers)
+                if (o.mode == Mode.ToShelf || o.mode == Mode.Looking)
+                    heading[o.target] = heading.TryGetValue(o.target, out int n) ? n + 1 : 1;
+        }
+        return heading.TryGetValue(key, out int count) ? count : 0;
+    }
+
+    // Is this the only place in the store with this product still up for grabs? Then they try anyway.
+    private bool LastOfIt(StorePlot plot, StoreListing.Source s)
+    {
+        foreach (var o in plot.Listing.SourcesOf(s.itemId))
+            if (!o.Key.Equals(s.Key) && o.quantity > Heading(o.Key)) return false;
+        return true;
     }
 
     // Priced well above what it's worth on the market (per product).
