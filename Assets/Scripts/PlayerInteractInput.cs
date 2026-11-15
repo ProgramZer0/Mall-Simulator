@@ -127,10 +127,12 @@ public class PlayerInteractInput : NetworkBehaviour
         UpdateLookedAtCustomer();
         HandleInteract();
         HandleRotation();
+        // Stocking from the held crate: out of sight entirely, so it doesn't block the shelf.
+        hideForStocking = stockTarget != null && !stockTargetIsTake && !previewActive;
         HandlePlacement();
 
-        // See-through while placing or stocking from the held crate, so it doesn't block the view.
-        inventory.SetHandVisualFaded(previewActive || (stockTarget != null && !stockTargetIsTake));
+        // See-through while placing, so you can see where it's going.
+        inventory.SetHandVisualFaded(previewActive);
     }
 
     /* ========================= INTERACT ========================= */
@@ -151,6 +153,7 @@ public class PlayerInteractInput : NetworkBehaviour
     [SerializeField] private KeyCode doorLockKey = KeyCode.L;
     private CartNet pushedCart;   // the cart you're pushing
     private ShopMonitor lookedAtMonitor;
+    private bool hideForStocking; // the held crate is out of sight while stocking from it
 
     // A customer in front of you, closer than whatever else you're looking at.
     private void UpdateLookedAtCustomer()
@@ -473,7 +476,9 @@ public class PlayerInteractInput : NetworkBehaviour
     // Something F would pick up: same ray and rules as picking up, so the prompt only shows when it works.
     private void FindPickupTarget()
     {
-        if (inventory.HeldItemId.Value != 0 || pushedCart != null) return;
+        if (pushedCart != null) return;
+        bool holding = inventory.HeldItemId.Value != 0;
+        if (holding && !inventory.CanTopUpHeldCrate) return;
         if (!Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit, interactRange, pickupMask)) return;
         var pickup = hit.collider.GetComponentInParent<ItemPickupNet>();
         if (pickup == null || !pickup.IsSpawned || pickup.EditModeOnly) return;
@@ -483,12 +488,20 @@ public class PlayerInteractInput : NetworkBehaviour
         if (pickup.TryGetComponent<CheckoutCounter>(out var counter) && counter.IsBusy) return;
         if (pickup.TryGetComponent<ShipmentPackage>(out var box) &&
             MallManager.Instance != null && box.IsReservedAgainst(MallManager.GetTeamOf(OwnerClientId))) return;
+        // Holding a crate with room: only more of the same (a crate on the floor, or a delivery box of it).
+        if (holding && inventory.UnitsToTopUpFrom(pickup) <= 0) return;
         lookedAtPickup = pickup;
     }
 
     private string PickupPrompt()
     {
         if (lookedAtPickup == null) return null;
+        if (inventory.HeldItemId.Value != 0)
+        {
+            int per = StockContainer.GetUnitsPerCrate(inventory.HeldItemId.Value);
+            int add = Mathf.Min(per - inventory.HeldUnits.Value, inventory.UnitsToTopUpFrom(lookedAtPickup));
+            return $"F: Add {add} to your box ({inventory.HeldUnits.Value + add}/{per})";
+        }
         if (lookedAtPickup.TryGetComponent<ShipmentPackage>(out var box) && box.ContainedItemId != 0)
             return $"F: Pick up {ItemName(box.ContainedItemId)} (box)";
         return $"F: Pick up {ItemName(lookedAtPickup.ItemId)}";
@@ -846,6 +859,8 @@ public class PlayerInteractInput : NetworkBehaviour
                     inventory.RequestPickupServerRpc(no);
             }
         }
+        else if (lookedAtPickup != null && lookedAtPickup.IsSpawned)
+            inventory.RequestPickupServerRpc(lookedAtPickup.NetworkObject); // tops up the held crate
         else
         {
             if (Physics.Raycast(cam.transform.position, cam.transform.forward,
@@ -934,7 +949,7 @@ public class PlayerInteractInput : NetworkBehaviour
             DestroyGhost();
             // Cancelled (or server rejected the place): put the item back in hand.
             if (!placePending)
-                inventory.SetHandVisualHidden(false);
+                inventory.SetHandVisualHidden(hideForStocking);
         }
 
         if (confirmPlace && previewing && ghostPreview == null)

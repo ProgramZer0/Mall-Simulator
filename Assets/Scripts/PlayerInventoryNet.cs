@@ -55,7 +55,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (currentHandVisual) currentHandVisual.SetActive(!handVisualHidden);
     }
 
-    [Tooltip("How see-through the held item is while placing or stocking (0 = invisible, 1 = solid).")]
+    [Tooltip("How see-through the held item is while placing it (0 = invisible, 1 = solid). While stocking it's hidden.")]
     [SerializeField, Range(0f, 1f)] private float handFadeAlpha = 0.25f;
     private bool handFaded;
     private readonly List<(Renderer r, Material[] solid)> fadedRenderers = new();
@@ -172,7 +172,12 @@ public class PlayerInventoryNet : NetworkBehaviour
         bool isBox = pickupNO.TryGetComponent<ShipmentPackage>(out var box);
         if (isBox && box.IsReservedAgainst(MallManager.GetTeamOf(rpcParams.Receive.SenderClientId))) return;
 
-        if (HeldItemId.Value != 0) return;
+        // Already holding a crate of this with room: it tops that up instead.
+        if (HeldItemId.Value != 0)
+        {
+            ServerTopUp(pickup, isBox ? box : null, rpcParams.Receive.SenderClientId);
+            return;
+        }
 
         // A delivery box gives you the item inside it.
         int itemId = isBox ? box.ContainedItemId : pickup.ItemId;
@@ -195,6 +200,54 @@ public class PlayerInventoryNet : NetworkBehaviour
         pickupNO.Despawn(true);
 
         PlayItemSoundClientRpc(itemId, soundPos, false);
+    }
+
+    /// <summary>Holding a stock crate that isn't full (and isn't someone else's delivery)?</summary>
+    public bool CanTopUpHeldCrate
+    {
+        get
+        {
+            int held = HeldItemId.Value;
+            if (held == 0 || HeldFromTeam.Value != ulong.MaxValue) return false;
+            int per = StockContainer.GetUnitsPerCrate(held);
+            return per > 0 && HeldUnits.Value < per;
+        }
+    }
+
+    /// <summary>
+    /// How many products this could give the held crate: a crate of the same product (same colors) on the
+    /// floor, or a delivery box of it (not another team's). 0: it can't.
+    /// </summary>
+    public int UnitsToTopUpFrom(ItemPickupNet pickup)
+    {
+        if (pickup == null || !CanTopUpHeldCrate) return 0;
+        int held = HeldItemId.Value, per = StockContainer.GetUnitsPerCrate(held);
+        if (pickup.TryGetComponent<ShipmentPackage>(out var box))
+        {
+            if (box.ContainedItemId != held || box.ContainedPaint != HeldPaint.Value) return 0;
+            if (box.OrderedBy != ulong.MaxValue && MallManager.Instance != null &&
+                box.OrderedBy != MallManager.GetTeamOf(OwnerClientId)) return 0;
+            return box.ContainedUnits > 0 ? Mathf.Min(box.ContainedUnits, per) : per;
+        }
+        if (!pickup.IsStockCrate || pickup.ItemId != held || pickup.Paint != HeldPaint.Value) return 0;
+        return pickup.Units;
+    }
+
+    // Server: move what fits from a crate or delivery box into the held crate; it goes away once empty.
+    private void ServerTopUp(ItemPickupNet pickup, ShipmentPackage box, ulong sender)
+    {
+        int units = UnitsToTopUpFrom(pickup);
+        if (units <= 0) return;
+        int itemId = HeldItemId.Value;
+        int moved = Mathf.Min(StockContainer.GetUnitsPerCrate(itemId) - HeldUnits.Value, units);
+        if (moved <= 0) return;
+        HeldUnits.Value += moved;
+        ItemDebug.Log($"Top up by client {sender}: {moved} from '{pickup.name}' ({units - moved} left in it).", pickup);
+        Vector3 at = pickup.transform.position;
+        if (moved >= units) pickup.NetworkObject.Despawn(true);
+        else if (box != null) box.ServerSetUnits(units - moved);
+        else pickup.ServerSetUnits(units - moved);
+        PlayItemSoundClientRpc(itemId, at, false);
     }
 
     /// <summary>Put one product from the held stock crate into a container's zone.</summary>
