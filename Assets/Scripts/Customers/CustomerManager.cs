@@ -236,10 +236,21 @@ public class CustomerManager : NetworkBehaviour
 
     private void Update()
     {
-        bool spawnPressed = spawnKey != KeyCode.None && Input.GetKeyDown(spawnKey) && !UIState.IsMenuOpen;
+        bool spawnPressed = spawnKey != KeyCode.None && Input.GetKeyDown(spawnKey);
+        if (spawnPressed && UIState.IsMenuOpen)
+        {
+            Debug.Log($"[Customers] {spawnKey} ignored: a menu counts as open ({UIState.Describe()}).", this);
+            spawnPressed = false;
+        }
         if (spawnPressed && !IsSpawned)
             Debug.LogWarning("[Customers] Not running: the CustomerManager's object isn't spawned on the network " +
                              "(it needs a NetworkObject, like the MallManager object).", this);
+        // Any player can call a test customer: a client asks the host.
+        if (spawnPressed && IsSpawned && !IsServer)
+        {
+            var me = NetworkManager.LocalClient?.PlayerObject;
+            TestCustomerRpc(me != null ? me.transform.position : transform.position);
+        }
         if (!IsSpawned || !IsServer) return;
         var nav = CustomerNavMesh.Instance;
         if (nav == null || !nav.Ready)
@@ -249,7 +260,12 @@ public class CustomerManager : NetworkBehaviour
         }
 
         if (Time.time >= nextEntrances) RefreshEntrances();
-        if (spawnPressed) SpawnNearLocalPlayer();
+        if (spawnPressed || testRequested)
+        {
+            testRequested = false;
+            SpawnTestCustomer(testAt ?? LocalPlayerPosition());
+            testAt = null;
+        }
         UpdateArrivals();
 
         float dt = Time.deltaTime;
@@ -320,12 +336,34 @@ public class CustomerManager : NetworkBehaviour
         return null;
     }
 
-    // Test (host key): a customer comes in at the entrance nearest the player. Standing in an open
-    // store, they head straight for it and always go in. Says what happened either way.
-    private void SpawnNearLocalPlayer()
+    private bool testRequested;
+    private Vector3? testAt;
+
+    private Vector3 LocalPlayerPosition()
     {
-        var player = NetworkManager.LocalClient?.PlayerObject;
-        Vector3 at = player != null ? player.transform.position : transform.position;
+        var player = NetworkManager != null ? NetworkManager.LocalClient?.PlayerObject : null;
+        return player != null ? player.transform.position : transform.position;
+    }
+
+    /// <summary>Test from the Inspector (right-click the component): a customer at the host player's nearest entrance.</summary>
+    [ContextMenu("Test: Spawn A Customer")]
+    private void SpawnFromMenu()
+    {
+        testRequested = true;
+        if (!IsServer) Debug.LogWarning("[Customers] Only the host runs customers: use this on the host.", this);
+    }
+
+    [Rpc(SendTo.Server)]
+    private void TestCustomerRpc(Vector3 playerPosition)
+    {
+        testRequested = true;
+        testAt = playerPosition;
+    }
+
+    // Test: a customer comes in at the entrance nearest a player. Standing in an open store, they head
+    // straight for it and always go in. Says what happened either way.
+    private void SpawnTestCustomer(Vector3 at)
+    {
         CustomerSpawnPoint best = null;
         float bestD = float.MaxValue;
         foreach (var sp in CustomerSpawnPoint.All)
