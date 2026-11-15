@@ -89,6 +89,8 @@ public class CustomerManager : NetworkBehaviour
     [Header("Debug")]
     [SerializeField] private bool logDecisions;
     [SerializeField] private bool drawPaths = true;
+    [Tooltip("Scene view: a label over each customer (number, what they're doing, where they're going, path trouble).")]
+    [SerializeField] private bool drawLabels = true;
     [Tooltip("Host: spawns a customer at the entrance nearest the player.")]
     [SerializeField] private KeyCode spawnKey = KeyCode.F3;
 
@@ -138,6 +140,8 @@ public class CustomerManager : NetworkBehaviour
         public int failures;
         public float bestLeft;     // least path left so far (for noticing they're stuck)
         public float stuckSince;
+        public int stuckRepaths;   // new paths in a row without getting anywhere
+        public string pathProblem; // the last reason a path failed (debug)
         public float lane;         // their side of the path (meters, + = right)
         public int laneCorner = -1;
         public Vector3 laneTarget; // the current corner, moved over to their lane
@@ -488,12 +492,26 @@ public class CustomerManager : NetworkBehaviour
     {
         c.corners.Clear();
         c.corner = 0;
-        if (!NavMesh.SamplePosition(to, out var hit, 2f, NavMesh.AllAreas) ||
-            !NavMesh.CalculatePath(c.pos, hit.position, NavMesh.AllAreas, path) ||
-            path.status == NavMeshPathStatus.PathInvalid || path.corners.Length == 0)
+        string problem = null;
+        if (!NavMesh.SamplePosition(to, out var hit, 2f, NavMesh.AllAreas))
+            problem = $"no walkable floor within 2 m of {to:F1}";
+        else if (!NavMesh.CalculatePath(c.pos, hit.position, NavMesh.AllAreas, path) ||
+                 path.status == NavMeshPathStatus.PathInvalid || path.corners.Length == 0)
+            problem = $"no path from {c.pos:F1} to {hit.position:F1}";
+        // Partial: the place can't be reached (behind a wall or a shut door); the path only gets as near
+        // as it can, which is how customers ended up piled against walls.
+        else if (path.status == NavMeshPathStatus.PathPartial &&
+                 FlatDistance(path.corners[path.corners.Length - 1], hit.position) > 1f)
+            problem = $"{hit.position:F1} can't be reached from {c.pos:F1} (gets within " +
+                      $"{FlatDistance(path.corners[path.corners.Length - 1], hit.position):0.0} m)";
+
+        if (problem != null)
         {
+            c.pathProblem = problem;
             c.failures++;
             c.arrived = true;
+            pathFailures++;
+            Log(c, $"path failed: {problem}");
             return false;
         }
         c.corners.AddRange(path.corners);
@@ -503,6 +521,8 @@ public class CustomerManager : NetworkBehaviour
         c.bestLeft = float.MaxValue;
         c.stuckSince = Time.time;
         c.laneCorner = -1;
+        c.stuckRepaths = 0;
+        paths++;
         return true;
     }
 
@@ -557,8 +577,22 @@ public class CustomerManager : NetworkBehaviour
 
         // Stuck (wedged on a corner, in a crowd): no less path left for 2 s → a new path from here.
         float pathLeft = FlatDistance(c.pos, c.corners[c.corner]) + RemainingAfter(c);
-        if (pathLeft < c.bestLeft - 0.3f) { c.bestLeft = pathLeft; c.stuckSince = Time.time; }
-        else if (Time.time - c.stuckSince > 2f && !PathTo(c, c.destination)) Arrive(c);
+        if (pathLeft < c.bestLeft - 0.3f) { c.bestLeft = pathLeft; c.stuckSince = Time.time; c.stuckRepaths = 0; }
+        else if (Time.time - c.stuckSince > 2f)
+        {
+            stuckEvents++;
+            c.stuckRepaths++;
+            Log(c, $"stuck at {c.pos:F1} heading for {c.destination:F1} (try {c.stuckRepaths})");
+            int tries = c.stuckRepaths;
+            // A few new paths; still nowhere: give up on this spot (they decide again from where they are).
+            if (tries > 3 || !PathTo(c, c.destination))
+            {
+                c.pathProblem = $"stuck at {c.pos:F1}, gave up on {c.destination:F1}";
+                c.failures++;
+                Arrive(c);
+            }
+            else c.stuckRepaths = tries; // (PathTo resets the timer, not the count)
+        }
     }
 
     // The current corner, moved sideways into this customer's lane (not past an edge). The last corner
@@ -595,6 +629,25 @@ public class CustomerManager : NetworkBehaviour
         float sum = 0f;
         for (int i = c.corner + 1; i < c.corners.Count; i++) sum += FlatDistance(c.corners[i - 1], c.corners[i]);
         return sum;
+    }
+
+    // Debug counts (since play started).
+    private int paths, pathFailures, stuckEvents;
+
+    /// <summary>One line for overlays: how many customers are doing what, and path trouble so far.</summary>
+    public string DebugSummary()
+    {
+        if (!IsServer) return $"Customers: {views.Count}";
+        int walking = 0, inStores = 0, inLine = 0, standing = 0;
+        foreach (var c in customers)
+        {
+            if (c.mode == Mode.ToQueue || c.mode == Mode.Queued) inLine++;
+            else if (c.store != null) inStores++;
+            if (!c.arrived) walking++;
+            else standing++;
+        }
+        return $"Customers: {customers.Count} ({walking} walking, {standing} standing; {inStores} in stores, {inLine} in line); " +
+               $"since start: {paths} paths, {pathFailures} failed, {stuckEvents} stuck";
     }
 
     private void Arrive(Customer c)
@@ -1237,7 +1290,7 @@ public class CustomerManager : NetworkBehaviour
                 inward = inward.sqrMagnitude > 1e-4f ? inward.normalized : Vector3.forward;
                 Vector3 foot = new(d.center.x, d.min.y + 0.1f, d.center.z);
 
-                bool found = false;
+                bool found = false, blocked = false;
                 bool sawInside = false, sawOutside = false;
                 foreach (float depth in DoorDepths)
                 {
@@ -1248,16 +1301,32 @@ public class CustomerManager : NetworkBehaviour
                     sawInside |= inOk;
                     sawOutside |= outOk;
                     if (!inOk || !outOk) continue;
+                    // Through the doorway, not round the long way (or not at all: a shut door).
+                    if (!NavMesh.CalculatePath(outHit.position, inHit.position, NavMesh.AllAreas, path) ||
+                        path.status != NavMeshPathStatus.PathComplete || PathLength(path) > depth * 2f + 4f)
+                    {
+                        blocked = true;
+                        continue;
+                    }
                     list.Add(new Entrance { outside = outHit.position, inside = inHit.position });
                     found = true;
                     break;
                 }
                 if (!found)
-                    problem ??= $"its door at {foot:F1} has no walkable floor {(sawInside ? "outside it (in the hallway)" : sawOutside ? "inside it (in the store's space)" : "on either side")}";
+                    problem ??= blocked ? $"its door at {foot:F1} can't be walked through (locked, staff-only, or blocked)"
+                              : $"its door at {foot:F1} has no walkable floor {(sawInside ? "outside it (in the hallway)" : sawOutside ? "inside it (in the store's space)" : "on either side")}";
             }
             if (list.Count > 0) entrances[plot] = list;
             else entranceProblems[plot] = problem ?? "no usable doors";
         }
+    }
+
+    private static float PathLength(NavMeshPath p)
+    {
+        float sum = 0f;
+        var corners = p.corners;
+        for (int i = 1; i < corners.Length; i++) sum += Vector3.Distance(corners[i - 1], corners[i]);
+        return sum;
     }
 
     // Why no customer can get into any store (for the test key's message).
@@ -1409,17 +1478,36 @@ public class CustomerManager : NetworkBehaviour
 
     private void OnDrawGizmos()
     {
-        if (!drawPaths || !Application.isPlaying) return;
+        if (!Application.isPlaying) return;
         foreach (var c in customers)
         {
-            Gizmos.color = c.store != null ? Color.green : Color.cyan;
-            Vector3 from = c.pos + Vector3.up * 0.1f;
-            for (int i = c.corner; i < c.corners.Count; i++)
+            bool trouble = c.stuckRepaths > 0 || c.failures > 0;
+            if (drawPaths && !c.arrived)
             {
-                Vector3 to = c.corners[i] + Vector3.up * 0.1f;
-                Gizmos.DrawLine(from, to);
-                from = to;
+                Gizmos.color = trouble ? Color.red : c.store != null ? Color.green : Color.cyan;
+                Vector3 from = c.pos + Vector3.up * 0.1f;
+                for (int i = c.corner; i < c.corners.Count; i++)
+                {
+                    Vector3 to = (i == c.corner && c.laneCorner == c.corner ? c.laneTarget : c.corners[i]) + Vector3.up * 0.1f;
+                    Gizmos.DrawLine(from, to);
+                    from = to;
+                }
+                Gizmos.DrawWireSphere(c.destination + Vector3.up * 0.1f, 0.2f);
             }
+#if UNITY_EDITOR
+            if (drawLabels)
+            {
+                string goal = c.goalStore != null ? c.goalStore.DisplayName : c.mode == Mode.Exiting ? "exit" : "-";
+                string text = $"#{c.id} {c.mode}{(c.store != null ? $" in {c.store.DisplayName}" : "")}\n→ {goal}" +
+                              (c.stuckRepaths > 0 ? $"\nSTUCK x{c.stuckRepaths}" : "") +
+                              (c.failures > 0 && c.pathProblem != null ? $"\n{c.pathProblem}" : "");
+                var style = new GUIStyle(UnityEditor.EditorStyles.miniLabel)
+                {
+                    normal = { textColor = trouble ? Color.red : Color.white },
+                };
+                UnityEditor.Handles.Label(c.pos + Vector3.up * 2.1f, text, style);
+            }
+#endif
         }
     }
 }
