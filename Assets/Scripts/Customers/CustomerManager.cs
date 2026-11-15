@@ -97,6 +97,11 @@ public class CustomerManager : NetworkBehaviour
     [Tooltip("Customer models (no NetworkObject; colliders are removed). Feet at the pivot, facing +Z. An " +
              "Animator float \"Speed\" gets their walking speed. Empty = plain capsules.")]
     [SerializeField] private List<GameObject> looks = new();
+    [Tooltip("A shopping bag a customer carries after buying in a store (one more per store, up to Max Bags). " +
+             "Placed at a child of the look called \"BagAnchor\" if it has one (its pivot is where the hand holds it), " +
+             "otherwise at their side. No colliders needed (they're removed).")]
+    [SerializeField] private GameObject bagPrefab;
+    [SerializeField, Min(0)] private int maxBags = 3;
 
     [Header("Reactions")]
     [Tooltip("Show reactions over customers' heads (for tuning). Off: players have to work out from sales why " +
@@ -293,6 +298,8 @@ public class CustomerManager : NetworkBehaviour
         public StorePlot robbed;    // the store they stole from
         public readonly List<Taken> stolen = new();
         public float stoppedAt = -99f;
+        public byte bags;           // shopping bags they carry (one per store they bought in)
+        public StorePlot baggedIn;  // the store their last bag came from
 
         // Checkout
         public CheckoutCounter counter;
@@ -1325,6 +1332,7 @@ public class CustomerManager : NetworkBehaviour
         c.satisfaction += 0.25f;
         Log(c, $"took {CheckoutCounter.NameOf(s.itemId)} ({CheckoutCounter.FormatAmount(s.priceCents)})");
         React(c, Reaction.Bought);
+        if (c.thief) GiveBag(c, plot); // a shoplifter brought their own bag (and fills it before paying...)
     }
 
     /* ========================= CHECKOUT ========================= */
@@ -1528,6 +1536,7 @@ public class CustomerManager : NetworkBehaviour
             c.nextThink = Time.time;
             Log(c, "paid");
             React(c, Reaction.Paid);
+            GiveBag(c, c.store);
             return;
         }
     }
@@ -1599,6 +1608,26 @@ public class CustomerManager : NetworkBehaviour
         }
         c.store = null;
         PickGoal(c);
+    }
+
+    /* ========================= BAGS ========================= */
+
+    // One more bag for a store they haven't got one from yet (up to Max Bags). Everyone sees it.
+    private void GiveBag(Customer c, StorePlot from)
+    {
+        if (from == null || from == c.baggedIn || c.bags >= maxBags) return;
+        c.baggedIn = from;
+        c.bags++;
+        SetBags(c.id, c.bags);
+        BagsRpc(c.id, c.bags);
+    }
+
+    [Rpc(SendTo.NotServer)]
+    private void BagsRpc(ushort id, byte count) => SetBags(id, count);
+
+    private void SetBags(ushort id, byte count)
+    {
+        if (views.TryGetValue(id, out var v) && v != null) v.SetBags(count, bagPrefab);
     }
 
     /* ========================= THEFT ========================= */
@@ -1921,8 +1950,11 @@ public class CustomerManager : NetworkBehaviour
         ReceiveArrivals(ids, lookIds, positions, yaws);
 
     [Rpc(SendTo.SpecifiedInParams)]
-    private void EveryoneRpc(ushort[] ids, byte[] lookIds, Vector3[] positions, byte[] yaws, RpcParams rpcParams) =>
+    private void EveryoneRpc(ushort[] ids, byte[] lookIds, Vector3[] positions, byte[] yaws, byte[] bags, RpcParams rpcParams)
+    {
         ReceiveArrivals(ids, lookIds, positions, yaws);
+        for (int i = 0; i < ids.Length && i < bags.Length; i++) if (bags[i] > 0) SetBags(ids[i], bags[i]);
+    }
 
     private void ReceiveArrivals(ushort[] ids, byte[] lookIds, Vector3[] positions, byte[] yaws)
     {
@@ -1947,6 +1979,7 @@ public class CustomerManager : NetworkBehaviour
             var lookIds = new byte[n];
             var positions = new Vector3[n];
             var yaws = new byte[n];
+            var bags = new byte[n];
             for (int k = 0; k < n; k++)
             {
                 var c = customers[start + k];
@@ -1954,8 +1987,9 @@ public class CustomerManager : NetworkBehaviour
                 lookIds[k] = c.look;
                 positions[k] = c.pos;
                 yaws[k] = PackYaw(c.yaw);
+                bags[k] = c.bags;
             }
-            EveryoneRpc(ids, lookIds, positions, yaws, RpcTarget.Single(clientId, RpcTargetUse.Temp));
+            EveryoneRpc(ids, lookIds, positions, yaws, bags, RpcTarget.Single(clientId, RpcTargetUse.Temp));
         }
     }
 
