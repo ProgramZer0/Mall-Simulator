@@ -70,6 +70,12 @@ public class CustomerManager : NetworkBehaviour
     [Header("Checkout")]
     [Tooltip("Meters between customers waiting in line.")]
     [SerializeField] private float queueSpacing = 0.8f;
+    [Tooltip("How far off their place in line each customer stands (meters, fixed per customer so it doesn't " +
+             "jitter). 0 = a perfectly neat line.")]
+    [SerializeField] private float lineLooseness = 0.12f;
+    [Tooltip("Customers waiting in line hold their place: nobody nudges them, and if they're bumped off it they " +
+             "step back at this speed (meters a second).")]
+    [SerializeField] private float lineSettleSpeed = 0.8f;
     [Tooltip("Seconds a customer waits in line before giving up (Patience perks add to it).")]
     [SerializeField] private float patienceSeconds = 120f;
     [Tooltip("First guess at seconds per item to get through a checkout (scanning plus paying, spread over the " +
@@ -937,6 +943,16 @@ public class CustomerManager : NetworkBehaviour
         foreach (var c in customers)
         {
             if (!c.arrived) continue;
+            if ((c.mode == Mode.ToQueue || c.mode == Mode.Queued) && float.IsFinite(c.queueSpot.x))
+            {
+                // In line: hold their place (others ease away from them instead), stepping back if moved off it.
+                Vector3 off = c.queueSpot - c.pos;
+                off.y = 0f;
+                if (off.sqrMagnitude < 0.0004f) continue;
+                c.pos += Vector3.ClampMagnitude(off, lineSettleSpeed * dt);
+                c.dirty = true;
+                continue;
+            }
             Vector3 push = Vector3.zero;
             int cx = Mathf.FloorToInt(c.pos.x), cz = Mathf.FloorToInt(c.pos.z);
             for (int dx = -1; dx <= 1; dx++)
@@ -1491,6 +1507,11 @@ public class CustomerManager : NetworkBehaviour
     {
         int place = lines.TryGetValue(c.counter, out var line) ? line.IndexOf(c) : 0;
         Vector3 spot = QueueSpot(c.counter, Mathf.Max(0, place), out Vector3 facing);
+        if (lineLooseness > 0f) // a little off the line, the same way every time for this customer
+        {
+            Vector3 loose = new Vector3(Mathf.Sin(c.id * 12.9898f), 0f, Mathf.Cos(c.id * 78.233f)) * lineLooseness;
+            if (!NavMesh.Raycast(spot, spot + loose, out _, NavMesh.AllAreas)) spot += loose;
+        }
         if ((c.queueSpot - spot).sqrMagnitude < 0.09f) // same place as before: on the way, or there
         {
             if (c.arrived) Face(c, c.pos + facing);
