@@ -65,7 +65,7 @@ public class CustomerView : MonoBehaviour
     {
         if (bubble == null)
         {
-            bubble = new GameObject("Reaction").transform;
+            bubble = new GameObject("Reaction", typeof(RectTransform)).transform; // TextMeshPro needs a RectTransform; adding it to a plain Transform swaps (destroys) the cached one
             bubble.SetParent(transform, false);
             bubble.localPosition = Vector3.up * (2.15f - lift);
             bubbleText = bubble.gameObject.AddComponent<TMPro.TextMeshPro>();
@@ -99,6 +99,52 @@ public class CustomerView : MonoBehaviour
         c.a = Mathf.Clamp01(left / 0.5f); // fade out at the end
         bubbleText.color = c;
         bubbleIcon.color = new Color(1f, 1f, 1f, c.a);
+    }
+
+    private readonly System.Collections.Generic.List<GameObject> bags = new();
+
+    /// <summary>
+    /// Show this many shopping bags: at a child called "BagAnchor" if the look has one, else at their
+    /// right side; each extra bag hangs a little further along. No prefab: a small paper-bag box.
+    /// </summary>
+    public void SetBags(int count, GameObject prefab)
+    {
+        while (bags.Count > count) { Destroy(bags[^1]); bags.RemoveAt(bags.Count - 1); }
+        Transform anchor = FindChild(transform, "BagAnchor");
+        while (bags.Count < count)
+        {
+            int i = bags.Count;
+            GameObject bag;
+            if (prefab != null) bag = Instantiate(prefab);
+            else
+            {
+                bag = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                bag.transform.localScale = new Vector3(0.12f, 0.3f, 0.25f);
+                var r = bag.GetComponent<Renderer>();
+                if (r != null) r.material.color = new Color(0.78f, 0.62f, 0.42f);
+            }
+            bag.name = "Bag";
+            foreach (var c in bag.GetComponentsInChildren<Collider>(true)) Destroy(c);
+            var t = bag.transform;
+            if (anchor != null)
+            {
+                t.SetParent(anchor, false);
+                t.localPosition = new Vector3(0f, 0f, 0.08f * i);
+            }
+            else
+            {
+                t.SetParent(transform, false);
+                t.localPosition = new Vector3(0.32f + 0.05f * i, 0.75f - lift, 0.1f * i - 0.05f);
+            }
+            if (prefab == null) t.localScale = new Vector3(0.12f, 0.3f, 0.25f) * (anchor != null ? 1f : 1f / Mathf.Max(0.01f, transform.lossyScale.x));
+            bags.Add(bag);
+        }
+    }
+
+    private static Transform FindChild(Transform root, string name)
+    {
+        foreach (var t in root.GetComponentsInChildren<Transform>(true)) if (t.name == name) return t;
+        return null;
     }
 
     /// <summary>Where the customer is now (the view eases there).</summary>

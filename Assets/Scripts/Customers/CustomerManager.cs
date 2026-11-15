@@ -76,6 +76,17 @@ public class CustomerManager : NetworkBehaviour
              "items). Each counter learns its real pace from then on.")]
     [SerializeField] private float secondsPerItemGuess = 6f;
 
+    [Header("Theft")]
+    [Tooltip("Chance a shoplifter's theft sets off the alarm as they leave the store (Theft Resistance perks add to it). " +
+             "The store's team is told straight away and can still catch them before they leave the mall.")]
+    [Range(0f, 1f)] [SerializeField] private float alarmChance = 0.15f;
+    [Tooltip("A shoplifter won't try it with a player this close who can see them (meters); they pay instead.")]
+    [SerializeField] private float watchedRange = 6f;
+    [Tooltip("How much faster a shoplifter walks once they've taken off with something.")]
+    [SerializeField] private float fleeSpeed = 1.6f;
+    [Tooltip("How close a player must be to stop a customer (meters).")]
+    [SerializeField] private float stopRange = 3f;
+
     [Header("Thinking (host)")]
     [Tooltip("Decisions per second per customer (walking is smooth regardless).")]
     [SerializeField] private float thinksPerSecond = 3f;
@@ -86,6 +97,11 @@ public class CustomerManager : NetworkBehaviour
     [Tooltip("Customer models (no NetworkObject; colliders are removed). Feet at the pivot, facing +Z. An " +
              "Animator float \"Speed\" gets their walking speed. Empty = plain capsules.")]
     [SerializeField] private List<GameObject> looks = new();
+    [Tooltip("A shopping bag a customer carries after buying in a store (one more per store, up to Max Bags). " +
+             "Placed at a child of the look called \"BagAnchor\" if it has one (its pivot is where the hand holds it), " +
+             "otherwise at their side. No colliders needed (they're removed).")]
+    [SerializeField] private GameObject bagPrefab;
+    [SerializeField, Min(0)] private int maxBags = 3;
 
     [Header("Reactions")]
     [Tooltip("Show reactions over customers' heads (for tuning). Off: players have to work out from sales why " +
@@ -164,7 +180,7 @@ public class CustomerManager : NetworkBehaviour
             t[(int)r]++;
         }
         if (!showReactions) return; // still counted above, just not shown (nothing sent)
-        ShowReaction(c.id, r);
+        try { ShowReaction(c.id, r); } catch (Exception e) { Debug.LogException(e); } // a visual must never break their thinking
         ReactRpc(c.id, r);
     }
 
@@ -274,6 +290,16 @@ public class CustomerManager : NetworkBehaviour
         public Vector3 targetPoint;
         public float targetWorth;
         public readonly List<Taken> basket = new();
+
+        // Theft
+        public bool thief;          // a shoplifter (decided when they arrive)
+        public bool fleeing;        // walking off with things they haven't paid for
+        public bool alarmed;        // set off the alarm (the store's team knows)
+        public StorePlot robbed;    // the store they stole from
+        public readonly List<Taken> stolen = new();
+        public float stoppedAt = -99f;
+        public byte bags;           // shopping bags they carry (one per store they bought in)
+        public StorePlot baggedIn;  // the store their last bag came from
 
         // Checkout
         public CheckoutCounter counter;
@@ -447,7 +473,7 @@ public class CustomerManager : NetworkBehaviour
     private void RefreshEventEffects()
     {
         eventsDirty = false;
-        eventArrivals = eventMax = eventBudget = 1f;
+        eventArrivals = eventMax = eventBudget = eventShoplifting = 1f;
         eventPersonality.Clear();
         if (MallEventManager.Instance == null) return;
         MallEventManager.Instance.GetActive(activeEvents);
@@ -456,6 +482,7 @@ public class CustomerManager : NetworkBehaviour
             eventArrivals *= Factor(e.customerArrivalsPercent);
             eventMax *= Factor(e.maxCustomersPercent);
             eventBudget *= Factor(e.customerBudgetPercent);
+            eventShoplifting *= Factor(e.shopliftingPercent);
             if (e.personalityShifts == null) continue;
             foreach (var shift in e.personalityShifts)
             {
@@ -635,6 +662,7 @@ public class CustomerManager : NetworkBehaviour
             cameFrom = hit.position,
             lane = Random.Range(-laneSpread, laneSpread),
         };
+        c.thief = Random.value < personality.shopliftChance * eventShoplifting;
         customers.Add(c);
         byId[c.id] = c;
         MakeView(c.id, c.look, c.pos, c.yaw);
@@ -654,6 +682,7 @@ public class CustomerManager : NetworkBehaviour
 
     private void Despawn(Customer c)
     {
+        if (c.stolen.Count > 0) GotAway(c);
         AbandonStore(c);
         customers.Remove(c);
         byId.Remove(c.id);
@@ -973,7 +1002,7 @@ public class CustomerManager : NetworkBehaviour
                 }
                 break;
             case Mode.Looking:
-                if (Time.time >= c.until) { Decide(c); c.mode = Mode.Browsing; }
+                if (Time.time >= c.until) { c.mode = Mode.Browsing; Decide(c); } // mode first, so an error in Decide can't repeat it every think
                 break;
             case Mode.ToQueue:
             case Mode.Queued: ThinkQueue(c); break;
@@ -1183,7 +1212,7 @@ public class CustomerManager : NetworkBehaviour
     private void ThinkBrowse(Customer c)
     {
         var plot = c.store;
-        bool done = c.basket.Count >= c.wants || c.budgetCents <= 0 || c.shelvesSeen >= maxLooksPerStore;
+        bool done = c.basket.Count >= c.wants || (!c.thief && c.budgetCents <= 0) || c.shelvesSeen >= maxLooksPerStore;
         if (!done && TryPickShelf(c, plot, out var source, out float worth))
         {
             c.shelvesSeen++;
@@ -1196,6 +1225,7 @@ public class CustomerManager : NetworkBehaviour
             return;
         }
 
+        if (c.basket.Count > 0 && c.thief && TryShoplift(c)) return;
         if (c.basket.Count > 0) GoToCheckout(c);
         else
         {
@@ -1222,8 +1252,10 @@ public class CustomerManager : NetworkBehaviour
         for (int k = 0; k < samples; k++)
         {
             var s = all[(start + k * stride) % count];
-            if (s.quantity <= 0 || c.seen.Contains(s.Key) || s.priceCents > c.budgetCents) continue;
+            if (s.quantity <= 0 || c.seen.Contains(s.Key) || (!c.thief && s.priceCents > c.budgetCents)) continue;
+            if (c.thief && s.container == null) continue; // a shoplifter only takes what fits in a bag
             float w = plot.Appeal.WorthTo(c.personality, s) * tolerance;
+            if (c.thief) w *= 1f + s.priceCents / 10000f; // and likes it pricey
             if (w <= 0.01f) continue;
             scratchPicks.Add((s, w));
         }
@@ -1267,7 +1299,7 @@ public class CustomerManager : NetworkBehaviour
             React(c, Reaction.SoldOut);
             return;
         }
-        if (s.priceCents > c.budgetCents)
+        if (!c.thief && s.priceCents > c.budgetCents)
         {
             c.satisfaction -= 0.05f;
             React(c, Reaction.TooPricey); // more than they brought
@@ -1296,10 +1328,11 @@ public class CustomerManager : NetworkBehaviour
         }
         else return;
 
-        c.budgetCents -= s.priceCents;
+        if (!c.thief) c.budgetCents -= s.priceCents;
         c.satisfaction += 0.25f;
         Log(c, $"took {CheckoutCounter.NameOf(s.itemId)} ({CheckoutCounter.FormatAmount(s.priceCents)})");
         React(c, Reaction.Bought);
+        if (c.thief) GiveBag(c, plot); // a shoplifter brought their own bag (and fills it before paying...)
     }
 
     /* ========================= CHECKOUT ========================= */
@@ -1503,6 +1536,7 @@ public class CustomerManager : NetworkBehaviour
             c.nextThink = Time.time;
             Log(c, "paid");
             React(c, Reaction.Paid);
+            GiveBag(c, c.store);
             return;
         }
     }
@@ -1555,6 +1589,16 @@ public class CustomerManager : NetworkBehaviour
     private void FinishStore(Customer c)
     {
         var plot = c.store;
+        if (plot != null && c.fleeing)
+        {
+            OutTheDoor(c, plot);
+            c.store = null;
+            c.mode = Mode.Exiting;
+            var exit = PickSpawnPoint(sp => sp.isExit && (sp.transform.position - c.cameFrom).sqrMagnitude > 25f)
+                       ?? PickSpawnPoint(sp => sp.isExit);
+            if (exit == null || !PathTo(c, exit.transform.position)) Despawn(c);
+            return;
+        }
         if (plot != null)
         {
             c.storesVisited++;
@@ -1565,6 +1609,190 @@ public class CustomerManager : NetworkBehaviour
         c.store = null;
         PickGoal(c);
     }
+
+    /* ========================= BAGS ========================= */
+
+    // One more bag for a store they haven't got one from yet (up to Max Bags). Everyone sees it.
+    private void GiveBag(Customer c, StorePlot from)
+    {
+        if (from == null || from == c.baggedIn || c.bags >= maxBags) return;
+        c.baggedIn = from;
+        c.bags++;
+        SetBags(c.id, c.bags);
+        BagsRpc(c.id, c.bags);
+    }
+
+    [Rpc(SendTo.NotServer)]
+    private void BagsRpc(ushort id, byte count) => SetBags(id, count);
+
+    private void SetBags(ushort id, byte count)
+    {
+        if (views.TryGetValue(id, out var v) && v != null) v.SetBags(count, bagPrefab);
+    }
+
+    /* ========================= THEFT ========================= */
+
+    private float eventShoplifting = 1f;
+
+    // Done picking things: a shoplifter walks out with them instead of paying, unless someone is
+    // watching or the store's Theft Resistance puts them off (then they pay like anyone else).
+    private bool TryShoplift(Customer c)
+    {
+        var plot = c.store;
+        float resistance = Mathf.Clamp01(ProgressionManager.StoreStat(plot, PerkStat.TheftResistance));
+        if (Watched(c.pos))
+        {
+            Log(c, "a shoplifter, but someone's watching: paying instead");
+            return false;
+        }
+        if (Random.value < resistance * 0.8f)
+        {
+            Log(c, $"a shoplifter, but put off by the store's security ({resistance:0.00}): paying instead");
+            return false;
+        }
+        c.fleeing = true;
+        c.speed *= fleeSpeed;
+        Log(c, $"SHOPLIFTING {c.basket.Count} thing(s) from '{plot.DisplayName}'");
+        c.mode = Mode.Leaving;
+        if (!PathTo(c, c.entrance.outside)) FinishStore(c);
+        return true;
+    }
+
+    // Is a player near and able to see this spot?
+    private bool Watched(Vector3 at)
+    {
+        Vector3 eye = at + Vector3.up * 1.6f;
+        foreach (var p in players)
+        {
+            if ((p - at).sqrMagnitude > watchedRange * watchedRange) continue;
+            if (!Physics.Linecast(eye, p + Vector3.up * 1.2f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) return true;
+        }
+        return false;
+    }
+
+    // Out of the store with things unpaid for: they're stolen now. The alarm may go off.
+    private void OutTheDoor(Customer c, StorePlot plot)
+    {
+        c.robbed = plot;
+        c.stolen.Clear();
+        foreach (var t in c.basket) if (t.container != null) c.stolen.Add(t);
+        c.basket.Clear();
+        if (c.counted && inside.TryGetValue(plot, out int n)) inside[plot] = Mathf.Max(0, n - 1);
+        c.counted = false;
+
+        float chance = Mathf.Clamp01(alarmChance + ProgressionManager.StoreStat(plot, PerkStat.TheftResistance));
+        if (Random.value < chance && plot.HasOwner && NotificationManager.Instance != null)
+        {
+            c.alarmed = true;
+            NotificationManager.Instance.ServerNotifyTeamText(plot.OwnerTeamId, $"Shoplifter at {plot.DisplayName}!",
+                $"The alarm went off: someone just walked out with {StolenText(c)}. Catch them before they leave the mall (F).",
+                alarm: true);
+        }
+        Log(c, $"out of '{plot.DisplayName}' with {StolenText(c)}{(c.alarmed ? " (ALARM)" : "")}");
+    }
+
+    // Left the mall with it: gone for good. The store's team finds out (if the alarm didn't tell them).
+    private void GotAway(Customer c)
+    {
+        var plot = c.robbed;
+        if (plot != null && plot.HasOwner && NotificationManager.Instance != null)
+            NotificationManager.Instance.ServerNotifyTeamText(plot.OwnerTeamId, $"Stock stolen from {plot.DisplayName}",
+                c.alarmed ? $"The shoplifter got away with {StolenText(c)}." : $"{StolenText(c)} went missing without being paid for.");
+        Log(c, $"got away with {StolenText(c)}");
+        c.stolen.Clear();
+    }
+
+    private static string StolenText(Customer c)
+    {
+        int total = 0;
+        foreach (var t in c.stolen.Count > 0 ? c.stolen : c.basket) total += t.priceCents;
+        int count = c.stolen.Count > 0 ? c.stolen.Count : c.basket.Count;
+        return $"{count} thing{(count == 1 ? "" : "s")} ({CheckoutCounter.FormatAmount(total)})";
+    }
+
+    /// <summary>
+    /// The customer the local player is looking at, close enough to stop (0 = none). Any machine: from
+    /// the drawn customers. Something solid in between hides them.
+    /// </summary>
+    public ushort CustomerInView(Camera cam, out float distance)
+    {
+        distance = 0f;
+        if (cam == null) return 0;
+        ushort best = 0;
+        float bestDist = stopRange;
+        Vector3 eye = cam.transform.position, fwd = cam.transform.forward;
+        foreach (var kv in views)
+        {
+            var v = kv.Value;
+            if (v == null) continue;
+            Vector3 body = v.transform.position + Vector3.up * 1f;
+            Vector3 to = body - eye;
+            float along = Vector3.Dot(to, fwd);
+            if (along <= 0f || along > bestDist) continue;
+            float off = (to - fwd * along).magnitude; // how far from the crosshair line
+            if (off > 0.45f) continue;
+            if (Physics.Linecast(eye, body, out var hit, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore) &&
+                hit.distance < along - 0.4f) continue;
+            best = kv.Key;
+            bestDist = along;
+        }
+        distance = bestDist;
+        return best;
+    }
+
+    /// <summary>Any player: stop the customer they're looking at and check their bag.</summary>
+    public void RequestStop(ushort id) => StopCustomerRpc(id);
+
+    [Rpc(SendTo.Server)]
+    private void StopCustomerRpc(ushort id, RpcParams rpcParams = default)
+    {
+        ulong sender = rpcParams.Receive.SenderClientId;
+        if (!byId.TryGetValue(id, out var c)) return;
+        var player = NetworkManager.ConnectedClients.TryGetValue(sender, out var client) ? client.PlayerObject : null;
+        if (player == null || (player.transform.position - c.pos).sqrMagnitude > (stopRange + 1f) * (stopRange + 1f)) return;
+        if (Time.time - c.stoppedAt < 5f) return;
+        c.stoppedAt = Time.time;
+        var notes = NotificationManager.Instance;
+
+        // Caught: what they took goes back on the shelves, and they leave the mall.
+        var taken = c.stolen.Count > 0 ? c.stolen : c.fleeing ? c.basket : null;
+        if (taken != null && taken.Count > 0)
+        {
+            string what = StolenText(c);
+            int back = 0;
+            foreach (var t in taken)
+                if (t.container != null && t.container.IsSpawned &&
+                    t.container.ServerAddOne(t.zone, t.itemId, t.container.GetZone(t.zone).orient)) back++;
+            var plot = c.robbed ?? c.store;
+            taken.Clear();
+            Log(c, $"CAUGHT by client {sender}: {what}, {back} back on the shelves");
+            // A help point only for helping another team: catching your own store's thief is just business.
+            bool helped = plot != null && plot.HasOwner && TeamOf(sender) != plot.OwnerTeamId;
+            if (helped && HelpPoints.Instance != null) HelpPoints.Instance.ServerAward(sender, HelpPoints.HelpAction.StoppedThief);
+            if (notes != null)
+            {
+                notes.ServerNotifyClientText(sender, "You caught a shoplifter!",
+                    $"They had {what}{(plot != null ? $" from {plot.DisplayName}" : "")}. {back} went back on the shelves.");
+                if (helped)
+                    notes.ServerNotifyTeamText(plot.OwnerTeamId, "Shoplifter caught",
+                        $"Another player stopped someone leaving {plot.DisplayName} with {what}. {back} went back on the shelves.");
+            }
+            c.fleeing = false;
+            c.robbed = null;
+            if (c.store != null) { AbandonStore(c); c.store = null; }
+            c.mode = Mode.Exiting;
+            var exit = PickSpawnPoint(sp => sp.isExit);
+            if (exit == null || !PathTo(c, exit.transform.position)) Despawn(c);
+            return;
+        }
+
+        // Nothing on them: an honest customer, and now an annoyed one.
+        c.satisfaction -= 0.5f;
+        Log(c, $"stopped by client {sender}: had nothing (annoyed)");
+        if (notes != null) notes.ServerNotifyClientText(sender, "Nothing on them", "That customer hadn't taken anything, and they're not happy about being stopped.");
+    }
+
+    private static ulong TeamOf(ulong clientId) => MallManager.GetTeamOf(clientId);
 
     /* ========================= STORE ENTRANCES ========================= */
 
@@ -1722,8 +1950,11 @@ public class CustomerManager : NetworkBehaviour
         ReceiveArrivals(ids, lookIds, positions, yaws);
 
     [Rpc(SendTo.SpecifiedInParams)]
-    private void EveryoneRpc(ushort[] ids, byte[] lookIds, Vector3[] positions, byte[] yaws, RpcParams rpcParams) =>
+    private void EveryoneRpc(ushort[] ids, byte[] lookIds, Vector3[] positions, byte[] yaws, byte[] bags, RpcParams rpcParams)
+    {
         ReceiveArrivals(ids, lookIds, positions, yaws);
+        for (int i = 0; i < ids.Length && i < bags.Length; i++) if (bags[i] > 0) SetBags(ids[i], bags[i]);
+    }
 
     private void ReceiveArrivals(ushort[] ids, byte[] lookIds, Vector3[] positions, byte[] yaws)
     {
@@ -1748,6 +1979,7 @@ public class CustomerManager : NetworkBehaviour
             var lookIds = new byte[n];
             var positions = new Vector3[n];
             var yaws = new byte[n];
+            var bags = new byte[n];
             for (int k = 0; k < n; k++)
             {
                 var c = customers[start + k];
@@ -1755,8 +1987,9 @@ public class CustomerManager : NetworkBehaviour
                 lookIds[k] = c.look;
                 positions[k] = c.pos;
                 yaws[k] = PackYaw(c.yaw);
+                bags[k] = c.bags;
             }
-            EveryoneRpc(ids, lookIds, positions, yaws, RpcTarget.Single(clientId, RpcTargetUse.Temp));
+            EveryoneRpc(ids, lookIds, positions, yaws, bags, RpcTarget.Single(clientId, RpcTargetUse.Temp));
         }
     }
 

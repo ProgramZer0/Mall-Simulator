@@ -103,6 +103,7 @@ public class PlayerInteractInput : NetworkBehaviour
             lookedAtSign = null;
             lookedAtMonitor = null;
             lookedAtVote = null;
+            lookedAtCustomer = 0;
             lookedAtCart = null;
             lookedAtDoor = null;
             lookedAtCounter = null;
@@ -123,6 +124,7 @@ public class PlayerInteractInput : NetworkBehaviour
 
         UpdateLookedAtSign();
         UpdateStockTarget();
+        UpdateLookedAtCustomer();
         HandleInteract();
         HandleRotation();
         HandlePlacement();
@@ -143,11 +145,23 @@ public class PlayerInteractInput : NetworkBehaviour
     private int lookedAtBuyZone = -1;               // a shelf zone (one product), or -1 for a loose item
     private int lookedAtBuyPrice;                   // cents
     private VoteButton lookedAtVote;                // a mall vote kiosk's button
+    private ushort lookedAtCustomer;                // a customer close enough to stop (0 = none)
     private bool lookedAtBuriedCartItem; // something on a cart with other things stacked on it
     [Tooltip("Lock / unlock a door your store owns.")]
     [SerializeField] private KeyCode doorLockKey = KeyCode.L;
     private CartNet pushedCart;   // the cart you're pushing
     private ShopMonitor lookedAtMonitor;
+
+    // A customer in front of you, closer than whatever else you're looking at.
+    private void UpdateLookedAtCustomer()
+    {
+        lookedAtCustomer = 0;
+        var customers = CustomerManager.Instance;
+        if (customers == null) return;
+        ushort id = customers.CustomerInView(cam, out _);
+        if (id == 0) return;
+        lookedAtCustomer = id;
+    }
 
     /// <summary>Is the player looking at a for-sale wall of an unowned store, or at their shop monitor?</summary>
     private void UpdateLookedAtSign()
@@ -495,7 +509,7 @@ public class PlayerInteractInput : NetworkBehaviour
         if (!IsOwner || (lookedAtSign == null && lookedAtMonitor == null && stockTarget == null &&
                          lookedAtCart == null && pushedCart == null && lookedAtDoor == null &&
                          lookedAtCounter == null && lookedAtPickup == null && lookedAtBuy == null && lookedAtVote == null &&
-                         !lookedAtBuriedCartItem) ||
+                         !lookedAtBuriedCartItem && lookedAtCustomer == 0) ||
             (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return null;
 
         return pushedCart != null ? "F: Let go of cart"
@@ -510,6 +524,7 @@ public class PlayerInteractInput : NetworkBehaviour
                     : lookedAtSign != null ? SignPrompt()
                     : lookedAtBuy != null ? BuyPrompt()
                     : stockTarget != null ? StockPrompt()
+                    : lookedAtCustomer != 0 && lookedAtPickup == null ? "F: Stop them and check their bag"
                     : PickupPrompt();
     }
 
@@ -750,6 +765,15 @@ public class PlayerInteractInput : NetworkBehaviour
         }
 
         if (!Input.GetKeyDown(KeyCode.F)) return;
+
+        // A customer and nothing else in front of you: stop them and check their bag (shoplifters).
+        if (lookedAtCustomer != 0 && pushedCart == null && lookedAtCart == null && lookedAtDoor == null &&
+            lookedAtCounter == null && lookedAtMonitor == null && lookedAtSign == null && lookedAtVote == null &&
+            lookedAtBuy == null && lookedAtPickup == null && stockTarget == null && CustomerManager.Instance != null)
+        {
+            CustomerManager.Instance.RequestStop(lookedAtCustomer);
+            return;
+        }
 
         // Carts: F lets go of the one you're pushing (and does nothing else), or starts pushing one.
         if (pushedCart != null)

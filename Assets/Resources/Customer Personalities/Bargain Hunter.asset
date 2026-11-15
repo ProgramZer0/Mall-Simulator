@@ -27,4 +27,5 @@ MonoBehaviour:
   curiosity: 0.15
   knowsTheMall: 0.3
   budgetDollars: {x: 15, y: 60}
+  shopliftChance: 0.06
   wantItems: {x: 2, y: 5}
