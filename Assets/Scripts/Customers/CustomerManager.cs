@@ -87,6 +87,15 @@ public class CustomerManager : NetworkBehaviour
              "Animator float \"Speed\" gets their walking speed. Empty = plain capsules.")]
     [SerializeField] private List<GameObject> looks = new();
 
+    [Header("Reactions")]
+    [Tooltip("What shows over a customer's head when something happens (text, colour, optional icon). " +
+             "Kinds left out use their defaults.")]
+    [SerializeField] private List<ReactionLook> reactionLooks = new();
+    [Tooltip("Seconds a reaction stays up.")]
+    [SerializeField] private float reactionSeconds = 2.5f;
+    [Tooltip("Reactions further than this from your camera aren't shown (meters).")]
+    [SerializeField] private float reactionRange = 30f;
+
     [Header("Network")]
     [Tooltip("Position updates per second sent to the other players.")]
     [SerializeField] private float sendRate = 10f;
@@ -98,6 +107,92 @@ public class CustomerManager : NetworkBehaviour
     [SerializeField] private bool drawLabels = true;
     [Tooltip("Host: spawns a customer at the entrance nearest the player.")]
     [SerializeField] private KeyCode spawnKey = KeyCode.F3;
+
+    /* ========================= REACTIONS ========================= */
+
+    /// <summary>Things that happen to a customer that players can see over their head.</summary>
+    public enum Reaction : byte
+    {
+        Interested,     // walking into a store
+        Bought,         // took something
+        TooPricey,      // put it back: dearer than it's worth to them
+        SoldOut,        // what they came for was gone
+        NothingForMe,   // left a store without finding anything
+        LineTooLong,    // put everything back rather than queue
+        GaveUpWaiting,  // waited too long in line
+        Paid,           // paid at the checkout
+        StoreClosed,    // the store shut while they were in it
+        NoCheckout,     // nowhere to pay
+    }
+
+    [Serializable]
+    public class ReactionLook
+    {
+        public Reaction kind;
+        public string text;
+        public Color color = Color.white;
+        [Tooltip("Optional: shown instead of the text.")]
+        public Sprite icon;
+    }
+
+    private static readonly Dictionary<Reaction, (string text, Color color)> DefaultLooks = new()
+    {
+        { Reaction.Interested, ("Ooh!", new Color(0.55f, 0.85f, 1f)) },
+        { Reaction.Bought, ("Got it!", new Color(0.45f, 0.95f, 0.45f)) },
+        { Reaction.TooPricey, ("Too pricey", new Color(1f, 0.7f, 0.25f)) },
+        { Reaction.SoldOut, ("Sold out?!", new Color(1f, 0.6f, 0.2f)) },
+        { Reaction.NothingForMe, ("Nothing for me", new Color(0.8f, 0.8f, 0.8f)) },
+        { Reaction.LineTooLong, ("Line's too long", new Color(1f, 0.4f, 0.35f)) },
+        { Reaction.GaveUpWaiting, ("Forget it!", new Color(1f, 0.3f, 0.3f)) },
+        { Reaction.Paid, ("Thanks!", new Color(0.45f, 0.95f, 0.45f)) },
+        { Reaction.StoreClosed, ("Closed?", new Color(0.8f, 0.8f, 0.8f)) },
+        { Reaction.NoCheckout, ("Where do I pay?", new Color(1f, 0.4f, 0.35f)) },
+    };
+
+    // Host: how often each reaction happened in each store (for tuning; see StoreReport).
+    private readonly Dictionary<StorePlot, int[]> storeTally = new();
+
+    // Host: a customer reacts; everyone sees it over their head, and it's counted for their store.
+    private void React(Customer c, Reaction r)
+    {
+        if (c.store != null)
+        {
+            if (!storeTally.TryGetValue(c.store, out var t)) storeTally[c.store] = t = new int[Enum.GetValues(typeof(Reaction)).Length];
+            t[(int)r]++;
+        }
+        ShowReaction(c.id, r);
+        ReactRpc(c.id, r);
+    }
+
+    [Rpc(SendTo.NotServer, Delivery = RpcDelivery.Unreliable)]
+    private void ReactRpc(ushort id, Reaction r) => ShowReaction(id, r);
+
+    private void ShowReaction(ushort id, Reaction r)
+    {
+        if (!views.TryGetValue(id, out var v) || v == null) return;
+        var cam = Camera.main;
+        if (cam != null && (cam.transform.position - v.transform.position).sqrMagnitude > reactionRange * reactionRange) return;
+        string text = null;
+        Color color = Color.white;
+        Sprite icon = null;
+        foreach (var look in reactionLooks)
+            if (look != null && look.kind == r) { text = look.text; color = look.color; icon = look.icon; break; }
+        if (text == null && icon == null && DefaultLooks.TryGetValue(r, out var d)) { text = d.text; color = d.color; }
+        v.ShowReaction(text, color, icon, reactionSeconds);
+    }
+
+    /// <summary>
+    /// Host: what customers made of a store since play started (for tuning prices and stock), e.g.
+    /// "Store02: 40 came in, 25 bought, 9 too pricey, 3 sold out, 6 nothing for them, 2 line too long".
+    /// </summary>
+    public string StoreReport(StorePlot plot)
+    {
+        if (plot == null || !storeTally.TryGetValue(plot, out var t)) return null;
+        return $"{plot.DisplayName}: {t[(int)Reaction.Interested]} came in, {t[(int)Reaction.Bought]} things taken, " +
+               $"{t[(int)Reaction.Paid]} paid, {t[(int)Reaction.TooPricey]} too pricey, {t[(int)Reaction.SoldOut]} sold out, " +
+               $"{t[(int)Reaction.NothingForMe]} nothing for them, {t[(int)Reaction.LineTooLong]} line too long, " +
+               $"{t[(int)Reaction.GaveUpWaiting]} gave up waiting";
+    }
 
     /* ========================= STATE ========================= */
 
@@ -782,6 +877,7 @@ public class CustomerManager : NetworkBehaviour
         if (c.store != null && c.mode != Mode.Leaving && !c.store.IsOpen)
         {
             Log(c, $"'{c.store.DisplayName}' closed: leaving");
+            React(c, Reaction.StoreClosed);
             LeaveStore(c, -0.2f);
             return;
         }
@@ -1005,6 +1101,7 @@ public class CustomerManager : NetworkBehaviour
         c.mode = Mode.Entering;
         if (!PathTo(c, e.inside)) { LeaveStore(c, 0f); return; }
         Log(c, $"going into '{plot.DisplayName}'");
+        React(c, Reaction.Interested);
     }
 
     // Inside: pick something to go and look at, or head to the checkout (or out) when done.
@@ -1028,6 +1125,7 @@ public class CustomerManager : NetworkBehaviour
         else
         {
             Log(c, $"found nothing to buy in '{plot.DisplayName}'");
+            React(c, Reaction.NothingForMe);
             LeaveStore(c, c.shelvesSeen == 0 ? -0.3f : -0.1f);
         }
     }
@@ -1073,6 +1171,16 @@ public class CustomerManager : NetworkBehaviour
         return false;
     }
 
+    // Priced well above what it's worth on the market (per product).
+    private static bool AboveMarket(StoreListing.Source s)
+    {
+        var catalog = ItemCatalog.Instance;
+        if (catalog == null || !catalog.TryGet(s.itemId, out var def)) return false;
+        int products = s.item != null && s.item.TryGetComponent<ItemPickupNet>(out var p) && p.IsStockCrate ? Mathf.Max(1, p.Units) : 1;
+        int market = MarketModifiers.MarketPriceCents(def) * products;
+        return market > 0 && s.priceCents > market * 1.15f;
+    }
+
     // At the shelf: still there, still worth it at this price? Then take one.
     private void Decide(Customer c)
     {
@@ -1081,11 +1189,13 @@ public class CustomerManager : NetworkBehaviour
         {
             c.satisfaction -= 0.15f;
             Log(c, "what they came for was gone");
+            React(c, Reaction.SoldOut);
             return;
         }
         if (s.priceCents > c.budgetCents)
         {
             c.satisfaction -= 0.05f;
+            React(c, Reaction.TooPricey); // more than they brought
             return;
         }
         float tolerance = 1f + ProgressionManager.StoreStat(plot, PerkStat.PriceTolerance);
@@ -1093,13 +1203,14 @@ public class CustomerManager : NetworkBehaviour
         if (Random.value >= Mathf.Clamp01(worth * buyEagerness))
         {
             Log(c, $"looked at {CheckoutCounter.NameOf(s.itemId)} for {CheckoutCounter.FormatAmount(s.priceCents)}, didn't take it");
+            if (AboveMarket(s) && c.personality.priceSensitivity > 0.3f) React(c, Reaction.TooPricey);
             return;
         }
 
         if (s.container != null)
         {
             int itemId = s.container.ServerRemoveOne(s.zone); // the host settles who gets the last one
-            if (itemId == 0) { c.satisfaction -= 0.15f; return; }
+            if (itemId == 0) { c.satisfaction -= 0.15f; React(c, Reaction.SoldOut); return; }
             c.basket.Add(new Taken { container = s.container, zone = s.zone, itemId = itemId, priceCents = s.priceCents, units = 1 });
         }
         else if (s.item != null)
@@ -1113,6 +1224,7 @@ public class CustomerManager : NetworkBehaviour
         c.budgetCents -= s.priceCents;
         c.satisfaction += 0.25f;
         Log(c, $"took {CheckoutCounter.NameOf(s.itemId)} ({CheckoutCounter.FormatAmount(s.priceCents)})");
+        React(c, Reaction.Bought);
     }
 
     /* ========================= CHECKOUT ========================= */
@@ -1131,6 +1243,7 @@ public class CustomerManager : NetworkBehaviour
         if (best == null)
         {
             Log(c, $"no checkout in '{c.store.DisplayName}': put things back and left");
+            React(c, Reaction.NoCheckout);
             LeaveStore(c, -0.6f);
             return;
         }
@@ -1140,6 +1253,7 @@ public class CustomerManager : NetworkBehaviour
         if (bestWait > patience && Random.value < Mathf.Clamp01(bestWait / patience - 0.5f))
         {
             Log(c, $"line looks like {bestWait:0} s (patience {patience:0} s): put things back and left");
+            React(c, Reaction.LineTooLong);
             LeaveStore(c, -0.4f);
             return;
         }
@@ -1296,6 +1410,7 @@ public class CustomerManager : NetworkBehaviour
         if (Time.time >= c.until)
         {
             Log(c, "waited too long in line: left their things on the counter");
+            React(c, Reaction.GaveUpWaiting);
             LeaveStore(c, -0.6f);
         }
     }
@@ -1312,6 +1427,7 @@ public class CustomerManager : NetworkBehaviour
             counterPace[counter] = Mathf.Lerp(PaceOf(counter), Mathf.Clamp(perItem, 1f, 120f), 0.3f);
             c.nextThink = Time.time;
             Log(c, "paid");
+            React(c, Reaction.Paid);
             return;
         }
     }

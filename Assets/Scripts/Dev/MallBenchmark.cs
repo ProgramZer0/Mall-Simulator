@@ -416,7 +416,17 @@ public class MallBenchmark : MonoBehaviour
             $"Spawned: {netObjects} network objects, {StockContainer.All.Count} shelves, {stockModels} products, {renderers} renderers\n" +
             (IsHost ? $"Shoppers: {buysShown} buys/s ({shopperMsShown:0.00} ms), {asksShown} appeal asks/s ({appealMsShown:0.00} ms)\n" : "") +
             (CustomerManager.Instance != null ? CustomerManager.Instance.DebugSummary() + "\n" : "") +
+            (StoreHereReport() is string report ? report + "\n" : "") +
             status;
+    }
+
+    // Host: what customers made of the store the local player is standing in.
+    private string StoreHereReport()
+    {
+        var customers = CustomerManager.Instance;
+        var player = NetworkManager.Singleton != null ? NetworkManager.Singleton.LocalClient?.PlayerObject : null;
+        if (customers == null || player == null || MallManager.Instance == null) return null;
+        return customers.StoreReport(MallManager.Instance.GetPlotAt(player.transform.position));
     }
 
     private void BuildOverlay()
