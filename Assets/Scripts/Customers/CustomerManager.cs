@@ -51,9 +51,17 @@ public class CustomerManager : NetworkBehaviour
     [Tooltip("Walking customers steer around other customers and players within this distance (meters), " +
              "keeping to the right to pass.")]
     [SerializeField] private float avoidRange = 1.1f;
+    [Tooltip("Someone leaving is out of the mall once this close to the exit (meters), crowd or not.")]
+    [SerializeField] private float exitReach = 1.5f;
     [Tooltip("Customers keep to their own lane, up to this far either side of the shortest path (meters), " +
              "so a hallway fills out instead of everyone walking one line.")]
     [SerializeField] private float laneSpread = 0.7f;
+    [Tooltip("How much customers keep to the right of the path (0 = either side, 1 = always right), so people " +
+             "going opposite ways down a hallway or round a corner use different sides instead of meeting head on.")]
+    [Range(0f, 1f)] [SerializeField] private float keepRight = 0.6f;
+    [Tooltip("At a corner of a wall, the path swings this far wide of it (meters) instead of hugging the corner, " +
+             "and nobody cuts a corner unless they'd clear it by this much.")]
+    [SerializeField] private float cornerClearance = 0.5f;
     [Tooltip("Chance a wandering customer's next stop is just a spot in the hallways rather than a store.")]
     [Range(0f, 1f)] [SerializeField] private float roamChance = 0.35f;
 
@@ -666,7 +674,7 @@ public class CustomerManager : NetworkBehaviour
             wants = Random.Range(personality.wantItems.x, personality.wantItems.y + 1),
             nextThink = Time.time,
             cameFrom = hit.position,
-            lane = Random.Range(-laneSpread, laneSpread),
+            lane = Random.Range(Mathf.Lerp(-laneSpread, 0f, keepRight), laneSpread),
         };
         c.thief = Random.value < personality.shopliftChance * eventShoplifting;
         customers.Add(c);
@@ -760,6 +768,8 @@ public class CustomerManager : NetworkBehaviour
         // Close to the end, people in the way matter less (someone may be standing near their spot).
         float toEnd = FlatDistance(c.pos, c.destination);
         float avoidWeight = Mathf.Clamp01(toEnd - 0.3f);
+        if (c.mode == Mode.Exiting && toEnd < exitReach) { Arrive(c); return; } // out the door
+        if (CustomerSpawnPoint.InAnyDoorway(c.pos)) avoidWeight = 0f; // coming and going: straight through
         Vector3 vel = dir * c.speed + Avoidance(c, dir) * (c.speed * avoidWeight);
         vel = Vector3.ClampMagnitude(vel, c.speed * 1.15f);
         if (vel.magnitude * dt > left && Vector3.Dot(vel, dir) > 0.5f * vel.magnitude)
@@ -813,14 +823,30 @@ public class CustomerManager : NetworkBehaviour
         c.laneCorner = c.corner;
         Vector3 corner = c.corners[c.corner];
         c.laneTarget = corner;
-        if (c.corner == c.corners.Count - 1 || Mathf.Abs(c.lane) < 0.05f) return corner;
+        if (c.corner == c.corners.Count - 1) return corner;
 
         Vector3 from = c.corner > 0 ? c.corners[c.corner - 1] : c.pos;
         Vector3 seg = corner - from;
         seg.y = 0f;
         if (seg.sqrMagnitude < 1e-4f) return corner;
         seg.Normalize();
-        Vector3 offset = corner + new Vector3(seg.z, 0f, -seg.x) * c.lane;
+
+        // A bend in the path is a wall's corner on its inside: swing wide of it (out of the turn), and take
+        // their lane across the bend rather than across the way in.
+        Vector3 side = new Vector3(seg.z, 0f, -seg.x);
+        Vector3 wide = Vector3.zero;
+        Vector3 after = c.corners[c.corner + 1] - corner;
+        after.y = 0f;
+        if (after.sqrMagnitude > 1e-4f)
+        {
+            after.Normalize();
+            Vector3 outward = seg - after; // away from the inside of the turn
+            if (outward.sqrMagnitude > 0.01f) wide = outward.normalized * cornerClearance;
+            Vector3 mid = seg + after;
+            if (mid.sqrMagnitude > 1e-4f) { mid.Normalize(); side = new Vector3(mid.z, 0f, -mid.x); }
+        }
+        Vector3 offset = corner + wide + side * c.lane;
+        if ((offset - corner).sqrMagnitude < 0.0025f) return corner;
         c.laneTarget = NavMesh.Raycast(corner, offset, out var hit, NavMesh.AllAreas)
             ? Vector3.Lerp(corner, hit.position, 0.7f) // not right up against the edge
             : offset;
@@ -831,7 +857,14 @@ public class CustomerManager : NetworkBehaviour
     private bool CanSeeNext(Customer c)
     {
         Vector3 nextCorner = c.corners[c.corner + 1];
-        return !NavMesh.Raycast(c.pos, nextCorner, out _, NavMesh.AllAreas);
+        if (NavMesh.Raycast(c.pos, nextCorner, out _, NavMesh.AllAreas)) return false;
+        // Clear by a margin on both sides too, so they don't cut so tight they scrape (and wedge on) the corner.
+        Vector3 d = nextCorner - c.pos;
+        d.y = 0f;
+        if (cornerClearance <= 0f || d.sqrMagnitude < 1e-4f) return true;
+        Vector3 side = new Vector3(d.z, 0f, -d.x).normalized * cornerClearance;
+        return !NavMesh.Raycast(c.pos + side, nextCorner + side, out _, NavMesh.AllAreas) &&
+               !NavMesh.Raycast(c.pos - side, nextCorner - side, out _, NavMesh.AllAreas);
     }
 
     private static float RemainingAfter(Customer c)
