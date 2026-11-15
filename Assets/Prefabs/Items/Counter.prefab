@@ -2588,6 +2588,37 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CheckoutClickable
   action: 4
   value: 1000
+--- !u!1 &3877496124249510650
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 685674062407163187}
+  m_Layer: 3
+  m_Name: queue
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &685674062407163187
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3877496124249510650}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 1.8, y: 1.61, z: -1.01}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2444562105724714166}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &4015883585383061273
 GameObject:
   m_ObjectHideFlags: 0
@@ -3799,6 +3830,7 @@ Transform:
   - {fileID: 3376943940989813025}
   - {fileID: 7456758684618003924}
   - {fileID: 8963076114344789846}
+  - {fileID: 685674062407163187}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &9029950602112234995
@@ -3851,6 +3883,7 @@ MonoBehaviour:
   screenLines: 4
   customerSpot: {fileID: 4208581158347833300}
   countingSpot: {fileID: 126744793030705540}
+  queueStart: {fileID: 685674062407163187}
   changeSpot: {fileID: 3376943940989813025}
   drawerMotion: {fileID: 4152219948642757432}
   moneyPrefabs: []
