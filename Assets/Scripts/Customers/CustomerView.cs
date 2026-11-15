@@ -53,6 +53,54 @@ public class CustomerView : MonoBehaviour
         return view;
     }
 
+    // The bubble over their head (made the first time it's needed).
+    private Transform bubble;
+    private TMPro.TextMeshPro bubbleText;
+    private SpriteRenderer bubbleIcon;
+    private float bubbleUntil, bubbleFor;
+    private Color bubbleColor;
+
+    /// <summary>Show a reaction over their head for a few seconds (an icon if given, else the text).</summary>
+    public void ShowReaction(string text, Color color, Sprite icon, float seconds)
+    {
+        if (bubble == null)
+        {
+            bubble = new GameObject("Reaction").transform;
+            bubble.SetParent(transform, false);
+            bubble.localPosition = Vector3.up * (2.15f - lift);
+            bubbleText = bubble.gameObject.AddComponent<TMPro.TextMeshPro>();
+            bubbleText.alignment = TMPro.TextAlignmentOptions.Center;
+            bubbleText.fontSize = 2.2f;
+            bubbleText.outlineWidth = 0.2f;
+            bubbleText.rectTransform.sizeDelta = new Vector2(4f, 1f);
+            var iconGo = new GameObject("Icon");
+            iconGo.transform.SetParent(bubble, false);
+            bubbleIcon = iconGo.AddComponent<SpriteRenderer>();
+            iconGo.transform.localScale = Vector3.one * 0.5f;
+        }
+        bubble.gameObject.SetActive(true);
+        bubbleText.text = icon == null ? text ?? "" : "";
+        bubbleIcon.sprite = icon;
+        bubbleColor = color;
+        bubbleFor = Mathf.Max(0.1f, seconds);
+        bubbleUntil = Time.time + bubbleFor;
+    }
+
+    private void UpdateBubble()
+    {
+        if (bubble == null || !bubble.gameObject.activeSelf) return;
+        float left = bubbleUntil - Time.time;
+        if (left <= 0f) { bubble.gameObject.SetActive(false); return; }
+        var cam = Camera.main;
+        if (cam != null) bubble.rotation = Quaternion.LookRotation(bubble.position - cam.transform.position); // face the camera
+        float rise = 1f - left / bubbleFor;
+        bubble.localPosition = Vector3.up * (2.15f - lift + rise * 0.3f);
+        var c = bubbleColor;
+        c.a = Mathf.Clamp01(left / 0.5f); // fade out at the end
+        bubbleText.color = c;
+        bubbleIcon.color = new Color(1f, 1f, 1f, c.a);
+    }
+
     /// <summary>Where the customer is now (the view eases there).</summary>
     public void SetTarget(Vector3 position, float yaw, bool snap = false)
     {
@@ -63,6 +111,7 @@ public class CustomerView : MonoBehaviour
 
     private void Update()
     {
+        UpdateBubble();
         Vector3 goal = target + Vector3.up * lift;
         Vector3 before = transform.position;
         Vector3 now = (goal - before).sqrMagnitude > 9f
