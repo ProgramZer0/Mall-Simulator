@@ -987,12 +987,19 @@ public class StorePlot : NetworkBehaviour
 
     private bool doorsApplied;
 
-    /// <summary>The bounds of every door of this store (customers come in through them).</summary>
+    /// <summary>
+    /// The bounds of every way into this store that customers can walk through: its doors, and any
+    /// doorway players put in its walls (with or without a door the store opens and shuts).
+    /// </summary>
     public void GetDoorBounds(List<Bounds> into)
     {
         into.Clear();
+        var seen = new HashSet<GameObject>();
         foreach (var d in AllDoors())
-            if (d != null) into.Add(WallModule.GeometryBounds(d)); // (a plain door is hidden while open: still its doorway)
+            if (d != null && seen.Add(d)) into.Add(WallModule.GeometryBounds(d)); // (a plain door is hidden while open: still its doorway)
+        foreach (var o in WallOpening.All)
+            if (o != null && o.IsDoor && !o.IsEditCopy && CuttableWall.HostOf(o)?.Plot == this && seen.Add(o.gameObject))
+                into.Add(WallModule.GeometryBounds(o.gameObject));
     }
 
     /// <summary>A door was added to or taken out of this store: open or shut it to match the store.</summary>
