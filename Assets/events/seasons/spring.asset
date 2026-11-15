@@ -70,3 +70,7 @@ MonoBehaviour:
     - stat: 5
       mode: 0
       amount: -30
+  customerArrivalsPercent: -30
+  maxCustomersPercent: -20
+  customerBudgetPercent: 0
+  personalityShifts: []

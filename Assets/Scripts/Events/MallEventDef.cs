@@ -184,4 +184,29 @@ public class MallEventDef : ScriptableObject
 
     [Header("What it does")]
     public List<Rule> rules = new();
+
+    /// <summary>A kind of customer made more or less common while the event runs.</summary>
+    [Serializable]
+    public class PersonalityShift
+    {
+        public CustomerPersonality personality;
+        [Tooltip("Percent: 100 = twice as common, -50 = half as common, -100 = none at all.")]
+        public float percent = 50f;
+    }
+
+    [Header("Customers (optional)")]
+    [Tooltip("Percent change to how many new customers come in per minute: 60 = 60% more, -40 = 40% fewer. " +
+             "Several events together multiply (a season and a sale stack).")]
+    public float customerArrivalsPercent;
+    [Tooltip("Percent change to the most customers in the mall at once.")]
+    public float maxCustomersPercent;
+    [Tooltip("Percent change to how much money customers bring.")]
+    public float customerBudgetPercent;
+    [Tooltip("Make some kinds of customer more or less common while this runs.")]
+    public List<PersonalityShift> personalityShifts = new();
+
+    /// <summary>Does this event change anything about customers?</summary>
+    public bool AffectsCustomers =>
+        customerArrivalsPercent != 0f || maxCustomersPercent != 0f || customerBudgetPercent != 0f ||
+        (personalityShifts != null && personalityShifts.Count > 0);
 }
