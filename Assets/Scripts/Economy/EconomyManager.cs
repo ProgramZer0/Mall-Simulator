@@ -278,6 +278,20 @@ public class EconomyManager : NetworkBehaviour
         if (dollars > 0) ServerAddMoney(teamId, dollars);
     }
 
+    /// <summary>
+    /// Server: take money in cents whether or not the team has it all (e.g. too much change handed back);
+    /// what they don't have is just gone, they never go below zero.
+    /// </summary>
+    public void ServerTakeCents(ulong teamId, int cents)
+    {
+        if (!IsServer || cents <= 0) return;
+        centsLeftOver.TryGetValue(teamId, out int left);
+        long have = (long)GetTeamMoney(teamId) * 100 + left;
+        long after = Math.Max(0L, have - cents);
+        centsLeftOver[teamId] = (int)(after % 100);
+        ServerAddMoney(teamId, (int)(after / 100) - GetTeamMoney(teamId));
+    }
+
     /// <summary>Server: take money if the team has enough. Free (0 or less) always succeeds.</summary>
     public bool ServerTrySpend(ulong teamId, int amount)
     {

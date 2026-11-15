@@ -167,6 +167,7 @@ public class CheckoutCounter : NetworkBehaviour
     // Server
     private readonly List<BeltItem> waiting = new();
     private int nextKey = 1, nextCustomer = 1;
+    private readonly Dictionary<int, bool> paysCash = new(); // server: customer number → pays cash (decided on arrival)
     private float nextFill;
 
     // Local
@@ -335,13 +336,15 @@ public class CheckoutCounter : NetworkBehaviour
 
     /// <summary>
     /// Server: a customer brings these to the counter. They go on the belt as room allows (too-big ones
-    /// as tags), after anyone already waiting. Returns the customer number.
+    /// as tags), after anyone already waiting. Cash Chance: how likely they pay cash (else card).
+    /// Returns the customer number.
     /// </summary>
-    public int ServerAddCustomer(IList<Purchase> purchases)
+    public int ServerAddCustomer(IList<Purchase> purchases, float cashChance = 0.5f)
     {
         if (!IsServer || purchases == null || purchases.Count == 0) return 0;
         if (IsForSale) return 0; // a counter up for sale isn't open to customers
         int customer = nextCustomer++;
+        paysCash[customer] = UnityEngine.Random.value < cashChance;
         AddToBelt(purchases, customer);
         return customer;
     }
@@ -552,6 +555,8 @@ public class CheckoutCounter : NetworkBehaviour
                 if (!cash) return;
                 if (s.moneyTaken == 0) { MessageRpc("Take the cash first"); return; }
                 if (s.changeCents < s.ChangeDueCents) { MessageRpc("Not enough change"); return; }
+                // The change comes out of the store's money: too much and they keep less of the cash, or
+                // (more back than was handed over) lose the difference.
                 int kept = s.tenderedCents - s.changeCents;
                 Complete(kept, s.changeCents > s.ChangeDueCents ? $"Sold, but {FormatAmount(s.changeCents - s.ChangeDueCents)} too much change" : "Sold");
                 return;
@@ -596,7 +601,9 @@ public class CheckoutCounter : NetworkBehaviour
             if (!HasMoreFor(s.customer))
             {
                 s.phase = Phase.AwaitingPayment;
-                s.method = UnityEngine.Random.value < 0.5f ? PayMethod.Cash : PayMethod.Card;
+                bool paysWithCash = paysCash.TryGetValue(s.customer, out bool withCash) ? withCash : UnityEngine.Random.value < 0.5f;
+                paysCash.Remove(s.customer);
+                s.method = paysWithCash ? PayMethod.Cash : PayMethod.Card;
                 s.tenderedCents = s.method == PayMethod.Cash ? CashHandedOver(s.totalCents) : 0;
             }
             state.Value = s;
@@ -648,14 +655,18 @@ public class CheckoutCounter : NetworkBehaviour
         int paidBy = state.Value.customer;
         var plot = Plot;
         var econ = EconomyManager.Instance;
-        if (plot != null && plot.HasOwner && econ != null) econ.ServerAddCents(plot.OwnerTeamId, receivedCents);
+        if (plot != null && plot.HasOwner && econ != null)
+        {
+            if (receivedCents >= 0) econ.ServerAddCents(plot.OwnerTeamId, receivedCents);
+            else econ.ServerTakeCents(plot.OwnerTeamId, -receivedCents); // gave back more than they were paid
+        }
         if (plot != null && ProgressionManager.Instance != null) ProgressionManager.Instance.ServerRecordSale(plot, sale, receivedCents);
         sale.Clear();
         scanned.Clear();
         lines.Clear();
         change.Clear();
         state.Value = new State { phase = Phase.Scanning, customer = FirstCustomer() };
-        MessageRpc($"{text}: {FormatAmount(receivedCents)}");
+        MessageRpc(receivedCents >= 0 ? $"{text}: {FormatAmount(receivedCents)}" : $"{text}: lost {FormatAmount(-receivedCents)}");
         ServerFill();
         if (paidBy != 0) ServerCustomerPaid?.Invoke(this, paidBy);
     }
@@ -668,6 +679,7 @@ public class CheckoutCounter : NetworkBehaviour
     public void ServerCustomerWalkedOff(int customer)
     {
         if (!IsServer || customer <= 0) return;
+        paysCash.Remove(customer);
         for (int i = 0; i < items.Count; i++)
             if (items[i].customer == customer) { var it = items[i]; it.customer = LeftBehind; items[i] = it; }
         for (int i = 0; i < waiting.Count; i++)

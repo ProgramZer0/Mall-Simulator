@@ -1585,7 +1585,7 @@ public class CustomerManager : NetworkBehaviour
                 else purchases.Add(new CheckoutCounter.Purchase { itemId = t.itemId, priceCents = t.priceCents, units = 1 });
             }
             if (purchases.Count == 0) { LeaveStore(c, c.satisfaction); return; }
-            c.ticket = counter.ServerAddCustomer(purchases);
+            c.ticket = counter.ServerAddCustomer(purchases, c.personality != null ? c.personality.cashChance : 0.5f);
             if (c.ticket == 0) { LeaveStore(c, -0.4f); return; }
             c.itemsAtCounter = purchases.Count;
             c.frontSince = Time.time;
