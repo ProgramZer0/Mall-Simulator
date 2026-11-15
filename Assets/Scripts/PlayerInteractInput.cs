@@ -164,8 +164,7 @@ public class PlayerInteractInput : NetworkBehaviour
         pushedCart = CartNet.GetPushedBy(OwnerClientId);
         FindPickupTarget();
         FindBuyTarget();
-        if (Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit,
-                interactRange, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+        if (LookRaycast(out RaycastHit hit))
         {
             // A cart's body (not something riding on it), with empty hands.
             var cart = hit.collider.GetComponentInParent<CartNet>();
@@ -205,6 +204,27 @@ public class PlayerInteractInput : NetworkBehaviour
     }
 
     private static readonly RaycastHit[] partHits = new RaycastHit[16];
+    private static readonly RaycastHit[] lookHits = new RaycastHit[16];
+
+    // What the crosshair is on, looking through text: a label or screen text with a collider on it
+    // (e.g. the card reader's total) mustn't stop the button or part behind it being clicked.
+    private bool LookRaycast(out RaycastHit hit)
+    {
+        hit = default;
+        int n = Physics.RaycastNonAlloc(cam.transform.position, cam.transform.forward, lookHits, interactRange,
+            Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        float best = float.MaxValue;
+        bool found = false;
+        for (int i = 0; i < n; i++)
+        {
+            var h = lookHits[i];
+            if (h.distance >= best || h.collider.TryGetComponent<TMPro.TMP_Text>(out _)) continue;
+            hit = h;
+            best = h.distance;
+            found = true;
+        }
+        return found;
+    }
 
     // The counter's body hit first: a clickable part of it just behind (the card reader, a key...) inside
     // the counter's own collider still counts, so overlapping colliders don't make parts unclickable.

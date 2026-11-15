@@ -753,17 +753,19 @@ public class CheckoutCounter : NetworkBehaviour
             Lay(new List<GameObject> { MakeCard() }, where, clickable ? CheckoutClickable.Action.CustomerMoney : null);
         else
         {
-            var bills = Breakdown(s.tenderedCents);
+            var bills = Kinds(Breakdown(s.tenderedCents));
             var models = new List<GameObject>();
             foreach (int c in bills) models.Add(MakeBillOrCoin(c));
             Lay(models, where, clickable ? CheckoutClickable.Action.CustomerMoney : CheckoutClickable.Action.TakenCash, bills);
         }
 
-        // The change: exactly the bills and coins taken from the drawer, biggest first; click one to put it back.
+        // The change: one of each kind of bill or coin taken from the drawer, biggest first (looking at one
+        // says how many); click one to put one back.
         if (s.method == PayMethod.Cash && change.Count > 0)
         {
             var given = new List<int>();
             foreach (int c in change) given.Add(c);
+            given = Kinds(given);
             given.Sort((a, b) => b.CompareTo(a));
             var models = new List<GameObject>();
             foreach (int c in given) models.Add(MakeBillOrCoin(c));
@@ -879,6 +881,15 @@ public class CheckoutCounter : NetworkBehaviour
                 list.Add(d);
             }
         return list;
+    }
+
+    // Each kind of bill or coin once (in the order first seen): one model stands for the whole pile, and
+    // looking at it says how many.
+    private static List<int> Kinds(List<int> values)
+    {
+        var kinds = new List<int>();
+        foreach (int v in values) if (!kinds.Contains(v)) kinds.Add(v);
+        return kinds;
     }
 
     // How many of one bill or coin an amount is handed over in.
