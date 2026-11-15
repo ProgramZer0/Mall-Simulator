@@ -15,7 +15,7 @@ public class EditLocalItem : MonoBehaviour
     private Rigidbody rb;
     private bool dragging;
     private StockContainer stockSource; // the prefab's, if this item is a shelf
-    private List<GameObject> stockModels;
+    private StockContainer.EditStock stock;
 
     /// <summary>Position of this item in the host's edit session list (-1: bought during this session).</summary>
     public int Index { get; private set; }
@@ -91,8 +91,17 @@ public class EditLocalItem : MonoBehaviour
     public void ShowStock(int[] itemIds, int[] counts, int[] orients, int[] seeds)
     {
         if (stockSource == null) return;
-        if (stockModels != null) foreach (var m in stockModels) if (m != null) Destroy(m);
-        stockModels = stockSource.BuildStockOnCopy(transform, itemIds, counts, orients, seeds);
+        stock?.Clear();
+        stock = stockSource.BuildStockOnCopy(transform, itemIds, counts, orients, seeds);
+        transform.hasChanged = false;
+    }
+
+    // The stock is drawn without objects of its own, so it's moved along when the copy moves.
+    private void LateUpdate()
+    {
+        if (stock == null || !transform.hasChanged) return;
+        transform.hasChanged = false;
+        stock.Follow(transform);
     }
 
     public void SetPose(Vector3 position, Quaternion rotation)
@@ -146,6 +155,8 @@ public class EditLocalItem : MonoBehaviour
 
     private void OnDestroy()
     {
+        stock?.Clear();
+        stock = null;
         if (fadeMaterials == null) return;
         foreach (var set in fadeMaterials)
             foreach (var m in set)

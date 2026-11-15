@@ -1775,9 +1775,10 @@ public class StorePlot : NetworkBehaviour
 
     /* ========================= EDIT SESSIONS (SERVER) ========================= */
 
-    /// <summary>One item taken out of the world for an edit session.</summary>
+    /// <summary>One item in an edit session (it stays in the world; the editor works on a copy).</summary>
     public struct EditEntry
     {
+        public ItemPickupNet live; // the real item (stays spawned during the session)
         public int itemId;
         public Vector3 position;
         public Quaternion rotation;
@@ -1789,6 +1790,10 @@ public class StorePlot : NetworkBehaviour
     }
 
     private readonly List<EditEntry> editSession = new();
+    private readonly HashSet<GameObject> editSessionObjects = new();
+
+    /// <summary>Server: is this one of the real items in the current edit session (shown to the editor as a copy)?</summary>
+    public bool ServerIsInEditSession(GameObject go) => go != null && editSessionObjects.Contains(go);
 
     /// <summary>Server: the items in the current edit session, in the order sent to the editor.</summary>
     public IReadOnlyList<EditEntry> ServerEditSession => editSession;
@@ -1799,10 +1804,11 @@ public class StorePlot : NetworkBehaviour
     /// <summary>
     /// Server only. Starts (clientId) or ends (NoOwner) edit mode.
     ///
-    /// Starting records every item in the store and despawns it; the editor works on local
-    /// copies, so nothing is sent over the network while they drag things around. Ending this
-    /// way (disconnect, store released) respawns everything where it was. A normal finish goes
-    /// through ServerEndEdit with the editor's final positions instead.
+    /// Starting records every item in the store. The items stay where they are (the store is closed to
+    /// other players while it's edited); the editor hides them on their own screen and works on local
+    /// copies, so nothing is sent over the network while they drag things around. Ending this way
+    /// (disconnect, store released) leaves everything where it was. A normal finish goes through
+    /// ServerEndEdit with the editor's final positions instead, which only touches what changed.
     /// Use MallManager.ServerTryStartEdit / ServerStopEdit rather than calling this directly.
     /// </summary>
     public void ServerSetEditor(ulong clientId)
@@ -1813,6 +1819,7 @@ public class StorePlot : NetworkBehaviour
         if (clientId == NoOwner) return;
 
         editSession.Clear();
+        editSessionObjects.Clear();
         ServerEditSessionId++;
 
         var catalog = ItemCatalog.Instance;
@@ -1835,6 +1842,7 @@ public class StorePlot : NetworkBehaviour
 
             editSession.Add(new EditEntry
             {
+                live = item,
                 itemId = item.ItemId,
                 position = item.transform.position,
                 rotation = item.transform.rotation,
@@ -1843,7 +1851,7 @@ public class StorePlot : NetworkBehaviour
                 price = item.TryGetComponent<Sellable>(out var sellable) ? sellable.Price : 0,
                 paint = item.Paint,
             });
-            item.NetworkObject.Despawn(true);
+            editSessionObjects.Add(item.gameObject);
         }
 
         editorClientId.Value = clientId;
@@ -1863,13 +1871,16 @@ public class StorePlot : NetworkBehaviour
     private readonly List<(int itemId, uint paint, Vector3 near, bool exact)> boxesOnSave = new();
 
     /// <summary>
-    /// Server only. Ends the edit session and respawns its items. Each item uses the editor's
-    /// position when one was given and it passes the checks (inside this store, isValid);
-    /// otherwise it goes back to where it was before editing.
+    /// Server only. Ends the edit session. Only what changed is touched: an item the editor moved is
+    /// replaced by a new one at its new place (when that passes the checks: inside this store, isValid;
+    /// otherwise it stays where it was), and everything else is left alone, so saving a big store
+    /// where little moved costs little (nothing is sent for the untouched items).
     ///
-    /// Windows and doors (WallOpening) bought during the session come in Added and are paid for here,
-    /// by Team. They're checked against this store's walls instead of its space. Items taken out
-    /// during the session (ServerRemoveEditItem) aren't put back.
+    /// The checks are against everything except this session's items: the editor already kept those
+    /// clear of each other. Windows and doors are checked against this store's walls instead of its
+    /// space, and any whose wall is gone go back in a box. Windows and doors bought during the session
+    /// come in Added and are paid for here, by Team. Items taken out during the session
+    /// (ServerRemoveEditItem) are already gone.
     /// </summary>
     public void ServerEndEdit(Vector3[] positions, Quaternion[] rotations,
                               Func<ItemDef, Vector3, Quaternion, bool> isValid, bool log = false,
@@ -1879,13 +1890,21 @@ public class StorePlot : NetworkBehaviour
 
         int moved = 0, unchanged = 0, rejected = 0, noPose = 0, sold = 0, bought = 0, notBought = 0;
         var catalog = ItemCatalog.Instance;
-        var econ = EconomyManager.Instance;
+
+        // Physics only needs to catch up when something was spawned or moved since the last check.
+        bool needSync = true;
+        void Sync()
+        {
+            if (!needSync) return;
+            Physics.SyncTransforms();
+            needSync = false;
+        }
 
         bool Allowed(ItemDef def, Vector3 p, Quaternion r)
         {
             if (WallOpening.IsOpening(def))
             {
-                Physics.SyncTransforms();
+                Sync();
                 if (!CanPlaceOpening(def, p, r, out string why))
                 {
                     if (log) Debug.LogWarning($"[StorePlot] '{def.displayName}' can't go at {p}: {why}.", this);
@@ -1898,61 +1917,85 @@ public class StorePlot : NetworkBehaviour
                                           $"(to {p}); it goes back to where it was.", this);
                 return false;
             }
-            Physics.SyncTransforms(); // see the items respawned earlier in this loop
+            Sync();
             return isValid == null || isValid(def, p, r);
         }
 
+        // 1. Sort the session: what the editor moved, and the windows and doors staying put (their wall
+        //    may have changed).
+        var moves = new List<(int index, ItemDef def, Vector3 pos, Quaternion rot)>();
+        var openingsStaying = new List<(int index, ItemDef def)>();
         for (int i = 0; i < editSession.Count; i++)
         {
             var entry = editSession[i];
             if (catalog == null || !catalog.TryGet(entry.itemId, out var def) || def.worldNetworkPrefab == null)
                 continue;
+            if (entry.removed) { sold++; continue; } // already gone (and refunded)
 
-            // Taken out during the session (already refunded).
-            if (entry.removed)
+            bool hasPose = positions != null && rotations != null && i < positions.Length && i < rotations.Length &&
+                           IsFinite(positions[i]) && IsFinite(rotations[i]);
+            Vector3 p = hasPose ? positions[i] : entry.position;
+            Quaternion r = hasPose ? rotations[i].normalized : entry.rotation;
+            bool samePlace = (p - entry.position).sqrMagnitude < 1e-6f && Quaternion.Angle(r, entry.rotation) < 0.1f;
+
+            if (!hasPose) noPose++;
+            if (hasPose && !samePlace) { moves.Add((i, def, p, r)); continue; }
+            if (hasPose) unchanged++;
+            if (WallOpening.IsOpening(def)) openingsStaying.Add((i, def));
+            else if (IsGone(entry)) SpawnFromEntry(def, entry, entry.position, entry.rotation); // lost somehow: put back
+        }
+
+        // 2. Check against everything but this session's items (switched off for the checks).
+        var offColliders = new List<Collider>();
+        var offOpenings = new List<WallOpening>();
+        foreach (var entry in editSession)
+        {
+            if (entry.removed || IsGone(entry)) continue;
+            foreach (var c in entry.live.GetComponentsInChildren<Collider>())
+                if (c.enabled) { c.enabled = false; offColliders.Add(c); }
+            foreach (var o in entry.live.GetComponentsInChildren<WallOpening>())
+                if (o.enabled) { o.enabled = false; offOpenings.Add(o); }
+        }
+
+        var accepted = new List<(int index, ItemDef def, Vector3 pos, Quaternion rot)>();
+        foreach (var m in moves)
+        {
+            if (Allowed(m.def, m.pos, m.rot)) { accepted.Add(m); moved++; continue; }
+            rejected++; // stays where it was
+            var entry = editSession[m.index];
+            if (WallOpening.IsOpening(m.def)) openingsStaying.Add((m.index, m.def));
+            else if (IsGone(entry)) SpawnFromEntry(m.def, entry, entry.position, entry.rotation);
+        }
+
+        // A window or door whose wall is gone (and nowhere valid to go) is sold back, not left floating.
+        var boxed = new List<int>();
+        foreach (var (index, def) in openingsStaying)
+        {
+            var entry = editSession[index];
+            Sync();
+            if (CanPlaceOpening(def, entry.position, entry.rotation, out string why))
             {
-                sold++;
+                if (IsGone(entry)) SpawnFromEntry(def, entry, entry.position, entry.rotation);
                 continue;
             }
-
-            Vector3 pos = entry.position;
-            Quaternion rot = entry.rotation;
-
-            if (positions != null && rotations != null && i < positions.Length && i < rotations.Length)
-            {
-                Vector3 p = positions[i];
-                Quaternion r = rotations[i];
-                if (IsFinite(p) && IsFinite(r))
-                {
-                    r = r.normalized;
-                    bool samePlace = (p - pos).sqrMagnitude < 1e-6f && Quaternion.Angle(r, rot) < 0.1f;
-                    if (Allowed(def, p, r))
-                    {
-                        if (samePlace) unchanged++; else moved++;
-                        pos = p;
-                        rot = r;
-                    }
-                    else rejected++;
-                }
-                else noPose++;
-            }
-            else noPose++;
-
-            // A window or door whose wall is gone (and nowhere valid to go) is sold back, not left floating.
-            if (WallOpening.IsOpening(def))
-            {
-                Physics.SyncTransforms();
-                if (!CanPlaceOpening(def, pos, rot, out string why))
-                {
-                    if (log) Debug.LogWarning($"[StorePlot] '{def.displayName}' has no wall to sit in ({why}); back in its box.", this);
-                    boxesOnSave.Add((entry.itemId, entry.paint, pos, false));
-                    sold++;
-                    continue;
-                }
-            }
-
-            SpawnEditItem(def, pos, rot, entry.units, entry.price, entry.stock, entry.paint);
+            if (log) Debug.LogWarning($"[StorePlot] '{def.displayName}' has no wall to sit in ({why}); back in its box.", this);
+            boxesOnSave.Add((entry.itemId, entry.paint, entry.position, false));
+            boxed.Add(index);
+            sold++;
         }
+
+        foreach (var c in offColliders) if (c != null) c.enabled = true;
+        foreach (var o in offOpenings) if (o != null) o.enabled = true;
+
+        // 3. Apply: moved items are replaced at their new place, boxed openings go.
+        foreach (int index in boxed) DespawnLive(editSession[index].live);
+        foreach (var m in accepted)
+        {
+            var entry = editSession[m.index];
+            SpawnFromEntry(m.def, entry, m.pos, m.rot);
+            DespawnLive(entry.live);
+        }
+        needSync = true;
 
         // Windows and doors taken out of their boxes in edit mode: each box is used up.
         if (added != null)
@@ -1981,6 +2024,7 @@ public class StorePlot : NetworkBehaviour
                 uint paint = box.ContainedPaint;
                 box.NetworkObject.Despawn(true);
                 SpawnEditItem(def, n.position, r, 0, 0, null, paint);
+                needSync = true;
                 bought++;
             }
         }
@@ -1995,7 +2039,39 @@ public class StorePlot : NetworkBehaviour
                       $"{sold} removed, {bought} windows/doors put in, {notBought} not put in.", this);
 
         editSession.Clear();
+        editSessionObjects.Clear();
         editorClientId.Value = NoOwner;
+    }
+
+    // The real item went away during the session (shouldn't happen; then it's spawned again from what
+    // was recorded at the start).
+    private static bool IsGone(EditEntry entry) => entry.live == null || !entry.live.IsSpawned;
+
+    // A new item like the session's one (taking its current stock, price and paint while it's still
+    // there, else what was recorded), at a pose.
+    private void SpawnFromEntry(ItemDef def, EditEntry entry, Vector3 pos, Quaternion rot)
+    {
+        var live = entry.live;
+        if (IsGone(entry))
+        {
+            SpawnEditItem(def, pos, rot, entry.units, entry.price, entry.stock, entry.paint);
+            return;
+        }
+        SpawnEditItem(def, pos, rot,
+                      live.IsStockCrate ? live.Units : 0,
+                      live.TryGetComponent<Sellable>(out var sellable) ? sellable.Price : 0,
+                      live.TryGetComponent<StockContainer>(out var container) ? container.ServerCopyStock() : null,
+                      live.Paint);
+    }
+
+    // Despawn a session item, out of physics and its wall straight away (it's only destroyed at the end
+    // of the frame, and later checks this frame mustn't see it).
+    private static void DespawnLive(ItemPickupNet live)
+    {
+        if (live == null || !live.IsSpawned) return;
+        foreach (var c in live.GetComponentsInChildren<Collider>()) c.enabled = false;
+        foreach (var o in live.GetComponentsInChildren<WallOpening>()) o.enabled = false;
+        live.NetworkObject.Despawn(true);
     }
 
     /// <summary>Can this item be taken out (sold back) in edit mode? Windows, doors and wall items.</summary>
@@ -2022,6 +2098,7 @@ public class StorePlot : NetworkBehaviour
 
         entry.removed = true;
         editSession[index] = entry;
+        DespawnLive(entry.live); // gone for everyone straight away
 
         // A window or door goes back in its box on the floor near where it was, straight away, so it can
         // be put in again in this session (the store may need it: its only front door).
