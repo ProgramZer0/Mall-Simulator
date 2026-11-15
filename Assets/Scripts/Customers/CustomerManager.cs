@@ -364,6 +364,7 @@ public class CustomerManager : NetworkBehaviour
     // straight for it and always go in. Says what happened either way.
     private void SpawnTestCustomer(Vector3 at)
     {
+        RefreshEntrances(); // up to date for the message
         CustomerSpawnPoint best = null;
         float bestD = float.MaxValue;
         foreach (var sp in CustomerSpawnPoint.All)
@@ -385,12 +386,12 @@ public class CustomerManager : NetworkBehaviour
             Debug.LogWarning($"[Customers] Test customer not spawned at '{best.name}': {why}", best);
             return;
         }
-        string where = c.mode == Mode.Exiting ? "the exit (no open store with a door it can reach)"
+        string where = c.mode == Mode.Exiting ? $"the exit, no store to go to ({WhyNoStores()})"
                      : c.goalStore != null ? $"'{c.goalStore.DisplayName}'" : "nowhere";
-        string note = store == null ? ""
+        string note = store == null || c.mode == Mode.Exiting ? ""
                     : !store.IsOpen ? $" (you're in '{store.DisplayName}', but it isn't open)"
-                    : !entrances.ContainsKey(store) ? $" (you're in '{store.DisplayName}', but no way in was found: " +
-                                                      "its doors need walkable floor just inside and outside)"
+                    : !entrances.ContainsKey(store) ? $" (you're in '{store.DisplayName}', but no way in: " +
+                                                      $"{(entranceProblems.TryGetValue(store, out var why2) ? why2 : "unknown")})"
                     : "";
         Debug.Log($"[Customers] Test customer #{c.id} ({c.personality.displayName}) came in at '{best.name}', " +
                   $"heading for {where}{note}.", this);
@@ -914,32 +915,72 @@ public class CustomerManager : NetworkBehaviour
 
     private readonly List<Bounds> scratchDoors = new();
 
-    // Each open store's ways in: a spot just outside and just inside each of its doors.
+    // Why stores have no way in (for the test key's message).
+    private readonly Dictionary<StorePlot, string> entranceProblems = new();
+    private static readonly float[] DoorDepths = { 0.8f, 1.4f, 2.2f, 3.2f };
+
+    // Each open store's ways in: a spot just outside and just inside each of its doors. Tries a few
+    // depths either side of the door (store fronts vary in thickness, and a store's space may reach a
+    // little into the hallway).
     private void RefreshEntrances()
     {
         nextEntrances = Time.time + 3f;
         entrances.Clear();
+        entranceProblems.Clear();
         if (MallManager.Instance == null) return;
         foreach (var plot in MallManager.Instance.Plots)
         {
             if (plot == null || !plot.IsOpen) continue;
             plot.GetDoorBounds(scratchDoors);
-            if (scratchDoors.Count == 0) continue;
+            if (scratchDoors.Count == 0) { entranceProblems[plot] = "no doors found in its walls"; continue; }
+
             var list = new List<Entrance>();
+            string problem = null;
             Vector3 middle = plot.GetWorldBounds().center;
             foreach (var d in scratchDoors)
             {
                 Vector3 inward = middle - d.center;
                 inward.y = 0f;
                 inward = inward.sqrMagnitude > 1e-4f ? inward.normalized : Vector3.forward;
-                Vector3 foot = new(d.center.x, d.min.y, d.center.z);
-                if (!NavMesh.SamplePosition(foot - inward * 1.2f, out var outHit, 1.5f, NavMesh.AllAreas) ||
-                    !NavMesh.SamplePosition(foot + inward * 1.2f, out var inHit, 1.5f, NavMesh.AllAreas)) continue;
-                if (!plot.Contains(inHit.position + Vector3.up * 0.1f) || plot.Contains(outHit.position + Vector3.up * 0.1f)) continue;
-                list.Add(new Entrance { outside = outHit.position, inside = inHit.position });
+                Vector3 foot = new(d.center.x, d.min.y + 0.1f, d.center.z);
+
+                bool found = false;
+                bool sawInside = false, sawOutside = false;
+                foreach (float depth in DoorDepths)
+                {
+                    bool inOk = NavMesh.SamplePosition(foot + inward * depth, out var inHit, 1f, NavMesh.AllAreas) &&
+                                plot.Contains(inHit.position + Vector3.up * 0.1f);
+                    bool outOk = NavMesh.SamplePosition(foot - inward * depth, out var outHit, 1f, NavMesh.AllAreas) &&
+                                 !plot.Contains(outHit.position + Vector3.up * 0.1f);
+                    sawInside |= inOk;
+                    sawOutside |= outOk;
+                    if (!inOk || !outOk) continue;
+                    list.Add(new Entrance { outside = outHit.position, inside = inHit.position });
+                    found = true;
+                    break;
+                }
+                if (!found)
+                    problem ??= $"its door at {foot:F1} has no walkable floor {(sawInside ? "outside it (in the hallway)" : sawOutside ? "inside it (in the store's space)" : "on either side")}";
             }
             if (list.Count > 0) entrances[plot] = list;
+            else entranceProblems[plot] = problem ?? "no usable doors";
         }
+    }
+
+    // Why no customer can get into any store (for the test key's message).
+    private string WhyNoStores()
+    {
+        if (MallManager.Instance == null) return "no MallManager";
+        var parts = new List<string>();
+        bool anyOpen = false;
+        foreach (var plot in MallManager.Instance.Plots)
+        {
+            if (plot == null || !plot.IsOpen) continue;
+            anyOpen = true;
+            if (entranceProblems.TryGetValue(plot, out var why)) parts.Add($"'{plot.DisplayName}': {why}");
+        }
+        if (!anyOpen) return "no store is open";
+        return parts.Count > 0 ? string.Join("; ", parts) : "every open store was already passed";
     }
 
     /* ========================= NETWORK ========================= */
