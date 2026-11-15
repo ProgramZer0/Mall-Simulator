@@ -202,11 +202,13 @@ public class MallEventDef : ScriptableObject
     public float maxCustomersPercent;
     [Tooltip("Percent change to how much money customers bring.")]
     public float customerBudgetPercent;
+    [Tooltip("Percent change to how many customers are shoplifters.")]
+    public float shopliftingPercent;
     [Tooltip("Make some kinds of customer more or less common while this runs.")]
     public List<PersonalityShift> personalityShifts = new();
 
     /// <summary>Does this event change anything about customers?</summary>
     public bool AffectsCustomers =>
-        customerArrivalsPercent != 0f || maxCustomersPercent != 0f || customerBudgetPercent != 0f ||
+        customerArrivalsPercent != 0f || maxCustomersPercent != 0f || customerBudgetPercent != 0f || shopliftingPercent != 0f ||
         (personalityShifts != null && personalityShifts.Count > 0);
 }

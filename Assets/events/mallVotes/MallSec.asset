@@ -44,3 +44,4 @@ MonoBehaviour:
     - stat: 2
       mode: 0
       amount: 50
+  shopliftingPercent: -50
