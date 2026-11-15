@@ -225,6 +225,8 @@ public class CustomerManager : NetworkBehaviour
         if (IsServer)
         {
             NetworkManager.OnClientConnectedCallback += OnClientConnected;
+            MallEventManager.Changed += OnEventsChanged;
+            eventsDirty = true;
             foreach (var c in CheckoutCounter.All) if (c != null) c.ServerCustomerPaid += OnPaid;
             CheckoutCounter.Spawned += OnCounterSpawned;
         }
@@ -234,6 +236,7 @@ public class CustomerManager : NetworkBehaviour
     {
         if (NetworkManager != null) NetworkManager.OnClientConnectedCallback -= OnClientConnected;
         CheckoutCounter.Spawned -= OnCounterSpawned;
+        MallEventManager.Changed -= OnEventsChanged;
         foreach (var c in CheckoutCounter.All) if (c != null) c.ServerCustomerPaid -= OnPaid;
         customers.Clear();
         byId.Clear();
@@ -332,11 +335,74 @@ public class CustomerManager : NetworkBehaviour
 
     /* ========================= ARRIVING AND LEAVING ========================= */
 
+    /* ========================= EVENTS AND SEASONS ========================= */
+
+    // What the running events (seasons included) do to customers, worked out when events change.
+    private float eventArrivals = 1f, eventMax = 1f, eventBudget = 1f;
+    private readonly Dictionary<CustomerPersonality, float> eventPersonality = new();
+    private readonly List<MallEventDef> activeEvents = new();
+    private bool eventsDirty = true;
+
+    private void OnEventsChanged() => eventsDirty = true;
+
+    private void RefreshEventEffects()
+    {
+        eventsDirty = false;
+        eventArrivals = eventMax = eventBudget = 1f;
+        eventPersonality.Clear();
+        if (MallEventManager.Instance == null) return;
+        MallEventManager.Instance.GetActive(activeEvents);
+        foreach (var e in activeEvents)
+        {
+            eventArrivals *= Factor(e.customerArrivalsPercent);
+            eventMax *= Factor(e.maxCustomersPercent);
+            eventBudget *= Factor(e.customerBudgetPercent);
+            if (e.personalityShifts == null) continue;
+            foreach (var shift in e.personalityShifts)
+            {
+                if (shift == null || shift.personality == null) continue;
+                eventPersonality[shift.personality] =
+                    (eventPersonality.TryGetValue(shift.personality, out float f) ? f : 1f) * Factor(shift.percent);
+            }
+        }
+    }
+
+    private static float Factor(float percent) => Mathf.Max(0f, 1f + percent / 100f);
+
+    /// <summary>Most customers at once right now (events and seasons included).</summary>
+    public int MaxCustomersNow => Mathf.Max(0, Mathf.RoundToInt(maxCustomers * eventMax));
+
+    /// <summary>New customers per minute right now (events and seasons included).</summary>
+    public float ArrivalsPerMinuteNow => arrivalsPerMinute * eventArrivals;
+
+    // Who comes: each personality by its Spawn Weight, times what the running events do to it.
+    private CustomerPersonality PickPersonality()
+    {
+        var settings = StoreAppealSettings.Instance;
+        if (settings == null) return null;
+        float total = 0f;
+        foreach (var p in settings.personalities) if (p != null) total += WeightOf(p);
+        if (total <= 0f) return null;
+        float roll = Random.value * total;
+        foreach (var p in settings.personalities)
+        {
+            if (p == null) continue;
+            roll -= WeightOf(p);
+            if (roll <= 0f) return p;
+        }
+        return null;
+    }
+
+    private float WeightOf(CustomerPersonality p) =>
+        p.spawnWeight * (eventPersonality.TryGetValue(p, out float f) ? f : 1f);
+
     private void UpdateArrivals()
     {
-        if (customers.Count >= maxCustomers || !AnyStoreOpen()) { spawnCredit = 0f; return; }
-        spawnCredit += arrivalsPerMinute / 60f * Time.deltaTime;
-        while (spawnCredit >= 1f && customers.Count < maxCustomers)
+        if (eventsDirty) RefreshEventEffects();
+        int max = MaxCustomersNow;
+        if (customers.Count >= max || !AnyStoreOpen()) { spawnCredit = 0f; return; }
+        spawnCredit += ArrivalsPerMinuteNow / 60f * Time.deltaTime;
+        while (spawnCredit >= 1f && customers.Count < max)
         {
             spawnCredit -= 1f;
             var sp = PickSpawnPoint(null);
@@ -438,7 +504,8 @@ public class CustomerManager : NetworkBehaviour
     {
         why = null;
         var settings = StoreAppealSettings.Instance;
-        var personality = settings != null ? settings.PickRandom() : null;
+        if (eventsDirty) RefreshEventEffects();
+        var personality = settings != null ? PickPersonality() : null;
         if (personality == null)
         {
             why = "no customer personalities (StoreAppealSettings → Personalities)";
@@ -463,7 +530,7 @@ public class CustomerManager : NetworkBehaviour
             speed = Random.Range(walkSpeed.x, walkSpeed.y),
             leaveAt = Time.time + maxMinutesInMall * 60f,
             stayUntil = Time.time + minMinutesInMall * 60f,
-            budgetCents = Mathf.RoundToInt(Random.Range(personality.budgetDollars.x, personality.budgetDollars.y) * 100f),
+            budgetCents = Mathf.RoundToInt(Random.Range(personality.budgetDollars.x, personality.budgetDollars.y) * 100f * eventBudget),
             wants = Random.Range(personality.wantItems.x, personality.wantItems.y + 1),
             nextThink = Time.time,
             cameFrom = hit.position,
@@ -655,8 +722,12 @@ public class CustomerManager : NetworkBehaviour
             if (!c.arrived) walking++;
             else standing++;
         }
+        string events = eventArrivals != 1f || eventMax != 1f || eventBudget != 1f || eventPersonality.Count > 0
+            ? $"; events: arrivals ×{eventArrivals:0.##}, max ×{eventMax:0.##} ({MaxCustomersNow}), budget ×{eventBudget:0.##}" +
+              (eventPersonality.Count > 0 ? $", {eventPersonality.Count} personality shift(s)" : "")
+            : "";
         return $"Customers: {customers.Count} ({walking} walking, {standing} standing; {inStores} in stores, {inLine} in line); " +
-               $"since start: {paths} paths, {pathFailures} failed, {stuckEvents} stuck";
+               $"since start: {paths} paths, {pathFailures} failed, {stuckEvents} stuck{events}";
     }
 
     private void Arrive(Customer c)

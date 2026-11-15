@@ -70,3 +70,11 @@ MonoBehaviour:
     - stat: 5
       mode: 0
       amount: 40
+  customerArrivalsPercent: 50
+  maxCustomersPercent: 30
+  customerBudgetPercent: 30
+  personalityShifts:
+  - personality: {fileID: 11400000, guid: cd40254913914871a1d60291475ee705, type: 2}
+    percent: 30
+  - personality: {fileID: 11400000, guid: 275d5843035e4ec4a9bf14bb21b83ba8, type: 2}
+    percent: 30
