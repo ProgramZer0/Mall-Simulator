@@ -77,6 +77,17 @@ public class DoorNet : NetworkBehaviour
                                (ownerSegment >= 0 && !ownerStore.IsSegmentPurchased(ownerSegment)));
     public bool IsPublic => isPublic;
     public bool IsManual => trigger == Trigger.Manual;
+
+    /// <summary>
+    /// Customers walk through it: unlocked, and automatic or public (they open public manual doors
+    /// themselves). Other doors (staff, back rooms, docks) are walls to them.
+    /// </summary>
+    public bool CustomersCanUse => !IsLocked && (trigger == Trigger.Automatic || isPublic);
+
+    /// <summary>Goes up when any door's lock or shut-by-store state changes (customer paths update).</summary>
+    public static int CustomerVersion { get; private set; }
+
+    private bool openedForCustomer; // a public manual door a customer opened (they close it behind them)
     private bool StoreIsOwned => ownerStore != null && ownerStore.HasOwner;
 
     private void Awake() => motion = GetComponent<DoorMotion>();
@@ -96,22 +107,29 @@ public class DoorNet : NetworkBehaviour
             }
         }
         state.OnValueChanged += OnStateChanged;
+        locked.OnValueChanged += OnLockedChanged;
         motion.SetOpen(state.Value != 0, state.Value, instant: true);
         All.Add(this);
+        CustomerVersion++;
     }
 
     public override void OnNetworkDespawn()
     {
         state.OnValueChanged -= OnStateChanged;
+        locked.OnValueChanged -= OnLockedChanged;
         if (IsServer && ownerStore != null) ownerStore.Changed -= OnStoreChanged;
         All.Remove(this);
+        CustomerVersion++;
     }
 
     private bool wasOwned;
 
     // Server: when the store goes back on sale, its doors go back to how they started (locked ones lock and shut).
+    private void OnLockedChanged(bool previous, bool current) => CustomerVersion++;
+
     private void OnStoreChanged(StorePlot plot)
     {
+        CustomerVersion++;
         // Edit mode started, or the door is behind a wall again: shut it.
         if (IsShutByStore && state.Value != 0) state.Value = 0;
 
@@ -249,7 +267,12 @@ public class DoorNet : NetworkBehaviour
 
     private void Update()
     {
-        if (!IsSpawned || !IsServer || trigger != Trigger.Automatic || Time.time < nextSense) return;
+        if (!IsSpawned || !IsServer || Time.time < nextSense) return;
+        if (trigger != Trigger.Automatic)
+        {
+            if (isPublic) UpdatePublicManual();
+            return;
+        }
         nextSense = Time.time + 0.2f;
 
         int mask = sensorMask.value != 0 ? sensorMask.value : LayerMask.GetMask("Player");
@@ -279,6 +302,33 @@ public class DoorNet : NetworkBehaviour
             if (clearSince < 0f) clearSince = Time.time;
             else if (Time.time - clearSince >= closeDelay && !GroupSensesSomeone()) ServerSetGroupOpen(false, null);
         }
+    }
+
+    // A public manual door: customers open it as they reach it and shut it after them (if it was shut).
+    // Players use it with F as always; a door a player opened stays open.
+    private void UpdatePublicManual()
+    {
+        nextSense = Time.time + 0.2f;
+        bool near = !IsLocked && CustomerManager.AnyNear(transform.position, sensorRange);
+        if (near)
+        {
+            clearSince = -1f;
+            if (!IsOpen)
+            {
+                openedForCustomer = true;
+                ServerSetGroupOpen(true, transform.position);
+            }
+        }
+        else if (openedForCustomer && IsOpen)
+        {
+            if (clearSince < 0f) clearSince = Time.time;
+            else if (Time.time - clearSince >= closeDelay)
+            {
+                openedForCustomer = false;
+                ServerSetGroupOpen(false, null);
+            }
+        }
+        else if (!IsOpen) openedForCustomer = false;
     }
 
     // An automatic door in the group that still has someone in front of it keeps them all open.

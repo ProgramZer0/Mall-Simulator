@@ -40,6 +40,12 @@ public class CustomerManager : NetworkBehaviour
     [SerializeField] private float passRange = 6f;
     [Tooltip("Most customers in one store at once (Capacity perks add to it).")]
     [SerializeField] private int storeCapacity = 12;
+    [Tooltip("How far a wandering customer notices a storefront (meters, needs a clear view of its entrance).")]
+    [SerializeField] private float sightRange = 20f;
+    [Tooltip("How readily a storefront they notice pulls them over: chance = what its window shows them × this.")]
+    [SerializeField] private float sightPull = 1.2f;
+    [Tooltip("Customers standing still (in line, at a shelf) keep at least this far apart (meters).")]
+    [SerializeField] private float personalSpace = 0.55f;
 
     [Header("Shopping")]
     [Tooltip("How many things for sale a customer looks over when deciding what to go and see next.")]
@@ -130,6 +136,7 @@ public class CustomerManager : NetworkBehaviour
         public int wants;
         public readonly HashSet<StorePlot> passed = new();
         public StorePlot goalStore;    // the store they're walking toward (null: the exit)
+        public readonly HashSet<StorePlot> noticed = new(); // storefronts they've seen from a distance
         public StorePlot mustEnter;    // a test customer: goes into this store whatever its appeal
         public Vector3 cameFrom;       // where they came into the mall (they leave by another way if there is one)
         public Entrance goalEntrance;
@@ -286,6 +293,8 @@ public class CustomerManager : NetworkBehaviour
             }
             if (thinkCursor < customers.Count && customers[thinkCursor] == c) thinkCursor++;
         }
+
+        KeepApart(dt);
 
         // Host draws its own straight from the simulation.
         foreach (var c in customers)
@@ -507,6 +516,54 @@ public class CustomerManager : NetworkBehaviour
         }
     }
 
+    // Customers standing still (in line, looking at a shelf, browsing) ease apart so they don't stand
+    // inside each other. Walkers pass through each other for now. Grid of 1 m cells, so it's cheap.
+    private readonly Dictionary<Vector2Int, List<Customer>> grid = new();
+    private readonly Stack<List<Customer>> spareCells = new();
+
+    private void KeepApart(float dt)
+    {
+        foreach (var list in grid.Values) { list.Clear(); spareCells.Push(list); }
+        grid.Clear();
+        foreach (var c in customers)
+        {
+            if (!c.arrived) continue;
+            var key = new Vector2Int(Mathf.FloorToInt(c.pos.x), Mathf.FloorToInt(c.pos.z));
+            if (!grid.TryGetValue(key, out var list)) grid[key] = list = spareCells.Count > 0 ? spareCells.Pop() : new List<Customer>();
+            list.Add(c);
+        }
+
+        float min = personalSpace, min2 = min * min;
+        float maxStep = 1.2f * dt;
+        foreach (var c in customers)
+        {
+            if (!c.arrived) continue;
+            Vector3 push = Vector3.zero;
+            int cx = Mathf.FloorToInt(c.pos.x), cz = Mathf.FloorToInt(c.pos.z);
+            for (int dx = -1; dx <= 1; dx++)
+            for (int dz = -1; dz <= 1; dz++)
+            {
+                if (!grid.TryGetValue(new Vector2Int(cx + dx, cz + dz), out var list)) continue;
+                foreach (var o in list)
+                {
+                    if (o == c) continue;
+                    Vector3 d = c.pos - o.pos;
+                    d.y = 0f;
+                    float d2 = d.sqrMagnitude;
+                    if (d2 >= min2 || Mathf.Abs(c.pos.y - o.pos.y) > 1f) continue;
+                    if (d2 < 1e-6f) d = new Vector3(Mathf.Sin(c.id), 0f, Mathf.Cos(c.id)) * 0.01f; // exactly on top: split
+                    float dist = Mathf.Sqrt(Mathf.Max(d2, 1e-6f));
+                    push += d / dist * (min - dist);
+                }
+            }
+            if (push.sqrMagnitude < 1e-6f) continue;
+            Vector3 to = c.pos + Vector3.ClampMagnitude(push * 0.5f, maxStep);
+            if (NavMesh.Raycast(c.pos, to, out var hit, NavMesh.AllAreas)) to = hit.position; // stay on the floor
+            c.pos = to;
+            c.dirty = true;
+        }
+    }
+
     private void Face(Customer c, Vector3 point)
     {
         Vector3 flat = point - c.pos;
@@ -565,6 +622,9 @@ public class CustomerManager : NetworkBehaviour
         bool done = Time.time >= c.leaveAt || c.storesVisited >= maxStoresPerVisit || c.budgetCents <= 0;
         if (!done && MallManager.Instance != null)
         {
+            // Someone who knows the mall heads for a store that sells what they like; anyone else
+            // wanders to a store at random and sees what catches their eye on the way.
+            bool knows = Random.value < c.personality.knowsTheMall;
             float total = 0f;
             StorePlot pick = null;
             foreach (var plot in MallManager.Instance.Plots)
@@ -572,10 +632,11 @@ public class CustomerManager : NetworkBehaviour
                 if (plot == null || !plot.IsOpen || plot.Appeal == null || c.passed.Contains(plot) ||
                     !entrances.TryGetValue(plot, out var list) || list.Count == 0)
                     continue;
-                float w = 0.1f + plot.Appeal.For(c.personality).outsideDraw;
+                float w = knows ? 0.02f + plot.Appeal.For(c.personality).insideDraw : 1f;
                 total += w;
                 if (Random.value * total < w) pick = plot; // one pass, weighted
             }
+            if (pick != null) Log(c, knows ? $"knows '{pick.DisplayName}' has what they like" : $"wandering toward '{pick.DisplayName}'");
             if (pick != null)
             {
                 var e = entrances[pick][Random.Range(0, entrances[pick].Count)];
@@ -614,11 +675,48 @@ public class CustomerManager : NetworkBehaviour
                 }
             }
         }
+        if (Notice(c)) return;
         if (!c.arrived) return;
         // At the store they were heading for (if passing it didn't already decide).
         if (c.goalStore != null && !c.passed.Contains(c.goalStore) && c.goalStore.IsOpen && c.goalStore.Appeal != null &&
             Consider(c, c.goalStore, c.goalEntrance)) return;
         PickGoal(c);
+    }
+
+    // A storefront in view (in range, nothing in the way): if what's in its window appeals to them,
+    // they head over to it. A couple of looks per decision, nearest first.
+    private bool Notice(Customer c)
+    {
+        if (MallManager.Instance == null) return false;
+        float r2 = sightRange * sightRange;
+        Vector3 eye = c.pos + Vector3.up * 1.6f;
+        int looked = 0;
+        foreach (var plot in MallManager.Instance.Plots)
+        {
+            if (looked >= 2) break;
+            if (plot == null || plot == c.goalStore || !plot.IsOpen || plot.Appeal == null || c.passed.Contains(plot) ||
+                c.noticed.Contains(plot) || !entrances.TryGetValue(plot, out var list)) continue;
+            foreach (var e in list)
+            {
+                if ((e.outside - c.pos).sqrMagnitude > r2) continue;
+                looked++;
+                Vector3 seen = e.outside + Vector3.up * 1.2f;
+                if (Physics.Linecast(eye, seen, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) break;
+                c.noticed.Add(plot);
+                float pull = Mathf.Clamp01(plot.Appeal.For(c.personality).outsideDraw * sightPull);
+                if (Random.value >= pull)
+                {
+                    Log(c, $"saw '{plot.DisplayName}', not interested ({pull:0.00})");
+                    break;
+                }
+                c.goalStore = plot;
+                c.goalEntrance = e;
+                if (!PathTo(c, e.outside)) return false;
+                Log(c, $"saw '{plot.DisplayName}' and is heading over ({pull:0.00})");
+                return true;
+            }
+        }
+        return false;
     }
 
     // A store's entrance, right there: roll its walk-in chance for this customer (once per store).
