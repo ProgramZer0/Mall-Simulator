@@ -49,6 +49,11 @@ public class CustomerManager : NetworkBehaviour
     [Tooltip("Walking customers steer around other customers and players within this distance (meters), " +
              "keeping to the right to pass.")]
     [SerializeField] private float avoidRange = 1.1f;
+    [Tooltip("Customers keep to their own lane, up to this far either side of the shortest path (meters), " +
+             "so a hallway fills out instead of everyone walking one line.")]
+    [SerializeField] private float laneSpread = 0.7f;
+    [Tooltip("Chance a wandering customer's next stop is just a spot in the hallways rather than a store.")]
+    [Range(0f, 1f)] [SerializeField] private float roamChance = 0.35f;
 
     [Header("Shopping")]
     [Tooltip("How many things for sale a customer looks over when deciding what to go and see next.")]
@@ -131,8 +136,11 @@ public class CustomerManager : NetworkBehaviour
         public bool arrived = true;
         public Vector3 destination;
         public int failures;
-        public float bestLeft;     // closest they've got to where they're going (for noticing they're stuck)
+        public float bestLeft;     // least path left so far (for noticing they're stuck)
         public float stuckSince;
+        public float lane;         // their side of the path (meters, + = right)
+        public int laneCorner = -1;
+        public Vector3 laneTarget; // the current corner, moved over to their lane
 
         // The visit
         public float leaveAt;
@@ -446,6 +454,7 @@ public class CustomerManager : NetworkBehaviour
             wants = Random.Range(personality.wantItems.x, personality.wantItems.y + 1),
             nextThink = Time.time,
             cameFrom = hit.position,
+            lane = Random.Range(-laneSpread, laneSpread),
         };
         customers.Add(c);
         byId[c.id] = c;
@@ -493,36 +502,52 @@ public class CustomerManager : NetworkBehaviour
         c.failures = 0;
         c.bestLeft = float.MaxValue;
         c.stuckSince = Time.time;
+        c.laneCorner = -1;
         return true;
     }
 
-    // Along the path, steering around people on the way. Each step stays on the walkable area; someone
-    // pushed so far off their line that they stop getting closer finds a new path.
+    // Along the path, in their own lane, steering around people on the way. Each step stays on the
+    // walkable area and slides along edges instead of stopping at them; a corner they can already see
+    // past is skipped. Someone who stops making progress finds a new path.
     private void Walk(Customer c, float dt)
     {
         if (c.arrived) return;
-        while (c.corner < c.corners.Count && FlatDistance(c.pos, c.corners[c.corner]) < 0.2f) c.corner++;
         if (c.corner >= c.corners.Count) { Arrive(c); return; }
 
-        Vector3 to = c.corners[c.corner];
-        Vector3 ahead = to - c.pos;
-        ahead.y = 0f;
-        float left = ahead.magnitude;
-        Vector3 dir = ahead / Mathf.Max(left, 1e-4f);
+        Vector3 to = LaneTarget(c);
+        float left = FlatDistance(c.pos, to);
+        if (left < 0.35f || (left < 2f && c.corner < c.corners.Count - 1 && CanSeeNext(c)))
+        {
+            c.corner++;
+            if (c.corner >= c.corners.Count) { Arrive(c); return; }
+            to = LaneTarget(c);
+            left = FlatDistance(c.pos, to);
+        }
+        Vector3 dir = to - c.pos;
+        dir.y = 0f;
+        dir = dir.sqrMagnitude > 1e-6f ? dir.normalized : Vector3.forward;
 
         // Close to the end, people in the way matter less (someone may be standing near their spot).
         float toEnd = FlatDistance(c.pos, c.destination);
         float avoidWeight = Mathf.Clamp01(toEnd - 0.3f);
         Vector3 vel = dir * c.speed + Avoidance(c, dir) * (c.speed * avoidWeight);
         vel = Vector3.ClampMagnitude(vel, c.speed * 1.15f);
+        if (vel.magnitude * dt > left && Vector3.Dot(vel, dir) > 0.5f * vel.magnitude)
+            vel = vel.normalized * (left / Mathf.Max(dt, 1e-4f)); // don't overshoot
 
-        float stepLen = vel.magnitude * dt;
-        if (stepLen > left && Vector3.Dot(vel, dir) > 0.5f * vel.magnitude) vel = vel / vel.magnitude * (left / Mathf.Max(dt, 1e-4f));
-        Vector3 next = c.pos + vel * dt;
-        // Height follows the path (stairs, ramps).
-        float along = left > 1e-4f ? Mathf.Clamp01(Vector3.Dot(next - c.pos, dir) / left) : 1f;
-        next.y = Mathf.Lerp(c.pos.y, to.y, along);
-        if (NavMesh.Raycast(c.pos, next, out var hit, NavMesh.AllAreas)) next = hit.position; // slide along walls
+        Vector3 step = vel * dt;
+        Vector3 next = c.pos + step;
+        float along = left > 1e-4f ? Mathf.Clamp01(Vector3.Dot(step, dir) / left) : 1f;
+        next.y = Mathf.Lerp(c.pos.y, to.y, along); // height follows the path (stairs, ramps)
+        if (NavMesh.Raycast(c.pos, next, out var hit, NavMesh.AllAreas))
+        {
+            // Hit an edge (a wall, a shelf corner): slide along it instead of stopping.
+            Vector3 slide = Vector3.ProjectOnPlane(step, hit.normal);
+            slide.y = 0f;
+            Vector3 alt = hit.position + slide * 0.9f;
+            alt.y = next.y;
+            next = NavMesh.Raycast(hit.position, alt, out var hit2, NavMesh.AllAreas) ? hit2.position : alt;
+        }
 
         Vector3 moved = next - c.pos;
         moved.y = 0f;
@@ -530,9 +555,46 @@ public class CustomerManager : NetworkBehaviour
         c.pos = next;
         c.dirty = true;
 
-        // Stuck (pushed around a corner, wedged in a crowd): new path from here.
-        if (toEnd < c.bestLeft - 0.3f) { c.bestLeft = toEnd; c.stuckSince = Time.time; }
-        else if (Time.time - c.stuckSince > 3f && !PathTo(c, c.destination)) Arrive(c);
+        // Stuck (wedged on a corner, in a crowd): no less path left for 2 s → a new path from here.
+        float pathLeft = FlatDistance(c.pos, c.corners[c.corner]) + RemainingAfter(c);
+        if (pathLeft < c.bestLeft - 0.3f) { c.bestLeft = pathLeft; c.stuckSince = Time.time; }
+        else if (Time.time - c.stuckSince > 2f && !PathTo(c, c.destination)) Arrive(c);
+    }
+
+    // The current corner, moved sideways into this customer's lane (not past an edge). The last corner
+    // (where they're going) stays put.
+    private Vector3 LaneTarget(Customer c)
+    {
+        if (c.laneCorner == c.corner) return c.laneTarget;
+        c.laneCorner = c.corner;
+        Vector3 corner = c.corners[c.corner];
+        c.laneTarget = corner;
+        if (c.corner == c.corners.Count - 1 || Mathf.Abs(c.lane) < 0.05f) return corner;
+
+        Vector3 from = c.corner > 0 ? c.corners[c.corner - 1] : c.pos;
+        Vector3 seg = corner - from;
+        seg.y = 0f;
+        if (seg.sqrMagnitude < 1e-4f) return corner;
+        seg.Normalize();
+        Vector3 offset = corner + new Vector3(seg.z, 0f, -seg.x) * c.lane;
+        c.laneTarget = NavMesh.Raycast(corner, offset, out var hit, NavMesh.AllAreas)
+            ? Vector3.Lerp(corner, hit.position, 0.7f) // not right up against the edge
+            : offset;
+        return c.laneTarget;
+    }
+
+    // Can they walk straight to the corner after this one (skip this one)?
+    private bool CanSeeNext(Customer c)
+    {
+        Vector3 nextCorner = c.corners[c.corner + 1];
+        return !NavMesh.Raycast(c.pos, nextCorner, out _, NavMesh.AllAreas);
+    }
+
+    private static float RemainingAfter(Customer c)
+    {
+        float sum = 0f;
+        for (int i = c.corner + 1; i < c.corners.Count; i++) sum += FlatDistance(c.corners[i - 1], c.corners[i]);
+        return sum;
     }
 
     private void Arrive(Customer c)
@@ -701,6 +763,14 @@ public class CustomerManager : NetworkBehaviour
             // Someone who knows the mall heads for a store that sells what they like; anyone else
             // wanders to a store at random and sees what catches their eye on the way.
             bool knows = Random.value < c.personality.knowsTheMall;
+
+            // Or just a stroll to somewhere in the hallways.
+            if (!knows && Random.value < roamChance && TryHallwaySpot(c.pos, out var spot))
+            {
+                c.mode = Mode.Wander;
+                c.goalStore = null;
+                if (PathTo(c, spot)) { Log(c, "strolling"); return; }
+            }
             float total = 0f;
             StorePlot pick = null;
             foreach (var plot in MallManager.Instance.Plots)
@@ -719,7 +789,7 @@ public class CustomerManager : NetworkBehaviour
                 c.mode = Mode.Wander;
                 c.goalStore = pick;
                 c.goalEntrance = e;
-                if (PathTo(c, e.outside)) return;
+                if (PathTo(c, Near(e.outside, 1.5f, pick))) return;
                 c.passed.Add(pick); // can't get there
             }
         }
@@ -731,6 +801,41 @@ public class CustomerManager : NetworkBehaviour
         c.mode = Mode.Exiting;
         if (exit == null || !PathTo(c, exit.transform.position)) { Despawn(c); return; }
         Log(c, "heading for the exit");
+    }
+
+    // A walkable spot within Radius of a point, outside the store (so people don't all aim at one point).
+    private static Vector3 Near(Vector3 point, float radius, StorePlot notIn)
+    {
+        for (int tries = 0; tries < 4; tries++)
+        {
+            Vector2 r = Random.insideUnitCircle * radius;
+            if (NavMesh.SamplePosition(point + new Vector3(r.x, 0f, r.y), out var hit, 1f, NavMesh.AllAreas) &&
+                (notIn == null || !notIn.Contains(hit.position + Vector3.up * 0.1f)))
+                return hit.position;
+        }
+        return point;
+    }
+
+    // A random walkable spot in the hallways (not in any store), at least 8 m away.
+    private static bool TryHallwaySpot(Vector3 from, out Vector3 spot)
+    {
+        spot = default;
+        var nav = CustomerNavMesh.Instance;
+        if (nav == null || MallManager.Instance == null) return false;
+        Bounds b = nav.BuiltBounds;
+        for (int tries = 0; tries < 8; tries++)
+        {
+            var p = new Vector3(Random.Range(b.min.x, b.max.x), from.y, Random.Range(b.min.z, b.max.z));
+            if (!NavMesh.SamplePosition(p, out var hit, 4f, NavMesh.AllAreas)) continue;
+            if (Mathf.Abs(hit.position.y - from.y) > 3f || (hit.position - from).sqrMagnitude < 64f) continue; // same floor, a walk away
+            bool inStore = false;
+            foreach (var plot in MallManager.Instance.Plots)
+                if (plot != null && plot.Contains(hit.position + Vector3.up * 0.1f)) { inStore = true; break; }
+            if (inStore) continue;
+            spot = hit.position;
+            return true;
+        }
+        return false;
     }
 
     private void ThinkWander(Customer c)
@@ -787,7 +892,7 @@ public class CustomerManager : NetworkBehaviour
                 }
                 c.goalStore = plot;
                 c.goalEntrance = e;
-                if (!PathTo(c, e.outside)) return false;
+                if (!PathTo(c, Near(e.outside, 1.5f, plot))) return false;
                 Log(c, $"saw '{plot.DisplayName}' and is heading over ({pull:0.00})");
                 return true;
             }

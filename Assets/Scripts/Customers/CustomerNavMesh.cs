@@ -36,6 +36,9 @@ public class CustomerNavMesh : MonoBehaviour
     [SerializeField] private float rebuildDelay = 1.5f;
     [SerializeField] private bool logBuilds = true;
 
+    /// <summary>The space the walkable area was last built over.</summary>
+    public Bounds BuiltBounds { get; private set; }
+
     /// <summary>Built at least once (customers can start walking).</summary>
     public bool Ready { get; private set; }
 
@@ -118,6 +121,7 @@ public class CustomerNavMesh : MonoBehaviour
         settings.agentSlope = maxSlope;
 
         Bounds bounds = BuildBounds();
+        BuiltBounds = bounds;
         NavMeshBuilder.CollectSources(bounds, layers, NavMeshCollectGeometry.PhysicsColliders, 0, markups, sources);
         sources.RemoveAll(Skip);
         AddDoorBlockers(bounds);
