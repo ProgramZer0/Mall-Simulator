@@ -204,7 +204,7 @@ public class SpecialMarket : NetworkBehaviour
     /// <summary>Buy some of a deal, delivered to this store.</summary>
     public void RequestBuy(int plotId, int dealId, int quantity) => BuyRpc(plotId, dealId, quantity);
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void BuyRpc(int plotId, int dealId, int quantity, RpcParams rpcParams = default)
     {
         ulong sender = rpcParams.Receive.SenderClientId;

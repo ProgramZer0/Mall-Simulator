@@ -228,7 +228,7 @@ public class FranchiseManager : NetworkBehaviour
 
     public void RequestBid(int franchiseId, int amount) => BidRpc(franchiseId, amount);
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void BidRpc(int franchiseId, int amount, RpcParams rpcParams = default)
     {
         ulong sender = rpcParams.Receive.SenderClientId;
@@ -258,7 +258,7 @@ public class FranchiseManager : NetworkBehaviour
     /// <summary>Give up a franchise your team holds: bidding opens now, and your team sits that auction out.</summary>
     public void RequestGiveUp(int franchiseId) => GiveUpRpc(franchiseId);
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void GiveUpRpc(int franchiseId, RpcParams rpcParams = default)
     {
         ulong sender = rpcParams.Receive.SenderClientId;

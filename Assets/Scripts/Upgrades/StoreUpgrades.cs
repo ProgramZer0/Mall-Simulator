@@ -104,7 +104,7 @@ public class StoreUpgrades : NetworkBehaviour
     /// <summary>Rename a store (empty = back to its default name).</summary>
     public void RequestRename(int plotId, string newName) => RenameRpc(plotId, new FixedString64Bytes(CleanName(newName)));
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void RenameRpc(int plotId, FixedString64Bytes newName, RpcParams rpcParams = default)
     {
         ulong sender = rpcParams.Receive.SenderClientId;
@@ -158,7 +158,7 @@ public class StoreUpgrades : NetworkBehaviour
 
     public void RequestBuyCartTier(int plotId) => BuyCartTierRpc(plotId);
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void BuyCartTierRpc(int plotId, RpcParams rpcParams = default)
     {
         ulong sender = rpcParams.Receive.SenderClientId;

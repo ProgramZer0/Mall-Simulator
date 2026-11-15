@@ -200,7 +200,7 @@ public class DoorNet : NetworkBehaviour
 
     /* ========================= F / L ========================= */
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     public void RequestToggleRpc(RpcParams rpcParams = default)
     {
         ulong sender = rpcParams.Receive.SenderClientId;
@@ -211,7 +211,7 @@ public class DoorNet : NetworkBehaviour
         ServerSetGroupOpen(!IsOpen, pos);
     }
 
-    [Rpc(SendTo.Server, RequireOwnership = false)]
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     public void RequestLockRpc(RpcParams rpcParams = default)
     {
         ulong sender = rpcParams.Receive.SenderClientId;

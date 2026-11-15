@@ -216,13 +216,14 @@ public class PlayerController3D : NetworkBehaviour
         hasSafe = true;
     }
 
-    private void OnDestroy()
+    public override void OnDestroy()
     {
         if (IsOwner)
         {
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
         }
+        base.OnDestroy();
     }
 
     private void Update()
