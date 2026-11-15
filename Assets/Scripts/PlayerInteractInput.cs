@@ -89,6 +89,11 @@ public class PlayerInteractInput : NetworkBehaviour
 
     private System.Action drawPrompt;
 
+    private static readonly Unity.Profiling.ProfilerMarker LookMarker = new("Interact.LookedAt");
+    private static readonly Unity.Profiling.ProfilerMarker StockMarker = new("Interact.StockTarget");
+    private static readonly Unity.Profiling.ProfilerMarker CustomerMarker = new("Interact.Customer");
+    private static readonly Unity.Profiling.ProfilerMarker PlaceMarker = new("Interact.Placement");
+
     private void Update()
     {
         // Fallback prompt (only when there's no InteractPromptUI on the HUD).
@@ -122,14 +127,17 @@ public class PlayerInteractInput : NetworkBehaviour
             return;
         }
 
-        UpdateLookedAtSign();
-        UpdateStockTarget();
-        UpdateLookedAtCustomer();
+        using (LookMarker.Auto()) UpdateLookedAtSign();
+        using (StockMarker.Auto()) UpdateStockTarget();
+        using (CustomerMarker.Auto()) UpdateLookedAtCustomer();
         HandleInteract();
+        var placing = PlaceMarker.Auto();
         HandleRotation();
         // Stocking from the held crate: out of sight entirely, so it doesn't block the shelf.
         hideForStocking = stockTarget != null && !stockTargetIsTake && !previewActive;
         HandlePlacement();
+
+        placing.Dispose();
 
         // See-through while placing, so you can see where it's going.
         inventory.SetHandVisualFaded(previewActive);

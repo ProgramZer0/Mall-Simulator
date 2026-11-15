@@ -155,23 +155,32 @@ public class CustomerView : MonoBehaviour
         if (snap) transform.SetPositionAndRotation(position + Vector3.up * lift, Quaternion.Euler(0f, yaw, 0f));
     }
 
-    private void Update()
+    /// <summary>
+    /// Ease toward where they are (called by the CustomerManager for every view in one loop, cheaper than an
+    /// Update on each). Ease: this frame's 1 - e^(-dt·10); settle: 1 - e^(-dt·8).
+    /// </summary>
+    public void Tick(float dt, float ease, float settle)
     {
-        UpdateBubble();
+        if (bubble != null) UpdateBubble();
         Vector3 goal = target + Vector3.up * lift;
-        Vector3 before = transform.position;
-        Vector3 now = (goal - before).sqrMagnitude > 9f
-            ? goal // far behind (lost updates, a teleport): jump
-            : Vector3.Lerp(before, goal, 1f - Mathf.Exp(-Time.deltaTime * 10f));
-        Quaternion rot = Quaternion.Slerp(transform.rotation, Quaternion.Euler(0f, targetYaw, 0f),
-                                          1f - Mathf.Exp(-Time.deltaTime * 10f));
-        transform.SetPositionAndRotation(now, rot);
+        transform.GetPositionAndRotation(out Vector3 before, out Quaternion was);
+        Quaternion want = Quaternion.Euler(0f, targetYaw, 0f);
+        bool still = (goal - before).sqrMagnitude < 1e-6f && Quaternion.Angle(was, want) < 0.5f;
+        Vector3 now = before;
+        if (!still) // standing still: leave the transform alone (no change for the renderer to pick up)
+        {
+            now = (goal - before).sqrMagnitude > 9f
+                ? goal // far behind (lost updates, a teleport): jump
+                : Vector3.Lerp(before, goal, ease);
+            transform.SetPositionAndRotation(now, Quaternion.Slerp(was, want, ease));
+        }
 
         if (!hasSpeed) return;
         Vector3 moved = now - before;
         moved.y = 0f;
-        float speed = Time.deltaTime > 0f ? moved.magnitude / Time.deltaTime : 0f;
-        shownSpeed = Mathf.Lerp(shownSpeed, speed, 1f - Mathf.Exp(-Time.deltaTime * 8f));
+        float speed = dt > 0f ? moved.magnitude / dt : 0f;
+        if (speed < 0.01f && shownSpeed < 0.01f) return;
+        shownSpeed = Mathf.Lerp(shownSpeed, speed, settle);
         animator.SetFloat(SpeedId, shownSpeed);
     }
 }
