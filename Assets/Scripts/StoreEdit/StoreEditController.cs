@@ -224,6 +224,7 @@ public class StoreEditController : NetworkBehaviour
     public override void OnDestroy()
     {
         ClearLocalItems();
+        ShowLive();
         if (editCam != null) Destroy(editCam.gameObject);
         if (handles != null) Destroy(handles.gameObject);
         base.OnDestroy();
@@ -348,7 +349,8 @@ public class StoreEditController : NetworkBehaviour
                              newPaints.ToArray(), newBoxes.ToArray());
 
         FinishEditRpc(clientSessionId);
-        // The local copies stay until the host's respawned items arrive (see SyncEditState).
+        // The local copies stay until the host has saved (see SyncEditState): by then the items it replaced
+        // at their new places have arrived.
     }
 
     /// <summary>Follows the host's decision: enter/leave the view when the synced edit state changes.</summary>
@@ -410,6 +412,7 @@ public class StoreEditController : NetworkBehaviour
         Deselect();
         selectedSlot = -1;
         ClearLocalItems();
+        ShowLive();
         clientSessionId = -1;
         finishing = false;
 
@@ -2511,12 +2514,12 @@ public class StoreEditController : NetworkBehaviour
         if (plot == null) { LogStart("host: started, but no store shows this player as its editor."); return; }
         LogStart($"host: editing '{plot.DisplayName}', sending {plot.ServerEditSession.Count} items.");
 
-        // Hand the editor the list of items that were taken out, a chunk at a time.
+        // Hand the editor the list of the store's items (and which real objects they are), a chunk at a time.
         var session = plot.ServerEditSession;
         int sessionId = plot.ServerEditSessionId;
         if (session.Count == 0)
         {
-            ReceiveEditItemsRpc(sessionId, 0, new int[0], new Vector3[0], new Quaternion[0], new uint[0]);
+            ReceiveEditItemsRpc(sessionId, 0, new int[0], new Vector3[0], new Quaternion[0], new uint[0], new ulong[0]);
             return;
         }
 
@@ -2527,6 +2530,7 @@ public class StoreEditController : NetworkBehaviour
             var positions = new Vector3[n];
             var rotations = new Quaternion[n];
             var paints = new uint[n];
+            var netIds = new ulong[n];
             for (int k = 0; k < n; k++)
             {
                 var entry = session[start + k];
@@ -2534,8 +2538,9 @@ public class StoreEditController : NetworkBehaviour
                 positions[k] = entry.position;
                 rotations[k] = entry.rotation;
                 paints[k] = entry.paint;
+                netIds[k] = entry.live != null ? entry.live.NetworkObjectId : ulong.MaxValue;
             }
-            ReceiveEditItemsRpc(sessionId, start, ids, positions, rotations, paints);
+            ReceiveEditItemsRpc(sessionId, start, ids, positions, rotations, paints, netIds);
         }
 
         // Then what's on each shelf, so its stock shows (and moves with it) while editing.
@@ -2568,14 +2573,15 @@ public class StoreEditController : NetworkBehaviour
         localItems[index].ShowStock(itemIds, counts, orients, seeds);
     }
 
-    /// <summary>Editor: build local copies of the items the host took out of the store.</summary>
+    /// <summary>Editor: build local copies of the store's items (and hide the real ones on this screen).</summary>
     [Rpc(SendTo.Owner)]
     private void ReceiveEditItemsRpc(int sessionId, int start, int[] itemIds, Vector3[] positions, Quaternion[] rotations,
-                                     uint[] paints)
+                                     uint[] paints, ulong[] netIds)
     {
         if (sessionId != clientSessionId)
         {
             ClearLocalItems();
+            ShowLive();
             clientSessionId = sessionId;
         }
 
@@ -2593,7 +2599,46 @@ public class StoreEditController : NetworkBehaviour
             }
             localItems[index] = EditLocalItem.Create(def, index, positions[k], rotations[k]);
             if (paints != null && k < paints.Length && paints[k] != 0) localItems[index].SetPaint(paints[k]); // shown as it is
+            if (netIds != null && k < netIds.Length) HideLive(netIds[k]);
         }
+    }
+
+    /* ========================= THE REAL ITEMS WHILE EDITING ========================= */
+
+    // The store's real items stay in the world during edit mode; on the editor's screen they're hidden
+    // and out of the way (no renderers, colliders or wall holes) while their copies are edited. Nothing
+    // here is networked: everyone else still sees them.
+    private readonly List<NetworkObject> hiddenLive = new();
+    private readonly List<Renderer> hiddenRenderers = new();
+    private readonly List<Collider> hiddenColliders = new();
+    private readonly List<WallOpening> hiddenOpenings = new();
+
+    private void HideLive(ulong netId)
+    {
+        var spawn = NetworkManager != null ? NetworkManager.SpawnManager : null;
+        if (spawn == null || !spawn.SpawnedObjects.TryGetValue(netId, out var no) || no == null) return;
+        hiddenLive.Add(no);
+        foreach (var r in no.GetComponentsInChildren<Renderer>())
+            if (r.enabled) { r.enabled = false; hiddenRenderers.Add(r); }
+        foreach (var c in no.GetComponentsInChildren<Collider>())
+            if (c.enabled) { c.enabled = false; hiddenColliders.Add(c); }
+        foreach (var o in no.GetComponentsInChildren<WallOpening>())
+            if (o.enabled) { o.enabled = false; hiddenOpenings.Add(o); }
+        if (no.TryGetComponent<StockContainer>(out var container)) container.SetLocalVisualsShown(false);
+    }
+
+    // Leaving edit mode: show what's still there (what the host replaced or removed is already gone).
+    private void ShowLive()
+    {
+        foreach (var r in hiddenRenderers) if (r != null) r.enabled = true;
+        foreach (var c in hiddenColliders) if (c != null) c.enabled = true;
+        foreach (var o in hiddenOpenings) if (o != null) o.enabled = true;
+        foreach (var no in hiddenLive)
+            if (no != null && no.TryGetComponent<StockContainer>(out var container)) container.SetLocalVisualsShown(true);
+        hiddenLive.Clear();
+        hiddenRenderers.Clear();
+        hiddenColliders.Clear();
+        hiddenOpenings.Clear();
     }
 
     /// <summary>Host: collect a chunk of the editor's final positions.</summary>
@@ -2679,13 +2724,14 @@ public class StoreEditController : NetworkBehaviour
         foreach (var o in WallOpening.All)
         {
             if (o == null || o.IsEditCopy || !o.IsDoor) continue;
+            if (plot.ServerIsInEditSession(o.gameObject)) continue; // counted above, where the editor put it
             var host = CuttableWall.HostOf(o);
             if (host != null && host.Plot == plot && host.IsStorefront) return true;
         }
         return false;
     }
 
-    /// <summary>Host: respawn every item, at the editor's position where it's valid.</summary>
+    /// <summary>Host: save the edit (moved items go to the editor's position where it's valid).</summary>
     [Rpc(SendTo.Server)]
     private void FinishEditRpc(int sessionId, RpcParams rpcParams = default)
     {

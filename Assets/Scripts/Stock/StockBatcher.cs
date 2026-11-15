@@ -25,7 +25,10 @@ using UnityEngine.Rendering;
 /// </summary>
 public sealed class StockBatcher : MonoBehaviour
 {
-    /// <summary>Don't draw (the local player is in edit mode).</summary>
+    /// <summary>
+    /// Don't draw shelf stock (the local player is in edit mode). Edit-view copies (AddCopy with
+    /// editView) still draw.
+    /// </summary>
     public static bool Paused;
 
     /// <summary>
@@ -61,14 +64,22 @@ public sealed class StockBatcher : MonoBehaviour
     public sealed class Part
     {
         internal PartShape shape;
+        internal bool edit;
         internal Batch batch;
         internal int index;
+    }
+
+    /// <summary>A product drawn with no GameObject of its own (edit-mode shelf copies), see AddCopy.</summary>
+    public sealed class Copy
+    {
+        internal Part[] parts;
     }
 
     internal sealed class Batch
     {
         public PartShape shape;
         public Vector3Int cell;
+        public bool edit;
         public readonly List<Matrix4x4> matrices = new();
         public readonly List<Part> parts = new();
         public bool hasBounds;
@@ -76,7 +87,7 @@ public sealed class StockBatcher : MonoBehaviour
     }
 
     private static StockBatcher instance;
-    private static readonly Dictionary<(Vector3Int, Mesh, Material, int, int, ShadowCastingMode), Batch> Batches = new();
+    private static readonly Dictionary<(Vector3Int, Mesh, Material, int, int, ShadowCastingMode, bool), Batch> Batches = new();
     private static readonly List<Batch> All = new();
     private static readonly Dictionary<Material, Material> Instanced = new();
     private static Camera[] cameras = new Camera[4];
@@ -147,15 +158,7 @@ public sealed class StockBatcher : MonoBehaviour
     public static void Add(StockModel model)
     {
         if (model == null || model.Shape == null || model.Parts != null) return;
-        Ensure();
-        var world = model.transform.localToWorldMatrix;
-        model.Parts = new Part[model.Shape.Count];
-        for (int i = 0; i < model.Shape.Count; i++)
-        {
-            var part = new Part { shape = model.Shape[i] };
-            Insert(part, world * part.shape.local);
-            model.Parts[i] = part;
-        }
+        model.Parts = Make(model.Shape, model.transform.localToWorldMatrix, false);
     }
 
     /// <summary>Stop drawing a product.</summary>
@@ -169,9 +172,48 @@ public sealed class StockBatcher : MonoBehaviour
     /// <summary>The product moved (its furniture moved): draw it where it is now.</summary>
     public static void Move(StockModel model)
     {
-        if (model == null || model.Parts == null) return;
-        var world = model.transform.localToWorldMatrix;
-        foreach (var part in model.Parts)
+        if (model != null && model.Parts != null) Place(model.Parts, model.transform.localToWorldMatrix);
+    }
+
+    /// <summary>
+    /// Draw a product from its shape at a pose (world: position, rotation and the product's own scale),
+    /// with no GameObject. Edit View: drawn while Paused (edit-mode copies on the editor's screen).
+    /// </summary>
+    public static Copy AddCopy(List<PartShape> shape, Matrix4x4 world, bool editView)
+    {
+        if (shape == null) return null;
+        return new Copy { parts = Make(shape, world, editView) };
+    }
+
+    /// <summary>Draw a copy at its new pose.</summary>
+    public static void MoveCopy(Copy copy, Matrix4x4 world)
+    {
+        if (copy != null && copy.parts != null) Place(copy.parts, world);
+    }
+
+    /// <summary>Stop drawing a copy.</summary>
+    public static void RemoveCopy(Copy copy)
+    {
+        if (copy == null || copy.parts == null) return;
+        foreach (var part in copy.parts) Take(part);
+        copy.parts = null;
+    }
+
+    private static Part[] Make(List<PartShape> shape, Matrix4x4 world, bool edit)
+    {
+        Ensure();
+        var parts = new Part[shape.Count];
+        for (int i = 0; i < shape.Count; i++)
+        {
+            parts[i] = new Part { shape = shape[i], edit = edit };
+            Insert(parts[i], world * shape[i].local);
+        }
+        return parts;
+    }
+
+    private static void Place(Part[] parts, Matrix4x4 world)
+    {
+        foreach (var part in parts)
         {
             var m = world * part.shape.local;
             if (part.batch != null && part.batch.cell == CellOf(m.GetColumn(3)))
@@ -194,13 +236,14 @@ public sealed class StockBatcher : MonoBehaviour
     {
         var s = part.shape;
         var cell = CellOf(m.GetColumn(3));
-        var key = (cell, s.mesh, s.material, s.submesh, s.layer, s.shadows);
+        var key = (cell, s.mesh, s.material, s.submesh, s.layer, s.shadows, part.edit);
         if (!Batches.TryGetValue(key, out var batch))
         {
             batch = new Batch
             {
                 shape = s,
                 cell = cell,
+                edit = part.edit,
                 rp = new RenderParams(s.material)
                 {
                     shadowCastingMode = s.shadows,
@@ -255,7 +298,7 @@ public sealed class StockBatcher : MonoBehaviour
     // (The Scene view isn't a game camera, so products only show in the Game view.)
     private void LateUpdate()
     {
-        if (Paused || All.Count == 0) return;
+        if (All.Count == 0) return;
         if (cameras.Length < Camera.allCamerasCount) cameras = new Camera[Camera.allCamerasCount * 2];
         int camCount = Camera.GetAllCameras(cameras);
         float maxSq = DrawDistance * DrawDistance;
@@ -273,9 +316,10 @@ public sealed class StockBatcher : MonoBehaviour
             {
                 var batch = All[b];
                 int count = batch.matrices.Count;
-                if (count == 0 || (mask & (1 << batch.shape.layer)) == 0) continue;
+                if (count == 0 || (Paused && !batch.edit) || (mask & (1 << batch.shape.layer)) == 0) continue;
                 var bounds = batch.rp.worldBounds;
-                if (bounds.SqrDistance(eye) > maxSq || !GeometryUtility.TestPlanesAABB(Planes, bounds)) continue;
+                // (Edit-view copies have no distance limit: the edit camera can zoom out over a big store.)
+                if ((!batch.edit && bounds.SqrDistance(eye) > maxSq) || !GeometryUtility.TestPlanesAABB(Planes, bounds)) continue;
 
                 var rp = batch.rp;
                 rp.camera = cam;
