@@ -246,6 +246,9 @@ public class PlayerController3D : NetworkBehaviour
         }
         wasMenuOpen = menuOpen;
 
+        // Field of view from the player's settings (phone → Settings), live even with the phone up.
+        if (playerCamera != null && GameSettings.FieldOfView > 0f && !Mathf.Approximately(playerCamera.fieldOfView, GameSettings.FieldOfView))
+            playerCamera.fieldOfView = GameSettings.FieldOfView;
         if (!menuOpen) HandleLook();
         HandleMove(allowInput: !menuOpen);
     }
@@ -263,8 +266,9 @@ public class PlayerController3D : NetworkBehaviour
 
     private void HandleLook()
     {
-        float mouseX = Input.GetAxis("Mouse X") * 100f * mouseSensitivity * Time.deltaTime;
-        float mouseY = Input.GetAxis("Mouse Y") * 100f * mouseSensitivity * Time.deltaTime;
+        float sensitivity = mouseSensitivity * GameSettings.MouseSensitivity; // the player's own setting (phone → Settings)
+        float mouseX = Input.GetAxis("Mouse X") * 100f * sensitivity * Time.deltaTime;
+        float mouseY = Input.GetAxis("Mouse Y") * 100f * sensitivity * Time.deltaTime * (GameSettings.InvertY ? -1f : 1f);
 
         // Pushing a cart and holding the button: turn only the head, so the body (and the cart) keep going straight.
         bool freeLook = Input.GetMouseButton(freeLookButton) && CartNet.GetPushedBy(OwnerClientId) != null;
