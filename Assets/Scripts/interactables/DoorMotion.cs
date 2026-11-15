@@ -52,6 +52,16 @@ public class DoorMotion : MonoBehaviour
     private Vector3 doorCenter;   // middle of all leaves
 
     public bool IsOpen => target > 0.5f;
+
+    /// <summary>The space the leaves fill when shut (world; doors don't move). False if it has no leaves to measure.</summary>
+    public bool TryGetClosedBounds(out Bounds bounds)
+    {
+        bounds = closedBounds;
+        return hasClosedBounds;
+    }
+
+    private Bounds closedBounds;
+    private bool hasClosedBounds;
     public Motion Type => motion;
 
     private void Awake()
@@ -68,6 +78,11 @@ public class DoorMotion : MonoBehaviour
             if (part == null) continue;
             closedPos[i] = part.localPosition;
             closedRot[i] = part.localRotation;
+            foreach (var r in part.GetComponentsInChildren<Renderer>(true))
+            {
+                if (!hasClosedBounds) { closedBounds = r.bounds; hasClosedBounds = true; }
+                else closedBounds.Encapsulate(r.bounds);
+            }
 
             // The leaf's middle (from what you see under it) moves around the hinge's up axis.
             Vector3 mid = LeafMiddle(part);

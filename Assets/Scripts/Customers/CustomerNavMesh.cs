@@ -59,7 +59,7 @@ public class CustomerNavMesh : MonoBehaviour
     private bool pending = true;
     private float lastChange = -999f;
     private float nextPoll;
-    private int seenItems = -1, seenWalls = -1, seenOpenings = -1;
+    private int seenItems = -1, seenWalls = -1, seenOpenings = -1, seenDoors = -1;
 
     private void Awake() => Instance = this;
 
@@ -85,12 +85,13 @@ public class CustomerNavMesh : MonoBehaviour
         {
             nextPoll = Time.time + 0.5f;
             if (ItemPickupNet.LayoutVersion != seenItems || CuttableWall.Version != seenWalls ||
-                WallOpening.Version != seenOpenings)
+                WallOpening.Version != seenOpenings || DoorNet.CustomerVersion != seenDoors)
             {
                 if (seenItems >= 0) MarkDirty();
                 seenItems = ItemPickupNet.LayoutVersion;
                 seenWalls = CuttableWall.Version;
                 seenOpenings = WallOpening.Version;
+                seenDoors = DoorNet.CustomerVersion;
             }
         }
 
@@ -119,6 +120,7 @@ public class CustomerNavMesh : MonoBehaviour
         Bounds bounds = BuildBounds();
         NavMeshBuilder.CollectSources(bounds, layers, NavMeshCollectGeometry.PhysicsColliders, 0, markups, sources);
         sources.RemoveAll(Skip);
+        AddDoorBlockers(bounds);
 
         if (data == null)
         {
@@ -139,6 +141,28 @@ public class CustomerNavMesh : MonoBehaviour
                c.GetComponentInParent<DoorMotion>() != null ||
                c.GetComponentInParent<EditLocalItem>() != null ||
                c.GetComponentInParent<CustomerView>() != null;
+    }
+
+    // Door leaves are left out above (doorways are walkable). Doors customers mustn't use (locked,
+    // or manual and not public: staff, back rooms, docks) get a solid block where the shut door is.
+    private void AddDoorBlockers(Bounds area)
+    {
+        foreach (var door in DoorNet.All)
+        {
+            if (door == null || door.CustomersCanUse || !door.TryGetComponent<DoorMotion>(out var motion) ||
+                !motion.TryGetClosedBounds(out var b) || !area.Intersects(b)) continue;
+            Vector3 size = b.size;
+            size.x = Mathf.Max(size.x, 0.5f); // a thin leaf would slip between the build's samples
+            size.z = Mathf.Max(size.z, 0.5f);
+            size.y += 0.2f;
+            sources.Add(new NavMeshBuildSource
+            {
+                shape = NavMeshBuildSourceShape.Box,
+                size = size,
+                transform = Matrix4x4.TRS(b.center - Vector3.up * 0.1f, Quaternion.identity, Vector3.one),
+                area = 1, // Not Walkable
+            });
+        }
     }
 
     private Bounds BuildBounds()

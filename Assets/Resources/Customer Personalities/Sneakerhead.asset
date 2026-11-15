@@ -25,5 +25,6 @@ MonoBehaviour:
   exoticLove: 2.0
   looksMatter: 0.8
   curiosity: 0.05
+  knowsTheMall: 0.7
   budgetDollars: {x: 100, y: 400}
   wantItems: {x: 1, y: 2}

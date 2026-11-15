@@ -46,6 +46,9 @@ public class CustomerPersonality : ScriptableObject
     [Range(0f, 1f)] public float curiosity = 0.1f;
 
     [Header("Shopping")]
+    [Tooltip("Chance they head straight for stores that sell what they like (they know the mall), instead " +
+             "of wandering to a random store and following whatever catches their eye on the way.")]
+    [Range(0f, 1f)] public float knowsTheMall = 0.3f;
     [Tooltip("Dollars they bring to the mall (random between).")]
     public Vector2 budgetDollars = new(20f, 150f);
     [Tooltip("How many things they'd like to buy on this visit (random between, inclusive).")]
