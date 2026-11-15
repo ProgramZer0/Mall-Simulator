@@ -40,6 +40,9 @@ using UnityEngine;
 public class CheckoutCounter : NetworkBehaviour
 {
     public enum Phase : byte { Scanning, AwaitingPayment }
+
+    /// <summary>The customer number on things a customer left on the counter (take them back to the shelves).</summary>
+    public const int LeftBehind = -1;
     public enum PayMethod : byte { Cash, Card }
 
     /// <summary>One thing on the belt.</summary>
@@ -49,7 +52,7 @@ public class CheckoutCounter : NetworkBehaviour
         public int itemId;
         public int priceCents;
         public int units;
-        public int customer;
+        public int customer;  // LeftBehind (-1): a customer walked off without it; take it, don't scan it
         public byte whole;  // 1: a whole item (sold loose); 0: one product off a shelf
         public byte tag;    // 1: too big for the belt, shown as a price tag
 
@@ -157,6 +160,7 @@ public class CheckoutCounter : NetworkBehaviour
     private NetworkList<BeltItem> items;
     private NetworkList<Line> lines;
     private readonly List<ProgressionManager.Sold> sale = new(); // host: what's been scanned, for profit
+    private readonly List<BeltItem> scanned = new();              // host: the same, as they were on the belt
     private NetworkList<int> change; // the bills and coins counted out, in cents, in the order taken
     private readonly NetworkVariable<State> state = new();
 
@@ -338,6 +342,19 @@ public class CheckoutCounter : NetworkBehaviour
         if (!IsServer || purchases == null || purchases.Count == 0) return 0;
         if (IsForSale) return 0; // a counter up for sale isn't open to customers
         int customer = nextCustomer++;
+        AddToBelt(purchases, customer);
+        return customer;
+    }
+
+    /// <summary>Server: things a customer put down on the counter and walked off from (taken, not scanned).</summary>
+    public void ServerLeaveOnCounter(IList<Purchase> purchases)
+    {
+        if (!IsServer || purchases == null || purchases.Count == 0) return;
+        AddToBelt(purchases, LeftBehind);
+    }
+
+    private void AddToBelt(IList<Purchase> purchases, int customer)
+    {
         foreach (var p in purchases)
             waiting.Add(new BeltItem
             {
@@ -350,7 +367,13 @@ public class CheckoutCounter : NetworkBehaviour
                 tag = (byte)(IsTooBig(p.itemId, p.whole) ? 1 : 0),
             });
         ServerFill();
-        return customer;
+    }
+
+    // The first customer on the belt who's still there to pay (not things left behind).
+    private int FirstCustomer()
+    {
+        foreach (var it in items.Each()) if (it.customer > 0) return it.customer;
+        return 0;
     }
 
     private void ServerFill()
@@ -369,8 +392,8 @@ public class CheckoutCounter : NetworkBehaviour
             waiting.RemoveAt(0);
         }
 
-        if (state.Value.customer == 0 && items.Count > 0)
-            state.Value = new State { phase = Phase.Scanning, customer = items[0].customer };
+        if (state.Value.customer == 0 && FirstCustomer() != 0)
+            state.Value = new State { phase = Phase.Scanning, customer = FirstCustomer() };
     }
 
     private void Update()
@@ -402,7 +425,8 @@ public class CheckoutCounter : NetworkBehaviour
             return s.method == PayMethod.Card
                 ? (s.moneyTaken == 0 ? "Paying by card: take the card" : "Paying by card: swipe it in the card reader")
                 : (s.moneyTaken == 0 ? "Paying cash: take the cash" : "Paying cash: count out the change from the drawer, then Confirm");
-        if (items.Count > 0) return "Click the things on the belt to scan them";
+        if (FirstCustomer() != 0) return "Click the things on the belt to scan them";
+        if (items.Count > 0) return "A customer left things behind: take them back to the shelves";
         return $"No customers{(IsServer && testKey != KeyCode.None ? $"   {testKey}: test customer" : "")}";
     }
 
@@ -419,7 +443,8 @@ public class CheckoutCounter : NetworkBehaviour
             case CheckoutClickable.Action.ScanItem:
                 foreach (var it in items.Each())
                     if (it.key == part.value)
-                        return it.customer == s.customer && !paying
+                        return it.customer == LeftBehind ? $"Left behind: {NameOf(it.itemId)}   Click: take it"
+                             : it.customer == s.customer && !paying
                             ? $"Click: scan {NameOf(it.itemId)}{(it.tag != 0 ? " (tag)" : "")} {FormatAmount(it.priceCents)}"
                             : "Next customer's";
                 return null;
@@ -478,7 +503,8 @@ public class CheckoutCounter : NetworkBehaviour
         switch (action)
         {
             case CheckoutClickable.Action.ScanItem:
-                if (!paying) ServerScan(value);
+                if (IsLeftBehind(value)) ServerTakeLeftBehind(value, rpcParams.Receive.SenderClientId);
+                else if (!paying) ServerScan(value);
                 return;
             case CheckoutClickable.Action.CustomerMoney:
                 if (paying && s.moneyTaken == 0)
@@ -557,11 +583,13 @@ public class CheckoutCounter : NetworkBehaviour
         {
             var it = items[i];
             if (it.key != key) continue;
+            if (it.customer == LeftBehind) return; // taken, not scanned (see ServerTakeLeftBehind)
             if (s.customer == 0) s.customer = it.customer;
             if (it.customer != s.customer) return; // the next customer's: this one pays first
             items.RemoveAt(i);
             lines.Add(new Line { itemId = it.itemId, priceCents = it.priceCents });
             sale.Add(new ProgressionManager.Sold { itemId = it.itemId, products = Mathf.Max(1, it.units), priceCents = it.priceCents });
+            scanned.Add(it);
             s.totalCents += it.priceCents;
 
             // That was this customer's last thing: they pay.
@@ -575,6 +603,12 @@ public class CheckoutCounter : NetworkBehaviour
             ServerFill();
             return;
         }
+    }
+
+    private bool IsLeftBehind(int key)
+    {
+        foreach (var it in items.Each()) if (it.key == key) return it.customer == LeftBehind;
+        return false;
     }
 
     private bool HasMoreFor(int customer)
@@ -608,29 +642,62 @@ public class CheckoutCounter : NetworkBehaviour
         if (plot != null && plot.HasOwner && econ != null) econ.ServerAddCents(plot.OwnerTeamId, receivedCents);
         if (plot != null && ProgressionManager.Instance != null) ProgressionManager.Instance.ServerRecordSale(plot, sale, receivedCents);
         sale.Clear();
+        scanned.Clear();
         lines.Clear();
         change.Clear();
-        state.Value = new State { phase = Phase.Scanning, customer = items.Count > 0 ? items[0].customer : 0 };
+        state.Value = new State { phase = Phase.Scanning, customer = FirstCustomer() };
         MessageRpc($"{text}: {FormatAmount(receivedCents)}");
         ServerFill();
         if (paidBy != 0) ServerCustomerPaid?.Invoke(this, paidBy);
     }
 
     /// <summary>
-    /// Server: a customer gives up before being served: their things come off the belt. False if
-    /// they're already being served (something scanned, or paying), so they stay.
+    /// Server: a customer walks off without paying (waited too long, the store closed). Their things stay
+    /// on the counter as left behind, scanned ones too, for a player to take back to the shelves; a sale
+    /// in progress is called off (no money, change back in the drawer).
     /// </summary>
-    public bool ServerCancelCustomer(int customer)
+    public void ServerCustomerWalkedOff(int customer)
     {
-        if (!IsServer || customer == 0) return false;
-        var s = state.Value;
-        if (s.customer == customer && (lines.Count > 0 || s.phase == Phase.AwaitingPayment)) return false;
-        for (int i = items.Count - 1; i >= 0; i--) if (items[i].customer == customer) items.RemoveAt(i);
-        waiting.RemoveAll(it => it.customer == customer);
-        if (s.customer == customer)
-            state.Value = new State { phase = Phase.Scanning, customer = items.Count > 0 ? items[0].customer : 0 };
+        if (!IsServer || customer <= 0) return;
+        for (int i = 0; i < items.Count; i++)
+            if (items[i].customer == customer) { var it = items[i]; it.customer = LeftBehind; items[i] = it; }
+        for (int i = 0; i < waiting.Count; i++)
+            if (waiting[i].customer == customer) { var it = waiting[i]; it.customer = LeftBehind; waiting[i] = it; }
+
+        if (state.Value.customer == customer)
+        {
+            foreach (var it in scanned)
+            {
+                var back = it;
+                back.customer = LeftBehind;
+                back.key = nextKey++;
+                waiting.Insert(0, back);
+            }
+            scanned.Clear();
+            sale.Clear();
+            lines.Clear();
+            change.Clear();
+            state.Value = new State { phase = Phase.Scanning, customer = FirstCustomer() };
+            MessageRpc("The customer walked off");
+        }
         ServerFill();
-        return true;
+    }
+
+    // Server: a player takes something left behind on the counter into their hands (like taking a
+    // product off a shelf: into empty hands, or into a held crate of the same product with room).
+    private void ServerTakeLeftBehind(int key, ulong clientId)
+    {
+        for (int i = 0; i < items.Count; i++)
+        {
+            var it = items[i];
+            if (it.key != key || it.customer != LeftBehind) continue;
+            var player = NetworkManager.ConnectedClients.TryGetValue(clientId, out var client) ? client.PlayerObject : null;
+            if (player == null || !player.TryGetComponent<PlayerInventoryNet>(out var inventory)) return;
+            if (!inventory.ServerTryTake(it.itemId, it.whole != 0 ? it.units : 1, it.whole != 0)) return;
+            items.RemoveAt(i);
+            ServerFill();
+            return;
+        }
     }
 
     /// <summary>
