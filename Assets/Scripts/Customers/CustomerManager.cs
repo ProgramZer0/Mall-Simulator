@@ -130,6 +130,8 @@ public class CustomerManager : NetworkBehaviour
         public int wants;
         public readonly HashSet<StorePlot> passed = new();
         public StorePlot goalStore;    // the store they're walking toward (null: the exit)
+        public StorePlot mustEnter;    // a test customer: goes into this store whatever its appeal
+        public Vector3 cameFrom;       // where they came into the mall (they leave by another way if there is one)
         public Entrance goalEntrance;
 
         // In a store
@@ -167,7 +169,7 @@ public class CustomerManager : NetworkBehaviour
     private float spawnCredit;
     private float nextSend, nextFullSend, nextEntrances;
     private int thinkCursor;
-    private bool warnedNoSpawn;
+    private bool warnedNoSpawn, warnedNoPersonality;
     private readonly Stopwatch thinkTimer = new();
 
     // Every machine: the drawn customers.
@@ -234,12 +236,20 @@ public class CustomerManager : NetworkBehaviour
 
     private void Update()
     {
+        bool spawnPressed = spawnKey != KeyCode.None && Input.GetKeyDown(spawnKey) && !UIState.IsMenuOpen;
+        if (spawnPressed && !IsSpawned)
+            Debug.LogWarning("[Customers] Not running: the CustomerManager's object isn't spawned on the network " +
+                             "(it needs a NetworkObject, like the MallManager object).", this);
         if (!IsSpawned || !IsServer) return;
         var nav = CustomerNavMesh.Instance;
-        if (nav == null || !nav.Ready) return;
+        if (nav == null || !nav.Ready)
+        {
+            if (spawnPressed) Debug.LogWarning($"[Customers] Can't spawn yet: {(nav == null ? "no CustomerNavMesh" : nav.Describe())}.", this);
+            return;
+        }
 
         if (Time.time >= nextEntrances) RefreshEntrances();
-        if (spawnKey != KeyCode.None && Input.GetKeyDown(spawnKey) && !UIState.IsMenuOpen) SpawnNearLocalPlayer();
+        if (spawnPressed) SpawnNearLocalPlayer();
         UpdateArrivals();
 
         float dt = Time.deltaTime;
@@ -278,7 +288,7 @@ public class CustomerManager : NetworkBehaviour
         {
             spawnCredit -= 1f;
             var sp = PickSpawnPoint(null);
-            if (sp != null) Spawn(sp.transform.position);
+            if (sp != null) Spawn(sp.transform.position, out _);
             else if (!warnedNoSpawn)
             {
                 warnedNoSpawn = true;
@@ -310,6 +320,8 @@ public class CustomerManager : NetworkBehaviour
         return null;
     }
 
+    // Test (host key): a customer comes in at the entrance nearest the player. Standing in an open
+    // store, they head straight for it and always go in. Says what happened either way.
     private void SpawnNearLocalPlayer()
     {
         var player = NetworkManager.LocalClient?.PlayerObject;
@@ -327,20 +339,43 @@ public class CustomerManager : NetworkBehaviour
             Debug.LogWarning("[Customers] No CustomerSpawnPoint in the scene: put some at the mall's entrances.", this);
             return;
         }
-        Spawn(best.transform.position);
+
+        var store = MallManager.Instance != null ? MallManager.Instance.GetPlotAt(at) : null;
+        var c = Spawn(best.transform.position, out string why, store);
+        if (c == null)
+        {
+            Debug.LogWarning($"[Customers] Test customer not spawned at '{best.name}': {why}", best);
+            return;
+        }
+        string where = c.mode == Mode.Exiting ? "the exit (no open store with a door it can reach)"
+                     : c.goalStore != null ? $"'{c.goalStore.DisplayName}'" : "nowhere";
+        string note = store == null ? ""
+                    : !store.IsOpen ? $" (you're in '{store.DisplayName}', but it isn't open)"
+                    : !entrances.ContainsKey(store) ? $" (you're in '{store.DisplayName}', but no way in was found: " +
+                                                      "its doors need walkable floor just inside and outside)"
+                    : "";
+        Debug.Log($"[Customers] Test customer #{c.id} ({c.personality.displayName}) came in at '{best.name}', " +
+                  $"heading for {where}{note}.", this);
     }
 
-    private void Spawn(Vector3 near)
+    // A new customer near a point (null and why if not). Visit: a store they head straight for and go into.
+    private Customer Spawn(Vector3 near, out string why, StorePlot visit = null)
     {
+        why = null;
         var settings = StoreAppealSettings.Instance;
         var personality = settings != null ? settings.PickRandom() : null;
         if (personality == null)
         {
-            Debug.LogWarning("[Customers] No customer personalities: add some to StoreAppealSettings → Personalities.", this);
-            maxCustomers = Mathf.Min(maxCustomers, customers.Count); // stop trying every frame
-            return;
+            why = "no customer personalities (StoreAppealSettings → Personalities)";
+            if (!warnedNoPersonality) Debug.LogWarning($"[Customers] Not spawning: {why}.", this);
+            warnedNoPersonality = true;
+            return null;
         }
-        if (!NavMesh.SamplePosition(near, out var hit, 3f, NavMesh.AllAreas)) return;
+        if (!NavMesh.SamplePosition(near, out var hit, 5f, NavMesh.AllAreas))
+        {
+            why = "no walkable floor within 5 m of it (is it inside CustomerNavMesh's area, on a floor with a collider?)";
+            return null;
+        }
 
         while (byId.ContainsKey(nextId) || nextId == 0) nextId++;
         var c = new Customer
@@ -355,13 +390,23 @@ public class CustomerManager : NetworkBehaviour
             budgetCents = Mathf.RoundToInt(Random.Range(personality.budgetDollars.x, personality.budgetDollars.y) * 100f),
             wants = Random.Range(personality.wantItems.x, personality.wantItems.y + 1),
             nextThink = Time.time,
+            cameFrom = hit.position,
         };
         customers.Add(c);
         byId[c.id] = c;
         MakeView(c.id, c.look, c.pos, c.yaw);
         ArriveRpc(new[] { c.id }, new[] { c.look }, new[] { c.pos }, new[] { PackYaw(c.yaw) });
-        PickGoal(c);
+        if (visit != null && visit.IsOpen && entrances.TryGetValue(visit, out var ways) && ways.Count > 0)
+        {
+            c.mustEnter = visit;
+            c.goalStore = visit;
+            c.goalEntrance = ways[0];
+            c.mode = Mode.Wander;
+            if (!PathTo(c, ways[0].outside)) PickGoal(c);
+        }
+        else PickGoal(c);
         Log(c, $"arrived ({personality.displayName}, ${c.budgetCents / 100} to spend, wants {c.wants})");
+        return byId.ContainsKey(c.id) ? c : null;
     }
 
     private void Despawn(Customer c)
@@ -505,7 +550,8 @@ public class CustomerManager : NetworkBehaviour
         c.goalStore = null;
 
         // Done (or nowhere to go): the exit.
-        var exit = PickSpawnPoint(sp => sp.isExit);
+        var exit = PickSpawnPoint(sp => sp.isExit && (sp.transform.position - c.cameFrom).sqrMagnitude > 25f)
+                   ?? PickSpawnPoint(sp => sp.isExit);
         c.mode = Mode.Exiting;
         if (exit == null || !PathTo(c, exit.transform.position)) { Despawn(c); return; }
         Log(c, "heading for the exit");
@@ -542,7 +588,7 @@ public class CustomerManager : NetworkBehaviour
         c.passed.Add(plot);
         float chance = plot.Appeal.For(c.personality).enterChance;
         bool full = InsideCount(plot) >= Capacity(plot);
-        if (!full && Random.value < chance)
+        if (plot == c.mustEnter || (!full && Random.value < chance))
         {
             Enter(c, plot, e);
             return true;

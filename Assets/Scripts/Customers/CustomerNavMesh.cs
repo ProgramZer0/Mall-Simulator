@@ -39,6 +39,16 @@ public class CustomerNavMesh : MonoBehaviour
     /// <summary>Built at least once (customers can start walking).</summary>
     public bool Ready { get; private set; }
 
+    /// <summary>Where it's at, in words (for messages).</summary>
+    public string Describe()
+    {
+        var nm = Unity.Netcode.NetworkManager.Singleton;
+        if (nm == null || !nm.IsServer) return "the walkable area is only built on the host";
+        if (building != null) return $"the walkable area is still being built ({buildTimer.Elapsed.TotalSeconds:0.0} s so far)";
+        if (!Ready) return "the walkable area hasn't been built yet";
+        return $"walkable area ready ({sources.Count} colliders)";
+    }
+
     private NavMeshData data;
     private NavMeshDataInstance dataInstance;
     private NavMeshBuildSettings settings;
