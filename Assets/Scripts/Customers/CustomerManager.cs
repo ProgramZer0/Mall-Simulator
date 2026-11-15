@@ -46,6 +46,9 @@ public class CustomerManager : NetworkBehaviour
     [SerializeField] private float sightPull = 1.2f;
     [Tooltip("Customers standing still (in line, at a shelf) keep at least this far apart (meters).")]
     [SerializeField] private float personalSpace = 0.55f;
+    [Tooltip("Walking customers steer around other customers and players within this distance (meters), " +
+             "keeping to the right to pass.")]
+    [SerializeField] private float avoidRange = 1.1f;
 
     [Header("Shopping")]
     [Tooltip("How many things for sale a customer looks over when deciding what to go and see next.")]
@@ -128,6 +131,8 @@ public class CustomerManager : NetworkBehaviour
         public bool arrived = true;
         public Vector3 destination;
         public int failures;
+        public float bestLeft;     // closest they've got to where they're going (for noticing they're stuck)
+        public float stuckSince;
 
         // The visit
         public float leaveAt;
@@ -276,6 +281,8 @@ public class CustomerManager : NetworkBehaviour
         UpdateArrivals();
 
         float dt = Time.deltaTime;
+        FillGrid();
+        GatherPlayers();
         foreach (var c in customers) Walk(c, dt);
 
         // Decisions, a few customers a frame, within the budget.
@@ -484,55 +491,124 @@ public class CustomerManager : NetworkBehaviour
         c.destination = hit.position;
         c.arrived = false;
         c.failures = 0;
+        c.bestLeft = float.MaxValue;
+        c.stuckSince = Time.time;
         return true;
     }
 
+    // Along the path, steering around people on the way. Each step stays on the walkable area; someone
+    // pushed so far off their line that they stop getting closer finds a new path.
     private void Walk(Customer c, float dt)
     {
         if (c.arrived) return;
-        float step = c.speed * dt;
-        while (step > 0f && c.corner < c.corners.Count)
-        {
-            Vector3 to = c.corners[c.corner];
-            Vector3 d = to - c.pos;
-            float len = d.magnitude;
-            if (len <= step)
-            {
-                c.pos = to;
-                step -= len;
-                c.corner++;
-                continue;
-            }
-            c.pos += d / len * step;
-            Vector3 flat = new(d.x, 0f, d.z);
-            if (flat.sqrMagnitude > 1e-4f) c.yaw = Quaternion.LookRotation(flat).eulerAngles.y;
-            step = 0f;
-        }
+        while (c.corner < c.corners.Count && FlatDistance(c.pos, c.corners[c.corner]) < 0.2f) c.corner++;
+        if (c.corner >= c.corners.Count) { Arrive(c); return; }
+
+        Vector3 to = c.corners[c.corner];
+        Vector3 ahead = to - c.pos;
+        ahead.y = 0f;
+        float left = ahead.magnitude;
+        Vector3 dir = ahead / Mathf.Max(left, 1e-4f);
+
+        // Close to the end, people in the way matter less (someone may be standing near their spot).
+        float toEnd = FlatDistance(c.pos, c.destination);
+        float avoidWeight = Mathf.Clamp01(toEnd - 0.3f);
+        Vector3 vel = dir * c.speed + Avoidance(c, dir) * (c.speed * avoidWeight);
+        vel = Vector3.ClampMagnitude(vel, c.speed * 1.15f);
+
+        float stepLen = vel.magnitude * dt;
+        if (stepLen > left && Vector3.Dot(vel, dir) > 0.5f * vel.magnitude) vel = vel / vel.magnitude * (left / Mathf.Max(dt, 1e-4f));
+        Vector3 next = c.pos + vel * dt;
+        // Height follows the path (stairs, ramps).
+        float along = left > 1e-4f ? Mathf.Clamp01(Vector3.Dot(next - c.pos, dir) / left) : 1f;
+        next.y = Mathf.Lerp(c.pos.y, to.y, along);
+        if (NavMesh.Raycast(c.pos, next, out var hit, NavMesh.AllAreas)) next = hit.position; // slide along walls
+
+        Vector3 moved = next - c.pos;
+        moved.y = 0f;
+        if (moved.sqrMagnitude > 1e-6f) c.yaw = Mathf.LerpAngle(c.yaw, Quaternion.LookRotation(moved).eulerAngles.y, 1f - Mathf.Exp(-dt * 12f));
+        c.pos = next;
         c.dirty = true;
-        if (c.corner >= c.corners.Count)
-        {
-            c.arrived = true;
-            c.nextThink = Time.time; // decide what's next straight away
-        }
+
+        // Stuck (pushed around a corner, wedged in a crowd): new path from here.
+        if (toEnd < c.bestLeft - 0.3f) { c.bestLeft = toEnd; c.stuckSince = Time.time; }
+        else if (Time.time - c.stuckSince > 3f && !PathTo(c, c.destination)) Arrive(c);
     }
 
-    // Customers standing still (in line, looking at a shelf, browsing) ease apart so they don't stand
-    // inside each other. Walkers pass through each other for now. Grid of 1 m cells, so it's cheap.
+    private void Arrive(Customer c)
+    {
+        c.arrived = true;
+        c.nextThink = Time.time; // decide what's next straight away
+    }
+
+    private static float FlatDistance(Vector3 a, Vector3 b)
+    {
+        float dx = a.x - b.x, dz = a.z - b.z;
+        return Mathf.Sqrt(dx * dx + dz * dz);
+    }
+
+    // A push away from nearby customers and players, plus a sidestep to the right for anyone ahead
+    // (so two people walking at each other pass instead of stopping nose to nose). Unit-ish length.
+    private Vector3 Avoidance(Customer c, Vector3 dir)
+    {
+        Vector3 push = Vector3.zero;
+        float range = avoidRange;
+        Vector3 right = new(dir.z, 0f, -dir.x);
+        int cx = Mathf.FloorToInt(c.pos.x), cz = Mathf.FloorToInt(c.pos.z);
+        for (int dx = -1; dx <= 1; dx++)
+        for (int dz = -1; dz <= 1; dz++)
+        {
+            if (!grid.TryGetValue(new Vector2Int(cx + dx, cz + dz), out var list)) continue;
+            foreach (var o in list)
+                if (o != c) push += AvoidOne(c.pos, o.pos, dir, right, range);
+        }
+        foreach (var p in players) push += AvoidOne(c.pos, p, dir, right, range) * 1.5f; // give players room
+        return Vector3.ClampMagnitude(push, 1.2f);
+    }
+
+    private static Vector3 AvoidOne(Vector3 me, Vector3 other, Vector3 dir, Vector3 right, float range)
+    {
+        Vector3 d = me - other;
+        if (Mathf.Abs(d.y) > 1.2f) return Vector3.zero; // another floor
+        d.y = 0f;
+        float dist = d.magnitude;
+        if (dist >= range || dist < 1e-4f) return Vector3.zero;
+        float w = 1f - dist / range;
+        Vector3 away = d / dist * w;
+        // In front of me: step to the right to pass.
+        float front = Vector3.Dot(-d / dist, dir);
+        if (front > 0.3f) away += right * (w * front);
+        return away;
+    }
+
+    // Everyone's position in 1 m cells (for who's near whom).
     private readonly Dictionary<Vector2Int, List<Customer>> grid = new();
     private readonly Stack<List<Customer>> spareCells = new();
+    private readonly List<Vector3> players = new();
 
-    private void KeepApart(float dt)
+    private void FillGrid()
     {
         foreach (var list in grid.Values) { list.Clear(); spareCells.Push(list); }
         grid.Clear();
         foreach (var c in customers)
         {
-            if (!c.arrived) continue;
             var key = new Vector2Int(Mathf.FloorToInt(c.pos.x), Mathf.FloorToInt(c.pos.z));
             if (!grid.TryGetValue(key, out var list)) grid[key] = list = spareCells.Count > 0 ? spareCells.Pop() : new List<Customer>();
             list.Add(c);
         }
+    }
 
+    private void GatherPlayers()
+    {
+        players.Clear();
+        foreach (var client in NetworkManager.ConnectedClientsList)
+            if (client.PlayerObject != null) players.Add(client.PlayerObject.transform.position);
+    }
+
+    // Customers standing still (in line, looking at a shelf, browsing) ease apart so they don't stand
+    // inside each other (walkers steer around them; see Avoidance).
+    private void KeepApart(float dt)
+    {
         float min = personalSpace, min2 = min * min;
         float maxStep = 1.2f * dt;
         foreach (var c in customers)
