@@ -33,6 +33,8 @@ public class CustomerManager : NetworkBehaviour
     [SerializeField] private int maxStoresPerVisit = 4;
     [Tooltip("Minutes a customer stays in the mall at most (then heads for the exit).")]
     [SerializeField] private float maxMinutesInMall = 8f;
+    [Tooltip("Minutes a customer stays at least: with no store to go to before then, they stroll the hallways.")]
+    [SerializeField] private float minMinutesInMall = 1.5f;
 
     [Header("Walking")]
     [SerializeField] private Vector2 walkSpeed = new(1.1f, 1.5f);
@@ -148,6 +150,7 @@ public class CustomerManager : NetworkBehaviour
 
         // The visit
         public float leaveAt;
+        public float stayUntil;    // they don't leave before this unless done shopping
         public int storesVisited;
         public int budgetCents;
         public int wants;
@@ -454,6 +457,7 @@ public class CustomerManager : NetworkBehaviour
             yaw = Random.Range(0f, 360f),
             speed = Random.Range(walkSpeed.x, walkSpeed.y),
             leaveAt = Time.time + maxMinutesInMall * 60f,
+            stayUntil = Time.time + minMinutesInMall * 60f,
             budgetCents = Mathf.RoundToInt(Random.Range(personality.budgetDollars.x, personality.budgetDollars.y) * 100f),
             wants = Random.Range(personality.wantItems.x, personality.wantItems.y + 1),
             nextThink = Time.time,
@@ -848,12 +852,19 @@ public class CustomerManager : NetworkBehaviour
         }
         c.goalStore = null;
 
+        // Nowhere to go yet, but not ready to leave: a stroll.
+        if (!done && Time.time < c.stayUntil && TryHallwaySpot(c.pos, out var stroll))
+        {
+            c.mode = Mode.Wander;
+            if (PathTo(c, stroll)) { Log(c, $"no store to go to ({WhyNoStores()}): strolling"); return; }
+        }
+
         // Done (or nowhere to go): the exit.
         var exit = PickSpawnPoint(sp => sp.isExit && (sp.transform.position - c.cameFrom).sqrMagnitude > 25f)
                    ?? PickSpawnPoint(sp => sp.isExit);
         c.mode = Mode.Exiting;
         if (exit == null || !PathTo(c, exit.transform.position)) { Despawn(c); return; }
-        Log(c, "heading for the exit");
+        Log(c, done ? "done: heading for the exit" : $"heading for the exit, no store to go to ({WhyNoStores()})");
     }
 
     // A walkable spot within Radius of a point, outside the store (so people don't all aim at one point).
