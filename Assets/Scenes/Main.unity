@@ -5318,7 +5318,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.8707408}
   m_AnchorMax: {x: 0.2503851, y: 1}
-  m_AnchoredPosition: {x: -2.332672, y: 2.3234863}
+  m_AnchoredPosition: {x: -2.3327026, y: 2.3234863}
   m_SizeDelta: {x: -2.7052002, y: -4.3699036}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &383177323
@@ -6924,6 +6924,7 @@ MonoBehaviour:
   arrivalsPerMinute: 60
   maxStoresPerVisit: 8
   maxMinutesInMall: 10
+  minMinutesInMall: 1.5
   walkSpeed: {x: 1.1, y: 1.5}
   passRange: 12
   storeCapacity: 12
@@ -6939,9 +6940,54 @@ MonoBehaviour:
   buyEagerness: 0.8
   queueSpacing: 0.5
   patienceSeconds: 200
+  secondsPerItemGuess: 6
   thinksPerSecond: 3
   thinkBudgetMs: 2
   looks: []
+  showReactions: 1
+  reactionLooks:
+  - kind: 0
+    text: Interested
+    color: {r: 0.7735849, g: 0.60882497, b: 0.348843, a: 0}
+    icon: {fileID: 0}
+  - kind: 1
+    text: Bought
+    color: {r: 0.35162356, g: 0.5773585, b: 0.27342823, a: 0}
+    icon: {fileID: 0}
+  - kind: 2
+    text: Too Pricey
+    color: {r: 0.6377357, g: 0.12393729, b: 0.12393729, a: 0}
+    icon: {fileID: 0}
+  - kind: 3
+    text: Sold Out
+    color: {r: 0.5245282, g: 0.21278028, b: 0.45050243, a: 0}
+    icon: {fileID: 0}
+  - kind: 4
+    text: Nothing For Me
+    color: {r: 1, g: 1, b: 1, a: 0}
+    icon: {fileID: 0}
+  - kind: 5
+    text: Line Too long
+    color: {r: 0.37658843, g: 0.4037736, b: 0.23083659, a: 0}
+    icon: {fileID: 0}
+  - kind: 6
+    text: Gave Up Waiting
+    color: {r: 0.30820215, g: 0.5320754, b: 0.5124778, a: 0}
+    icon: {fileID: 0}
+  - kind: 7
+    text: Paid
+    color: {r: 0.008384943, g: 1, b: 0, a: 0}
+    icon: {fileID: 0}
+  - kind: 8
+    text: Store Cclosed
+    color: {r: 0, g: 0, b: 0, a: 0}
+    icon: {fileID: 0}
+  - kind: 9
+    text: No Checkout
+    color: {r: 0.5018867, g: 0.5018867, b: 0.5018867, a: 0}
+    icon: {fileID: 0}
+  reactionSeconds: 2.5
+  reactionRange: 30
   sendRate: 10
   logDecisions: 1
   drawPaths: 1
@@ -13867,7 +13913,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0.27600002}
-  m_AnchoredPosition: {x: -0.00020599365, y: -0.87319946}
+  m_AnchoredPosition: {x: -0.00020599365, y: -0.8732004}
   m_SizeDelta: {x: -0.27600098, y: -2.2707005}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &901036962
@@ -15531,7 +15577,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -11.48703, y: 39.86139}
+  m_AnchoredPosition: {x: -11.487061, y: 39.86139}
   m_SizeDelta: {x: -676.79443, y: -356.55322}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &962819998
@@ -25478,7 +25524,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.785}
   m_AnchorMax: {x: 0.82500005, y: 1}
-  m_AnchoredPosition: {x: -4.337982, y: 2.7698975}
+  m_AnchoredPosition: {x: -4.3380127, y: 2.7698975}
   m_SizeDelta: {x: -8.6759, y: -6.8029995}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1557418836
@@ -32601,7 +32647,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0.53722984, y: 0.11374079}
-  m_AnchoredPosition: {x: -1.9900208, y: -1.0599976}
+  m_AnchoredPosition: {x: -1.9900513, y: -1.0599976}
   m_SizeDelta: {x: -0.049987793, y: -1.8370056}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &1928707708
