@@ -170,7 +170,6 @@ public class CustomerNavMesh : MonoBehaviour
     // Per build: whether each item is added as boxes (many of its colliders ask).
     private static readonly Dictionary<ItemPickupNet, bool> AddedAsItem = new();
     private readonly List<Collider> itemColliders = new();
-    }
 
     // Placed things (furniture, shelves, boxes on the floor) as solid shapes, whatever layer they're on and
     // even while their colliders are switched off (hidden on the host during store edit mode), so customers
