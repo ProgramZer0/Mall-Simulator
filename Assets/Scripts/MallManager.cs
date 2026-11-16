@@ -33,6 +33,18 @@ public class MallManager : NetworkBehaviour
     [Tooltip("Players allowed on one team. 1 = everyone plays solo (co-op off).")]
     [SerializeField] private int maxPlayersPerTeam = 1;
 
+    [Header("Doorways")]
+    [Tooltip("Each store keeps at least one doorway clear: nothing may be put down in the last clear one. " +
+             "This is how far into the store from the doorway is kept clear (meters).")]
+    [SerializeField, Min(0f)] private float doorwayClearDepth = 1.2f;
+    [Tooltip("...and how high above the floor something has to start to not count (meters): things hung " +
+             "higher up on the wall beside a door don't block it.")]
+    [SerializeField, Min(0.1f)] private float doorwayClearHeight = 1.0f;
+
+    /// <summary>How far into a store its kept-clear doorway reaches (0: no doorway rule).</summary>
+    public static float DoorwayClearDepth => Instance != null ? Instance.doorwayClearDepth : 0f;
+    public static float DoorwayClearHeight => Instance != null ? Instance.doorwayClearHeight : 1f;
+
     [Header("Clearing For Edit")]
     [Tooltip("Starting edit mode with other players in the store gives them this long to leave; then anyone " +
              "still inside is moved out and edit mode starts. No placing in the store meanwhile.")]

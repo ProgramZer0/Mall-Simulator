@@ -133,6 +133,10 @@ public partial class CustomerManager : NetworkBehaviour
     [SerializeField] private float fleeSpeed = 1.6f;
     [Tooltip("How long a caught shoplifter stands still (after dropping what they took) before running for the exit.")]
     [SerializeField] private float caughtStopSeconds = 1.2f;
+    [Tooltip("A customer who can't find a way out of a store (something's in the way) says so, gets less happy " +
+             "and the store's team is told. If they're still stuck after this long (seconds), they're let out at " +
+             "the door and leave very unhappy. (Each store keeps one doorway clear: MallManager > Doorways.)")]
+    [SerializeField, Min(1f)] private float trappedLetOutSeconds = 30f;
     [Tooltip("How close a player must be to stop a customer (meters).")]
     [SerializeField] private float stopRange = 3f;
 
@@ -206,6 +210,7 @@ public partial class CustomerManager : NetworkBehaviour
         NoCheckout,     // nowhere to pay
         CheaperElsewhere, // put it back: another store sells it for less (and they'll go there)
         Caught,         // a shoplifter, stopped by a player
+        Trapped,        // can't get out of a store: something's in the way
     }
 
     [Serializable]
@@ -232,6 +237,7 @@ public partial class CustomerManager : NetworkBehaviour
         { Reaction.NoCheckout, ("Where do I pay?", new Color(1f, 0.4f, 0.35f)) },
         { Reaction.CheaperElsewhere, ("Cheaper elsewhere", new Color(1f, 0.85f, 0.3f)) },
         { Reaction.Caught, ("Busted!", new Color(1f, 0.25f, 0.25f)) },
+        { Reaction.Trapped, ("Let me out!", new Color(1f, 0.35f, 0.3f)) },
     };
 
     // Host: how often each reaction happened in each store (for tuning; see StoreReport).
@@ -331,6 +337,7 @@ public partial class CustomerManager : NetworkBehaviour
         public int failures;
         public float bestLeft;     // least path left so far (for noticing they're stuck)
         public float stuckSince;
+        public float trappedSince = -1f; // when they found they couldn't get out of a store (-1: not trapped)
         public int stuckRepaths;   // new paths in a row without getting anywhere
         public string pathProblem; // the last reason a path failed (debug)
         public float lane;         // their side of the path (meters, + = right)
@@ -1208,7 +1215,14 @@ public partial class CustomerManager : NetworkBehaviour
 
     private void Think(Customer c)
     {
-        if (c.failures > 4) { Log(c, "stuck: gone"); Despawn(c); return; }
+        if (c.failures > 4)
+        {
+            if (Trapped(c)) return;
+            Log(c, "stuck: gone");
+            Despawn(c);
+            return;
+        }
+        if (c.trappedSince >= 0f && c.failures == 0 && !c.arrived) c.trappedSince = -1f; // found a way out
 
         // The store shut (closed, being renovated, sold) while they were in it: out they go.
         if (c.store != null && c.mode != Mode.Leaving && !c.store.IsOpen)
@@ -2252,6 +2266,80 @@ public partial class CustomerManager : NetworkBehaviour
     }
 
     private static ulong TeamOf(ulong clientId) => MallManager.GetTeamOf(clientId);
+
+    /* ========================= TRAPPED IN A STORE ========================= */
+
+    // Keeps failing to find a way anywhere while standing in a store: something's blocking the way out.
+    // They say so (and the team hears), get unhappier, and keep trying; after a while they're let out at
+    // the door so a glitch can't hold them forever. False if they're not in a store (stuck elsewhere).
+    private bool Trapped(Customer c)
+    {
+        var plot = c.store != null ? c.store : MallManager.Instance != null ? MallManager.Instance.GetPlotAt(c.pos + Vector3.up * 0.1f) : null;
+        if (plot == null) return false;
+        c.failures = 0; // keep trying (the way may be cleared)
+        if (c.trappedSince < 0f)
+        {
+            c.trappedSince = Time.time;
+            Log(c, $"TRAPPED in '{plot.DisplayName}': {c.pathProblem}");
+            React(c, Reaction.Trapped);
+            if (plot.HasOwner && NotificationManager.Instance != null && (!trappedNoticeAt.TryGetValue(plot, out float quietUntil) || Time.time >= quietUntil))
+            {
+                trappedNoticeAt[plot] = Time.time + 30f; // once in a while per store, not per customer
+                NotificationManager.Instance.ServerNotifyTeamText(plot.OwnerTeamId, $"Customer stuck in {plot.DisplayName}",
+                    "Something's blocking their way out. Clear a path to the door.");
+            }
+        }
+        c.satisfaction = Mathf.Min(c.satisfaction, 0f) - 0.1f;
+        if (Time.time - c.trappedSince < trappedLetOutSeconds)
+        {
+            if (Random.value < 0.3f) React(c, Reaction.Trapped);
+            c.nextThink = Time.time + 1.5f;
+            return true;
+        }
+
+        // Still stuck: let out at the nearest door, very unhappy.
+        Vector3 door = c.pos;
+        float best = float.MaxValue;
+        if (entrances.TryGetValue(plot, out var ways))
+            foreach (var e in ways)
+            {
+                float d = (e.outside - c.pos).sqrMagnitude;
+                if (d < best) { best = d; door = e.outside; }
+            }
+        if (best == float.MaxValue) { Log(c, "trapped, and no door to let them out of: gone"); Despawn(c); return true; }
+        Log(c, $"let out of '{plot.DisplayName}' after {Time.time - c.trappedSince:0} s trapped");
+        if (c.store != null)
+        {
+            c.satisfaction = -1f;
+            AbandonStore(c);
+            if (plot.HasOwner && ProgressionManager.Instance != null)
+                ProgressionManager.Instance.ServerCustomerLeft(plot.OwnerTeamId, -1f);
+            c.store = null;
+        }
+        else if (plot.HasOwner && ProgressionManager.Instance != null)
+            ProgressionManager.Instance.ServerCustomerLeft(plot.OwnerTeamId, -1f);
+        DropFromGroup(c);
+        c.trappedSince = -1f;
+        c.pos = door;
+        c.corners.Clear();
+        c.corner = 0;
+        c.dirty = true;
+        SnapRpc(c.id, door, PackYaw(c.yaw));
+        c.leaveAt = 0f; // had enough: off home
+        c.mode = Mode.Exiting;
+        var exit = PickSpawnPoint(sp => sp.isExit);
+        if (exit == null || !PathTo(c, exit.transform.position)) Despawn(c);
+        return true;
+    }
+
+    private readonly Dictionary<StorePlot, float> trappedNoticeAt = new();
+
+    // Moved, not walked (let out of a store): every machine puts them there at once.
+    [Rpc(SendTo.Everyone)]
+    private void SnapRpc(ushort id, Vector3 pos, byte yaw)
+    {
+        if (views.TryGetValue(id, out var v) && v != null) v.SetTarget(pos, UnpackYaw(yaw), snap: true);
+    }
 
     // ...then off to the mall exit (still at a shoplifter's run).
     private void RunForExit(Customer c)

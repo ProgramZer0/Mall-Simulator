@@ -1442,7 +1442,12 @@ public class PlayerInteractInput : NetworkBehaviour
         int ground = LayerMask.NameToLayer("Ground");
         int blocking = placementBlockingMask.value;
         if (ground >= 0) blocking &= ~(1 << ground);
-        return PlacementCheck.FitsPrefab(boxPrefab, position, rotation, blocking, placementMask);
+        if (!PlacementCheck.FitsPrefab(boxPrefab, position, rotation, blocking, placementMask)) return false;
+        // On the floor (not a cart): not in the store's last clear doorway either.
+        Vector3 center = PlacementCheck.PrefabCenter(boxPrefab, position, rotation);
+        if (CartNet.FindCartAt(center) != null) return true;
+        var shape = ShipmentPacker.GetBox(boxPrefab);
+        return !PlacementCheck.BlocksLastDoorway(center, shape.half, rotation, null);
     }
 
     public bool FitsAt(int itemId, Vector3 position, Quaternion rotation, bool onWall = false)
