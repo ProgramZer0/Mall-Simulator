@@ -21,7 +21,7 @@ using Random = UnityEngine.Random;
 /// Put this on the MallManager object (it has a NetworkObject), next to StoreAppealSettings (its
 /// Personalities are who comes). Place CustomerSpawnPoints at the mall's entrances.
 /// </summary>
-public class CustomerManager : NetworkBehaviour
+public partial class CustomerManager : NetworkBehaviour
 {
     public static CustomerManager Instance { get; private set; }
 
@@ -36,6 +36,16 @@ public class CustomerManager : NetworkBehaviour
     [SerializeField] private float maxMinutesInMall = 8f;
     [Tooltip("Minutes a customer stays at least: with no store to go to before then, they stroll the hallways.")]
     [SerializeField] private float minMinutesInMall = 1.5f;
+
+    [Header("Groups")]
+    [Tooltip("Customer groups that come (couples, friends...). Empty: everything in Resources/Customer Groups.")]
+    [SerializeField] private List<CustomerGroupDef> groups = new();
+    [Tooltip("Chance an arrival is a group rather than someone on their own.")]
+    [Range(0f, 1f)] [SerializeField] private float groupChance = 0.35f;
+    [Tooltip("How far apart a group walks side by side (meters).")]
+    [SerializeField] private float groupSpacing = 0.7f;
+    [Tooltip("Longest a group member waits outside a store for the others (seconds) before they move on.")]
+    [SerializeField] private float groupWaitSeconds = 90f;
 
     [Header("Walking")]
     [SerializeField] private Vector2 walkSpeed = new(1.1f, 1.5f);
@@ -206,6 +216,7 @@ public class CustomerManager : NetworkBehaviour
     // Host: a customer reacts; everyone sees it over their head, and it's counted for their store.
     private void React(Customer c, Reaction r)
     {
+        if (c.group != null) GroupReact(c, r);
         if (c.store != null)
         {
             if (!storeTally.TryGetValue(c.store, out var t)) storeTally[c.store] = t = new int[Enum.GetValues(typeof(Reaction)).Length];
@@ -259,6 +270,8 @@ public class CustomerManager : NetworkBehaviour
         Queued,      // in line (at the front: their things are on the belt)
         Leaving,     // walking out of the store
         Exiting,     // walking to the mall exit
+        Follow,      // in a group, walking with the leader
+        Wait,        // in a group, waiting outside a store for the others
     }
 
     private struct Taken
@@ -337,6 +350,11 @@ public class CustomerManager : NetworkBehaviour
         public StorePlot baggedIn;  // the store their last bag came from
         public StorePlot bargainStore; // somewhere they know sells something for less: going there next
         public int bargainItem;        // ...this
+
+        // Groups (see CustomerGroups.cs)
+        public Group group;
+        public int handed;             // things in their basket that others in the group handed them to pay for
+        public StorePlot waitFor;      // the store they're waiting outside of
 
         // Checkout
         public CheckoutCounter counter;
@@ -594,7 +612,9 @@ public class CustomerManager : NetworkBehaviour
         {
             spawnCredit -= 1f;
             var sp = PickSpawnPoint(null);
-            if (sp != null) Spawn(sp.transform.position, out _);
+            CustomerGroupDef groupDef = Random.value < groupChance ? PickGroupDef() : null;
+            if (sp != null && groupDef != null) spawnCredit -= Mathf.Max(0, SpawnGroup(groupDef, sp.transform.position) - 1);
+            else if (sp != null) Spawn(sp.transform.position, out _);
             else if (!warnedNoSpawn)
             {
                 warnedNoSpawn = true;
@@ -688,12 +708,13 @@ public class CustomerManager : NetworkBehaviour
     }
 
     // A new customer near a point (null and why if not). Visit: a store they head straight for and go into.
-    private Customer Spawn(Vector3 near, out string why, StorePlot visit = null)
+    private Customer Spawn(Vector3 near, out string why, StorePlot visit = null,
+                           CustomerPersonality personality = null, bool pickGoal = true)
     {
         why = null;
         var settings = StoreAppealSettings.Instance;
         if (eventsDirty) RefreshEventEffects();
-        var personality = settings != null ? PickPersonality() : null;
+        if (personality == null) personality = settings != null ? PickPersonality() : null;
         if (personality == null)
         {
             why = "no customer personalities (StoreAppealSettings → Personalities)";
@@ -737,13 +758,18 @@ public class CustomerManager : NetworkBehaviour
             c.mode = Mode.Wander;
             if (!PathTo(c, ways[0].outside)) PickGoal(c);
         }
-        else PickGoal(c);
+        else if (pickGoal) PickGoal(c);
         Log(c, $"arrived ({personality.displayName}, ${c.budgetCents / 100} to spend, wants {c.wants})");
         return byId.ContainsKey(c.id) ? c : null;
     }
 
     private void Despawn(Customer c)
     {
+        if (c.group != null)
+        {
+            if (c.group.Leader == c && c.mode == Mode.Exiting) GroupLeftMall(c);
+            else DropFromGroup(c);
+        }
         if (c.stolen.Count > 0) GotAway(c);
         AbandonStore(c);
         customers.Remove(c);
@@ -826,8 +852,9 @@ public class CustomerManager : NetworkBehaviour
         float avoidWeight = Mathf.Clamp01(toEnd - 0.3f);
         if (c.mode == Mode.Exiting && toEnd < exitReach) { Arrive(c); return; } // out the door
         if (InDoorway(c.pos)) avoidWeight = 0f; // coming and going: straight through
-        Vector3 vel = dir * c.speed + Avoidance(c, dir) * (c.speed * avoidWeight);
-        vel = Vector3.ClampMagnitude(vel, c.speed * 1.15f);
+        float speed = GroupSpeed(c);
+        Vector3 vel = dir * speed + Avoidance(c, dir) * (speed * avoidWeight);
+        vel = Vector3.ClampMagnitude(vel, speed * 1.15f);
         if (vel.magnitude * dt > left && Vector3.Dot(vel, dir) > 0.5f * vel.magnitude)
             vel = vel.normalized * (left / Mathf.Max(dt, 1e-4f)); // don't overshoot
 
@@ -982,7 +1009,7 @@ public class CustomerManager : NetworkBehaviour
         {
             if (!grid.TryGetValue(new Vector2Int(cx + dx, cz + dz), out var list)) continue;
             foreach (var o in list)
-                if (o != c) push += AvoidOne(c.pos, o.pos, dir, right, range);
+                if (o != c && !SameGroup(c, o)) push += AvoidOne(c.pos, o.pos, dir, right, range); // a group walks together
         }
         foreach (var p in players) push += AvoidOne(c.pos, p, dir, right, range) * 1.5f; // give players room
         return Vector3.ClampMagnitude(push, 1.2f);
@@ -1047,7 +1074,7 @@ public class CustomerManager : NetworkBehaviour
     // inside each other (walkers steer around them; see Avoidance).
     private void KeepApart(float dt)
     {
-        float min = personalSpace, min2 = min * min;
+        float min = personalSpace;
         float maxStep = 1.2f * dt;
         foreach (var c in customers)
         {
@@ -1074,10 +1101,11 @@ public class CustomerManager : NetworkBehaviour
                     Vector3 d = c.pos - o.pos;
                     d.y = 0f;
                     float d2 = d.sqrMagnitude;
-                    if (d2 >= min2 || Mathf.Abs(c.pos.y - o.pos.y) > 1f) continue;
+                    float space = SameGroup(c, o) ? min * 0.75f : min; // a group stands closer together
+                    if (d2 >= space * space || Mathf.Abs(c.pos.y - o.pos.y) > 1f) continue;
                     if (d2 < 1e-6f) d = new Vector3(Mathf.Sin(c.id), 0f, Mathf.Cos(c.id)) * 0.01f; // exactly on top: split
                     float dist = Mathf.Sqrt(Mathf.Max(d2, 1e-6f));
-                    push += d / dist * (min - dist);
+                    push += d / dist * (space - dist);
                 }
             }
             if (push.sqrMagnitude < 1e-6f) continue;
@@ -1137,6 +1165,8 @@ public class CustomerManager : NetworkBehaviour
             case Mode.Exiting:
                 if (c.arrived) { Log(c, "left the mall"); Despawn(c); }
                 break;
+            case Mode.Follow: ThinkFollow(c); break;
+            case Mode.Wait: ThinkWait(c); break;
         }
     }
 
@@ -1144,7 +1174,8 @@ public class CustomerManager : NetworkBehaviour
     // kind of customer), or the exit when they're done.
     private void PickGoal(Customer c)
     {
-        bool done = Time.time >= c.leaveAt || c.storesVisited >= maxStoresPerVisit || c.budgetCents <= 0;
+        if (FollowInstead(c)) return; // in a group: the leader chooses
+        bool done = Time.time >= c.leaveAt || c.storesVisited >= maxStoresPerVisit || BudgetLeft(c) <= 0;
         if (!done && MallManager.Instance != null)
         {
             // Someone who knows the mall heads for a store that sells what they like; anyone else
@@ -1178,7 +1209,7 @@ public class CustomerManager : NetworkBehaviour
                 if (plot == null || !plot.IsOpen || plot.Appeal == null || c.passed.Contains(plot) ||
                     !entrances.TryGetValue(plot, out var list) || list.Count == 0)
                     continue;
-                float w = knows ? 0.02f + plot.Appeal.For(c.personality).insideDraw : 1f;
+                float w = knows ? 0.02f + AppealTo(c, plot).insideDraw : 1f;
                 total += w;
                 if (Random.value * total < w) pick = plot; // one pass, weighted
             }
@@ -1291,7 +1322,7 @@ public class CustomerManager : NetworkBehaviour
                 Vector3 seen = e.outside + Vector3.up * 1.2f;
                 if (Physics.Linecast(eye, seen, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) break;
                 c.noticed.Add(plot);
-                float pull = Mathf.Clamp01(plot.Appeal.For(c.personality).outsideDraw * sightPull);
+                float pull = Mathf.Clamp01(AppealTo(c, plot).outsideDraw * sightPull);
                 if (Random.value >= pull)
                 {
                     Log(c, $"saw '{plot.DisplayName}', not interested ({pull:0.00})");
@@ -1311,7 +1342,7 @@ public class CustomerManager : NetworkBehaviour
     private bool Consider(Customer c, StorePlot plot, Entrance e)
     {
         c.passed.Add(plot);
-        float chance = plot.Appeal.For(c.personality).enterChance;
+        float chance = AppealTo(c, plot).enterChance;
         bool full = InsideCount(plot) >= Capacity(plot);
         bool deal = plot == c.bargainStore;
         if (plot == c.mustEnter || deal || (!full && Random.value < chance))
@@ -1337,12 +1368,15 @@ public class CustomerManager : NetworkBehaviour
         c.shelvesSeen = 0;
         c.seen.Clear();
         c.basket.Clear();
+        c.handed = 0;
+        c.waitFor = null;
         c.counter = null;
         c.ticket = 0;
         c.paid = false;
         inside[plot] = InsideCount(plot) + 1;
         c.counted = true;
         c.mode = Mode.Entering;
+        GroupEntered(c, plot); // the leader: everyone with them comes in too
         if (!PathTo(c, e.inside)) { LeaveStore(c, 0f); return; }
         Log(c, $"going into '{plot.DisplayName}'");
         React(c, Reaction.Interested);
@@ -1352,7 +1386,8 @@ public class CustomerManager : NetworkBehaviour
     private void ThinkBrowse(Customer c)
     {
         var plot = c.store;
-        bool done = c.basket.Count >= c.wants || (!c.thief && c.budgetCents <= 0) || c.shelvesSeen >= maxLooksPerStore;
+        bool done = c.basket.Count - c.handed >= c.wants || (!c.thief && c.budgetCents <= 0) ||
+                    c.shelvesSeen >= Mathf.Max(1, Mathf.RoundToInt(maxLooksPerStore * GroupLooks(c)));
         if (!done && TryPickShelf(c, plot, out var source, out float worth))
         {
             c.shelvesSeen++;
@@ -1366,6 +1401,7 @@ public class CustomerManager : NetworkBehaviour
         }
 
         if (c.basket.Count > 0 && c.thief && TryShoplift(c)) return;
+        if (HandToPayer(c)) return; // a couple: the leader pays for both
         if (c.basket.Count > 0) GoToCheckout(c);
         else
         {
@@ -1398,6 +1434,7 @@ public class CustomerManager : NetworkBehaviour
             float w = plot.Appeal.WorthTo(c.personality, s) * tolerance;
             if (c.thief) w *= 1f + s.priceCents / 10000f; // and likes it pricey
             if (s.itemId == c.bargainItem && c.bargainItem != 0) w *= 5f; // what they came over for
+            if (c.group != null) w *= GroupItemBoost(c, s.itemId); // group tastes, "I'll get one too"
             if (w <= 0.01f) continue;
             scratchPicks.Add((s, w));
         }
@@ -1540,6 +1577,7 @@ public class CustomerManager : NetworkBehaviour
 
         float tolerance = 1f + ProgressionManager.StoreStat(plot, PerkStat.PriceTolerance);
         float worth = plot.Appeal.WorthTo(c.personality, s) * tolerance;
+        if (c.group != null) worth *= GroupItemBoost(c, s.itemId) * GroupEagerness(c);
         if (!c.thief && Random.value >= Mathf.Clamp01(worth * buyEagerness))
         {
             Log(c, $"looked at {CheckoutCounter.NameOf(s.itemId)} for {CheckoutCounter.FormatAmount(s.priceCents)}, didn't take it");
@@ -1563,6 +1601,7 @@ public class CustomerManager : NetworkBehaviour
 
         if (!c.thief) c.budgetCents -= s.priceCents;
         if (s.itemId == c.bargainItem) { c.bargainItem = 0; c.bargainStore = null; } // found the deal
+        GroupBought(c, s.itemId);
         c.satisfaction += 0.25f;
         Log(c, $"took {CheckoutCounter.NameOf(s.itemId)} ({CheckoutCounter.FormatAmount(s.priceCents)})");
         React(c, Reaction.Bought);
@@ -1830,6 +1869,7 @@ public class CustomerManager : NetworkBehaviour
         var plot = c.store;
         if (plot != null && c.fleeing)
         {
+            DropFromGroup(c); // running off: on their own now
             OutTheDoor(c, plot);
             c.store = null;
             c.mode = Mode.Exiting;
@@ -1846,6 +1886,7 @@ public class CustomerManager : NetworkBehaviour
             Log(c, $"left '{plot.DisplayName}' ({(c.satisfaction >= 0f ? "happy" : "unhappy")} {c.satisfaction:0.00})");
         }
         c.store = null;
+        if (plot != null && GroupFinishedStore(c, plot)) return; // together: wait for the others
         PickGoal(c);
     }
 

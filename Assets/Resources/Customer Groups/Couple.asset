@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1ac6d2b5bee1452abfac3df2fc60d9f6, type: 3}
+  m_Name: Couple
+  m_EditorClassIdentifier: Assembly-CSharp::CustomerGroupDef
+  displayName: Couple
+  kind: 0
+  spawnWeight: 1
+  size: {x: 2, y: 2}
+  personalities: []
+  payTogether: 1
+  groupLikes:
+  - category: Couples
+    weight: 1
+  buyTogether: 0.6
+  sway: 1.2
