@@ -85,8 +85,9 @@ public class MarketScreen : MonoBehaviour, IShopScreen
         var catalog = ItemCatalog.Instance;
         if (m != null && catalog != null)
             foreach (var d in m.DealsNow)
-                if (d.left > 0 && catalog.TryGet(d.itemId, out var def) && LicenseManager.CanOrder(LocalTeam, def, out _))
-                    shown.Add(d);
+                if (d.left > 0 && catalog.TryGet(d.itemId, out var def) && ProgressionManager.CanOrder(LocalTeam, def) &&
+                    LicenseManager.CanOrder(LocalTeam, def, out _) && FranchiseManager.CanOrder(LocalTeam, def, out _))
+                    shown.Add(d); // only deals the team can take
 
         if (cardPrefab != null && cardParent != null)
         {

@@ -120,12 +120,22 @@ public class BuyMenu : MonoBehaviour, IShopScreen
 
     private void OnDisable() => Unsubscribe();
 
+    private int shownForLevel = -1;
+
     private void Update()
     {
         if (statusText != null && statusUntil > 0f && Time.unscaledTime > statusUntil)
         {
             statusText.text = "";
             statusUntil = 0f;
+        }
+        // Leveled up while the shop is open: what's newly unlocked shows up.
+        int level = ProgressionManager.LevelOf(LocalTeam);
+        if (shownForLevel != level)
+        {
+            bool first = shownForLevel < 0;
+            shownForLevel = level;
+            if (!first) RefreshItems();
         }
     }
 
@@ -269,7 +279,8 @@ public class BuyMenu : MonoBehaviour, IShopScreen
             {
                 if (def == null || !def.showInShop || def.worldNetworkPrefab == null) continue;
                 if (!MatchesFilter(def)) continue;
-                // Items needing a license the team doesn't hold aren't listed at all.
+                // Only what the team can order: not before its level, nor needing a license it doesn't hold.
+                if (!ProgressionManager.CanOrder(LocalTeam, def)) continue;
                 if (!LicenseManager.CanOrder(LocalTeam, def, out _)) continue;
                 // Franchise items: only for the team holding the franchise.
                 if (!FranchiseManager.CanOrder(LocalTeam, def, out _)) continue;
