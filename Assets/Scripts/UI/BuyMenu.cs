@@ -397,7 +397,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         bool licenseLocked = !LicenseManager.CanOrder(LocalTeam, def, out var license);
         bool locked = levelLocked || licenseLocked;
         if (priceText != null)
-            priceText.text = levelLocked ? $"Level {ProgressionManager.LevelNeeded(def)}"
+            priceText.text = levelLocked ? $"Level {ProgressionManager.LevelNeeded(def, LocalTeam)}"
                 : licenseLocked ? $"Needs {license.displayName}"
                 : $"${MarketModifiers.OrderCost(def) + MarketModifiers.DeliveryFee(def):N0}";
         if (button != null)
@@ -430,7 +430,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     private void OnBuyClicked(ItemDef def)
     {
         if (plot == null) return;
-        if (!ProgressionManager.CanOrder(LocalTeam, def)) { ShowStatus($"Reach level {ProgressionManager.LevelNeeded(def)} to order {def.displayName}."); return; }
+        if (!ProgressionManager.CanOrder(LocalTeam, def)) { ShowStatus($"Reach level {ProgressionManager.LevelNeeded(def, LocalTeam)} to order {def.displayName}."); return; }
         if (!LicenseManager.CanOrder(LocalTeam, def, out var needs)) { ShowStatus($"{def.displayName} needs the {needs.displayName} (Licenses tab)."); return; }
         if (!FranchiseManager.CanOrder(LocalTeam, def, out var franchise)) { ShowStatus($"{def.displayName} belongs to the {franchise.displayName} franchise."); return; }
 
