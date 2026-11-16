@@ -24,6 +24,9 @@ using UnityEngine;
 ///   handMisc and shipmentSmall / shipmentMed / shipmentLrg / shipmentMisc (and Default Shipment Prefab
 ///   from one named shipment).
 ///
+/// - Stock crates for products without one are made first (StockBoxGenerator): product models in a folder
+///   per product under the BoxStock box's folder, named (or in folders named) "hang" or "fold".
+///
 /// Tools > Mall Sim > Items > Move Catalog Items Onto Prefabs: one time, for items set up on the
 /// ItemCatalog the old way. Each moves onto its world prefab as an ItemData, keeping its id.
 ///
@@ -69,6 +72,7 @@ public static class ItemSetupTool
     public static void UpdateCatalog(bool quiet)
     {
         var report = new StringBuilder();
+        StockBoxGenerator.Run(report); // crates for new products first, so they get ids below
         allPrefabs = LoadAllPrefabs();
         var datas = FindItemPrefabs();
         var catalog = FindCatalog();
@@ -278,8 +282,9 @@ public static class ItemSetupTool
     private static List<ItemData> FindItemPrefabs()
     {
         var found = new List<ItemData>();
+        var box = StockBoxGenerator.Template; // the stock box's ItemData is only the made crates' starting values
         foreach (var (_, go) in allPrefabs)
-            if (go.TryGetComponent<ItemData>(out var d)) found.Add(d);
+            if (go != box && go.TryGetComponent<ItemData>(out var d)) found.Add(d);
         return found.OrderBy(d => AssetDatabase.GetAssetPath(d)).ToList();
     }
 
