@@ -36,7 +36,7 @@ public class ItemPickupNet : NetworkBehaviour
     private uint? pendingPaint;
     private FreezeState? pendingFreeze;
 
-    private byte Size => !IsSpawned && pendingSize >= 0 ? (byte)pendingSize : size.Value;
+    private byte Size => pendingSize >= 0 ? (byte)pendingSize : size.Value;
 
     private void SetSize(byte v) { if (IsSpawned) size.Value = v; else pendingSize = v; }
 
@@ -220,7 +220,7 @@ public class ItemPickupNet : NetworkBehaviour
     {
         get
         {
-            int v = !IsSpawned && pendingUnits >= 0 ? pendingUnits : units.Value;
+            int v = pendingUnits >= 0 ? pendingUnits : units.Value;
             return v > 0 ? Mathf.Min(v, UnitsPerCrate) : UnitsPerCrate;
         }
     }
@@ -230,7 +230,7 @@ public class ItemPickupNet : NetworkBehaviour
         new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     /// <summary>The colors of its paint zones (see PaintSet).</summary>
-    public uint Paint => !IsSpawned && pendingPaint.HasValue ? pendingPaint.Value : paint.Value;
+    public uint Paint => pendingPaint ?? paint.Value;
 
     /// <summary>Server: set every zone's color. Call after Instantiate (before Spawn is fine).</summary>
     public void ServerSetPaint(uint set)
@@ -567,7 +567,7 @@ public class ItemPickupNet : NetworkBehaviour
         PlacementCheck.GetTestBox(def, position, rotation, out Vector3 c, out _) ? c : position;
 
     /// <summary>Is it frozen in place (not falling)?</summary>
-    public bool IsFrozen => !Falls || rb == null || freeze.Value.frozen;
+    public bool IsFrozen => !Falls || rb == null || (pendingFreeze ?? freeze.Value).frozen;
 
     /// <summary>
     /// Server: stop it falling and freeze it where it is right now. Used when something is stocked onto
