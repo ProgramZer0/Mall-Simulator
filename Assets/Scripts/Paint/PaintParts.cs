@@ -169,8 +169,15 @@ public class PaintParts : MonoBehaviour
     public static bool IsPaintable(GameObject prefab) => prefab != null && prefab.GetComponentInChildren<PaintParts>(true) != null;
 
     /// <summary>Can this catalog item be painted?</summary>
-    public static bool IsPaintable(ItemDef def) =>
-        def != null && def.worldNetworkPrefab != null && IsPaintable(def.worldNetworkPrefab.gameObject);
+    public static bool IsPaintable(ItemDef def)
+    {
+        if (def == null || def.worldNetworkPrefab == null) return false;
+        // A stock crate: bought painted means its products are that color (if they can be painted).
+        if (def.worldNetworkPrefab.TryGetComponent<ItemPickupNet>(out var p) && p.IsStockCrate)
+            return IsPaintable(StockContainer.GetStockedPrefab(def.id, false)) ||
+                   IsPaintable(StockContainer.GetStockedPrefab(def.id, true));
+        return IsPaintable(def.worldNetworkPrefab.gameObject);
+    }
 
     /// <summary>A zone's name for prompts ("" when there's only one zone, or for an unnamed root zone).</summary>
     public static string ZoneName(GameObject go, int zone)

@@ -89,6 +89,11 @@ public class ItemPickupNet : NetworkBehaviour
     [Tooltip("On: each product stocked is a random pick from the list (a box of mixed colours). " +
              "Off: always the first one. With one entry it makes no difference.")]
     [SerializeField] private bool randomVariants;
+    public enum ShelfPose { Either, StandingOnly, LyingOnly }
+    [Tooltip("How its products may sit on shelves: Lying Only for things that can't stand up (folded clothes), " +
+             "Standing Only for things that shouldn't be laid down. T (lay down / stand up) can't change it then.")]
+    [SerializeField] private ShelfPose shelfPose = ShelfPose.Either;
+    public ShelfPose ShelfPoseAllowed => shelfPose;
 
     // Older single-model fields; moved into the lists above automatically.
     [Tooltip("How many products a full crate holds.")]
@@ -250,7 +255,8 @@ public class ItemPickupNet : NetworkBehaviour
 
     private void OnPaintChanged(uint before, uint now) => ApplyPaint();
 
-    private void ApplyPaint() => PaintParts.ApplySet(gameObject, paint.Value);
+    // A stock crate's paint is its products' color, not the box's.
+    private void ApplyPaint() => PaintParts.ApplySet(gameObject, isStockCrate ? 0u : paint.Value);
 
     /// <summary>Server: how many products are left in this crate. Call after Instantiate, before Spawn.</summary>
     public void ServerSetUnits(int count)

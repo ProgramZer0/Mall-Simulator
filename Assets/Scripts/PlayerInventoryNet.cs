@@ -108,12 +108,14 @@ public class PlayerInventoryNet : NetworkBehaviour
         HeldPaint.OnValueChanged -= OnHeldPaintChanged;
     }
 
-    // The hand model shows the held item's paint, if it has PaintParts of its own.
+    // The hand model shows the held item's paint, if it has PaintParts of its own (not a stock crate's:
+    // its paint is its products' color).
     private void OnHeldPaintChanged(uint before, uint now) => PaintHandVisual();
 
     private void PaintHandVisual()
     {
-        if (currentHandVisual != null) PaintParts.ApplySet(currentHandVisual, HeldPaint.Value);
+        if (currentHandVisual != null)
+            PaintParts.ApplySet(currentHandVisual, StockContainer.IsStockCrate(HeldItemId.Value) ? 0u : HeldPaint.Value);
     }
 
     public override void OnNetworkSpawn()
@@ -277,7 +279,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         // A shelf still settling after being put down stops where it is first, so its stock can't send it flying.
         if (container.TryGetComponent<ItemPickupNet>(out var shelf)) shelf.ServerFreezeNow();
 
-        if (!container.ServerAddOne(zone, id, orient)) // full, holds something else, or wrong kind of zone
+        if (!container.ServerAddOne(zone, id, orient, HeldPaint.Value)) // full, holds something else (or another color), or wrong kind of zone
         { ItemDebug.Log($"Stock refused by '{container.name}': {container.WhyCantStock(zone, id, orient)}.", container); return; }
 
         // The empty crate goes away.
@@ -336,16 +338,18 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (zone >= 0)
         {
             var shelf = target.GetComponent<StockContainer>();
-            id = shelf.GetZone(zone).itemId;
+            var stock = shelf.GetZone(zone);
+            id = stock.itemId;
             bool emptyHands = HeldItemId.Value == 0;
-            bool roomInCrate = HeldItemId.Value == id && HeldUnits.Value < StockContainer.GetUnitsPerCrate(id);
+            bool roomInCrate = HeldItemId.Value == id && HeldPaint.Value == stock.paint &&
+                               HeldUnits.Value < StockContainer.GetUnitsPerCrate(id);
             if (!emptyHands && !roomInCrate) return;
             if (eco != null && eco.IsSpawned && !eco.ServerTrySpendCents(MallManager.GetTeamOf(buyer), price)) return;
             if (shelf.ServerRemoveOne(zone) != id) return; // (can't happen: checked above)
             if (emptyHands)
             {
                 HeldItemId.Value = id;
-                HeldPaint.Value = 0;
+                HeldPaint.Value = stock.paint; // the products' color
                 HeldUnits.Value = 1;
             }
             else HeldUnits.Value++;
@@ -411,18 +415,20 @@ public class PlayerInventoryNet : NetworkBehaviour
     {
         if (!TryGetContainerZone(containerRef, zone, rpcParams.Receive.SenderClientId, out var container, out var at)) return;
 
-        int id = container.GetZone(zone).itemId;
+        var stock = container.GetZone(zone);
+        int id = stock.itemId;
         if (id == 0) return;
 
         bool emptyHands = HeldItemId.Value == 0;
-        bool roomInCrate = HeldItemId.Value == id && HeldUnits.Value < StockContainer.GetUnitsPerCrate(id);
+        bool roomInCrate = HeldItemId.Value == id && HeldPaint.Value == stock.paint &&
+                           HeldUnits.Value < StockContainer.GetUnitsPerCrate(id);
         if (!emptyHands && !roomInCrate) return;
         if (container.ServerRemoveOne(zone) != id) return;
 
         if (emptyHands)
         {
             HeldItemId.Value = id;
-            HeldPaint.Value = 0;
+            HeldPaint.Value = stock.paint; // the products' color
             HeldUnits.Value = 1;
         }
         else HeldUnits.Value++;
