@@ -6795,10 +6795,77 @@ MonoBehaviour:
   competitionPerStore: 0.1
   minCompetition: 0.35
   categoryNeeds:
-  - category: 
-    needs: []
+  - category: Shirts
+    needs:
+    - feature: ClothingDecor
+      wanted: 2
+      importance: 5
+    - feature: Window
+      wanted: 1
+      importance: 1
+    - feature: ShirtDecor
+      wanted: 1
+      importance: 1
+  - category: Shoes
+    needs:
+    - feature: ClothingDecor
+      wanted: 2
+      importance: 5
+    - feature: Window
+      wanted: 1
+      importance: 0.5
+    - feature: ShoeDisplay
+      wanted: 1
+      importance: 1
   decorReach: 12
   neutralQuality: 0.5
+  categoryPairs:
+  - categoryA: Shirts
+    categoryB: Shirts
+    effect: 0.54
+    wanted: 3
+  - categoryA: Shipment
+    categoryB: All
+    effect: -1
+    wanted: 1
+  - categoryA: Shoes
+    categoryB: Shoes
+    effect: 1
+    wanted: 3
+  - categoryA: Clothing
+    categoryB: Clothing
+    effect: 0.21
+    wanted: 5
+  - categoryA: Homey
+    categoryB: Clothing
+    effect: 0.22
+    wanted: 1
+  - categoryA: Too Homey
+    categoryB: Clothing
+    effect: -0.5
+    wanted: 5
+  - categoryA: Appliance
+    categoryB: Clothing
+    effect: -0.5
+    wanted: 1
+  - categoryA: Appliance
+    categoryB: Appliance
+    effect: 1
+    wanted: 1
+  - categoryA: Appliance
+    categoryB: Homey
+    effect: 0.52
+    wanted: 1
+  - categoryA: Appliance
+    categoryB: Furniture
+    effect: 0.25
+    wanted: 2
+  - categoryA: Furniture
+    categoryB: Furniture
+    effect: 0.12
+    wanted: 2
+  pairReach: 3
+  pairStrength: 0.5
   windowFeature: Window
   outsideSaturation: 10
   insideSaturation: 30
@@ -14089,7 +14156,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0.27600002}
-  m_AnchoredPosition: {x: -0.00020599365, y: -0.87319946}
+  m_AnchoredPosition: {x: -0.00020599365, y: -0.8731985}
   m_SizeDelta: {x: -0.27600098, y: -2.2707005}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &901036962
@@ -16730,7 +16797,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.83500004, y: 0}
   m_AnchorMax: {x: 1, y: 0.096}
-  m_AnchoredPosition: {x: 2.4486084, y: -0.868103}
+  m_AnchoredPosition: {x: 2.4486084, y: -0.86813354}
   m_SizeDelta: {x: -4.8879013, y: -2.3680992}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1069599436
@@ -22610,7 +22677,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.11731859, y: 0.4684036}
   m_AnchorMax: {x: 0.36263925, y: 0.5454196}
-  m_AnchoredPosition: {x: -4.1220703, y: 1.5399933}
+  m_AnchoredPosition: {x: -4.122101, y: 1.5399933}
   m_SizeDelta: {x: -11.881897, y: -4.8294067}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1405366925
@@ -23517,7 +23584,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.509, y: 0.5454196}
   m_AnchorMax: {x: 1, y: 0.9528739}
-  m_AnchoredPosition: {x: 1.667572, y: -2}
+  m_AnchoredPosition: {x: 1.6675873, y: -2}
   m_SizeDelta: {x: -3.9429932, y: -2.72}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1438284293
@@ -25076,7 +25143,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.86630434, y: 0.8975837}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0.6600189, y: -0.47000122}
+  m_AnchoredPosition: {x: 0.66000366, y: -0.47000122}
   m_SizeDelta: {x: -1, y: 0.55249786}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1513210653

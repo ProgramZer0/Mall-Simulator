@@ -210,7 +210,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PaintParts
-  parts: []
+  parts:
+  - renderer: {fileID: 5572895728389539817}
+    materialIndex: 0
   zoneName: 
 --- !u!114 &5864119003445810270
 MonoBehaviour:
