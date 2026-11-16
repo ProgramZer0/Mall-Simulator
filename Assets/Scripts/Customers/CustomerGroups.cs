@@ -38,20 +38,47 @@ public partial class CustomerManager
         if (groups.Count == 0) groups.AddRange(Resources.LoadAll<CustomerGroupDef>("Customer Groups"));
     }
 
-    private CustomerGroupDef PickGroupDef()
+    // A shoppers' group (bystanders false) or a bystanders' one (true: every adult it can have is a bystander).
+    private CustomerGroupDef PickGroupDef(bool bystanders)
     {
         if (!groupsLoaded) LoadGroups();
         float total = 0f;
-        foreach (var g in groups) if (g != null) total += g.spawnWeight;
+        foreach (var g in groups) if (g != null && IsBystanderGroup(g) == bystanders) total += g.spawnWeight;
         if (total <= 0f) return null;
         float roll = Random.value * total;
         foreach (var g in groups)
         {
-            if (g == null) continue;
+            if (g == null || IsBystanderGroup(g) != bystanders) continue;
             roll -= g.spawnWeight;
             if (roll <= 0f) return g;
         }
         return null;
+    }
+
+    private static bool IsBystanderGroup(CustomerGroupDef def)
+    {
+        if (def.personalities == null || def.personalities.Count == 0) return false;
+        foreach (var p in def.personalities) if (p != null && !p.bystander) return false;
+        return true;
+    }
+
+    // Bystanders come on their own count (Max Bystanders), alone or as a bystander group.
+    private void UpdateBystanderArrivals(int bystanders)
+    {
+        if (bystanders >= maxBystanders) { bystanderCredit = 0f; return; }
+        bystanderCredit += bystanderArrivalsPerMinute / 60f * Time.deltaTime;
+        while (bystanderCredit >= 1f && bystanders < maxBystanders)
+        {
+            bystanderCredit -= 1f;
+            var sp = PickSpawnPoint(null);
+            if (sp == null) return;
+            var def = Random.value < groupChance ? PickGroupDef(true) : null;
+            if (def != null) { int n = SpawnGroup(def, sp.transform.position); bystanders += Mathf.Max(1, n); bystanderCredit -= Mathf.Max(0, n - 1); continue; }
+            var p = PickPersonality(true);
+            if (p == null) { bystanderCredit = 0f; return; } // no bystander personalities
+            Spawn(sp.transform.position, out _, null, p);
+            bystanders++;
+        }
     }
 
     private CustomerPersonality PickMemberPersonality(CustomerGroupDef def)
@@ -116,6 +143,8 @@ public partial class CustomerManager
             slowest = Mathf.Min(slowest, kid.speed);
         }
         if (g.members.Count == 1) { g.members[0].group = null; PickGoal(g.members[0]); return 1; }
+        bool bystanders = IsBystanderGroup(def);
+        foreach (var m in g.members) m.bystanderSlot = bystanders; // children count with their parent
 
         // They walk at the slowest one's pace, and keep the same lane.
         var leader = g.Leader;

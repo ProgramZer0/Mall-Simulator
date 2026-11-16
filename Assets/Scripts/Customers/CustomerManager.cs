@@ -30,6 +30,11 @@ public partial class CustomerManager : NetworkBehaviour
     [SerializeField] private int maxCustomers = 40;
     [Tooltip("New customers per minute while there's room (only while at least one store is open).")]
     [SerializeField] private float arrivalsPerMinute = 30f;
+    [Tooltip("Bystanders (Bystander personalities, and groups led by one) come on top of Max Customers, up to " +
+             "this many at once, to fill the halls. They never shop, so they cost less than shoppers.")]
+    [SerializeField] private int maxBystanders = 60;
+    [Tooltip("New bystanders per minute while there's room (whether or not any store is open).")]
+    [SerializeField] private float bystanderArrivalsPerMinute = 20f;
     [Tooltip("Most stores one customer goes into before leaving.")]
     [SerializeField] private int maxStoresPerVisit = 4;
     [Tooltip("Minutes a customer stays in the mall at most (then heads for the exit).")]
@@ -367,6 +372,7 @@ public partial class CustomerManager : NetworkBehaviour
         public StorePlot partyStore;   // (leading a party) the store they're in, and how it's going for them
         public float partyMood;
         public bool lingering;         // a bystander standing around at a spot they strolled to
+        public bool bystanderSlot;     // counts toward Max Bystanders (not Max Customers)
 
         // Checkout
         public CheckoutCounter counter;
@@ -594,40 +600,65 @@ public partial class CustomerManager : NetworkBehaviour
     public float ArrivalsPerMinuteNow => arrivalsPerMinute * eventArrivals;
 
     // Who comes: each personality by its Spawn Weight, times what the running events do to it.
-    private CustomerPersonality PickPersonality()
+    // A shopper's personality (bystanders false), or a bystander's (true), by Spawn Weight.
+    private CustomerPersonality PickPersonality(bool bystanders = false)
     {
-        var settings = StoreAppealSettings.Instance;
-        if (settings == null) return null;
+        var list = bystanders ? BystanderPersonalities() : StoreAppealSettings.Instance?.personalities;
+        if (list == null) return null;
         float total = 0f;
-        foreach (var p in settings.personalities) if (p != null) total += WeightOf(p);
+        foreach (var p in list) if (p != null && p.bystander == bystanders) total += WeightOf(p);
         if (total <= 0f) return null;
         float roll = Random.value * total;
-        foreach (var p in settings.personalities)
+        foreach (var p in list)
         {
-            if (p == null) continue;
+            if (p == null || p.bystander != bystanders) continue;
             roll -= WeightOf(p);
             if (roll <= 0f) return p;
         }
         return null;
     }
 
+    // Bystander personalities: those in StoreAppealSettings, else any in Resources/Customer Personalities.
+    private List<CustomerPersonality> bystanderPersonalities;
+
+    private List<CustomerPersonality> BystanderPersonalities()
+    {
+        if (bystanderPersonalities != null) return bystanderPersonalities;
+        bystanderPersonalities = new List<CustomerPersonality>();
+        var settings = StoreAppealSettings.Instance;
+        if (settings != null)
+            foreach (var p in settings.personalities) if (p != null && p.bystander) bystanderPersonalities.Add(p);
+        if (bystanderPersonalities.Count == 0)
+            foreach (var p in Resources.LoadAll<CustomerPersonality>("Customer Personalities"))
+                if (p != null && p.bystander) bystanderPersonalities.Add(p);
+        return bystanderPersonalities;
+    }
+
     private float WeightOf(CustomerPersonality p) =>
         p.spawnWeight * (eventPersonality.TryGetValue(p, out float f) ? f : 1f);
+
+    private float bystanderCredit;
 
     private void UpdateArrivals()
     {
         if (eventsDirty) RefreshEventEffects();
+        int shoppers = 0, bystanders = 0;
+        foreach (var c in customers) { if (c.bystanderSlot) bystanders++; else shoppers++; }
+        UpdateBystanderArrivals(bystanders);
+
         int max = MaxCustomersNow;
-        if (customers.Count >= max || !AnyStoreOpen()) { spawnCredit = 0f; return; }
+        if (shoppers >= max || !AnyStoreOpen()) { spawnCredit = 0f; return; }
         spawnCredit += ArrivalsPerMinuteNow / 60f * Time.deltaTime;
-        while (spawnCredit >= 1f && customers.Count < max)
+        while (spawnCredit >= 1f && shoppers < max)
         {
             spawnCredit -= 1f;
             var sp = PickSpawnPoint(null);
-            CustomerGroupDef groupDef = Random.value < groupChance ? PickGroupDef() : null;
-            if (sp != null && groupDef != null) spawnCredit -= Mathf.Max(0, SpawnGroup(groupDef, sp.transform.position) - 1);
+            CustomerGroupDef groupDef = Random.value < groupChance ? PickGroupDef(false) : null;
+            int came = 1;
+            if (sp != null && groupDef != null) spawnCredit -= Mathf.Max(0, (came = SpawnGroup(groupDef, sp.transform.position)) - 1);
             else if (sp != null) Spawn(sp.transform.position, out _);
-            else if (!warnedNoSpawn)
+            shoppers += came;
+            if (sp == null && !warnedNoSpawn)
             {
                 warnedNoSpawn = true;
                 Debug.LogWarning("[Customers] No CustomerSpawnPoint in the scene: put some at the mall's entrances.", this);
@@ -759,7 +790,10 @@ public partial class CustomerManager : NetworkBehaviour
         };
         c.thief = Random.value < personality.shopliftChance * eventShoplifting;
         if (personality.bystander) // here for a walk: stays a while, whatever their money
+        {
             c.leaveAt = Time.time + Random.Range(minMinutesInMall, maxMinutesInMall) * 60f;
+            c.bystanderSlot = true;
+        }
         if (child)
         {
             c.child = true;
@@ -997,9 +1031,10 @@ public partial class CustomerManager : NetworkBehaviour
     public string DebugSummary()
     {
         if (!IsServer) return $"Customers: {views.Count}";
-        int walking = 0, inStores = 0, inLine = 0, standing = 0;
+        int walking = 0, inStores = 0, inLine = 0, standing = 0, bystanders = 0;
         foreach (var c in customers)
         {
+            if (c.bystanderSlot) bystanders++;
             if (c.mode == Mode.ToQueue || c.mode == Mode.Queued) inLine++;
             else if (c.store != null) inStores++;
             if (!c.arrived) walking++;
@@ -1009,7 +1044,7 @@ public partial class CustomerManager : NetworkBehaviour
             ? $"; events: arrivals ×{eventArrivals:0.##}, max ×{eventMax:0.##} ({MaxCustomersNow}), budget ×{eventBudget:0.##}" +
               (eventPersonality.Count > 0 ? $", {eventPersonality.Count} personality shift(s)" : "")
             : "";
-        return $"Customers: {customers.Count} ({walking} walking, {standing} standing; {inStores} in stores, {inLine} in line); " +
+        return $"Customers: {customers.Count} ({bystanders} bystanders; {walking} walking, {standing} standing; {inStores} in stores, {inLine} in line); " +
                $"since start: {paths} paths, {pathFailures} failed, {stuckEvents} stuck{events}";
     }
 
