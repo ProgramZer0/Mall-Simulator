@@ -650,7 +650,7 @@ public class StoreEditController : NetworkBehaviour
                 ShowEditMessage("Only windows and doors can be removed here.");
             if (Input.GetKeyDown(toolKey))
                 tool = tool == Tool.None ? Tool.Move : tool == Tool.Move ? Tool.Rotate : Tool.None; // None -> Move -> Rotate -> None
-            if (Input.GetKeyDown(rotateKey))
+            if (Input.GetKeyDown(rotateKey) && !FlipOnWall()) // on a wall: turn it round; otherwise the rings
                 tool = tool == Tool.Rotate ? Tool.None : Tool.Rotate;
 
             if (Input.GetKeyDown(gravityKey))
@@ -908,13 +908,13 @@ public class StoreEditController : NetworkBehaviour
         Quaternion rot;
         if (PlacementCheck.IsWallNormal(hit.normal) && PlacementCheck.IsWallLayer(hit.collider, WallMask()))
         {
-            PlacementCheck.WallPose(def, hit.point, hit.normal, false, out pos, out rot);
+            KeepFacingWallPose(def, hit.point, hit.normal, out pos, out rot);
         }
         else if (TryNearbyWall(def, hit.point, out Vector3 wallPoint, out Vector3 wallNormal))
         {
             // From above you mostly see floor, so a wall near the mouse counts: the item stays on it
             // (at its current height) instead of dropping to the floor the moment the mouse slips off.
-            PlacementCheck.WallPose(def, wallPoint, wallNormal, false, out pos, out rot);
+            KeepFacingWallPose(def, wallPoint, wallNormal, out pos, out rot);
         }
         else if (mounting == ItemPickupNet.Mounting.FloorOrWall && hit.normal.y > 0.7f)
         {
@@ -939,6 +939,32 @@ public class StoreEditController : NetworkBehaviour
     /// A wall within Wall Snap Distance of a floor point, found at hanging height: the selected item's
     /// current middle if it's already on a wall, otherwise Wall Hang Height above the floor.
     /// </summary>
+    // Hung on a wall, with whichever face outward is closer to how it's turned now (so moving it along a
+    // wall, or onto another, never spins it round; R turns it the other way).
+    private void KeepFacingWallPose(ItemDef def, Vector3 point, Vector3 normal, out Vector3 pos, out Quaternion rot)
+    {
+        PlacementCheck.WallPose(def, point, normal, false, out pos, out rot);
+        PlacementCheck.WallPose(def, point, normal, true, out Vector3 pos2, out Quaternion rot2);
+        Quaternion now = selected.transform.rotation;
+        if (Quaternion.Angle(now, rot2) < Quaternion.Angle(now, rot)) { pos = pos2; rot = rot2; }
+    }
+
+    // R on an item hung on a wall: the other face outward, on the same wall. True if it was on a wall.
+    private bool FlipOnWall()
+    {
+        var def = selected.Def;
+        if (def == null || PlacementCheck.GetMounting(def) == ItemPickupNet.Mounting.Floor ||
+            !PlacementCheck.HasWallBehind(def, selected.transform.position, selected.transform.rotation, WallMask()) ||
+            !TryNearbyWall(def, selected.transform.position, out Vector3 point, out Vector3 normal)) return false;
+        PlacementCheck.WallPose(def, point, normal, false, out Vector3 pos, out Quaternion rot);
+        PlacementCheck.WallPose(def, point, normal, true, out Vector3 pos2, out Quaternion rot2);
+        Quaternion now = selected.transform.rotation;
+        if (Quaternion.Angle(now, rot2) > Quaternion.Angle(now, rot)) { pos = pos2; rot = rot2; } // the far one
+        if (PlacementCheck.IsClear(def, pos, rot, EditMask(), selected.transform)) selected.SetPose(pos, rot);
+        else ShowEditMessage("No room to turn it around here.");
+        return true;
+    }
+
     private bool TryNearbyWall(ItemDef def, Vector3 floorPoint, out Vector3 wallPoint, out Vector3 wallNormal)
     {
         wallPoint = wallNormal = default;
@@ -2370,7 +2396,7 @@ public class StoreEditController : NetworkBehaviour
         string toolName = selected == null ? "-" : tool == Tool.None ? "none" : tool.ToString();
         string gravity = selected == null ? "-" : selected.Gravity ? "on" : "off";
         hudStatus = $"Selected: {itemName}   Tool: {toolName}   Gravity: {gravity}";
-        hudControls = $"{K("Drag")} item: slide   {K("X")}: move > rotate > hide   {K(rotateKey)}: rotate   {K("G")}: gravity\n" +
+        hudControls = $"{K("Drag")} item: slide   {K("X")}: move > rotate > hide   {K(rotateKey)}: rotate (on a wall: turn around)   {K("G")}: gravity\n" +
                       $"{K("Ctrl")}: no snap   {K("RMB")} drag: camera   {K("RMB")} click / {K("Esc")}: deselect\n" +
                       $"{K("Click")} a box: put in its window, door or front wall   {K(wallToolKey)}: build walls   {K(toggleKey)}: save & exit";
         hudInfo = openingInfo;
