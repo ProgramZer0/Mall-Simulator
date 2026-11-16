@@ -1321,9 +1321,15 @@ public class PlayerInteractInput : NetworkBehaviour
         int id = inventory.HeldItemId.Value;
         if (!placingOnWall && !placingOnCart && ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(id, out var def) &&
             PlacementCheck.GetMounting(def) == ItemPickupNet.Mounting.Wall) return "wall-only item not aimed at a wall";
-        return FitsAt(id, at, ghost.transform.rotation, placingOnWall)
-            ? "ok"
-            : $"blocked or no support {(placingOnWall ? "on the wall" : "on the floor")} (turn on Debug Placement for the boxes)";
+        if (FitsAt(id, at, ghost.transform.rotation, placingOnWall)) return "ok";
+        if (!placingOnWall && ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(id, out var held))
+        {
+            int ground = LayerMask.NameToLayer("Ground");
+            int blocking = placementBlockingMask.value;
+            if (ground >= 0) blocking &= ~(1 << ground);
+            return PlacementCheck.WhyNotFits(held, at, ghost.transform.rotation, blocking, placementMask);
+        }
+        return "blocked or no support on the wall (turn on Debug Placement for the boxes)";
     }
 
     // Setting something from a delivery box back down in its box (allowed at the docks).

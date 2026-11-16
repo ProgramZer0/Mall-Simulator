@@ -12,8 +12,11 @@ using UnityEngine;
 /// sized items) and one color (random, for paintable items), and that's what you get: no switching. Bought on the shop monitor's Market tab
 /// (MarketScreen); they're delivered like any order.
 ///
-/// Network: one small synced list of deals. The host checks every buy (amount left, level, license,
-/// money) through the normal order path.
+/// Anyone can buy any deal: no level, license or franchise needed. First come, first served, as long as
+/// they have the money.
+///
+/// Network: one small synced list of deals. The host checks every buy (amount left, money) through the
+/// normal order path.
 /// </summary>
 public class SpecialMarket : NetworkBehaviour
 {
@@ -220,7 +223,8 @@ public class SpecialMarket : NetworkBehaviour
             }
             var eco = EconomyManager.Instance;
             if (eco == null) break;
-            result = eco.ServerTryOrder(sender, plotId, new[] { d.itemId }, new[] { quantity }, -1f, new[] { d.paint }, new[] { d.price });
+            result = eco.ServerTryOrder(sender, plotId, new[] { d.itemId }, new[] { quantity }, -1f, new[] { d.paint }, new[] { d.price },
+                                        anyoneMayBuy: true); // no level, license or franchise needed here
             if (result == EconomyManager.OrderResult.Ordered)
             {
                 d.left -= quantity;
