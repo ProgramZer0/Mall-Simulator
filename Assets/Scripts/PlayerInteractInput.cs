@@ -1193,7 +1193,7 @@ public class PlayerInteractInput : NetworkBehaviour
             if (cart == null) cart = CartNet.FindCartAt(hit.point + Vector3.up * 0.02f);
             // Aimed at the side of something on the cart: onto the cart beside it, not the floor.
             if (cart != null && cart.CanUse(OwnerClientId) && hit.normal.y < 0.7f &&
-                TryCartBeside(def, cart, hit, out RaycastHit beside)) hit = beside;
+                TryCartBeside(def, cart, hit, out RaycastHit besideOnCart)) hit = besideOnCart;
             if (cart != null && cart.CanUse(OwnerClientId) && hit.normal.y >= 0.7f)
             {
                 placingOnCart = true;
