@@ -1,0 +1,38 @@
+using UnityEngine;
+
+/// <summary>
+/// Settings for making stock crates by themselves (see StockBoxGenerator): one box prefab for every
+/// product, and which product models go on rails or shelves, found by name. Made at
+/// Assets/Settings/StockBoxSettings.asset the first time Update Item Catalog runs; select it to change them.
+/// </summary>
+public class StockBoxSettings : ScriptableObject
+{
+    [Tooltip("The box every crate is made from (each crate is a prefab variant of it: change the box, they all " +
+             "change). It needs a NetworkObject and an ItemPickupNet. An ItemData on it gives new crates their " +
+             "starting values (price, categories, sizes...); the box itself isn't an item. Empty: a prefab named " +
+             "BoxStock. Only product models in its folder (and the folders under it) get crates.")]
+    public GameObject template;
+
+    [Tooltip("Make crates for new products on Update Item Catalog (and before Play), and keep their models " +
+             "in step with the product folders.")]
+    public bool generate = true;
+
+    [Tooltip("A product model whose name, or its folder's name, has one of these goes on rails (the crate's " +
+             "Hang Prefabs). Several in one product folder: variants (colors).")]
+    public string[] hangWords = { "hang" };
+
+    [Tooltip("...or one of these: on shelves (Shelf Prefabs).")]
+    public string[] shelfWords = { "fold" };
+
+    [Tooltip("The crate is named after its product's folder, plus this (\"Cheap Jeans Stock\").")]
+    public string nameSuffix = " Stock";
+
+    [Header("Products per crate")]
+    [Tooltip("How many fit: the box's size over one product's (the shelf model if it has one, else the hanging " +
+             "one), times this for the gaps. A product folder named with x and a number (\"Cheap Jeans x12\") " +
+             "holds exactly that many instead. Set when a crate is made; change it on the crate afterwards, or run " +
+             "Tools > Mall Sim > Items > Recalculate Stock Crate Amounts.")]
+    [Range(0.1f, 1f)] public float packing = 0.7f;
+    [Min(1)] public int minUnits = 1;
+    [Min(1)] public int maxUnits = 24;
+}
