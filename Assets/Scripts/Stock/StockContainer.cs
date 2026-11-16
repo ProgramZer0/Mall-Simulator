@@ -520,7 +520,7 @@ public class StockContainer : NetworkBehaviour
         int taken = z.itemId;
         zones[zone] = z.count == 1
             ? new ZoneStock { price = z.price, pricedItem = z.pricedItem } // empty, but keeps its price tag
-            : new ZoneStock { itemId = z.itemId, count = z.count - 1, orient = z.orient, seed = z.seed,
+            : new ZoneStock { itemId = z.itemId, count = z.count - 1, orient = z.orient, seed = z.seed, paint = z.paint,
                               price = z.price, pricedItem = z.pricedItem };
         return taken;
     }
