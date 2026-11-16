@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: -2491506767347114586}
   - component: {fileID: 5018596196362121026}
   - component: {fileID: 4534553784132897104}
+  - component: {fileID: 3829521992122722927}
   m_Layer: 3
   m_Name: CheapJeansBox
   m_TagString: Untagged
@@ -179,3 +180,24 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Sellable
   ShowTopMostFoldoutHeaderGroup: 1
   sellWhenLoose: 1
+--- !u!65 &3829521992122722927
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4223701351420822915}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.62832415, y: 0.6283241, z: 0.6512}
+  m_Center: {x: 0, y: 0, z: 0.011437952}

@@ -31,10 +31,11 @@ Transform:
   m_GameObject: {fileID: 4451348040118434355}
   serializedVersion: 2
   m_LocalRotation: {x: -0.7071068, y: -0, z: -0, w: 0.7071067}
-  m_LocalPosition: {x: 3.518999, y: -0.23500001, z: 7.7929993}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 8870539235658012233}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &7522530270227343409
@@ -135,7 +136,7 @@ MonoBehaviour:
   itemId: 12
   mounting: 0
   editModeOnly: 0
-  modelRotation: {x: -90, y: 0, z: 0}
+  modelRotation: {x: -90, y: 0, z: 90}
   startsOnWall: 0
   isStockCrate: 0
   shelfPrefabs: []
@@ -174,6 +175,68 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PaintParts
   parts:
-  - renderer: {fileID: 0}
+  - renderer: {fileID: 449567740394008888}
     materialIndex: 0
   zoneName: 
+--- !u!1001 &5642254151389691951
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 29251956686430468}
+    m_Modifications:
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0.369
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8097223827721448696, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_Name
+      value: pantsHanger
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+--- !u!4 &8870539235658012233 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+  m_PrefabInstance: {fileID: 5642254151389691951}
+  m_PrefabAsset: {fileID: 0}

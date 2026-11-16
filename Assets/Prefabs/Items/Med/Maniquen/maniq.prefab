@@ -16,6 +16,7 @@ GameObject:
   - component: {fileID: 8111690074518622407}
   - component: {fileID: 7763246439610956298}
   - component: {fileID: 305284483791914614}
+  - component: {fileID: -3506604066726038744}
   m_Layer: 3
   m_Name: maniq
   m_TagString: Untagged
@@ -174,7 +175,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PaintParts
-  parts: []
+  parts:
+  - renderer: {fileID: 269815029135026698}
+    materialIndex: 0
   zoneName: 
 --- !u!114 &305284483791914614
 MonoBehaviour:
@@ -189,3 +192,25 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Decor
   features: []
+--- !u!64 &-3506604066726038744
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 640511178853749887}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 0
+  m_CookingOptions: 30
+  m_Mesh: {fileID: -457407427988783435, guid: 3fc99f8fe6c7a1041bc59acc78eeb30c, type: 3}

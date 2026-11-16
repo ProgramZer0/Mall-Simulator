@@ -16,6 +16,7 @@ GameObject:
   - component: {fileID: 4141536290712822343}
   - component: {fileID: 9115893290124163688}
   - component: {fileID: 5526056447754153284}
+  - component: {fileID: -1829838725700351697}
   m_Layer: 3
   m_Name: DisplayShoe
   m_TagString: Untagged
@@ -193,3 +194,24 @@ MonoBehaviour:
   features:
   - name: Shoes
     amount: 2
+--- !u!65 &-1829838725700351697
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6355907173077873743}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.16006593, y: 0.49563265, z: 0.17924236}
+  m_Center: {x: -0.0000022128224, y: -0.011463343, z: 0.009718175}

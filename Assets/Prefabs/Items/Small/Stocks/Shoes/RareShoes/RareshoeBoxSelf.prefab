@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 8050326082642464709}
   - component: {fileID: 2919167297392315864}
   - component: {fileID: 8947527600630200432}
+  - component: {fileID: 3040273434049339160}
   m_Layer: 0
   m_Name: RareshoeBoxSelf
   m_TagString: Untagged
@@ -160,3 +161,19 @@ MonoBehaviour:
   maxFallSeconds: 20
   lostFallDistance: 30
   stillSpeed: 0.05
+--- !u!114 &3040273434049339160
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3463483974703208823}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PaintParts
+  parts:
+  - renderer: {fileID: 7310086505779448274}
+    materialIndex: 0
+  zoneName: 
