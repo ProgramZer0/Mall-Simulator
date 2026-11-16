@@ -383,8 +383,9 @@ public class EconomyManager : NetworkBehaviour
 
     /// <summary>Server: check, charge and start a delivery.</summary>
     public OrderResult ServerTryOrder(ulong clientId, int plotId, int[] itemIds, int[] quantities, float deliverySeconds,
-                                      byte[] paints = null, int[] unitPrices = null)
+                                      byte[] paints = null, int[] unitPrices = null, bool anyoneMayBuy = false)
     {
+        // Anyone May Buy: no level, license or franchise needed (the special market: first come, first served).
         // Unit Prices (optional, dollars per item, delivery included): a set price instead of the
         // catalog's, e.g. a special market deal.
         int UnitCost(int i, ItemDef d) => unitPrices != null && i < unitPrices.Length && unitPrices[i] >= 0
@@ -408,9 +409,12 @@ public class EconomyManager : NetworkBehaviour
                 def.worldNetworkPrefab == null)
                 return OrderResult.UnknownItem;
             if (quantities[i] < 1) return OrderResult.BadQuantity;
-            if (!ProgressionManager.CanOrder(team, def)) return OrderResult.LevelTooLow;
-            if (!LicenseManager.CanOrder(team, def, out _)) return OrderResult.NeedsLicense;
-            if (!FranchiseManager.CanOrder(team, def, out _)) return OrderResult.NeedsFranchise;
+            if (!anyoneMayBuy)
+            {
+                if (!ProgressionManager.CanOrder(team, def)) return OrderResult.LevelTooLow;
+                if (!LicenseManager.CanOrder(team, def, out _)) return OrderResult.NeedsLicense;
+                if (!FranchiseManager.CanOrder(team, def, out _)) return OrderResult.NeedsFranchise;
+            }
 
             boxes += quantities[i];
             if (boxes > maxItemsPerOrder) return OrderResult.BadQuantity;
