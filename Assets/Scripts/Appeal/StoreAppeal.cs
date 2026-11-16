@@ -11,7 +11,8 @@ using UnityEngine;
 ///
 /// What it knows:
 /// - Quality (0-1): how well the store's decor covers what its categories want
-///   (StoreAppealSettings → Category Needs), weighted by how much of each category it sells.
+///   (StoreAppealSettings → Category Needs), weighted by how much of each category it sells, plus or
+///   minus how well what's for sale is placed next to things that go with it (Category Pairs).
 ///   Features lists the decor it has; Hints says what would help ("Clothing: add 2 Mirror").
 /// - What's for sale and what of it is SEEN FROM OUTSIDE: a product counts when a passer-by standing
 ///   in front of one of the store's front windows or doors could see it (nothing solid in between;
@@ -92,6 +93,11 @@ public class StoreAppeal : MonoBehaviour
     private readonly Dictionary<StoreListing.Key, (Vector3 at, bool seen)> seenCache = new();
     private readonly Dictionary<CustomerPersonality, (float outside, float inside)> sums = new();
     private readonly Dictionary<(string feature, string category), float> nearCache = new();
+    private readonly Dictionary<string, float> pairCache = new(StringComparer.OrdinalIgnoreCase); // category → pair score
+    private readonly Dictionary<(string category, string other, int wanted), float> pairPartCache = new();
+    private readonly List<Vector3> boxes = new(); // delivery boxes in the store (the "Shipment" pair category)
+    private int seenItemLayout = -1;
+    private bool boxesDirty = true;
     private readonly List<StoreListing.Key> keyBuffer = new();
     private readonly List<StoreListing.Source> sourceBuffer = new();
 
@@ -277,11 +283,19 @@ public class StoreAppeal : MonoBehaviour
             seenCompetition = Competition.Version;
             revalue = true;
         }
-        if (!rebuildAll && !revalue && pending.Count == 0) return;
+        // Something placed or picked up somewhere: delivery boxes may have come or gone (only matters with pairs).
+        if (seenItemLayout != ItemPickupNet.LayoutVersion)
+        {
+            seenItemLayout = ItemPickupNet.LayoutVersion;
+            var st = StoreAppealSettings.Instance;
+            if (st != null && st.categoryPairs.Count > 0) boxesDirty = true;
+        }
+        if (!rebuildAll && !revalue && pending.Count == 0 && !boxesDirty) return;
         if (Time.unscaledTime < nextAllowed) return;
         nextAllowed = Time.unscaledTime + 1f;
 
         bool layoutChanged = false; // offers added, removed or moved (decor-near-it needs redoing)
+        bool settingsChanged = revalue || rebuildAll;
         if (rebuildAll)
         {
             rebuildAll = false;
@@ -331,6 +345,13 @@ public class StoreAppeal : MonoBehaviour
         }
         sums.Clear();
         if (layoutChanged) nearCache.Clear();
+        if (boxesDirty)
+        {
+            boxesDirty = false;
+            GatherBoxes();
+            layoutChanged = true;
+        }
+        if (layoutChanged || settingsChanged) { pairCache.Clear(); pairPartCache.Clear(); }
         BuildQuality();
     }
 
@@ -494,6 +515,73 @@ public class StoreAppeal : MonoBehaviour
         return have;
     }
 
+    // A category's pair score (-1..1 per pair, summed): for each of its items, each pair's effect times how
+    // much of the other category is near it (up to Wanted spots), averaged over its items. Cached until the
+    // layout changes.
+    private float PairScore(string category, List<(string other, float effect, int wanted)> pairs, float reach)
+    {
+        if (pairCache.TryGetValue(category, out float cached)) return cached;
+        float sum = 0f;
+        foreach (var (other, effect, wanted) in pairs) sum += effect * PairPart(category, other, wanted, reach);
+        pairCache[category] = sum;
+        return sum;
+    }
+
+    // Averaged over this category's shelf spots (and loose items): how much of the other category is within
+    // reach of each (0-1, full at Wanted spots). A spot doesn't count itself. Cached until the layout changes.
+    private float PairPart(string category, string other, int wanted, float reach)
+    {
+        if (pairPartCache.TryGetValue((category, other, wanted), out float cached)) return cached;
+        float reach2 = reach * reach, total = 0f, weight = 0f;
+        foreach (var kv in offers)
+        {
+            var o = kv.Value;
+            if (!IsIn(o.def, category)) continue;
+            int near = 0;
+            if (string.Equals(other, StoreAppealSettings.ShipmentCategory, StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var b in boxes)
+                {
+                    float dx = b.x - o.position.x, dz = b.z - o.position.z;
+                    if (dx * dx + dz * dz > reach2 || Mathf.Abs(b.y - o.position.y) > 3f) continue;
+                    if (++near >= wanted) break;
+                }
+            }
+            else
+                foreach (var kv2 in offers)
+                {
+                    if (kv2.Key.Equals(kv.Key)) continue;
+                    var n = kv2.Value;
+                    if (!IsIn(n.def, other)) continue;
+                    float dx = n.position.x - o.position.x, dz = n.position.z - o.position.z;
+                    if (dx * dx + dz * dz > reach2 || Mathf.Abs(n.position.y - o.position.y) > 3f) continue;
+                    if (++near >= wanted) break;
+                }
+            total += Mathf.Clamp01(near / (float)wanted);
+            weight += 1f;
+        }
+        float part = weight > 0f ? total / weight : 0f;
+        pairPartCache[(category, other, wanted)] = part;
+        return part;
+    }
+
+    // In a pair category: "Any" is every item for sale.
+    private static bool IsIn(ItemDef def, string category) =>
+        string.Equals(category, StoreAppealSettings.AnyCategory, StringComparison.OrdinalIgnoreCase) || def.HasCategory(category);
+
+    // Delivery boxes sitting in the store (not on a cart, not being carried).
+    private void GatherBoxes()
+    {
+        boxes.Clear();
+        if (plot == null) return;
+        foreach (var item in ItemPickupNet.All)
+        {
+            if (item == null || !item.IsSpawned || item.IsOnCart || !item.TryGetComponent<ShipmentPackage>(out _)) continue;
+            Vector3 p = item.transform.position;
+            if (plot.Contains(p + Vector3.up * 0.05f)) boxes.Add(p);
+        }
+    }
+
     private bool InThisStore(GameObject go)
     {
         if (go.TryGetComponent<WallOpening>(out var o))
@@ -557,6 +645,37 @@ public class StoreAppeal : MonoBehaviour
         }
 
         quality = weights > 0f ? sum / weights : neutral;
+
+        // Things that go together (or don't), placed near each other.
+        float pairSum = 0f, pairWeights = 0f;
+        var anyPairs = settings.PairsFor(StoreAppealSettings.AnyCategory);
+        var both = new List<(string other, float effect, int wanted)>();
+        foreach (var kv in categoryShare)
+        {
+            both.Clear();
+            var own = settings.PairsFor(kv.Key);
+            if (own != null) both.AddRange(own);
+            if (anyPairs != null) both.AddRange(anyPairs); // pairs with "Any" apply to every category
+            var pairs = both;
+            if (pairs.Count == 0) continue;
+            float share = kv.Value / total;
+            float score = PairScore(kv.Key, pairs, settings.pairReach);
+            string Named(string other) =>
+                string.Equals(other, StoreAppealSettings.ShipmentCategory, StringComparison.OrdinalIgnoreCase) ? "delivery boxes"
+                : string.Equals(other, StoreAppealSettings.AnyCategory, StringComparison.OrdinalIgnoreCase) ? "other things" : other;
+            pairSum += share * score;
+            pairWeights += share;
+            foreach (var (other, effect, wanted) in pairs)
+            {
+                float part = PairPart(kv.Key, other, wanted, settings.pairReach);
+                if (effect > 0f && part < 1f)
+                    gaps.Add((share * effect * (1f - part) * settings.pairStrength, $"{kv.Key}: put more {Named(other)} near it"));
+                else if (effect < 0f && part > 0f)
+                    gaps.Add((share * -effect * part * settings.pairStrength, $"{kv.Key}: move it away from {Named(other)}"));
+            }
+        }
+        if (pairWeights > 0f) quality = Mathf.Clamp01(quality + settings.pairStrength * pairSum / pairWeights);
+
         gaps.Sort((x, y) => y.worth.CompareTo(x.worth));
         for (int i = 0; i < gaps.Count && i < 5; i++) hints.Add(gaps[i].text);
     }
