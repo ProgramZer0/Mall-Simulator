@@ -92,6 +92,13 @@ public class CustomerManager : NetworkBehaviour
     [SerializeField] private float secondsPerItemGuess = 6f;
 
     [Header("Theft")]
+    [Tooltip("Tempted by a high price: an honest customer looking at something priced above its market price " +
+             "may steal it instead, with their personality's Shoplift Chance times (1 + this × how far over the " +
+             "market price it is). E.g. 3: at double the market price, 4× as likely. A personality with Shoplift " +
+             "Chance 0 never steals.")]
+    [Min(0f)] [SerializeField] private float overpriceTemptation = 3f;
+    [Tooltip("The most a high price can multiply someone's Shoplift Chance by.")]
+    [Min(1f)] [SerializeField] private float maxTemptation = 10f;
     [Tooltip("Chance a shoplifter's theft sets off the alarm as they leave the store (Theft Resistance perks add to it). " +
              "The store's team is told straight away and can still catch them before they leave the mall.")]
     [Range(0f, 1f)] [SerializeField] private float alarmChance = 0.15f;
@@ -101,6 +108,14 @@ public class CustomerManager : NetworkBehaviour
     [SerializeField] private float fleeSpeed = 1.6f;
     [Tooltip("How close a player must be to stop a customer (meters).")]
     [SerializeField] private float stopRange = 3f;
+
+    [Header("Comparing prices")]
+    [Tooltip("How likely a price-conscious customer is to know another open store sells the same thing for less " +
+             "(times their personality's Price Sensitivity, so 0 sensitivity never compares). They put it back " +
+             "and head there next.")]
+    [Range(0f, 1f)] [SerializeField] private float comparePrices = 0.8f;
+    [Tooltip("Only cheaper by at least this much counts (0.05 = 5%).")]
+    [Range(0f, 1f)] [SerializeField] private float cheaperBy = 0.05f;
 
     [Header("Thinking (host)")]
     [Tooltip("Decisions per second per customer (walking is smooth regardless).")]
@@ -157,6 +172,7 @@ public class CustomerManager : NetworkBehaviour
         Paid,           // paid at the checkout
         StoreClosed,    // the store shut while they were in it
         NoCheckout,     // nowhere to pay
+        CheaperElsewhere, // put it back: another store sells it for less (and they'll go there)
     }
 
     [Serializable]
@@ -181,6 +197,7 @@ public class CustomerManager : NetworkBehaviour
         { Reaction.Paid, ("Thanks!", new Color(0.45f, 0.95f, 0.45f)) },
         { Reaction.StoreClosed, ("Closed?", new Color(0.8f, 0.8f, 0.8f)) },
         { Reaction.NoCheckout, ("Where do I pay?", new Color(1f, 0.4f, 0.35f)) },
+        { Reaction.CheaperElsewhere, ("Cheaper elsewhere", new Color(1f, 0.85f, 0.3f)) },
     };
 
     // Host: how often each reaction happened in each store (for tuning; see StoreReport).
@@ -226,7 +243,7 @@ public class CustomerManager : NetworkBehaviour
         return $"{plot.DisplayName}: {t[(int)Reaction.Interested]} came in, {t[(int)Reaction.Bought]} things taken, " +
                $"{t[(int)Reaction.Paid]} paid, {t[(int)Reaction.TooPricey]} too pricey, {t[(int)Reaction.SoldOut]} sold out, " +
                $"{t[(int)Reaction.NothingForMe]} nothing for them, {t[(int)Reaction.LineTooLong]} line too long, " +
-               $"{t[(int)Reaction.GaveUpWaiting]} gave up waiting";
+               $"{t[(int)Reaction.GaveUpWaiting]} gave up waiting, {t[(int)Reaction.CheaperElsewhere]} cheaper elsewhere";
     }
 
     /* ========================= STATE ========================= */
@@ -318,6 +335,8 @@ public class CustomerManager : NetworkBehaviour
         public float stoppedAt = -99f;
         public byte bags;           // shopping bags they carry (one per store they bought in)
         public StorePlot baggedIn;  // the store their last bag came from
+        public StorePlot bargainStore; // somewhere they know sells something for less: going there next
+        public int bargainItem;        // ...this
 
         // Checkout
         public CheckoutCounter counter;
@@ -1132,6 +1151,19 @@ public class CustomerManager : NetworkBehaviour
             // wanders to a store at random and sees what catches their eye on the way.
             bool knows = Random.value < c.personality.knowsTheMall;
 
+            // Off to where they know it's cheaper.
+            var deal = c.bargainStore;
+            if (deal != null && deal != c.store && deal.IsOpen && entrances.TryGetValue(deal, out var dealWays) && dealWays.Count > 0)
+            {
+                var e = dealWays[Random.Range(0, dealWays.Count)];
+                c.mode = Mode.Wander;
+                c.goalStore = deal;
+                c.goalEntrance = e;
+                if (PathTo(c, Near(e.outside, 1.5f, deal))) { Log(c, $"heading to '{deal.DisplayName}' for a better price"); return; }
+                c.bargainStore = null;
+            }
+            else c.bargainStore = null;
+
             // Or just a stroll to somewhere in the hallways.
             if (!knows && Random.value < roamChance && TryHallwaySpot(c.pos, out var spot))
             {
@@ -1281,8 +1313,10 @@ public class CustomerManager : NetworkBehaviour
         c.passed.Add(plot);
         float chance = plot.Appeal.For(c.personality).enterChance;
         bool full = InsideCount(plot) >= Capacity(plot);
-        if (plot == c.mustEnter || (!full && Random.value < chance))
+        bool deal = plot == c.bargainStore;
+        if (plot == c.mustEnter || deal || (!full && Random.value < chance))
         {
+            if (deal) c.bargainStore = null; // there now (once: no coming back for it again and again)
             Enter(c, plot, e);
             return true;
         }
@@ -1363,6 +1397,7 @@ public class CustomerManager : NetworkBehaviour
             if (c.thief && s.container == null) continue; // a shoplifter only takes what fits in a bag
             float w = plot.Appeal.WorthTo(c.personality, s) * tolerance;
             if (c.thief) w *= 1f + s.priceCents / 10000f; // and likes it pricey
+            if (s.itemId == c.bargainItem && c.bargainItem != 0) w *= 5f; // what they came over for
             if (w <= 0.01f) continue;
             scratchPicks.Add((s, w));
         }
@@ -1415,9 +1450,54 @@ public class CustomerManager : NetworkBehaviour
     {
         var catalog = ItemCatalog.Instance;
         if (catalog == null || !catalog.TryGet(s.itemId, out var def)) return false;
-        int products = s.item != null && s.item.TryGetComponent<ItemPickupNet>(out var p) && p.IsStockCrate ? Mathf.Max(1, p.Units) : 1;
-        int market = MarketModifiers.MarketPriceCents(def) * products;
+        int market = MarketModifiers.MarketPriceCents(def) * UnitsOf(s);
         return market > 0 && s.priceCents > market * 1.15f;
+    }
+
+    // Products in a listing: a whole crate counts its units.
+    private static int UnitsOf(StoreListing.Source s) =>
+        s.item != null && s.item.TryGetComponent<ItemPickupNet>(out var p) && p.IsStockCrate ? Mathf.Max(1, p.Units) : 1;
+
+    // How much a price over the market one multiplies the chance of stealing it (1 = not over).
+    private float Temptation(StoreListing.Source s)
+    {
+        var catalog = ItemCatalog.Instance;
+        if (catalog == null || !catalog.TryGet(s.itemId, out var def)) return 1f;
+        int market = MarketModifiers.MarketPriceCents(def) * UnitsOf(s);
+        if (market <= 0 || s.priceCents <= market) return 1f;
+        return Mathf.Min(maxTemptation, 1f + overpriceTemptation * (s.priceCents / (float)market - 1f));
+    }
+
+    // The cheapest price per product of each thing across the open stores, gathered every couple of seconds.
+    private readonly Dictionary<int, (float perUnit, StorePlot plot)> cheapest = new();
+    private float cheapestUntil = -1f;
+
+    private bool CheaperElsewhere(StorePlot here, StoreListing.Source s, out StorePlot there)
+    {
+        there = null;
+        if (Time.time >= cheapestUntil)
+        {
+            cheapestUntil = Time.time + 2f;
+            cheapest.Clear();
+            if (MallManager.Instance != null)
+                foreach (var plot in MallManager.Instance.Plots)
+                {
+                    if (plot == null || !plot.IsOpen || plot.Listing == null ||
+                        !entrances.TryGetValue(plot, out var ways) || ways.Count == 0) continue;
+                    foreach (var o in plot.Listing.Sources)
+                    {
+                        if (o.quantity <= 0) continue;
+                        float per = o.priceCents / (float)UnitsOf(o);
+                        if (!cheapest.TryGetValue(o.itemId, out var best) || per < best.perUnit)
+                            cheapest[o.itemId] = (per, plot);
+                    }
+                }
+        }
+        if (!cheapest.TryGetValue(s.itemId, out var low) || low.plot == here || low.plot == null || !low.plot.IsOpen) return false;
+        float mine = s.priceCents / (float)UnitsOf(s);
+        if (low.perUnit > mine * (1f - cheaperBy)) return false;
+        there = low.plot;
+        return true;
     }
 
     // At the shelf: still there, still worth it at this price? Then take one.
@@ -1437,9 +1517,30 @@ public class CustomerManager : NetworkBehaviour
             React(c, Reaction.TooPricey); // more than they brought
             return;
         }
+        // Another store sells it for less, and they know it: put it back and go there next.
+        if (!c.thief && CheaperElsewhere(plot, s, out var there) &&
+            Random.value < comparePrices * Mathf.Clamp01(c.personality.priceSensitivity))
+        {
+            c.bargainStore = there;
+            c.bargainItem = s.itemId;
+            c.passed.Remove(there);
+            c.satisfaction -= 0.05f;
+            Log(c, $"{CheckoutCounter.NameOf(s.itemId)} is cheaper at '{there.DisplayName}', going there next");
+            React(c, Reaction.CheaperElsewhere);
+            return;
+        }
+
+        // A price well over the market one tempts them: their usual chance of stealing, multiplied.
+        if (!c.thief && s.container != null && c.personality.shopliftChance > 0f &&
+            Random.value < c.personality.shopliftChance * eventShoplifting * Temptation(s))
+        {
+            c.thief = true;
+            Log(c, $"tempted by {CheckoutCounter.NameOf(s.itemId)} at {CheckoutCounter.FormatAmount(s.priceCents)}: stealing it");
+        }
+
         float tolerance = 1f + ProgressionManager.StoreStat(plot, PerkStat.PriceTolerance);
         float worth = plot.Appeal.WorthTo(c.personality, s) * tolerance;
-        if (Random.value >= Mathf.Clamp01(worth * buyEagerness))
+        if (!c.thief && Random.value >= Mathf.Clamp01(worth * buyEagerness))
         {
             Log(c, $"looked at {CheckoutCounter.NameOf(s.itemId)} for {CheckoutCounter.FormatAmount(s.priceCents)}, didn't take it");
             if (AboveMarket(s) && c.personality.priceSensitivity > 0.3f) React(c, Reaction.TooPricey);
@@ -1461,6 +1562,7 @@ public class CustomerManager : NetworkBehaviour
         else return;
 
         if (!c.thief) c.budgetCents -= s.priceCents;
+        if (s.itemId == c.bargainItem) { c.bargainItem = 0; c.bargainStore = null; } // found the deal
         c.satisfaction += 0.25f;
         Log(c, $"took {CheckoutCounter.NameOf(s.itemId)} ({CheckoutCounter.FormatAmount(s.priceCents)})");
         React(c, Reaction.Bought);

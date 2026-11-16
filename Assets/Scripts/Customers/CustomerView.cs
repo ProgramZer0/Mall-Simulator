@@ -134,10 +134,16 @@ public class CustomerView : MonoBehaviour
             }
             else
             {
-                t.SetParent(transform, false);
-                t.localPosition = new Vector3(0.32f + 0.05f * i, 0.75f - lift, 0.1f * i - 0.05f);
+                // Placed in the world, beside their hand, then attached keeping that (the plain capsule is
+                // scaled, so local positions under it would land inside the body).
+                var me = transform;
+                Vector3 feet = me.position - Vector3.up * lift;
+                t.SetPositionAndRotation(
+                    feet + Vector3.up * 0.6f + me.right * (0.42f + 0.07f * i) + me.forward * (0.12f * i - 0.06f),
+                    me.rotation);
+                if (prefab == null) t.localScale = new Vector3(0.12f, 0.3f, 0.25f);
+                t.SetParent(me, true);
             }
-            if (prefab == null) t.localScale = new Vector3(0.12f, 0.3f, 0.25f) * (anchor != null ? 1f : 1f / Mathf.Max(0.01f, transform.lossyScale.x));
             bags.Add(bag);
         }
     }
