@@ -88,11 +88,11 @@ public class EditLocalItem : MonoBehaviour
     }
 
     /// <summary>Show what's on this shelf, so the stock moves with it while editing.</summary>
-    public void ShowStock(int[] itemIds, int[] counts, int[] orients, int[] seeds)
+    public void ShowStock(int[] itemIds, int[] counts, int[] orients, int[] seeds, uint[] paints = null)
     {
         if (stockSource == null) return;
         stock?.Clear();
-        stock = stockSource.BuildStockOnCopy(transform, itemIds, counts, orients, seeds);
+        stock = stockSource.BuildStockOnCopy(transform, itemIds, counts, orients, seeds, paints);
         transform.hasChanged = false;
     }
 

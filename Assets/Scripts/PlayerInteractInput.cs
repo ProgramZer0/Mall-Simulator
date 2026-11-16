@@ -248,7 +248,7 @@ public class PlayerInteractInput : NetworkBehaviour
         for (int i = 0; i < n; i++)
         {
             var h = lookHits[i];
-            if (h.distance >= best || h.collider.TryGetComponent<TMPro.TMP_Text>(out _)) continue;
+            if (h.distance >= best || LookThrough.Ignore(h.collider)) continue; // text, screens: see through them
             hit = h;
             best = h.distance;
             found = true;
@@ -267,7 +267,7 @@ public class PlayerInteractInput : NetworkBehaviour
         for (int i = 0; i < n; i++)
         {
             var h = partHits[i];
-            if (h.distance >= bestDistance || h.distance > bodyDistance + 0.25f) continue;
+            if (h.distance >= bestDistance || h.distance > bodyDistance + 0.25f || LookThrough.Ignore(h.collider)) continue;
             var p = h.collider.GetComponentInParent<CheckoutClickable>();
             if (p == null || p.Counter != counter) continue;
             best = p;
@@ -332,9 +332,10 @@ public class PlayerInteractInput : NetworkBehaviour
                 MallManager.CanPickupOrPlace(OwnerClientId, transform.position, container.transform.position))
             {
                 stockTargetIsTake = held == 0;
-                stockZone = container.FindNearestZone(hit.point, held, wantStock: held == 0, orient: stockOrient);
+                uint? heldPaint = held != 0 ? inventory.HeldPaint.Value : (uint?)null; // a zone holds one color
+                stockZone = container.FindNearestZone(hit.point, held, wantStock: held == 0, orient: stockOrient, paint: heldPaint);
                 if (holdingCrate && inventory.HeldUnits.Value < StockContainer.GetUnitsPerCrate(held))
-                    putBackZone = container.FindNearestZone(hit.point, held, wantStock: true);
+                    putBackZone = container.FindNearestZone(hit.point, held, wantStock: true, paint: heldPaint);
                 if (stockZone >= 0 || putBackZone >= 0) stockTarget = container;
                 else if (holdingCrate)
                 {
@@ -635,10 +636,10 @@ public class PlayerInteractInput : NetworkBehaviour
         if (zone < 0) return "";
         string text = $"\n{stockTurnKey}: Turn";
         var z = stockTarget.GetZone(zone);
-        bool tipped = StockContainer.Orientation.Lying(z.count > 0 ? z.orient : stockOrient);
-        text += stockTarget.IsHangRail(zone)
-            ? $"   {stockLayKey}: Tip over"
-            : $"   {stockLayKey}: {(tipped ? "Stand up" : "Lay down")}";
+        int item = z.count > 0 ? z.itemId : inventory.HeldItemId.Value;
+        bool tipped = StockContainer.Orientation.Lying(StockContainer.AllowedOrient(item, z.count > 0 ? z.orient : stockOrient));
+        if (stockTarget.IsHangRail(zone)) text += $"   {stockLayKey}: Tip over";
+        else if (StockContainer.CanTip(item)) text += $"   {stockLayKey}: {(tipped ? "Stand up" : "Lay down")}";
         return text;
     }
 
@@ -650,6 +651,8 @@ public class PlayerInteractInput : NetworkBehaviour
         string kind = stockTarget.IsHangRail(blockedZone) ? "rack" : "shelf";
         if (z.count > 0 && z.itemId != held) return $"This {kind} spot has {ItemName(z.itemId)}";
         if (stockTarget.IsCovered(blockedZone)) return $"This {kind} spot is covered: clear it to stock it";
+        if (z.count > 0 && z.paint != inventory.HeldPaint.Value)
+            return $"This {kind} spot has {(z.paint == 0 ? "plain" : PaintPalette.NameOf(PaintSet.Get(z.paint, 0)))} ones (one color per spot)";
         if (!stockTarget.Accepts(blockedZone, held)) return $"{ItemName(held)} can't go on a {kind}";
         if (z.count > 0) return $"This {kind} spot is full ({z.count})";
         return stockTarget.FitsAnyWay(blockedZone, held)
@@ -702,6 +705,7 @@ public class PlayerInteractInput : NetworkBehaviour
         var z = stockTarget.GetZone(zone);
         int current = z.count > 0 ? z.orient : stockOrient;
         int itemId = z.count > 0 ? z.itemId : inventory.HeldItemId.Value;
+        if (lay && !turn && !stockTarget.IsHangRail(zone) && !StockContainer.CanTip(itemId)) return; // only one way it can sit
 
         // The next way round that fits: R tries each further quarter turn, T lays it down (or stands it
         // up) and then tries its turns. A way it doesn't fit is skipped; if none fits, nothing changes.

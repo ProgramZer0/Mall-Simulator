@@ -140,6 +140,33 @@ public sealed class StockBatcher : MonoBehaviour
         return parts;
     }
 
+    private static readonly Dictionary<(Material, byte), Material> TintedMaterials = new();
+    private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+    private static readonly int ColorId = Shader.PropertyToID("_Color");
+
+    /// <summary>A shape's parts with a paint color (PaintPalette id) on their materials (new parts, shared materials).</summary>
+    public static List<PartShape> Tinted(List<PartShape> shape, byte color)
+    {
+        if (shape == null || !PaintPalette.TryGetColor(color, out Color c)) return shape;
+        var result = new List<PartShape>(shape.Count);
+        foreach (var p in shape)
+        {
+            if (!TintedMaterials.TryGetValue((p.material, color), out var m) || m == null)
+            {
+                m = new Material(p.material) { name = p.material.name + " (paint " + color + ")", enableInstancing = true };
+                if (m.HasProperty(BaseColorId)) m.SetColor(BaseColorId, c);
+                if (m.HasProperty(ColorId)) m.SetColor(ColorId, c);
+                TintedMaterials[(p.material, color)] = m;
+            }
+            result.Add(new PartShape
+            {
+                mesh = p.mesh, submesh = p.submesh, material = m, local = p.local, shadows = p.shadows,
+                receiveShadows = p.receiveShadows, layer = p.layer, renderingLayers = p.renderingLayers,
+            });
+        }
+        return result;
+    }
+
     // The material with GPU instancing on (a copy if the asset doesn't have it ticked).
     private static Material InstancedOf(Material m)
     {

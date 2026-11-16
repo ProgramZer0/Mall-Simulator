@@ -140,7 +140,7 @@ public class CustomerView : MonoBehaviour
                 Vector3 feet = me.position - Vector3.up * lift;
                 t.SetPositionAndRotation(
                     feet + Vector3.up * 0.6f + me.right * (0.42f + 0.07f * i) + me.forward * (0.12f * i - 0.06f),
-                    me.rotation);
+                    me.rotation * (prefab != null ? prefab.transform.localRotation : Quaternion.identity)); // the model's own turn (Blender's -90 on X) kept
                 if (prefab == null) t.localScale = new Vector3(0.12f, 0.3f, 0.25f);
                 t.SetParent(me, true);
             }

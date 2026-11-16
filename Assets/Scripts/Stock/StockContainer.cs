@@ -37,13 +37,14 @@ public class StockContainer : NetworkBehaviour
         public int seed;   // picks the variant (colour) of each product; new each time the zone is restocked from empty
         public int price;      // sale price in cents (0 = not for sale); kept while the zone is empty
         public int pricedItem; // the product the price was set for (restocking with something else clears it)
+        public uint paint;     // the products' colors (PaintSet, 0 = their own): one color per zone
 
         /// <summary>Is what's in this zone for sale? (Stocked, priced, and the product has a Sellable.)</summary>
         public bool IsForSale => count > 0 && price > 0 && pricedItem == itemId && Sellable.IsSellable(itemId);
 
         public bool Equals(ZoneStock other) =>
             itemId == other.itemId && count == other.count && orient == other.orient && seed == other.seed &&
-            price == other.price && pricedItem == other.pricedItem;
+            price == other.price && pricedItem == other.pricedItem && paint == other.paint;
         public override bool Equals(object obj) => obj is ZoneStock other && Equals(other);
         public override int GetHashCode() => (((itemId * 397 ^ count) * 31 + orient) * 31 + seed) * 31 + price;
     }
@@ -79,6 +80,11 @@ public class StockContainer : NetworkBehaviour
     [SerializeField] private float hangSpacing = 0f;
     [Tooltip("Never more than this many products in one zone, however small they are.")]
     [SerializeField] private int maxPerZone = 100;
+    [Tooltip("Shelves fill the bottom layer first (then stack up), starting from this side as a shopper facing " +
+             "the shelf sees it...")]
+    [SerializeField] private bool fillFromRight = true;
+    [Tooltip("...and from the front (nearest the shopper) or the back.")]
+    [SerializeField] private bool fillFromFront = true;
     [Tooltip("A zone with another placed thing in it (a shelf stacked on top, a box left there) is covered: " +
              "nothing can be stocked there and customers can't take from it until it's clear. What's already in " +
              "it can still be taken out by players.")]
@@ -297,12 +303,16 @@ public class StockContainer : NetworkBehaviour
         return false;
     }
 
-    /// <summary>Can one more of this product go in this zone? (orient: the pick, if the zone is empty.)</summary>
-    public bool HasRoomFor(int zone, int itemId, int orient)
+    /// <summary>
+    /// Can one more of this product go in this zone? (orient: the pick, if the zone is empty. Paint: its
+    /// colors; a zone holds one color, so a different one only goes in an empty zone. Null: any.)
+    /// </summary>
+    public bool HasRoomFor(int zone, int itemId, int orient, uint? paint = null)
     {
         if (IsCovered(zone)) return false;
         var z = GetZone(zone);
         if (z.count > 0 && z.itemId != itemId) return false;
+        if (z.count > 0 && paint.HasValue && z.paint != paint.Value) return false;
         return Mathf.Max(0, z.count) < GetCapacity(zone, itemId, orient);
     }
 
@@ -311,7 +321,7 @@ public class StockContainer : NetworkBehaviour
     /// orient = the pick for an empty zone), or that holds some of it (wantStock true; itemId 0 = any
     /// product). -1 if none.
     /// </summary>
-    public int FindNearestZone(Vector3 near, int itemId, bool wantStock, int orient = 0)
+    public int FindNearestZone(Vector3 near, int itemId, bool wantStock, int orient = 0, uint? paint = null)
     {
         int best = -1;
         float bestDist = float.MaxValue;
@@ -319,7 +329,9 @@ public class StockContainer : NetworkBehaviour
         {
             if (GetBox(i) == null) continue;
             var z = GetZone(i);
-            bool ok = wantStock ? z.count > 0 && (itemId == 0 || z.itemId == itemId) : HasRoomFor(i, itemId, orient);
+            bool ok = wantStock
+                ? z.count > 0 && (itemId == 0 || z.itemId == itemId) && (!paint.HasValue || z.paint == paint.Value)
+                : HasRoomFor(i, itemId, orient, paint);
             if (!ok) continue;
 
             float d = DistanceToZone(i, near);
@@ -372,6 +384,29 @@ public class StockContainer : NetworkBehaviour
             index >= layout.capacity) return false;
         GetSlotPose(GetBox(zone), IsHangRail(zone), layout, index, out position, out rotation);
         return true;
+    }
+
+    /// <summary>
+    /// The orientation a product really takes on a shelf: lying or standing forced if its crate allows only
+    /// one (Shelf Pose), otherwise as given.
+    /// </summary>
+    public static int AllowedOrient(int itemId, int orient)
+    {
+        var crate = GetCratePickup(itemId);
+        if (crate == null) return orient;
+        return crate.ShelfPoseAllowed switch
+        {
+            ItemPickupNet.ShelfPose.LyingOnly => Orientation.Make(Orientation.Turns(orient), true),
+            ItemPickupNet.ShelfPose.StandingOnly => Orientation.Make(Orientation.Turns(orient), false),
+            _ => orient,
+        };
+    }
+
+    /// <summary>Can its products be laid down and stood up on shelves (T)? False if the crate allows only one.</summary>
+    public static bool CanTip(int itemId)
+    {
+        var crate = GetCratePickup(itemId);
+        return crate == null || crate.ShelfPoseAllowed == ItemPickupNet.ShelfPose.Either;
     }
 
     /// <summary>Is this item a stock crate (and does it say what one product looks like)?</summary>
@@ -437,9 +472,10 @@ public class StockContainer : NetworkBehaviour
     /// Server: put one product in a zone. An empty zone takes the given orientation; otherwise the
     /// zone keeps its own. False if it's full, holds something else, or doesn't take this product.
     /// </summary>
-    public bool ServerAddOne(int zone, int itemId, int orient)
+    /// <summary>Server: one more product in a zone (paint: its colors; null: the zone's own, for putting back).</summary>
+    public bool ServerAddOne(int zone, int itemId, int orient, uint? paint = null)
     {
-        if (!IsServer || zone < 0 || zone >= zones.Count || !HasRoomFor(zone, itemId, orient)) return false;
+        if (!IsServer || zone < 0 || zone >= zones.Count || !HasRoomFor(zone, itemId, orient, paint)) return false;
         var z = zones[zone];
         bool same = z.count > 0 && z.itemId == itemId;
         bool keepPrice = z.pricedItem == itemId && z.price > 0; // the shelf's own price tag stays for the same product
@@ -455,6 +491,7 @@ public class StockContainer : NetworkBehaviour
             seed = same ? z.seed : UnityEngine.Random.Range(1, int.MaxValue),
             price = price,
             pricedItem = price > 0 ? itemId : 0,
+            paint = same ? z.paint : paint ?? 0,
         };
         return true;
     }
@@ -583,6 +620,7 @@ public class StockContainer : NetworkBehaviour
         var prefab = GetStockedPrefab(itemId, hang);
         if (box == null || prefab == null) return false;
 
+        if (!hang) orient = AllowedOrient(itemId, orient);
         ZoneFrame(box, out _, out _, out Vector3 size);
         Quaternion o = Orientation.Rotation(orient, hang);
         int max = Mathf.Max(0, maxPerZone);
@@ -716,10 +754,11 @@ public class StockContainer : NetworkBehaviour
             // Centre the grid in the zone so leftover space is shared on both sides.
             float usedX = l.nx * l.cell.x - spacing;
             float usedZ = l.nz * l.cell.z - spacing;
-            local = new Vector3(
-                -usedX * 0.5f + l.half.x + col * l.cell.x,
-                -size.y * 0.5f + l.half.y + layer * l.cell.y,
-                usedZ * 0.5f - l.half.z - row * l.cell.z);
+            // Bottom layer first. A shopper facing the shelf (the zone's front, its blue arrow, toward them)
+            // has their right at -x: Fill From Right starts there; Fill From Front starts at +z.
+            float x = -usedX * 0.5f + l.half.x + col * l.cell.x;
+            float z = usedZ * 0.5f - l.half.z - row * l.cell.z;
+            local = new Vector3(fillFromRight ? x : -x, -size.y * 0.5f + l.half.y + layer * l.cell.y, fillFromFront ? z : -z);
         }
 
         rotation = zoneRot * l.orient;
@@ -776,7 +815,8 @@ public class StockContainer : NetworkBehaviour
     /// Lays out the stock on an edit-mode copy, so it moves with it (see EditStock). Nothing of it can be
     /// clicked, so clicks reach the copy.
     /// </summary>
-    public EditStock BuildStockOnCopy(Transform copyRoot, int[] itemIds, int[] counts, int[] orients, int[] seeds)
+    public EditStock BuildStockOnCopy(Transform copyRoot, int[] itemIds, int[] counts, int[] orients, int[] seeds,
+                                      uint[] paints = null)
     {
         var made = new EditStock();
         Transform holder = null; // only for products that can't be batched
@@ -788,6 +828,7 @@ public class StockContainer : NetworkBehaviour
             var prefab = GetStockedPrefab(itemIds[i], IsHangRail(i));
             int orient = orients != null && i < orients.Length ? orients[i] : 0;
             int seed = seeds != null && i < seeds.Length ? seeds[i] : 0;
+            uint paint = paints != null && i < paints.Length ? paints[i] : 0u;
             if (box == null || prefab == null || counts[i] <= 0 ||
                 !TryGetLayout(box, IsHangRail(i), itemIds[i], orient, out var layout)) continue;
 
@@ -796,6 +837,7 @@ public class StockContainer : NetworkBehaviour
                 GetSlotPose(box, IsHangRail(i), layout, k, out Vector3 pos, out Quaternion rot);
                 var model = GetVariantPrefab(itemIds[i], IsHangRail(i), seed, k) ?? prefab;
                 var template = BatchedTemplateFor(model, out var shape);
+                shape = PaintedShape(model, shape, paint);
                 if (shape != null)
                 {
                     var world = Matrix4x4.TRS(pos, rot, template.transform.localScale);
@@ -807,7 +849,7 @@ public class StockContainer : NetworkBehaviour
                     holder = StockVisualFollower.Create(copyRoot, null).transform;
                     made.objects.Add(holder.gameObject);
                 }
-                var go = MakeVisual(model, pos, rot, holder);
+                var go = MakeVisual(model, pos, rot, holder, paint: paint);
                 foreach (var c in go.GetComponentsInChildren<Collider>()) c.enabled = false;
                 made.objects.Add(go);
             }
@@ -874,7 +916,8 @@ public class StockContainer : NetworkBehaviour
     {
         var list = visuals[zone];
         var shown = visualState[zone];
-        if (shown.itemId != state.itemId || shown.orient != state.orient || shown.seed != state.seed)
+        if (shown.itemId != state.itemId || shown.orient != state.orient || shown.seed != state.seed ||
+            shown.paint != state.paint)
         {
             foreach (var go in list) if (go != null) Destroy(go);
             list.Clear();
@@ -898,7 +941,7 @@ public class StockContainer : NetworkBehaviour
         {
             GetSlotPose(box, IsHangRail(zone), layout, list.Count, out Vector3 pos, out Quaternion rot);
             var model = GetVariantPrefab(state.itemId, IsHangRail(zone), state.seed, list.Count) ?? prefab;
-            list.Add(MakeVisual(model, pos, rot, root, batched: true));
+            list.Add(MakeVisual(model, pos, rot, root, batched: true, paint: state.paint));
         }
     }
 
@@ -910,12 +953,14 @@ public class StockContainer : NetworkBehaviour
     /// or networking. Each prefab is stripped once; after that a copy is a single Instantiate.
     /// </summary>
     public static GameObject MakeVisual(GameObject prefab, Vector3 position, Quaternion rotation, Transform parent,
-                                       bool batched = false)
+                                       bool batched = false, uint paint = 0)
     {
         List<StockBatcher.PartShape> shape = null;
         var template = batched ? BatchedTemplateFor(prefab, out shape) : TemplateFor(prefab);
         var go = Instantiate(template, position, rotation, parent); // parent is unscaled, so the prefab keeps its size
         go.name = prefab.name;
+        if (batched && shape != null) shape = PaintedShape(prefab, shape, paint);
+        else if (paint != 0) PaintParts.ApplySetToCopy(prefab, go, paint); // drawn by its own renderers
         if (batched && shape != null)
         {
             // Drawn with the rest of its kind nearby (StockBatcher); its own renderers are off.
@@ -924,6 +969,20 @@ public class StockContainer : NetworkBehaviour
             StockBatcher.Add(model);
         }
         return go;
+    }
+
+    // Painted products: the same parts with the color on their materials (one color per product: the
+    // buy menu paints every zone the same). Cached per shape and color. Only prefabs with PaintParts.
+    private static readonly Dictionary<(List<StockBatcher.PartShape>, byte), List<StockBatcher.PartShape>> Painted = new();
+
+    private static List<StockBatcher.PartShape> PaintedShape(GameObject prefab, List<StockBatcher.PartShape> shape, uint paint)
+    {
+        byte color = PaintSet.Get(paint, 0);
+        if (shape == null || color == 0 || !PaintParts.IsPaintable(prefab)) return shape;
+        if (Painted.TryGetValue((shape, color), out var done)) return done;
+        done = StockBatcher.Tinted(shape, color);
+        Painted[(shape, color)] = done;
+        return done;
     }
 
     // Shelf stock: the template with its renderers off, and the parts StockBatcher draws instead (null
