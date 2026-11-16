@@ -649,6 +649,7 @@ public class PlayerInteractInput : NetworkBehaviour
         var z = stockTarget.GetZone(blockedZone);
         string kind = stockTarget.IsHangRail(blockedZone) ? "rack" : "shelf";
         if (z.count > 0 && z.itemId != held) return $"This {kind} spot has {ItemName(z.itemId)}";
+        if (stockTarget.IsCovered(blockedZone)) return $"This {kind} spot is covered: clear it to stock it";
         if (!stockTarget.Accepts(blockedZone, held)) return $"{ItemName(held)} can't go on a {kind}";
         if (z.count > 0) return $"This {kind} spot is full ({z.count})";
         return stockTarget.FitsAnyWay(blockedZone, held)

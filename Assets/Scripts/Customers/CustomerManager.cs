@@ -1393,6 +1393,7 @@ public class CustomerManager : NetworkBehaviour
         {
             var s = all[(start + k * stride) % count];
             if (s.quantity <= 0 || c.seen.Contains(s.Key) || (!c.thief && s.priceCents > c.budgetCents)) continue;
+            if (s.container != null && s.container.IsCovered(s.zone)) continue; // can't get at it
             if (Heading(s.Key) >= s.quantity && !LastOfIt(plot, s)) continue; // others already have it covered; there's more elsewhere
             if (c.thief && s.container == null) continue; // a shoplifter only takes what fits in a bag
             float w = plot.Appeal.WorthTo(c.personality, s) * tolerance;
@@ -1504,7 +1505,8 @@ public class CustomerManager : NetworkBehaviour
     private void Decide(Customer c)
     {
         var plot = c.store;
-        if (!plot.Listing.TryGetSource(c.target, out var s) || s.quantity <= 0)
+        if (!plot.Listing.TryGetSource(c.target, out var s) || s.quantity <= 0 ||
+            (s.container != null && s.container.IsCovered(s.zone)))
         {
             c.satisfaction -= 0.15f;
             Log(c, "what they came for was gone");

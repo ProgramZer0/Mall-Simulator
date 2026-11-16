@@ -79,6 +79,13 @@ public class StockContainer : NetworkBehaviour
     [SerializeField] private float hangSpacing = 0f;
     [Tooltip("Never more than this many products in one zone, however small they are.")]
     [SerializeField] private int maxPerZone = 100;
+    [Tooltip("A zone with another placed thing in it (a shelf stacked on top, a box left there) is covered: " +
+             "nothing can be stocked there and customers can't take from it until it's clear. What's already in " +
+             "it can still be taken out by players.")]
+    [SerializeField] private bool blockWhenCovered = true;
+    [Tooltip("How far inside a zone's box something has to reach to cover it (meters), so things just " +
+             "touching its edge don't count.")]
+    [SerializeField] private float coverMargin = 0.02f;
 
     /// <summary>Every spawned container on this machine (customers can search these for stock).</summary>
     public static readonly List<StockContainer> All = new();
@@ -231,15 +238,69 @@ public class StockContainer : NetworkBehaviour
         if (zone < 0 || zone >= ZoneCount) return $"no zone {zone}";
         var z = GetZone(zone);
         if (z.count > 0 && z.itemId != itemId) return $"zone holds {ItemDebug.Describe(z.itemId)}";
+        if (IsCovered(zone)) return "something is placed in the way (covered)";
         if (!Accepts(zone, itemId)) return $"the crate has no {(IsHangRail(zone) ? "Hang" : "Shelf")} Prefab for this zone";
         if (!TryGetLayout(zone, itemId, OrientFor(zone, itemId, orient), out var l)) return "the product doesn't fit this zone in that orientation";
         if (z.count >= l.capacity) return $"full ({z.count}/{l.capacity})";
         return "ok";
     }
 
+    /* ========================= COVERED ZONES ========================= */
+
+    private bool[] covered;
+    private int coverVersion = -1;
+    private float coverCheckAt;
+    private bool coverPending;
+    private ItemPickupNet self;
+    private static readonly Collider[] CoverHits = new Collider[32];
+
+    /// <summary>
+    /// Is something else placed in this zone (another shelf stacked on it, a box left there)? Then it can't
+    /// be stocked and customers can't take from it. Rechecked shortly after anything is placed or moved.
+    /// </summary>
+    public bool IsCovered(int zone)
+    {
+        if (!blockWhenCovered || zone < 0 || zone >= ZoneCount) return false;
+        if (covered == null || covered.Length != ZoneCount) { covered = new bool[ZoneCount]; coverVersion = -1; }
+        int v = ItemPickupNet.LayoutVersion;
+        if (v != coverVersion)
+        {
+            coverVersion = v;
+            coverPending = true;
+            coverCheckAt = Time.time + 0.1f; // let what just landed settle into physics first
+        }
+        if (coverPending && Time.time >= coverCheckAt)
+        {
+            coverPending = false;
+            for (int i = 0; i < ZoneCount; i++) covered[i] = CheckCovered(i);
+        }
+        return covered[zone];
+    }
+
+    // Another placed item's collider inside the zone's box (shrunk by the margin)? This furniture, its
+    // products, items on carts and edit-mode copies don't count.
+    private bool CheckCovered(int zone)
+    {
+        if (!TryGetZoneBox(zone, out Vector3 center, out Quaternion rotation, out Vector3 size)) return false;
+        Vector3 half = Vector3.Max(size * 0.5f - Vector3.one * coverMargin, Vector3.one * 0.005f);
+        if (self == null) self = GetComponent<ItemPickupNet>();
+        int n = Physics.OverlapBoxNonAlloc(center, half, CoverHits, rotation, Physics.DefaultRaycastLayers,
+                                           QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < n; i++)
+        {
+            var col = CoverHits[i];
+            if (col == null || col.transform.IsChildOf(transform)) continue;
+            var item = col.GetComponentInParent<ItemPickupNet>();
+            if (item == null || item == self || !item.IsSpawned || item.IsOnCart) continue;
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>Can one more of this product go in this zone? (orient: the pick, if the zone is empty.)</summary>
     public bool HasRoomFor(int zone, int itemId, int orient)
     {
+        if (IsCovered(zone)) return false;
         var z = GetZone(zone);
         if (z.count > 0 && z.itemId != itemId) return false;
         return Mathf.Max(0, z.count) < GetCapacity(zone, itemId, orient);
