@@ -16,7 +16,7 @@ GameObject:
   - component: {fileID: -2028892032763157303}
   - component: {fileID: 323429474624334279}
   - component: {fileID: 7971765392998675163}
-  - component: {fileID: 7200720463423570956}
+  - component: {fileID: -894259086625378813}
   m_Layer: 3
   m_Name: TestPaint
   m_TagString: Untagged
@@ -233,7 +233,7 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
---- !u!114 &7200720463423570956
+--- !u!114 &-894259086625378813
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -245,6 +245,4 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d750dcf5b0143264483d62371c762da9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Decor
-  features:
-  - name: Paint
-    amount: 5
+  features: []

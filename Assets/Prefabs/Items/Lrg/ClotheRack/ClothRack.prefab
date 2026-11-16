@@ -17,8 +17,8 @@ GameObject:
   - component: {fileID: 3570835795013352836}
   - component: {fileID: 3219855054341772113}
   - component: {fileID: 488232005747566637}
-  - component: {fileID: 8304024432232629268}
   - component: {fileID: 4988795791844834532}
+  - component: {fileID: -3670365866274194816}
   m_Layer: 3
   m_Name: ClothRack
   m_TagString: Untagged
@@ -242,23 +242,6 @@ MonoBehaviour:
   maxPerZone: 100
   blockWhenCovered: 1
   coverMargin: 0.02
---- !u!114 &8304024432232629268
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2635878287570873435}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d750dcf5b0143264483d62371c762da9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Decor
-  features:
-  - name: Clothing
-    amount: 2
-  - name: Hanging
-    amount: 1
 --- !u!64 &4988795791844834532
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -281,6 +264,19 @@ MeshCollider:
   m_Convex: 0
   m_CookingOptions: 30
   m_Mesh: {fileID: 5025227930295674748, guid: 45f1245114a4b474faa3b500a8a746ff, type: 3}
+--- !u!114 &-3670365866274194816
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2635878287570873435}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d750dcf5b0143264483d62371c762da9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Decor
+  features: []
 --- !u!1 &7364303095756083360
 GameObject:
   m_ObjectHideFlags: 0

@@ -70,8 +70,8 @@ GameObject:
   - component: {fileID: 5578678705030454111}
   - component: {fileID: 572328698127110668}
   - component: {fileID: 4343883862323072302}
-  - component: {fileID: 1342891989380524492}
   - component: {fileID: -5371223154218454662}
+  - component: {fileID: 3752206418897188705}
   m_Layer: 3
   m_Name: Shelf1
   m_TagString: Untagged
@@ -293,21 +293,6 @@ MonoBehaviour:
   maxPerZone: 100
   blockWhenCovered: 1
   coverMargin: 0.02
---- !u!114 &1342891989380524492
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2862137894041919205}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d750dcf5b0143264483d62371c762da9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Decor
-  features:
-  - name: Shelf
-    amount: 1
 --- !u!64 &-5371223154218454662
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -330,3 +315,16 @@ MeshCollider:
   m_Convex: 0
   m_CookingOptions: 30
   m_Mesh: {fileID: 3895528892748612893, guid: 01ec16d2778e5e7489c00a160f5464db, type: 3}
+--- !u!114 &3752206418897188705
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2862137894041919205}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d750dcf5b0143264483d62371c762da9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Decor
+  features: []

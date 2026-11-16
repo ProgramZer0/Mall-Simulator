@@ -16,8 +16,8 @@ GameObject:
   - component: {fileID: 3315525152279686768}
   - component: {fileID: 4141536290712822343}
   - component: {fileID: 9115893290124163688}
-  - component: {fileID: 5526056447754153284}
   - component: {fileID: -1829838725700351697}
+  - component: {fileID: -5845649722978120771}
   m_Layer: 3
   m_Name: DisplayShoe
   m_TagString: Untagged
@@ -217,21 +217,6 @@ MonoBehaviour:
   - renderer: {fileID: 7148169488006178791}
     materialIndex: 0
   zoneName: 
---- !u!114 &5526056447754153284
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6355907173077873743}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d750dcf5b0143264483d62371c762da9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Decor
-  features:
-  - name: Shoes
-    amount: 2
 --- !u!65 &-1829838725700351697
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -253,3 +238,16 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.16006593, y: 0.49563265, z: 0.17924236}
   m_Center: {x: -0.0000022128224, y: -0.011463343, z: 0.009718175}
+--- !u!114 &-5845649722978120771
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6355907173077873743}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d750dcf5b0143264483d62371c762da9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Decor
+  features: []

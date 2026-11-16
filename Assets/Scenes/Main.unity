@@ -6888,6 +6888,7 @@ MonoBehaviour:
   unhappyCustomerXp: 5
   xpPerProfitDollar: 0.1
   storeUnlockLevels: 01000000050000000a0000000f000000140000001e000000
+  categoryUnlocks: []
   perks:
   - {fileID: 11400000, guid: e57b649638304d6599d99174674770bb, type: 2}
   - {fileID: 11400000, guid: 04fd2707fc2c45d596888c14f1dd6785, type: 2}
@@ -11930,7 +11931,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0.67477095}
-  m_AnchoredPosition: {x: -0.08679199, y: -1.4301453}
+  m_AnchoredPosition: {x: -0.08679199, y: -1.4302368}
   m_SizeDelta: {x: 0.8699951, y: -2.4200134}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &744671981
@@ -20509,7 +20510,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0.857234}
-  m_AnchoredPosition: {x: -0.014831543, y: -1.2429199}
+  m_AnchoredPosition: {x: -0.014831543, y: -1.242981}
   m_SizeDelta: {x: -0.08999634, y: -1.9200134}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1283808628
@@ -23753,7 +23754,7 @@ MonoBehaviour:
   - {fileID: -266586334021288181, guid: e258abd6dede2c248a951fb62a325c33, type: 3}
   - {fileID: 4779044835678152003, guid: 8af42cf235b76e54ca878f0bd3fe903f, type: 3}
   - {fileID: -8598856594727087991, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
-  - {fileID: 3976191113780829281, guid: ba8daff54a7182c4d88b96467f2c1365, type: 3}
+  - {fileID: 3976191113780829281, guid: d272d205b70f4db49ad535a92506c563, type: 3}
   - {fileID: -6839698113511525030, guid: ce3b17f158509f345b79e18e5dc8049e, type: 3}
   - {fileID: -1046490897543473415, guid: ef05c615a04bbfc4e895985a1de605f6, type: 3}
   - {fileID: -2028892032763157303, guid: 8da3b69830e0af64fbf5e08640760dc2, type: 3}
@@ -23771,21 +23772,22 @@ MonoBehaviour:
   - {fileID: 8433466896409622839, guid: d74abc845def03c4a8b478d79273ef19, type: 3}
   - {fileID: -6184147982583123352, guid: 0758e6d846664854fbfd8ffbd1e839d4, type: 3}
   - {fileID: 2059737018542200355, guid: 627734816979ea14a96110368e5f44e5, type: 3}
+  - {fileID: 3976191113780829281, guid: ba8daff54a7182c4d88b96467f2c1365, type: 3}
   items: []
   defaultPickupClip: {fileID: 8300000, guid: b0b6305f02b720e4490beeeb41c410d6, type: 3}
   defaultPlaceClip: {fileID: 8300000, guid: 382cd51e5d8f86d42b7132faadb6ac88, type: 3}
   defaultShipmentPrefab: {fileID: -7919701627516103740, guid: ba8daff54a7182c4d88b96467f2c1365, type: 3}
   small:
-    hand: {fileID: 0}
+    hand: {fileID: 7529414783980617621, guid: 334579a501c0e3e4b9e9f3f066b1af22, type: 3}
     shipment: {fileID: -7919701627516103740, guid: 5acf0c0ccc2cf914d946f7057abe3884, type: 3}
   medium:
-    hand: {fileID: 0}
+    hand: {fileID: 7529414783980617621, guid: 2307b0370f316e24490542c1316affed, type: 3}
     shipment: {fileID: -7919701627516103740, guid: 9e156332ec14d5142bd8e76ae4bf1914, type: 3}
   large:
-    hand: {fileID: 0}
+    hand: {fileID: 7529414783980617621, guid: 31c8f8b9df803e64b9748f160d207df4, type: 3}
     shipment: {fileID: -7919701627516103740, guid: 48d04ce3779329345a7a4939b2eff303, type: 3}
   misc:
-    hand: {fileID: 0}
+    hand: {fileID: 7529414783980617621, guid: 7206aef495b2f4949960a525e0b2bb1d, type: 3}
     shipment: {fileID: -7919701627516103740, guid: d272d205b70f4db49ad535a92506c563, type: 3}
   debugItemLogs: 1
 --- !u!4 &1459986144
@@ -31484,7 +31486,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.6228019, y: 0}
   m_AnchorMax: {x: 1, y: 0.632}
-  m_AnchoredPosition: {x: 0.8800049, y: -0.6029663}
+  m_AnchoredPosition: {x: 0.8800049, y: -0.60302734}
   m_SizeDelta: {x: 0.22998047, y: -1.2100067}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1854907482
@@ -33079,7 +33081,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0.53722984, y: 0.11374079}
-  m_AnchoredPosition: {x: -1.9899902, y: -1.059967}
+  m_AnchoredPosition: {x: -1.9899902, y: -1.0599976}
   m_SizeDelta: {x: -0.049987793, y: -1.8370056}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &1928707708
@@ -36268,7 +36270,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &438851043112074430
 Transform:
   m_ObjectHideFlags: 0
@@ -36717,7 +36719,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!1 &4154378063395139584
 GameObject:
   m_ObjectHideFlags: 0
@@ -36916,7 +36918,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!23 &5089262721669709909
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -36984,7 +36986,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!1 &5956691172464362032
 GameObject:
   m_ObjectHideFlags: 0

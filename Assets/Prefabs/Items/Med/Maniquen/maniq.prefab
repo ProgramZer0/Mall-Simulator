@@ -16,8 +16,8 @@ GameObject:
   - component: {fileID: 5620994197713683640}
   - component: {fileID: 8111690074518622407}
   - component: {fileID: 7763246439610956298}
-  - component: {fileID: 305284483791914614}
   - component: {fileID: -3506604066726038744}
+  - component: {fileID: 8848683542101434657}
   m_Layer: 3
   m_Name: maniq
   m_TagString: Untagged
@@ -217,21 +217,6 @@ MonoBehaviour:
   - renderer: {fileID: 269815029135026698}
     materialIndex: 0
   zoneName: 
---- !u!114 &305284483791914614
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 640511178853749887}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d750dcf5b0143264483d62371c762da9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Decor
-  features:
-  - name: Clothing
-    amount: 2
 --- !u!64 &-3506604066726038744
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -254,3 +239,16 @@ MeshCollider:
   m_Convex: 0
   m_CookingOptions: 30
   m_Mesh: {fileID: -457407427988783435, guid: 3fc99f8fe6c7a1041bc59acc78eeb30c, type: 3}
+--- !u!114 &8848683542101434657
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 640511178853749887}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d750dcf5b0143264483d62371c762da9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Decor
+  features: []

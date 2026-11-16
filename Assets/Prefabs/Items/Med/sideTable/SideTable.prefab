@@ -70,8 +70,8 @@ GameObject:
   - component: {fileID: 818582580531521703}
   - component: {fileID: 5228311939349839958}
   - component: {fileID: 7337279925706141562}
-  - component: {fileID: 8715040806644406024}
   - component: {fileID: 3780663302892896896}
+  - component: {fileID: 4891030650343094079}
   m_Layer: 3
   m_Name: SideTable
   m_TagString: Untagged
@@ -294,23 +294,6 @@ MonoBehaviour:
   maxPerZone: 100
   blockWhenCovered: 1
   coverMargin: 0.02
---- !u!114 &8715040806644406024
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9204385750485355886}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d750dcf5b0143264483d62371c762da9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Decor
-  features:
-  - name: Clothing
-    amount: 0
-  - name: Homey
-    amount: 0
 --- !u!64 &3780663302892896896
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -333,3 +316,16 @@ MeshCollider:
   m_Convex: 0
   m_CookingOptions: 30
   m_Mesh: {fileID: 4113798828950266752, guid: cb5b629ba46195745b96195f247c6adc, type: 3}
+--- !u!114 &4891030650343094079
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9204385750485355886}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d750dcf5b0143264483d62371c762da9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Decor
+  features: []
