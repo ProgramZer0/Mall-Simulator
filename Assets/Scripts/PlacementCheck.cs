@@ -34,7 +34,102 @@ public static class PlacementCheck
         if (count > 0 || NoPlaceArea.Find(center, halfExtents, rotation) != null) return false;
 
         // 2) Something underneath to sit on (stops placing items in mid-air).
-        return HasSupport(center, halfExtents, rotation, supportMask);
+        if (!HasSupport(center, halfExtents, rotation, supportMask)) return false;
+
+        // 3) Not shutting the store's last clear doorway.
+        return !BlocksLastDoorway(center, halfExtents, rotation, null);
+    }
+
+    /* ========================= DOORWAYS ========================= */
+
+    private static readonly System.Collections.Generic.List<Bounds> DoorScratch = new();
+    private static readonly Collider[] DoorHits = new Collider[64];
+
+    /// <summary>
+    /// Would a box here shut off the last doorway of its store that's still clear? Every store keeps one
+    /// way in and out clear (MallManager > Doorways), so customers can't be trapped inside. Ignore: the
+    /// item being moved (edit mode), so it doesn't count as already in the way.
+    /// </summary>
+    public static bool BlocksLastDoorway(Vector3 center, Vector3 half, Quaternion rotation, Transform ignore)
+    {
+        float depth = MallManager.DoorwayClearDepth;
+        var mall = MallManager.Instance;
+        if (depth <= 0f || mall == null) return false;
+        var plot = mall.GetPlotAt(center);
+        if (plot == null) return false;
+        plot.GetDoorBounds(DoorScratch);
+        if (DoorScratch.Count == 0) return false;
+
+        Bounds mine = WorldBox(center, half, rotation);
+        Vector3 middle = plot.GetWorldBounds().center;
+        int clear = 0, stillClear = 0;
+        foreach (var d in DoorScratch)
+        {
+            Bounds keep = KeepClear(d, middle, depth);
+            if (Occupied(keep, ignore)) continue;
+            clear++;
+            if (!mine.Intersects(keep)) stillClear++;
+        }
+        return clear > 0 && stillClear == 0;
+    }
+
+    /// <summary>The floor just inside a doorway that's kept clear (world box, floor-level part only).</summary>
+    public static Bounds KeepClear(Bounds door, Vector3 storeMiddle, float depth)
+    {
+        Vector3 inward = storeMiddle - door.center;
+        bool alongX = Mathf.Abs(inward.x) > Mathf.Abs(inward.z);
+        float sign = alongX ? Mathf.Sign(inward.x) : Mathf.Sign(inward.z);
+        float height = MallManager.DoorwayClearHeight;
+        // The doorway itself (its frame's depth) and Depth meters past it into the store.
+        Vector3 c = door.center;
+        c.y = door.min.y + height * 0.5f;
+        Vector3 size;
+        if (alongX)
+        {
+            c.x += sign * depth * 0.5f;
+            size = new Vector3(door.size.x + depth, height, Mathf.Max(0.6f, door.size.z));
+        }
+        else
+        {
+            c.z += sign * depth * 0.5f;
+            size = new Vector3(Mathf.Max(0.6f, door.size.x), height, door.size.z + depth);
+        }
+        return new Bounds(c, size);
+    }
+
+    // Anything placed in there already (an item, or an edit-mode copy), other than the one being moved?
+    private static bool Occupied(Bounds keep, Transform ignore)
+    {
+        // A little in from each side, so things just touching the edge don't count.
+        Vector3 half = Vector3.Max(keep.extents - new Vector3(0.05f, 0f, 0.05f), Vector3.one * 0.01f);
+        int n = Physics.OverlapBoxNonAlloc(keep.center, half, DoorHits, Quaternion.identity,
+                                           Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < n; i++)
+        {
+            var c = DoorHits[i];
+            if (c == null || !c.gameObject.activeInHierarchy || (ignore != null && c.transform.IsChildOf(ignore))) continue;
+            var item = c.GetComponentInParent<ItemPickupNet>();
+            if (item != null)
+            {
+                if (item.TryGetComponent<WallOpening>(out _)) continue; // the doorway itself (a door put in the wall)
+                if (item.IsSpawned && !item.IsOnCart && !item.OnWall && !item.EditModeOnly) return true;
+                continue;
+            }
+            var copy = c.GetComponentInParent<EditLocalItem>();
+            if (copy != null && copy.Opening == null) return true;
+        }
+        return false;
+    }
+
+    // An (turned) box's world-axis bounds.
+    private static Bounds WorldBox(Vector3 center, Vector3 half, Quaternion rotation)
+    {
+        Vector3 r = rotation * Vector3.right, u = rotation * Vector3.up, f = rotation * Vector3.forward;
+        Vector3 e = new(
+            Mathf.Abs(r.x) * half.x + Mathf.Abs(u.x) * half.y + Mathf.Abs(f.x) * half.z,
+            Mathf.Abs(r.y) * half.x + Mathf.Abs(u.y) * half.y + Mathf.Abs(f.y) * half.z,
+            Mathf.Abs(r.z) * half.x + Mathf.Abs(u.z) * half.y + Mathf.Abs(f.z) * half.z);
+        return new Bounds(center, e * 2f);
     }
 
     // Something to stand on under the bottom of a (turned) box: straight down from the middle of its lowest
@@ -78,6 +173,8 @@ public static class PlacementCheck
         if (!HasSupport(center, halfExtents, rotation, supportMask))
             return $"nothing to stand on under its base at {baseCenter:F2} (looked {SupportProbe + 0.05f:0.00} m down on the support layers; " +
                    $"test box {halfExtents * 2f:F2} m)";
+        if (BlocksLastDoorway(center, halfExtents, rotation, null))
+            return "it would block the store's last clear doorway (MallManager > Doorways)";
         return "ok";
     }
 
@@ -255,6 +352,7 @@ public static class PlacementCheck
                                                blockingMask, QueryTriggerInteraction.Ignore);
         for (int i = 0; i < count; i++)
             if (!IsPartOf(EditHits[i], ignoreRoot)) return false;
+        if (BlocksLastDoorway(center, half, rotation, ignoreRoot)) return false;
         return NoPlaceArea.Find(center, half + Vector3.one * (Skin + HangTouch), rotation) == null;
     }
 

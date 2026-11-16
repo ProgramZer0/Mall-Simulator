@@ -361,6 +361,8 @@ public class CartNet : NetworkBehaviour
         // Physics runs only on the pusher's machine, and only while they own it.
         bool want = rb != null && IsOwner && pusher.Value == NetworkManager.LocalClientId;
         if (want != simulating) SetSimulating(want);
+        // Not pushing it (any more) but still set to pass through it and its load: walk into it again.
+        if (ignoredWithPusher.Count > 0 && pusher.Value != NetworkManager.LocalClientId) RestorePusherCollisions();
         if (!simulating) return;
 
         var player = NetworkManager.LocalClient?.PlayerObject;
@@ -544,8 +546,13 @@ public class CartNet : NetworkBehaviour
         var player = NetworkManager != null ? NetworkManager.LocalClient?.PlayerObject : null;
         var cc = player != null ? player.GetComponent<CharacterController>() : null;
         if (cc != null)
+        {
             foreach (var c in ignoredWithPusher)
                 if (c != null) Physics.IgnoreCollision(cc, c, false);
+            // And everything on it now, in case something went on or came off while it was pushed.
+            foreach (var c in GetComponentsInChildren<Collider>())
+                if (c != null && c != cc) Physics.IgnoreCollision(cc, c, false);
+        }
         ignoredWithPusher.Clear();
         ignoredChildCount = -1;
     }

@@ -71,6 +71,10 @@ public class PlayerInteractInput : NetworkBehaviour
     [Header("Debug")]
     [Tooltip("Draw the fit-test box and log what it overlaps (once a second) while previewing.")]
     [SerializeField] private bool debugPlacement;
+    [Tooltip("Log (once a second) everything the crosshair ray passes through and what each one counts as: " +
+             "seen through (text, LookThrough), a checkout part, or what blocks.")]
+    [SerializeField] private bool debugLook;
+    private float nextLookLog;
 
     private readonly List<(Material mat, Color original)> ghostMaterials = new();
     private bool? ghostShownValid;
@@ -156,7 +160,7 @@ public class PlayerInteractInput : NetworkBehaviour
     private int lookedAtBuyPrice;                   // cents
     private VoteButton lookedAtVote;                // a mall vote kiosk's button
     private ushort lookedAtCustomer;                // a customer close enough to stop (0 = none)
-    private bool lookedAtBuriedCartItem; // something on a cart with other things stacked on it
+    private bool lookedAtBuriedCartItem; // something with other things stacked on it (on a cart or not)
     [Tooltip("Lock / unlock a door your store owns.")]
     [SerializeField] private KeyCode doorLockKey = KeyCode.L;
     private CartNet pushedCart;   // the cart you're pushing
@@ -205,8 +209,11 @@ public class PlayerInteractInput : NetworkBehaviour
 
             if (inventory.HeldItemId.Value == 0)
             {
-                var onCart = hit.collider.GetComponentInParent<ItemPickupNet>();
-                lookedAtBuriedCartItem = onCart != null && onCart.HasItemOnTopOnCart();
+                // Something you could pick up, but with things on it: they come off first.
+                var under = hit.collider.GetComponentInParent<ItemPickupNet>();
+                lookedAtBuriedCartItem = under != null && under.IsSpawned && !under.EditModeOnly &&
+                    MallManager.CanPickupOrPlace(OwnerClientId, transform.position, under.transform.position, hallwayPickup: under.IsStockCrate) &&
+                    under.HasItemOnTop();
             }
 
             var door = hit.collider.GetComponentInParent<DoorNet>();
@@ -253,7 +260,30 @@ public class PlayerInteractInput : NetworkBehaviour
             best = h.distance;
             found = true;
         }
+        if (debugLook && Time.time >= nextLookLog) LogLook(n, found ? hit.collider : null);
         return found;
+    }
+
+    private void LogLook(int n, Collider chosen)
+    {
+        nextLookLog = Time.time + 1f;
+        var lines = new System.Text.StringBuilder($"[Look] {n} hit(s) along the crosshair (nearest wins, unless seen through):");
+        var sorted = new List<RaycastHit>();
+        for (int i = 0; i < n; i++) sorted.Add(lookHits[i]);
+        sorted.Sort((a, b) => a.distance.CompareTo(b.distance));
+        foreach (var h in sorted)
+        {
+            var c = h.collider;
+            var part = c.GetComponentInParent<CheckoutClickable>();
+            var through = c.GetComponentInParent<LookThrough>();
+            string what = LookThrough.Ignore(c)
+                ? (c.TryGetComponent<TMPro.TMP_Text>(out _) ? "seen through (text)"
+                   : through != null ? $"seen through (LookThrough on '{through.name}')" : "seen through (canvas)")
+                : part != null ? $"checkout part {part.action}" : "solid";
+            lines.Append($"\n  {h.distance:0.00} m  '{c.name}' (layer {LayerMask.LayerToName(c.gameObject.layer)}): {what}" +
+                         (c == chosen ? "   <- looked at" : ""));
+        }
+        Debug.Log(lines.ToString(), chosen);
     }
 
     // The counter's body hit first: a clickable part of it just behind (the card reader, a key...) inside
@@ -496,8 +526,8 @@ public class PlayerInteractInput : NetworkBehaviour
         if (!Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit, interactRange, pickupMask)) return;
         var pickup = hit.collider.GetComponentInParent<ItemPickupNet>();
         if (pickup == null || !pickup.IsSpawned || pickup.EditModeOnly) return;
-        if (!MallManager.CanPickupOrPlace(OwnerClientId, transform.position, pickup.transform.position)) return;
-        if (pickup.HasItemOnTopOnCart()) return; // "take the things on top off first" says that
+        if (!MallManager.CanPickupOrPlace(OwnerClientId, transform.position, pickup.transform.position, hallwayPickup: pickup.IsStockCrate)) return;
+        if (pickup.HasItemOnTop()) return; // "take the things on top off first" says that
         if (pickup.TryGetComponent<StockContainer>(out var shelf) && shelf.HasStock) return;
         if (pickup.TryGetComponent<CheckoutCounter>(out var counter) && counter.IsBusy) return;
         if (pickup.TryGetComponent<ShipmentPackage>(out var box) &&
@@ -552,12 +582,12 @@ public class PlayerInteractInput : NetworkBehaviour
                     : lookedAtCounter != null ? (lookedAtCheckoutPart != null
                         ? lookedAtCheckoutPart.Counter.PromptFor(lookedAtCheckoutPart, OwnerClientId) ?? lookedAtCounter.StatusFor(OwnerClientId)
                         : CounterBodyPrompt(lookedAtCounter))
-                    : lookedAtBuriedCartItem ? "Take the things on top off first"
                     : lookedAtVote != null ? lookedAtVote.Prompt(OwnerClientId)
                     : lookedAtMonitor != null ? "F: Shop monitor"
                     : lookedAtSign != null ? SignPrompt()
                     : lookedAtBuy != null ? BuyPrompt()
                     : stockTarget != null ? StockPrompt()
+                    : lookedAtBuriedCartItem ? "Take the things on top off first"
                     : lookedAtCustomer != 0 && lookedAtPickup == null ? "F: Stop them and check their bag"
                     : PickupPrompt();
     }
@@ -1161,6 +1191,9 @@ public class PlayerInteractInput : NetworkBehaviour
             // Your own cart: the item goes on as its shipment box, sitting on what was aimed at.
             var cart = hit.collider.GetComponentInParent<CartNet>();
             if (cart == null) cart = CartNet.FindCartAt(hit.point + Vector3.up * 0.02f);
+            // Aimed at the side of something on the cart: onto the cart beside it, not the floor.
+            if (cart != null && cart.CanUse(OwnerClientId) && hit.normal.y < 0.7f &&
+                TryCartBeside(def, cart, hit, out RaycastHit beside)) hit = beside;
             if (cart != null && cart.CanUse(OwnerClientId) && hit.normal.y >= 0.7f)
             {
                 placingOnCart = true;
@@ -1216,6 +1249,39 @@ public class PlayerInteractInput : NetworkBehaviour
         // so models with a centered pivot don't sink halfway into the floor.
         if (def != null) pos += Vector3.up * PlacementCheck.PivotHeightAboveBase(def, rot);
 
+        return true;
+    }
+
+    /// <summary>
+    /// The side of something riding a cart was aimed at: the top of whatever's just beside it on the same
+    /// cart (its bed, or a box lower down), far enough out for the shipment box to fit.
+    /// </summary>
+    private bool TryCartBeside(ItemDef def, CartNet cart, RaycastHit side, out RaycastHit top)
+    {
+        top = default;
+        var box = PlacementCheck.CartBoxOf(def);
+        var rider = side.collider.GetComponentInParent<ItemPickupNet>();
+        if (box == null || rider == null || !rider.IsOnCart) return false;
+        Vector3 n = side.normal;
+        n.y = 0f;
+        if (n.sqrMagnitude < 1e-6f) return false;
+        n.Normalize();
+
+        // How far the box reaches toward the side, squared to the cart (as it'll be placed).
+        var shape = ShipmentPacker.GetBox(box.gameObject);
+        Quaternion rot = Quaternion.Euler(0f, cart.Yaw + Mathf.Round(placeRotationY / 90f) * 90f, 0f);
+        float reach = Mathf.Abs(Vector3.Dot(rot * Vector3.right, n)) * shape.half.x +
+                      Mathf.Abs(Vector3.Dot(rot * Vector3.forward, n)) * shape.half.z;
+        Vector3 probe = side.point + n * (reach + 0.03f) + Vector3.up * 0.05f;
+        if (!Physics.Raycast(probe, Vector3.down, out top, 3f, placementMask, QueryTriggerInteraction.Ignore) ||
+            top.normal.y < 0.7f) return false;
+        var under = top.collider.GetComponentInParent<CartNet>();
+        if (under == null) under = CartNet.FindCartAt(top.point + Vector3.up * 0.02f);
+        if (under != cart) return false; // past the cart's edge: let it go where it would have
+        // The box's middle (not its pivot) goes out from the side.
+        Vector3 off = rot * shape.pivotOffset;
+        off.y = 0f;
+        top.point -= off;
         return true;
     }
 
@@ -1317,7 +1383,7 @@ public class PlayerInteractInput : NetworkBehaviour
         if (ghost == null) return "no preview";
         Vector3 at = ghost.transform.position;
         bool dropOff = MallManager.IsDeliveringTo(OwnerClientId, inventory.HeldFromTeam.Value, transform.position, at);
-        if (!dropOff && !MallManager.CanPickupOrPlace(OwnerClientId, transform.position, at)) return "store rules (not your store, or you're outside it)";
+        if (!dropOff && !MallManager.CanPickupOrPlace(OwnerClientId, transform.position, at)) return "store rules (not your store)";
         if (!dropOff && MallManager.IsOthersShipmentArea(OwnerClientId, at)) return "another store's shipment area";
         if (!PuttingBoxBack && MallManager.IsNoPlaceZone(at)) return "no-place zone (docks)";
         if ((placingOnCart || placingBoxed) && cartBoxPrefab != null)
@@ -1376,7 +1442,12 @@ public class PlayerInteractInput : NetworkBehaviour
         int ground = LayerMask.NameToLayer("Ground");
         int blocking = placementBlockingMask.value;
         if (ground >= 0) blocking &= ~(1 << ground);
-        return PlacementCheck.FitsPrefab(boxPrefab, position, rotation, blocking, placementMask);
+        if (!PlacementCheck.FitsPrefab(boxPrefab, position, rotation, blocking, placementMask)) return false;
+        // On the floor (not a cart): not in the store's last clear doorway either.
+        Vector3 center = PlacementCheck.PrefabCenter(boxPrefab, position, rotation);
+        if (CartNet.FindCartAt(center) != null) return true;
+        var shape = ShipmentPacker.GetBox(boxPrefab);
+        return !PlacementCheck.BlocksLastDoorway(center, shape.half, rotation, null);
     }
 
     public bool FitsAt(int itemId, Vector3 position, Quaternion rotation, bool onWall = false)
