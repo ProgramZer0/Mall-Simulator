@@ -10,14 +10,14 @@ using UnityEngine;
 
 /// <summary>
 /// Stock crates without making one per product. Put product models in a folder per product under the
-/// BoxStock box's folder; a model named (or in a folder named) with "hang" goes on rails, "fold" on shelves
-/// (StockBoxSettings). Update Item Catalog then makes "&lt;folder&gt; Stock" in that product folder: a variant
-/// of the box with those models and a products-per-crate worked out from the sizes, then gives it an id
-/// like any item. Add another color to the folder later and it's added to the crate.
+/// BoxStock box's folder; a model named (or in a folder named) with "hang" goes on rails, "fold" / "shelf" /
+/// "self" on shelves (StockBoxSettings). Update Item Catalog then makes "&lt;folder&gt; Stock" in that product
+/// folder: a variant of the box with those models and a products-per-crate worked out from the sizes, then
+/// gives it an id like any item. Add another color to the folder later and it's added to the crate.
 ///
-/// Crates made by hand are left alone, and so are the products they use. Name, price and the rest are set
-/// on the made crate's ItemData as usual; only its models (and amount, when the folder says xN) are kept
-/// in step.
+/// The crate's price, categories (plus Boxed), rarity, sizes, delivery time and so on come from its product's
+/// ItemData (the shelf model's, else the hanging one's) and are kept in step every run: set them on the product.
+/// Its name and amount are its own to change. Crates made by hand are left alone, and so are their products.
 /// </summary>
 public static class StockBoxGenerator
 {
@@ -38,6 +38,7 @@ public static class StockBoxGenerator
             s = ScriptableObject.CreateInstance<StockBoxSettings>();
             AssetDatabase.CreateAsset(s, SettingsPath);
         }
+        if (s != null && s.Upgrade()) EditorUtility.SetDirty(s);
         if (s != null && s.template == null)
         {
             var box = FindPrefabNamed("BoxStock");
@@ -128,7 +129,7 @@ public static class StockBoxGenerator
             int? fixedUnits = AmountInName.Match(folderName) is { Success: true } m ? int.Parse(m.Groups[1].Value) : null;
             string productName = AmountInName.Replace(folderName, "").Trim();
             if (made.TryGetValue(folder, out var existing))
-                Update(existing.path, hang, shelf, recalcUnits || fixedUnits.HasValue ? Units(s, template, hang, shelf, fixedUnits) : (int?)null, report);
+                Update(s, existing.path, hang, shelf, recalcUnits || fixedUnits.HasValue ? Units(s, template, hang, shelf, fixedUnits) : (int?)null, report);
             else
                 Make(s, template, folder, productName, hang, shelf, Units(s, template, hang, shelf, fixedUnits), report);
         }
@@ -153,34 +154,116 @@ public static class StockBoxGenerator
             data.item.displayName = productName;
             data.item.worldNetworkPrefab = null;
             data.item.showInShop = true;
+            FromProduct(s, inst.GetComponent<ItemPickupNet>(), data, Product(hang, shelf), units);
             PrefabUtility.RecordPrefabInstancePropertyModifications(data);
 
             PrefabUtility.SaveAsPrefabAsset(inst, path);
         }
         finally { EditorSceneManager.ClosePreviewScene(scene); }
         FreshNetworkId(path);
-        report.AppendLine($"Made stock crate '{path}': {Describe(hang, shelf)}, {units} per crate. Set its price on its ItemData.");
+        report.AppendLine($"Made stock crate '{path}': {Describe(hang, shelf)}, {units} per crate.");
     }
 
     // A made crate: its models in step with its folder (and its amount, when given).
-    private static void Update(string path, List<GameObject> hang, List<GameObject> shelf, int? units, StringBuilder report)
+    private static void Update(StockBoxSettings s, string path, List<GameObject> hang, List<GameObject> shelf, int? units,
+                               StringBuilder report)
     {
+        // Looked at as it is first (cheap): only opened and saved when something's different.
+        var asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+        if (asset == null || !asset.TryGetComponent<ItemPickupNet>(out var current)) return;
+        var product = Product(hang, shelf);
+        var cur = new SerializedObject(current);
+        int count = units ?? cur.FindProperty("unitsPerCrate").intValue;
+        bool same = SameList(cur.FindProperty("hangPrefabs"), hang) && SameList(cur.FindProperty("shelfPrefabs"), shelf) &&
+                    cur.FindProperty("isStockCrate").boolValue && cur.FindProperty("unitsPerCrate").intValue == count &&
+                    (PoseOf(product) is not int pose || cur.FindProperty("shelfPose").enumValueIndex == pose);
+        if (same && asset.TryGetComponent<ItemData>(out var curData) && curData.item != null)
+        {
+            var want = curData.item.Copy();
+            ApplyProduct(s, want, product, count);
+            same = JsonUtility.ToJson(want) == JsonUtility.ToJson(curData.item);
+        }
+        if (same) return;
+
         var root = PrefabUtility.LoadPrefabContents(path);
         try
         {
             var pickup = root.GetComponent<ItemPickupNet>();
             if (pickup == null) return;
-            var so = new SerializedObject(pickup);
-            bool same = SameList(so.FindProperty("hangPrefabs"), hang) && SameList(so.FindProperty("shelfPrefabs"), shelf) &&
-                        so.FindProperty("isStockCrate").boolValue &&
-                        (!units.HasValue || so.FindProperty("unitsPerCrate").intValue == units.Value);
-            if (same) return;
-            int keep = so.FindProperty("unitsPerCrate").intValue;
-            SetModels(pickup, hang, shelf, units ?? keep);
+            var data = root.GetComponent<ItemData>();
+            SetModels(pickup, hang, shelf, count);
+            if (data != null) FromProduct(s, pickup, data, product, count);
             PrefabUtility.SaveAsPrefabAsset(root, path);
-            report.AppendLine($"Updated stock crate '{path}': {Describe(hang, shelf)}, {units ?? keep} per crate.");
+            report.AppendLine($"Updated stock crate '{path}': {Describe(hang, shelf)}, {count} per crate.");
         }
         finally { PrefabUtility.UnloadPrefabContents(root); }
+    }
+
+    // The product a crate is priced and described from: its shelf model, else its hanging one.
+    private static GameObject Product(List<GameObject> hang, List<GameObject> shelf) =>
+        shelf.Count > 0 ? shelf[0] : hang.Count > 0 ? hang[0] : null;
+
+    /// <summary>
+    /// What a crate takes from its product's ItemData (kept in step every run; set it on the product):
+    /// price (one product's times how many are in a crate), what one's worth, categories (plus Boxed),
+    /// rarity, sizes and size step, delivery time, level, special market, icon. Always in the shop. And how
+    /// its products may sit on shelves, from the product's ItemPickupNet.
+    /// </summary>
+    private static void FromProduct(StockBoxSettings s, ItemPickupNet crate, ItemData data, GameObject product, int units)
+    {
+        if (data.item == null) data.item = new ItemDef();
+        ApplyProduct(s, data.item, product, units);
+
+        // Shelf Pose is on the crate but says how its products sit: the product's own setting, if it has one.
+        if (crate != null && PoseOf(product) is int pose)
+        {
+            var so = new SerializedObject(crate);
+            var to = so.FindProperty("shelfPose");
+            if (to != null && to.enumValueIndex != pose)
+            {
+                to.enumValueIndex = pose;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                PrefabUtility.RecordPrefabInstancePropertyModifications(crate);
+            }
+        }
+    }
+
+    // The product's Shelf Pose (on its ItemPickupNet), if it has one.
+    private static int? PoseOf(GameObject product)
+    {
+        if (product == null || !product.TryGetComponent<ItemPickupNet>(out var pp)) return null;
+        var from = new SerializedObject(pp).FindProperty("shelfPose");
+        return from != null ? from.enumValueIndex : (int?)null;
+    }
+
+    private static void ApplyProduct(StockBoxSettings s, ItemDef item, GameObject product, int units)
+    {
+        item.showInShop = true;
+        if (product == null) return;
+
+        if (product.TryGetComponent<ItemData>(out var pd) && pd.item != null)
+        {
+            var p = pd.item;
+            item.price = Mathf.Max(0, p.price) * Mathf.Max(1, units);
+            item.marketPrice = p.marketPrice; // worth to customers is per product (counted per product sold)
+            var cats = new List<string>();
+            foreach (var c in p.Categories)
+                if (!cats.Exists(x => string.Equals(x, c, System.StringComparison.OrdinalIgnoreCase))) cats.Add(c);
+            if (!string.IsNullOrWhiteSpace(s.boxedCategory) &&
+                !cats.Exists(x => string.Equals(x, s.boxedCategory.Trim(), System.StringComparison.OrdinalIgnoreCase)))
+                cats.Add(s.boxedCategory.Trim());
+            item.categories = cats;
+            item.category = null;
+            item.CategoriesChanged();
+            item.rarity = p.rarity;
+            item.sizes = p.sizes;
+            item.sizePriceStep = p.sizePriceStep;
+            item.deliverySeconds = p.deliverySeconds;
+            item.minLevel = p.minLevel;
+            item.inSpecialMarket = p.inSpecialMarket;
+            item.specialMarketWeight = p.specialMarketWeight;
+            if (p.icon != null) item.icon = p.icon;
+        }
     }
 
     private static void SetModels(ItemPickupNet pickup, List<GameObject> hang, List<GameObject> shelf, int units)

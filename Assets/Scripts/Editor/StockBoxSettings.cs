@@ -21,8 +21,31 @@ public class StockBoxSettings : ScriptableObject
              "Hang Prefabs). Several in one product folder: variants (colors).")]
     public string[] hangWords = { "hang" };
 
-    [Tooltip("...or one of these: on shelves (Shelf Prefabs).")]
-    public string[] shelfWords = { "fold" };
+    [Tooltip("...or one of these: on shelves (Shelf Prefabs). (\"self\" is for the shoe boxes named Self.)")]
+    public string[] shelfWords = { "fold", "shelf", "self" };
+
+    [Tooltip("Added to the crate's categories, on top of its product's.")]
+    public string boxedCategory = "Boxed";
+
+    // Settings made by an older version get its new defaults added once.
+    [SerializeField, HideInInspector] private int version;
+    private const int Current = 1;
+
+    /// <summary>Editor: bring settings made by an older version up to date. True if anything changed.</summary>
+    public bool Upgrade()
+    {
+        if (version >= Current) return false;
+        if (version < 1)
+        {
+            var words = new System.Collections.Generic.List<string>(shelfWords ?? new string[0]);
+            foreach (var w in new[] { "shelf", "self" })
+                if (!words.Exists(x => string.Equals(x?.Trim(), w, System.StringComparison.OrdinalIgnoreCase))) words.Add(w);
+            shelfWords = words.ToArray();
+            if (string.IsNullOrWhiteSpace(boxedCategory)) boxedCategory = "Boxed";
+        }
+        version = Current;
+        return true;
+    }
 
     [Tooltip("The crate is named after its product's folder, plus this (\"Cheap Jeans Stock\").")]
     public string nameSuffix = " Stock";
