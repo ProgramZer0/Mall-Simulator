@@ -43,6 +43,7 @@ public class CustomerView : MonoBehaviour
         view.lift = lift;
         view.target = position;
         view.targetYaw = yaw;
+        view.shown = position + Vector3.up * lift;
         view.animator = go.GetComponentInChildren<Animator>();
         if (view.animator != null)
         {
@@ -159,11 +160,17 @@ public class CustomerView : MonoBehaviour
     /// Ease toward where they are (called by the CustomerManager for every view in one loop, cheaper than an
     /// Update on each). Ease: this frame's 1 - e^(-dt·10); settle: 1 - e^(-dt·8).
     /// </summary>
+    /// <summary>Where they're shown standing (feet), as of the last Tick: no transform read needed.</summary>
+    public Vector3 Shown => shown - Vector3.up * lift;
+    private Vector3 shown;
+    private Transform tr;
+
     public void Tick(float dt, float ease, float settle)
     {
         if (bubble != null) UpdateBubble();
+        if (tr == null) tr = transform;
         Vector3 goal = target + Vector3.up * lift;
-        transform.GetPositionAndRotation(out Vector3 before, out Quaternion was);
+        tr.GetPositionAndRotation(out Vector3 before, out Quaternion was);
         Quaternion want = Quaternion.Euler(0f, targetYaw, 0f);
         bool still = (goal - before).sqrMagnitude < 1e-6f && Quaternion.Angle(was, want) < 0.5f;
         Vector3 now = before;
@@ -172,8 +179,9 @@ public class CustomerView : MonoBehaviour
             now = (goal - before).sqrMagnitude > 9f
                 ? goal // far behind (lost updates, a teleport): jump
                 : Vector3.Lerp(before, goal, ease);
-            transform.SetPositionAndRotation(now, Quaternion.Slerp(was, want, ease));
+            tr.SetPositionAndRotation(now, Quaternion.Slerp(was, want, ease));
         }
+        shown = now;
 
         if (!hasSpeed) return;
         Vector3 moved = now - before;
