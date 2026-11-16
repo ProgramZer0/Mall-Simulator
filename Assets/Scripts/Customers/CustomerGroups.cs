@@ -423,11 +423,20 @@ public partial class CustomerManager
         if (StillInside(root, plot))
         {
             Log(c, $"waiting outside '{plot.DisplayName}' for the others");
-            if (!PathTo(c, Near(c.entrance.outside, 1.2f, plot))) c.arrived = true;
+            if (!PathTo(c, WaitSpot(c.entrance, plot))) c.arrived = true;
             return true;
         }
         MoveOn(root);
         return true;
+    }
+
+    // Somewhere to wait for the others: out from the door a bit and to one side, not in the doorway.
+    private Vector3 WaitSpot(Entrance e, StorePlot plot)
+    {
+        Vector3 outward = e.outside - e.inside;
+        outward.y = 0f;
+        outward = outward.sqrMagnitude > 0.0001f ? outward.normalized : Vector3.zero;
+        return Near(e.outside + outward * groupWaitDistance, Mathf.Max(1.2f, groupWaitDistance * 0.6f), plot);
     }
 
     private static bool StillInside(Customer root, StorePlot plot)

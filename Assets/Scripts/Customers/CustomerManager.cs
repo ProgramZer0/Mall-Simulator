@@ -51,12 +51,15 @@ public partial class CustomerManager : NetworkBehaviour
     [SerializeField] private float groupSpacing = 0.7f;
     [Tooltip("Longest a group member waits outside a store for the others (seconds) before they move on.")]
     [SerializeField] private float groupWaitSeconds = 90f;
+    [Tooltip("How far out from a store's door a group member waits for the others (meters), so they don't crowd it.")]
+    [SerializeField] private float groupWaitDistance = 2.5f;
 
     [Header("Walking")]
     [SerializeField] private Vector2 walkSpeed = new(1.1f, 1.5f);
     [Tooltip("A passer-by decides whether to go into a store when this close to its entrance (meters).")]
     [SerializeField] private float passRange = 6f;
-    [Tooltip("Most customers in one store at once (Capacity perks add to it).")]
+    [Tooltip("Most customers in one store at once (Capacity perks add to it). Customers on their way to it and " +
+             "waiting at its door count too: a store that's full (or about to be) isn't picked.")]
     [SerializeField] private int storeCapacity = 12;
     [Tooltip("How far a wandering customer notices a storefront (meters, needs a clear view of its entrance).")]
     [SerializeField] private float sightRange = 20f;
@@ -103,6 +106,10 @@ public partial class CustomerManager : NetworkBehaviour
     [Tooltip("Customers waiting in line hold their place: nobody nudges them, and if they're bumped off it they " +
              "step back at this speed (meters a second).")]
     [SerializeField] private float lineSettleSpeed = 0.8f;
+    [Tooltip("At the front of the line but kept just short of their spot (someone in the way): this close (meters)...")]
+    [SerializeField] private float frontReach = 1.2f;
+    [Tooltip("...for this long (seconds), and they count as there and put their things on the belt.")]
+    [SerializeField] private float frontSettleSeconds = 3f;
     [Tooltip("Seconds a customer waits in line before giving up (Patience perks add to it).")]
     [SerializeField] private float patienceSeconds = 120f;
     [Tooltip("First guess at seconds per item to get through a checkout (scanning plus paying, spread over the " +
@@ -124,6 +131,8 @@ public partial class CustomerManager : NetworkBehaviour
     [SerializeField] private float watchedRange = 6f;
     [Tooltip("How much faster a shoplifter walks once they've taken off with something.")]
     [SerializeField] private float fleeSpeed = 1.6f;
+    [Tooltip("How long a caught shoplifter stands still (after dropping what they took) before running for the exit.")]
+    [SerializeField] private float caughtStopSeconds = 1.2f;
     [Tooltip("How close a player must be to stop a customer (meters).")]
     [SerializeField] private float stopRange = 3f;
 
@@ -194,6 +203,7 @@ public partial class CustomerManager : NetworkBehaviour
         StoreClosed,    // the store shut while they were in it
         NoCheckout,     // nowhere to pay
         CheaperElsewhere, // put it back: another store sells it for less (and they'll go there)
+        Caught,         // a shoplifter, stopped by a player
     }
 
     [Serializable]
@@ -219,6 +229,7 @@ public partial class CustomerManager : NetworkBehaviour
         { Reaction.StoreClosed, ("Closed?", new Color(0.8f, 0.8f, 0.8f)) },
         { Reaction.NoCheckout, ("Where do I pay?", new Color(1f, 0.4f, 0.35f)) },
         { Reaction.CheaperElsewhere, ("Cheaper elsewhere", new Color(1f, 0.85f, 0.3f)) },
+        { Reaction.Caught, ("Busted!", new Color(1f, 0.25f, 0.25f)) },
     };
 
     // Host: how often each reaction happened in each store (for tuning; see StoreReport).
@@ -283,6 +294,7 @@ public partial class CustomerManager : NetworkBehaviour
         Exiting,     // walking to the mall exit
         Follow,      // in a group, walking with the leader
         Wait,        // in a group, waiting outside a store for the others
+        Caught,      // a shoplifter stopped by a player: stands there a moment, then runs for the exit
     }
 
     private struct Taken
@@ -293,6 +305,7 @@ public partial class CustomerManager : NetworkBehaviour
         public int itemId;
         public int priceCents;
         public int units;
+        public uint paint;               // the products' colors (off a shelf)
     }
 
     private sealed class Customer
@@ -378,6 +391,7 @@ public partial class CustomerManager : NetworkBehaviour
         public CheckoutCounter counter;
         public int itemsAtCounter;  // how many things they put on the belt
         public float frontSince;    // when they reached the front (for the counter's pace)
+        public float nearFrontSince = -1f; // when they got close to the front spot without quite reaching it
         public Vector3 queueSpot;  // the place in line they're walking to
         public int ticket;         // the counter's customer number once their things are on the belt
         public bool paid;
@@ -1231,6 +1245,9 @@ public partial class CustomerManager : NetworkBehaviour
                 break;
             case Mode.Follow: ThinkFollow(c); break;
             case Mode.Wait: ThinkWait(c); break;
+            case Mode.Caught:
+                if (Time.time >= c.until) RunForExit(c);
+                break;
         }
     }
 
@@ -1282,7 +1299,7 @@ public partial class CustomerManager : NetworkBehaviour
             foreach (var plot in MallManager.Instance.Plots)
             {
                 if (plot == null || !plot.IsOpen || plot.Appeal == null || c.passed.Contains(plot) ||
-                    !entrances.TryGetValue(plot, out var list) || list.Count == 0)
+                    !entrances.TryGetValue(plot, out var list) || list.Count == 0 || Crowded(plot, c))
                     continue;
                 float w = knows ? 0.02f + AppealTo(c, plot).insideDraw : 1f;
                 total += w;
@@ -1405,7 +1422,7 @@ public partial class CustomerManager : NetworkBehaviour
         {
             if (looked >= 2) break;
             if (plot == null || plot == c.goalStore || !plot.IsOpen || plot.Appeal == null || c.passed.Contains(plot) ||
-                c.noticed.Contains(plot) || !entrances.TryGetValue(plot, out var list)) continue;
+                c.noticed.Contains(plot) || !entrances.TryGetValue(plot, out var list) || Crowded(plot, c)) continue;
             foreach (var e in list)
             {
                 if ((e.outside - c.pos).sqrMagnitude > r2) continue;
@@ -1450,6 +1467,39 @@ public partial class CustomerManager : NetworkBehaviour
         Mathf.Max(1, Mathf.RoundToInt(storeCapacity * (1f + ProgressionManager.StoreStat(plot, PerkStat.Capacity))));
 
     private int InsideCount(StorePlot plot) => inside.TryGetValue(plot, out int n) ? n : 0;
+
+    // Customers on their way to a store, or waiting at its door for their party (worked out once a frame).
+    private readonly Dictionary<StorePlot, int> outsideCount = new();
+    private int outsideFrame = -1;
+
+    private int CrowdCount(StorePlot plot)
+    {
+        if (outsideFrame != Time.frameCount)
+        {
+            outsideFrame = Time.frameCount;
+            outsideCount.Clear();
+            foreach (var o in customers)
+            {
+                var p = HeadingFor(o);
+                if (p != null) outsideCount[p] = (outsideCount.TryGetValue(p, out int k) ? k : 0) + 1;
+            }
+        }
+        return InsideCount(plot) + (outsideCount.TryGetValue(plot, out int n) ? n : 0);
+    }
+
+    // The store a customer is about to add to the crowd at (not in one yet): where they're walking
+    // (or their party's leader is), or the door they're waiting at.
+    private static StorePlot HeadingFor(Customer o)
+    {
+        if (o.store != null) return null;
+        if (o.mode == Mode.Wait) return o.waitFor;
+        var who = o.mode == Mode.Follow ? Root(o) : o;
+        return who.store == null && (who.mode == Mode.Wander) ? who.goalStore : null;
+    }
+
+    // Is this store full, counting everyone inside, on their way, and waiting at the door (but not this customer)?
+    private bool Crowded(StorePlot plot, Customer c) =>
+        CrowdCount(plot) - (HeadingFor(c) == plot ? 1 : 0) >= Capacity(plot);
 
     private void Enter(Customer c, StorePlot plot, Entrance e)
     {
@@ -1681,9 +1731,10 @@ public partial class CustomerManager : NetworkBehaviour
 
         if (s.container != null)
         {
+            uint paint = s.container.GetZone(s.zone).paint;
             int itemId = s.container.ServerRemoveOne(s.zone); // the host settles who gets the last one
             if (itemId == 0) { c.satisfaction -= 0.15f; React(c, Reaction.SoldOut); return; }
-            c.basket.Add(new Taken { container = s.container, zone = s.zone, itemId = itemId, priceCents = s.priceCents, units = 1 });
+            c.basket.Add(new Taken { container = s.container, zone = s.zone, itemId = itemId, priceCents = s.priceCents, units = 1, paint = paint });
         }
         else if (s.item != null)
         {
@@ -1737,6 +1788,7 @@ public partial class CustomerManager : NetworkBehaviour
         line.Add(c);
         c.counter = best;
         c.queueSpot = Vector3.positiveInfinity;
+        c.nearFrontSince = -1f;
         c.until = Time.time + patience;
         c.mode = Mode.ToQueue;
         Log(c, $"joined a line of {line.Count - 1} (about {bestWait:0} s)");
@@ -1859,6 +1911,21 @@ public partial class CustomerManager : NetworkBehaviour
 
         int place = lines.TryGetValue(counter, out var line) ? line.IndexOf(c) : 0;
         WalkToPlaceInLine(c);
+
+        // At the front but held just short of the spot (someone standing in it, a tight corner): close
+        // enough for long enough counts as there, so they don't stand waiting forever.
+        if (place == 0 && !c.arrived && c.ticket == 0 && float.IsFinite(c.queueSpot.x))
+        {
+            if (FlatDistance(c.pos, c.queueSpot) > frontReach) c.nearFrontSince = -1f;
+            else if (c.nearFrontSince < 0f) c.nearFrontSince = Time.time;
+            else if (Time.time - c.nearFrontSince >= frontSettleSeconds)
+            {
+                Log(c, $"close enough to the front ({FlatDistance(c.pos, c.queueSpot):0.00} m): counts as there");
+                c.corners.Clear();
+                c.corner = 0;
+                c.arrived = true;
+            }
+        }
 
         // At the front: their things go on the belt.
         if (place == 0 && c.arrived && c.ticket == 0)
@@ -2138,35 +2205,40 @@ public partial class CustomerManager : NetworkBehaviour
         c.stoppedAt = Time.time;
         var notes = NotificationManager.Instance;
 
-        // Caught: what they took goes back on the shelves, and they leave the mall.
+        // Caught: they stop, drop what they took (as crates of stock at their feet, for the store to pick
+        // up and put back), then run for the exit.
         var taken = c.stolen.Count > 0 ? c.stolen : c.fleeing ? c.basket : null;
         if (taken != null && taken.Count > 0)
         {
             string what = StolenText(c);
-            int back = 0;
-            foreach (var t in taken)
-                if (t.container != null && t.container.IsSpawned &&
-                    t.container.ServerAddOne(t.zone, t.itemId, t.container.GetZone(t.zone).orient)) back++;
             var plot = c.robbed ?? c.store;
+            int dropped = DropStolen(c, taken);
             taken.Clear();
-            Log(c, $"CAUGHT by client {sender}: {what}, {back} back on the shelves");
+            Log(c, $"CAUGHT by client {sender}: {what}, {dropped} dropped");
             // A help point only for helping another team: catching your own store's thief is just business.
             bool helped = plot != null && plot.HasOwner && TeamOf(sender) != plot.OwnerTeamId;
             if (helped && HelpPoints.Instance != null) HelpPoints.Instance.ServerAward(sender, HelpPoints.HelpAction.StoppedThief);
+            string where = plot != null ? $" from {plot.DisplayName}" : "";
             if (notes != null)
             {
                 notes.ServerNotifyClientText(sender, "You caught a shoplifter!",
-                    $"They had {what}{(plot != null ? $" from {plot.DisplayName}" : "")}. {back} went back on the shelves.");
+                    $"They had {what}{where}. They dropped it: pick it up and put it back on the shelves.");
                 if (helped)
                     notes.ServerNotifyTeamText(plot.OwnerTeamId, "Shoplifter caught",
-                        $"Another player stopped someone leaving {plot.DisplayName} with {what}. {back} went back on the shelves.");
+                        $"Another player stopped someone leaving {plot.DisplayName} with {what}. It's on the floor where they were caught.");
             }
             c.fleeing = false;
             c.robbed = null;
             if (c.store != null) { AbandonStore(c); c.store = null; }
-            c.mode = Mode.Exiting;
-            var exit = PickSpawnPoint(sp => sp.isExit);
-            if (exit == null || !PathTo(c, exit.transform.position)) Despawn(c);
+            DropFromGroup(c); // caught: on their own now
+            React(c, Reaction.Caught);
+            // Stopped where they are for a moment...
+            c.mode = Mode.Caught;
+            c.corners.Clear();
+            c.corner = 0;
+            c.arrived = true;
+            c.until = Time.time + caughtStopSeconds;
+            c.nextThink = c.until;
             return;
         }
 
@@ -2177,6 +2249,50 @@ public partial class CustomerManager : NetworkBehaviour
     }
 
     private static ulong TeamOf(ulong clientId) => MallManager.GetTeamOf(clientId);
+
+    // ...then off to the mall exit (still at a shoplifter's run).
+    private void RunForExit(Customer c)
+    {
+        c.mode = Mode.Exiting;
+        var exit = PickSpawnPoint(sp => sp.isExit);
+        if (exit == null || !PathTo(c, exit.transform.position)) Despawn(c);
+    }
+
+    // What a caught shoplifter took, dropped at their feet: one crate per product and color (more if
+    // it's more than a crate holds), part-filled with what they had. Returns how many products dropped.
+    private int DropStolen(Customer c, List<Taken> taken)
+    {
+        var piles = new Dictionary<(int item, uint paint), int>();
+        foreach (var t in taken)
+        {
+            if (t.loose != null || t.itemId == 0) continue; // a loose item was never picked up: still where it was
+            piles.TryGetValue((t.itemId, t.paint), out int n);
+            piles[(t.itemId, t.paint)] = n + Mathf.Max(1, t.units);
+        }
+        var catalog = ItemCatalog.Instance;
+        int dropped = 0, crates = 0;
+        foreach (var kv in piles)
+        {
+            if (catalog == null || !catalog.TryGet(kv.Key.item, out var def) || def.worldNetworkPrefab == null) continue;
+            int perCrate = Mathf.Max(1, StockContainer.GetUnitsPerCrate(kv.Key.item));
+            for (int left = kv.Value; left > 0; left -= perCrate)
+            {
+                // Spread around their feet, a little up so it settles onto the floor.
+                float angle = crates * 2.4f;
+                Vector3 at = c.pos + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * (crates == 0 ? 0.35f : 0.6f) + Vector3.up * 0.3f;
+                var spawned = Instantiate(def.worldNetworkPrefab, at, Quaternion.Euler(0f, Random.Range(0f, 360f), 0f));
+                if (spawned.TryGetComponent<ItemPickupNet>(out var crate))
+                {
+                    if (crate.IsStockCrate) crate.ServerSetUnits(Mathf.Min(left, perCrate));
+                    if (kv.Key.paint != 0) crate.ServerSetPaint(kv.Key.paint);
+                }
+                spawned.Spawn(true);
+                dropped += Mathf.Min(left, perCrate);
+                crates++;
+            }
+        }
+        return dropped;
+    }
 
     /* ========================= STORE ENTRANCES ========================= */
 
