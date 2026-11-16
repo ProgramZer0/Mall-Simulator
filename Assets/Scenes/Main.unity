@@ -298,6 +298,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a63bc163bee148cba58a6b646404f461, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CustomerNoWalkZone
+  kind: 0
 --- !u!65 &6764781
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -6363,6 +6364,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a63bc163bee148cba58a6b646404f461, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CustomerNoWalkZone
+  kind: 0
 --- !u!65 &435999744
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -6724,11 +6726,11 @@ MonoBehaviour:
     atLove1: 2
     atLove2: 3
   competitionPerStore: 0.1
-  minCompetition: 0.5
+  minCompetition: 0.35
   categoryNeeds:
   - category: 
     needs: []
-  decorReach: 8
+  decorReach: 12
   neutralQuality: 0.5
   windowFeature: Window
   outsideSaturation: 10
@@ -6795,7 +6797,7 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   ballotEvery: 1600
   firstBallotAt: 1600
-  ballotLength: 5
+  ballotLength: 200
   optionsPerBallot: 4
   noVotesPicksRandom: 0
   devHotkey: 1
@@ -6817,7 +6819,7 @@ MonoBehaviour:
   levelXpGrowth: 1.3
   happyCustomerXp: 10
   unhappyCustomerXp: 5
-  xpPerProfitDollar: 0.05
+  xpPerProfitDollar: 0.1
   storeUnlockLevels: 01000000050000000a0000000f000000140000001e000000
   perks:
   - {fileID: 11400000, guid: e57b649638304d6599d99174674770bb, type: 2}
@@ -6866,7 +6868,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: dd91cf5f032f4d3785dae4054f501c9f, type: 2}
   - {fileID: 11400000, guid: 53d1593fb4b34acc997d362b7b4195b9, type: 2}
   licensesAtStart: 2
-  levelsPerExtraLicense: 5
+  levelsPerExtraLicense: 2
   unusedFor: 600
 --- !u!114 &451575860
 MonoBehaviour:
@@ -7009,17 +7011,17 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CustomerManager
   ShowTopMostFoldoutHeaderGroup: 1
-  maxCustomers: 300
-  arrivalsPerMinute: 60
+  maxCustomers: 500
+  arrivalsPerMinute: 100
   maxStoresPerVisit: 8
-  maxMinutesInMall: 10
-  minMinutesInMall: 1.5
+  maxMinutesInMall: 30
+  minMinutesInMall: 5
   walkSpeed: {x: 1.1, y: 1.5}
-  passRange: 12
-  storeCapacity: 12
+  passRange: 20
+  storeCapacity: 20
   sightRange: 20
   sightPull: 1.2
-  personalSpace: 0.68
+  personalSpace: 1.05
   avoidRange: 1.43
   exitReach: 1.5
   laneSpread: 1
@@ -7028,11 +7030,11 @@ MonoBehaviour:
   roamChance: 0.96
   browseSamples: 60
   maxLooksPerStore: 10
-  lookSeconds: {x: 1.5, y: 8}
+  lookSeconds: {x: 5, y: 30}
   buyEagerness: 0.8
-  queueSpacing: 0.5
-  lineLooseness: 0.12
-  lineSettleSpeed: 0.8
+  queueSpacing: 1.2
+  lineLooseness: 0.2
+  lineSettleSpeed: 1.12
   patienceSeconds: 200
   secondsPerItemGuess: 6
   alarmChance: 0.15
@@ -7090,8 +7092,8 @@ MonoBehaviour:
   reactionRange: 30
   sendRate: 10
   logDecisions: 1
-  drawPaths: 1
-  drawLabels: 1
+  drawPaths: 0
+  drawLabels: 0
   spawnKey: 284
 --- !u!114 &451575866
 MonoBehaviour:
@@ -7110,10 +7112,12 @@ MonoBehaviour:
   layers:
     serializedVersion: 2
     m_Bits: 6015
-  agentRadius: 0.43
+  agentRadius: 0.45
   agentHeight: 1.8
   maxStep: 0.35
   maxSlope: 40
+  avoidArea: 3
+  avoidCost: 20
   rebuildDelay: 1.5
   logBuilds: 1
 --- !u!1 &451926993
@@ -10269,7 +10273,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.768}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -0.00390625, y: 3.691208}
+  m_AnchoredPosition: {x: -0.00390625, y: 3.6912231}
   m_SizeDelta: {x: -1.0700073, y: -6.9923096}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &645596349
@@ -21153,6 +21157,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a63bc163bee148cba58a6b646404f461, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CustomerNoWalkZone
+  kind: 1
 --- !u!65 &1320330680
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -21172,8 +21177,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 6.0565853, y: 3.267814, z: 4.6747894}
-  m_Center: {x: 2.0282927, y: -0.56266296, z: -1.8373947}
+  m_Size: {x: 56.095078, y: 3.267814, z: 4.2723293}
+  m_Center: {x: 27.047535, y: -0.56266296, z: -1.6361647}
 --- !u!1 &1329355400
 GameObject:
   m_ObjectHideFlags: 0
@@ -27018,7 +27023,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1620831328}
   m_Layer: 8
-  m_Name: customerdenied
+  m_Name: customerWalking
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -30965,6 +30970,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a63bc163bee148cba58a6b646404f461, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CustomerNoWalkZone
+  kind: 0
 --- !u!65 &1842488499
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -32075,7 +32081,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0.062415693, y: 1}
-  m_AnchoredPosition: {x: -1.8455505, y: 0.00022125244}
+  m_AnchoredPosition: {x: -1.84552, y: 0.00022125244}
   m_SizeDelta: {x: -2.7530975, y: -0.8370018}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1890857566
@@ -36490,6 +36496,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a63bc163bee148cba58a6b646404f461, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CustomerNoWalkZone
+  kind: 0
 --- !u!65 &4270560814167111532
 BoxCollider:
   m_ObjectHideFlags: 0
