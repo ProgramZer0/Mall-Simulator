@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 1362310953697958363}
   - component: {fileID: 4635179723197239667}
   - component: {fileID: 5349476074656871480}
+  - component: {fileID: -266586334021288181}
   - component: {fileID: 8605269008475586885}
   - component: {fileID: 3279461360851579719}
   - component: {fileID: 7720008476236679494}
@@ -121,6 +122,40 @@ MonoBehaviour:
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
+--- !u!114 &-266586334021288181
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8111841602143186489}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 68ea5bd60ebf4b6cbb486691048c82e9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ItemData
+  item:
+    id: 20
+    displayName: washing
+    handVisualPrefab: {fileID: 0}
+    worldNetworkPrefab: {fileID: 0}
+    sizeClass: 2
+    showInShop: 1
+    icon: {fileID: 0}
+    categories: []
+    category: 
+    price: 10
+    sizes: 0
+    sizePriceStep: 0.03
+    minLevel: 0
+    inSpecialMarket: 0
+    specialMarketWeight: 1
+    rarity: 0
+    marketPrice: 0
+    deliverySeconds: 30
+    shipmentPrefab: {fileID: 0}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
 --- !u!114 &8605269008475586885
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -134,7 +169,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 201
+  itemId: 20
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}

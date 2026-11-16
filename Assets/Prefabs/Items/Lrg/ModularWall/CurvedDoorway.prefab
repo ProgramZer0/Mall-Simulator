@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 1765414779243861376}
   - component: {fileID: 8923745533527127532}
   - component: {fileID: 5142968316462350609}
+  - component: {fileID: -8213129843688176999}
   - component: {fileID: 3339914593648648466}
   - component: {fileID: 3063179651413053089}
   - component: {fileID: -8003250446748475929}
@@ -142,6 +143,40 @@ MonoBehaviour:
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
+--- !u!114 &-8213129843688176999
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8863387626637269206}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 68ea5bd60ebf4b6cbb486691048c82e9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ItemData
+  item:
+    id: 5
+    displayName: CurvedDoorway
+    handVisualPrefab: {fileID: 0}
+    worldNetworkPrefab: {fileID: 0}
+    sizeClass: 3
+    showInShop: 1
+    icon: {fileID: 0}
+    categories: []
+    category: 
+    price: 10
+    sizes: 0
+    sizePriceStep: 0.03
+    minLevel: 0
+    inSpecialMarket: 0
+    specialMarketWeight: 1
+    rarity: 0
+    marketPrice: 0
+    deliverySeconds: 30
+    shipmentPrefab: {fileID: 0}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
 --- !u!114 &3339914593648648466
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -155,7 +190,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 2003
+  itemId: 5
   mounting: 1
   editModeOnly: 1
   modelRotation: {x: 0, y: 0, z: 0}

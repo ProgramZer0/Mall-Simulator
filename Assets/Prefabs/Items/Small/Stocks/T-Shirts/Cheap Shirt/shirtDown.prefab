@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 2511920739260602555}
   - component: {fileID: 2993137086532015986}
   - component: {fileID: 5483348910539199125}
+  - component: {fileID: 4547445877476511579}
   - component: {fileID: 2684956556140015760}
   - component: {fileID: 4713084436352208970}
   - component: {fileID: 6578835836704211935}
@@ -119,6 +120,40 @@ MonoBehaviour:
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
+--- !u!114 &4547445877476511579
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2246502935814221757}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 68ea5bd60ebf4b6cbb486691048c82e9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ItemData
+  item:
+    id: 37
+    displayName: shirtDown
+    handVisualPrefab: {fileID: 0}
+    worldNetworkPrefab: {fileID: 0}
+    sizeClass: 1
+    showInShop: 0
+    icon: {fileID: 0}
+    categories: []
+    category: 
+    price: 10
+    sizes: 0
+    sizePriceStep: 0.03
+    minLevel: 0
+    inSpecialMarket: 0
+    specialMarketWeight: 1
+    rarity: 0
+    marketPrice: 0
+    deliverySeconds: 30
+    shipmentPrefab: {fileID: 0}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
 --- !u!114 &2684956556140015760
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -132,7 +167,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 2
+  itemId: 37
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: -90, y: 0, z: 0}

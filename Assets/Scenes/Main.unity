@@ -23730,11 +23730,63 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1e929dd44e5f47c47a3928defdc7c2d4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  itemPrefabs: []
+  itemPrefabs:
+  - {fileID: -4646698693008925334, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
+  - {fileID: 6356841331412371667, guid: 5722825167f8c9d48866a8bb78d0e439, type: 3}
+  - {fileID: 6394233842884395254, guid: 861afb34f8ded0e418080f960289fa71, type: 3}
+  - {fileID: 2522532057461909842, guid: 615d2e1a69245dc468dbc69d47ad6af4, type: 3}
+  - {fileID: -8213129843688176999, guid: f4ef4c26a2aa3324dab1b1e4eacb5f52, type: 3}
+  - {fileID: 4591845432916875739, guid: 33d1a8b358b712e4988efef9b4e1b1d6, type: 3}
+  - {fileID: -6640487932043246454, guid: ae88e9a5964c9df4283014ef2a360925, type: 3}
+  - {fileID: 2257913978917670974, guid: 0445137ef25852941840332529e35f20, type: 3}
+  - {fileID: -4600150872848602766, guid: f0201107502004d4f9fec9a32ad81b95, type: 3}
+  - {fileID: -893196466500702749, guid: a5f22dae0e7cd1a48bf09f46cdeb0455, type: 3}
+  - {fileID: 9155394778503579941, guid: 48d04ce3779329345a7a4939b2eff303, type: 3}
+  - {fileID: -3466762604157177853, guid: 6f2b5546efb52154a81fff4f8aa7652d, type: 3}
+  - {fileID: -8284546426299901416, guid: 139c536f3927ad74ea955949690aa461, type: 3}
+  - {fileID: -7542254937691378901, guid: e73a9a709e432d4498472d3691ba2fc3, type: 3}
+  - {fileID: 7339213561254254147, guid: 5afe19bc86c86864cb8b24d7377130ed, type: 3}
+  - {fileID: 6632832255425144030, guid: eacd3ab742c2c4740ac7884d13522a41, type: 3}
+  - {fileID: 9070186529678612163, guid: 5e011d469d241b040a8a2e5048a48e48, type: 3}
+  - {fileID: -1438613752515307353, guid: 9e156332ec14d5142bd8e76ae4bf1914, type: 3}
+  - {fileID: 3815711668264778507, guid: a98a64d474d5e9046b81cda572cc0b64, type: 3}
+  - {fileID: -266586334021288181, guid: e258abd6dede2c248a951fb62a325c33, type: 3}
+  - {fileID: 4779044835678152003, guid: 8af42cf235b76e54ca878f0bd3fe903f, type: 3}
+  - {fileID: -8598856594727087991, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
+  - {fileID: 3976191113780829281, guid: ba8daff54a7182c4d88b96467f2c1365, type: 3}
+  - {fileID: -6839698113511525030, guid: ce3b17f158509f345b79e18e5dc8049e, type: 3}
+  - {fileID: -1046490897543473415, guid: ef05c615a04bbfc4e895985a1de605f6, type: 3}
+  - {fileID: -2028892032763157303, guid: 8da3b69830e0af64fbf5e08640760dc2, type: 3}
+  - {fileID: 820819573890492068, guid: 5acf0c0ccc2cf914d946f7057abe3884, type: 3}
+  - {fileID: 1247861028855555439, guid: 77998e8fc62621b4294aa4afb8f8836b, type: 3}
+  - {fileID: 4799133724927143761, guid: b6eca67313d14d441b5ef4be96cae925, type: 3}
+  - {fileID: 5369733132906016115, guid: 6f529d750bb779349901399377876247, type: 3}
+  - {fileID: -404870806933037200, guid: 47890ab733aebdb49aaffc9f69f96879, type: 3}
+  - {fileID: -913459193929632504, guid: 565a7df3bcfa9d44c8cb7982023d4af6, type: 3}
+  - {fileID: 1082646445133144435, guid: 9603a84ee0fdf794cbb00c172892befc, type: 3}
+  - {fileID: 5084520932644890560, guid: 87d1a5c29cbf53b4f94e4e1c9bdb070e, type: 3}
+  - {fileID: 1932967595074668903, guid: 8c94803d355b23442b3fb84b75825070, type: 3}
+  - {fileID: -5343423758350955439, guid: b063450db796f2d4a8a5e20e1751dd09, type: 3}
+  - {fileID: 4547445877476511579, guid: a3548a721c1332d4bbc2f70cd7d248c9, type: 3}
+  - {fileID: 8433466896409622839, guid: d74abc845def03c4a8b478d79273ef19, type: 3}
+  - {fileID: -6184147982583123352, guid: 0758e6d846664854fbfd8ffbd1e839d4, type: 3}
+  - {fileID: 2059737018542200355, guid: 627734816979ea14a96110368e5f44e5, type: 3}
   items: []
   defaultPickupClip: {fileID: 8300000, guid: b0b6305f02b720e4490beeeb41c410d6, type: 3}
   defaultPlaceClip: {fileID: 8300000, guid: 382cd51e5d8f86d42b7132faadb6ac88, type: 3}
   defaultShipmentPrefab: {fileID: -7919701627516103740, guid: ba8daff54a7182c4d88b96467f2c1365, type: 3}
+  small:
+    hand: {fileID: 0}
+    shipment: {fileID: -7919701627516103740, guid: 5acf0c0ccc2cf914d946f7057abe3884, type: 3}
+  medium:
+    hand: {fileID: 0}
+    shipment: {fileID: -7919701627516103740, guid: 9e156332ec14d5142bd8e76ae4bf1914, type: 3}
+  large:
+    hand: {fileID: 0}
+    shipment: {fileID: -7919701627516103740, guid: 48d04ce3779329345a7a4939b2eff303, type: 3}
+  misc:
+    hand: {fileID: 0}
+    shipment: {fileID: -7919701627516103740, guid: d272d205b70f4db49ad535a92506c563, type: 3}
   debugItemLogs: 1
 --- !u!4 &1459986144
 Transform:

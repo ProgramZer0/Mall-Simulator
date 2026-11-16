@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 8182986576570070126}
   - component: {fileID: 5004198110118064219}
   - component: {fileID: 8949743630989440838}
+  - component: {fileID: -1046490897543473415}
   - component: {fileID: 8469361842552670011}
   - component: {fileID: 4632519094026294874}
   - component: {fileID: 6498150863928948201}
@@ -121,6 +122,40 @@ MonoBehaviour:
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
+--- !u!114 &-1046490897543473415
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3505566834757353271}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 68ea5bd60ebf4b6cbb486691048c82e9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ItemData
+  item:
+    id: 25
+    displayName: paintShipment
+    handVisualPrefab: {fileID: 0}
+    worldNetworkPrefab: {fileID: 0}
+    sizeClass: 1
+    showInShop: 0
+    icon: {fileID: 0}
+    categories: []
+    category: 
+    price: 10
+    sizes: 0
+    sizePriceStep: 0.03
+    minLevel: 0
+    inSpecialMarket: 0
+    specialMarketWeight: 1
+    rarity: 0
+    marketPrice: 0
+    deliverySeconds: 30
+    shipmentPrefab: {fileID: 0}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
 --- !u!114 &8469361842552670011
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -134,7 +169,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 5004
+  itemId: 25
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}

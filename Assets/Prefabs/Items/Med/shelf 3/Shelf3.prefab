@@ -65,6 +65,7 @@ GameObject:
   - component: {fileID: 6895877467843971255}
   - component: {fileID: 5955362630617385977}
   - component: {fileID: -2346949488018487158}
+  - component: {fileID: 7339213561254254147}
   - component: {fileID: 4414068124089498877}
   - component: {fileID: 681771195894922142}
   - component: {fileID: 8054572322901295755}
@@ -176,6 +177,40 @@ MonoBehaviour:
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
+--- !u!114 &7339213561254254147
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8036485127719048047}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 68ea5bd60ebf4b6cbb486691048c82e9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ItemData
+  item:
+    id: 15
+    displayName: Shelf3
+    handVisualPrefab: {fileID: 0}
+    worldNetworkPrefab: {fileID: 0}
+    sizeClass: 2
+    showInShop: 1
+    icon: {fileID: 0}
+    categories: []
+    category: 
+    price: 10
+    sizes: 0
+    sizePriceStep: 0.03
+    minLevel: 0
+    inSpecialMarket: 0
+    specialMarketWeight: 1
+    rarity: 0
+    marketPrice: 0
+    deliverySeconds: 30
+    shipmentPrefab: {fileID: 0}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
 --- !u!114 &4414068124089498877
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -189,7 +224,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 206
+  itemId: 15
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}
