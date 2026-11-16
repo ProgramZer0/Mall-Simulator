@@ -40,6 +40,36 @@ public static class PlacementCheck
                                supportMask, QueryTriggerInteraction.Ignore);
     }
 
+    /// <summary>Why Fits says no, in words (for logs): what's in the way, a No Place Area, or nothing under it.</summary>
+    public static string WhyNotFits(ItemDef def, Vector3 position, Quaternion rotation,
+                                    LayerMask blockingMask, LayerMask supportMask)
+    {
+        if (def == null || def.worldNetworkPrefab == null) return "no item or world prefab";
+        if (!GetTestBox(def, position, rotation, out Vector3 center, out Vector3 halfExtents)) return "ok (nothing to measure)";
+        int count = Physics.OverlapBoxNonAlloc(center, halfExtents, Hits, rotation, blockingMask, QueryTriggerInteraction.Ignore);
+        if (count > 0)
+        {
+            var sb = new System.Text.StringBuilder("in the way: ");
+            for (int i = 0; i < count; i++)
+            {
+                var c = Hits[i];
+                if (i > 0) sb.Append(", ");
+                sb.Append($"'{c.name}' ({c.GetType().Name}, layer {LayerMask.LayerToName(c.gameObject.layer)}" +
+                          (c.transform.root != c.transform ? $", under '{c.transform.root.name}'" : "") + ")");
+            }
+            sb.Append($"; test box {halfExtents * 2f:F2} m at {center:F2}");
+            return sb.ToString();
+        }
+        var area = NoPlaceArea.Find(center, halfExtents, rotation);
+        if (area != null) return $"inside No Place Area '{area.name}'";
+        Vector3 up = rotation * Vector3.up;
+        Vector3 baseCenter = center - up * (halfExtents.y + Skin);
+        if (!Physics.Raycast(baseCenter + up * 0.05f, -up, 0.05f + SupportProbe, supportMask, QueryTriggerInteraction.Ignore))
+            return $"nothing to stand on under its base at {baseCenter:F2} (looked {SupportProbe + 0.05f:0.00} m down on the support layers; " +
+                   $"test box {halfExtents * 2f:F2} m)";
+        return "ok";
+    }
+
     /* ========================= BOXES ON CARTS ========================= */
 
     /// <summary>
