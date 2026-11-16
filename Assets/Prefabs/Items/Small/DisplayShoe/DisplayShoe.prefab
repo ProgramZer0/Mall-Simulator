@@ -142,17 +142,20 @@ MonoBehaviour:
     sizeClass: 1
     showInShop: 1
     icon: {fileID: 0}
-    categories: []
+    categories:
+    - Shoes
+    - Display
+    - Hightop
     category: 
     price: 10
-    sizes: 0
+    sizes: 2
     sizePriceStep: 0.03
     minLevel: 0
     inSpecialMarket: 0
     specialMarketWeight: 1
     rarity: 0
-    marketPrice: 0
-    deliverySeconds: 30
+    marketPrice: 5
+    deliverySeconds: 60
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}

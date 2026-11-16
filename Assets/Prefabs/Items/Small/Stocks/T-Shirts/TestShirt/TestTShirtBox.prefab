@@ -108,7 +108,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 646132995
+  GlobalObjectIdHash: 1895300468
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -141,17 +141,22 @@ MonoBehaviour:
     sizeClass: 1
     showInShop: 1
     icon: {fileID: 0}
-    categories: []
+    categories:
+    - Clothing
+    - Test
+    - Shirts
+    - T-Shirt
+    - Boxed
     category: 
     price: 10
-    sizes: 0
+    sizes: 1
     sizePriceStep: 0.03
     minLevel: 0
     inSpecialMarket: 0
     specialMarketWeight: 1
     rarity: 0
-    marketPrice: 0
-    deliverySeconds: 30
+    marketPrice: 5
+    deliverySeconds: 60
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}

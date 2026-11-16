@@ -140,17 +140,21 @@ MonoBehaviour:
     sizeClass: 1
     showInShop: 0
     icon: {fileID: 0}
-    categories: []
+    categories:
+    - Clothing
+    - Pants
+    - Jeans
+    - Cheap
     category: 
     price: 10
-    sizes: 0
+    sizes: 1
     sizePriceStep: 0.03
     minLevel: 0
     inSpecialMarket: 0
-    specialMarketWeight: 1
+    specialMarketWeight: 0
     rarity: 0
-    marketPrice: 0
-    deliverySeconds: 30
+    marketPrice: 5
+    deliverySeconds: 60
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
