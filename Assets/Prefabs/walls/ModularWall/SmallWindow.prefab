@@ -133,7 +133,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 105
+  itemId: 2006
   mounting: 1
   editModeOnly: 1
   modelRotation: {x: 0, y: 0, z: 0}
@@ -164,6 +164,8 @@ MonoBehaviour:
   isDoor: 0
   holeSize: {x: 0, y: 0}
   modelRotation: {x: 0, y: 0, z: 90}
+  holeOutline: 0
+  outline: []
 --- !u!65 &-3503740585031919176
 BoxCollider:
   m_ObjectHideFlags: 0

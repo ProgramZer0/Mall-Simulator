@@ -170,7 +170,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8210e9a71076a7b43a579c5292f4edd9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WallModule
-  moduleId: 202
+  moduleId: 2
   displayName: Wall wooden
   isEntrance: 0
   price: 0

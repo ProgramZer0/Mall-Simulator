@@ -7037,10 +7037,14 @@ MonoBehaviour:
   lineSettleSpeed: 1.12
   patienceSeconds: 200
   secondsPerItemGuess: 6
+  overpriceTemptation: 3
+  maxTemptation: 10
   alarmChance: 0.15
   watchedRange: 6
   fleeSpeed: 1.6
   stopRange: 3
+  comparePrices: 0.8
+  cheaperBy: 0.05
   thinksPerSecond: 3
   thinkBudgetMs: 2
   looks: []
@@ -10764,7 +10768,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.6895374}
   m_AnchorMax: {x: 0.4426707, y: 1}
-  m_AnchoredPosition: {x: -1.9215698, y: 2.0566711}
+  m_AnchoredPosition: {x: -1.9215698, y: 2.0566673}
   m_SizeDelta: {x: -4.349106, y: -6.1133003}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &658848816
@@ -10956,7 +10960,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.6144812, y: 0.632}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 4.379944, y: -0.41000366}
+  m_AnchoredPosition: {x: 4.3799744, y: -0.41000366}
   m_SizeDelta: {x: -9.309998, y: 1.2100067}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &667311123
@@ -11859,7 +11863,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0.67477095}
-  m_AnchoredPosition: {x: -0.08679199, y: -1.4300537}
+  m_AnchoredPosition: {x: -0.08679199, y: -1.4301758}
   m_SizeDelta: {x: 0.8699951, y: -2.4200134}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &744671981
@@ -13239,6 +13243,63 @@ Transform:
   - {fileID: 1620045252}
   m_Father: {fileID: 1320047867}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &853049084
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: 3e64e53630266bf45a96ba190682a6e4, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -27.950352
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 3e64e53630266bf45a96ba190682a6e4, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -1.9426832
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 3e64e53630266bf45a96ba190682a6e4, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -51.26393
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 3e64e53630266bf45a96ba190682a6e4, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.7071067
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 3e64e53630266bf45a96ba190682a6e4, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 3e64e53630266bf45a96ba190682a6e4, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 3e64e53630266bf45a96ba190682a6e4, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 3e64e53630266bf45a96ba190682a6e4, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 3e64e53630266bf45a96ba190682a6e4, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 3e64e53630266bf45a96ba190682a6e4, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 3e64e53630266bf45a96ba190682a6e4, type: 3}
+      propertyPath: m_Name
+      value: shirtDown
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 3e64e53630266bf45a96ba190682a6e4, type: 3}
 --- !u!1 &854397830
 GameObject:
   m_ObjectHideFlags: 0
@@ -20103,7 +20164,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0.857234}
-  m_AnchoredPosition: {x: -0.014831543, y: -1.2428589}
+  m_AnchoredPosition: {x: -0.014831543, y: -1.2429199}
   m_SizeDelta: {x: -0.08999634, y: -1.9200134}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1283808628
@@ -22136,7 +22197,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.11731859, y: 0.4684036}
   m_AnchorMax: {x: 0.36263925, y: 0.5454196}
-  m_AnchoredPosition: {x: -4.121704, y: 1.5399933}
+  m_AnchoredPosition: {x: -4.121826, y: 1.5399933}
   m_SizeDelta: {x: -11.881897, y: -4.8294067}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1405366925
@@ -23259,569 +23320,24 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   items:
   - id: 1
-    displayName: Test Cube
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5976144729851372552, guid: d4d248d7e84344a46bbfb0b524251c0b, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories:
-    - test
-    category: 
-    price: 1
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 30
-    shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 2
-    displayName: BookShelf
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 1596268347389550911, guid: fea93b5b1603ff54791dca9e653d5cd8, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories:
-    - Shelves
-    category: 
-    price: 100
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 200
-    shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 3
-    displayName: Washing Machine
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5349476074656871480, guid: e258abd6dede2c248a951fb62a325c33, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories:
-    - Appliance
-    category: 
-    price: 800
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 500
-    shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 4
-    displayName: Shop Monitor
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5976144729851372552, guid: 3a0334e0d59c64841bcc005a85b829b5, type: 3}
+    displayName: woza
+    handVisualPrefab: {fileID: 4223701351420822915, guid: 627734816979ea14a96110368e5f44e5, type: 3}
+    worldNetworkPrefab: {fileID: 8513666520626042969, guid: 627734816979ea14a96110368e5f44e5, type: 3}
     showInShop: 0
     icon: {fileID: 0}
     categories:
-    - Base
-    category: 
-    price: 999999
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 99999
-    shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 5
-    displayName: DefaultShipment
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5976144729851372552, guid: 771bc865ce9ffeb42930bb74e38e4209, type: 3}
-    showInShop: 0
-    icon: {fileID: 0}
-    categories:
-    - Base
-    category: 
-    price: 999999
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 99999
-    shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 6
-    displayName: BookShelf Shipment
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
-    showInShop: 0
-    icon: {fileID: 0}
-    categories:
-    - Base
-    category: 
-    price: 999999
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 99999
-    shipmentPrefab: {fileID: 5976144729851372552, guid: 1b6f031473d286c42a269e80ea9457ea, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 7
-    displayName: Test Shirts
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5976144729851372552, guid: 7692a217a775d2c4694107e6ec273348, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories:
-    - Clothing
-    category: 
-    price: 40
-    sizes: 1
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 300
-    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 8
-    displayName: 'Test Shirt '
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5976144729851372552, guid: 0758e6d846664854fbfd8ffbd1e839d4, type: 3}
-    showInShop: 0
-    icon: {fileID: 0}
-    categories:
-    - Clothing
-    category: 
-    price: 10
-    sizes: 1
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 300
-    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 9
-    displayName: Test Shirt Shipment
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    showInShop: 0
-    icon: {fileID: 0}
-    categories:
-    - Clothing
-    category: 
-    price: 10
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 300
-    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 10
-    displayName: Clothes Rack
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 342891455308358134, guid: b03be5abf9dae6947ab3b876f3c9e637, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories:
-    - Shelves
-    category: 
-    price: 100
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 200
-    shipmentPrefab: {fileID: 5976144729851372552, guid: 3c680629927b20b4db25f94c7e0e28bc, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 11
-    displayName: Clothes Rack Shipment Box
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5976144729851372552, guid: 3c680629927b20b4db25f94c7e0e28bc, type: 3}
-    showInShop: 0
-    icon: {fileID: 0}
-    categories:
-    - Clothing
-    category: 
-    price: 10
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 300
-    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 12
-    displayName: Test Shirt Hanger
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5976144729851372552, guid: d74abc845def03c4a8b478d79273ef19, type: 3}
-    showInShop: 0
-    icon: {fileID: 0}
-    categories:
-    - Clothing
-    category: 
-    price: 10
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 300
-    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 13
-    displayName: Test Painting
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5976144729851372552, guid: 8da3b69830e0af64fbf5e08640760dc2, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories:
-    - Clothing
-    category: 
-    price: 230
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 200
-    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 101
-    displayName: Tall Window
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 2823917773914635188, guid: 861afb34f8ded0e418080f960289fa71, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories:
-    - Window
+    - tesst
     category: 
     price: 0
     sizes: 0
-    sizePriceStep: 0.03
+    sizePriceStep: 0
     minLevel: 0
     inSpecialMarket: 0
-    specialMarketWeight: 1
+    specialMarketWeight: 0
     rarity: 0
     marketPrice: 0
     deliverySeconds: 0
-    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 102
-    displayName: Big Window
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 6547886306711070832, guid: 615d2e1a69245dc468dbc69d47ad6af4, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories:
-    - Window
-    category: 
-    price: 0
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 0
-    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 103
-    displayName: Curved Doorway
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5142968316462350609, guid: f4ef4c26a2aa3324dab1b1e4eacb5f52, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories:
-    - Window
-    category: 
-    price: 0
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 0
-    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 105
-    displayName: Small Window
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 994817689204787635, guid: 0445137ef25852941840332529e35f20, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories:
-    - Window
-    category: 
-    price: 0
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 0
-    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 104
-    displayName: Doorway
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 7986386913516174642, guid: ae88e9a5964c9df4283014ef2a360925, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories:
-    - Window
-    category: 
-    price: 0
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 0
-    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 106
-    displayName: Tall Window
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5207118145016102118, guid: f0201107502004d4f9fec9a32ad81b95, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories:
-    - Window
-    category: 
-    price: 0
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 0
-    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 107
-    displayName: Door
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5704774462145694906, guid: 33d1a8b358b712e4988efef9b4e1b1d6, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories:
-    - Window
-    category: 
-    price: 0
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 0
-    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 14
-    displayName: Checkout counter
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 9029950602112234995, guid: 8af42cf235b76e54ca878f0bd3fe903f, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories: []
-    category: 
-    price: 0
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 0
-    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 201
-    displayName: wallkit 1
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5976144729851372552, guid: 828e8ded47724b1498f79b8036a70de3, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories: []
-    category: 
-    price: 0
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 0
-    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 202
-    displayName: wallkit wooden
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5976144729851372552, guid: e24e0e85496056640b8c722096396866, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories: []
-    category: 
-    price: 0
-    sizes: 0
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 0
-    shipmentPrefab: {fileID: 5976144729851372552, guid: d18209254520ae7488705cb6b9d99e47, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 15
-    displayName: Test Shoe box
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5976144729851372552, guid: 93fb97edddb618c4cae08832d353a054, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories:
-    - shoes
-    category: 
-    price: 160
-    sizes: 2
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 0
-    deliverySeconds: 200
-    shipmentPrefab: {fileID: 5976144729851372552, guid: 75b990fec1068f24d89ce150db927e28, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 16
-    displayName: Test Shoes
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 2919167297392315864, guid: 565a7df3bcfa9d44c8cb7982023d4af6, type: 3}
-    showInShop: 0
-    icon: {fileID: 0}
-    categories:
-    - shoe
-    category: 
-    price: 0
-    sizes: 2
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 40
-    deliverySeconds: 0
-    shipmentPrefab: {fileID: 5976144729851372552, guid: 75b990fec1068f24d89ce150db927e28, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 17
-    displayName: Test Rare Shoe box
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 5976144729851372552, guid: 3c2f0eaa3c055a247b419c8469ea03bd, type: 3}
-    showInShop: 1
-    icon: {fileID: 0}
-    categories:
-    - shoes
-    - Rare Shoes
-    category: 
-    price: 500
-    sizes: 2
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 70
-    deliverySeconds: 30
-    shipmentPrefab: {fileID: 5976144729851372552, guid: 75b990fec1068f24d89ce150db927e28, type: 3}
-    pickupClip: {fileID: 0}
-    placeClip: {fileID: 0}
-  - id: 18
-    displayName: 'Test Rare Shoes '
-    handVisualPrefab: {fileID: 7529414783980617621, guid: d46f34e40c159624bb08b1adfa6c6c80, type: 3}
-    worldNetworkPrefab: {fileID: 2919167297392315864, guid: 87d1a5c29cbf53b4f94e4e1c9bdb070e, type: 3}
-    showInShop: 0
-    icon: {fileID: 0}
-    categories:
-    - shoes
-    - Rare Shoes
-    category: 
-    price: 0
-    sizes: 2
-    sizePriceStep: 0.03
-    minLevel: 0
-    inSpecialMarket: 0
-    specialMarketWeight: 1
-    rarity: 0
-    marketPrice: 40
-    deliverySeconds: 0
-    shipmentPrefab: {fileID: 5976144729851372552, guid: 75b990fec1068f24d89ce150db927e28, type: 3}
+    shipmentPrefab: {fileID: -7919701627516103740, guid: 5acf0c0ccc2cf914d946f7057abe3884, type: 3}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
   defaultPickupClip: {fileID: 8300000, guid: b0b6305f02b720e4490beeeb41c410d6, type: 3}
@@ -25706,7 +25222,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.785}
   m_AnchorMax: {x: 0.82500005, y: 1}
-  m_AnchoredPosition: {x: -4.3380127, y: 2.769867}
+  m_AnchoredPosition: {x: -4.338043, y: 2.769867}
   m_SizeDelta: {x: -8.6759, y: -6.8029995}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1557418836
@@ -28549,7 +28065,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.80500007, y: 0.89400005}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 4.44281, y: 2.0925903}
+  m_AnchoredPosition: {x: 4.44281, y: 2.0925598}
   m_SizeDelta: {x: -10.365601, y: -11.665192}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1690225560
@@ -32906,7 +32422,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0.53722984, y: 0.11374079}
-  m_AnchoredPosition: {x: -1.9899902, y: -1.059967}
+  m_AnchoredPosition: {x: -1.9899597, y: -1.059967}
   m_SizeDelta: {x: -0.049987793, y: -1.8370056}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &1928707708
@@ -33310,7 +32826,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.6736914}
   m_AnchorMax: {x: 0.5524938, y: 1}
-  m_AnchoredPosition: {x: -2.2114868, y: 3.1706696}
+  m_AnchoredPosition: {x: -2.2114868, y: 3.170662}
   m_SizeDelta: {x: -5.2169952, y: -6.895401}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1964414124
@@ -37107,3 +36623,4 @@ SceneRoots:
   - {fileID: 451575849}
   - {fileID: 868998941}
   - {fileID: 788747397}
+  - {fileID: 853049084}
