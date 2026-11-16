@@ -85,8 +85,8 @@ public class MarketScreen : MonoBehaviour, IShopScreen
         var catalog = ItemCatalog.Instance;
         if (m != null && catalog != null)
             foreach (var d in m.DealsNow)
-                if (d.left > 0 && catalog.TryGet(d.itemId, out var def) && LicenseManager.CanOrder(LocalTeam, def, out _))
-                    shown.Add(d);
+                if (d.left > 0 && catalog.TryGet(d.itemId, out _))
+                    shown.Add(d); // anyone can take a deal: no level, license or franchise needed
 
         if (cardPrefab != null && cardParent != null)
         {
@@ -123,10 +123,9 @@ public class MarketScreen : MonoBehaviour, IShopScreen
                 }
                 if (row.colorText != null) row.colorText.text = d.paint != 0 ? PaintPalette.NameOf(d.paint) : "";
 
-                bool levelOk = ProgressionManager.CanOrder(LocalTeam, def);
-                bool can = levelOk && money >= d.price;
+                bool can = money >= d.price;
                 if (row.buyButton != null) row.buyButton.interactable = can;
-                if (row.buttonText != null) row.buttonText.text = !levelOk ? $"Level {def.minLevel}" : money < d.price ? "Not enough money" : "Buy";
+                if (row.buttonText != null) row.buttonText.text = money < d.price ? "Not enough money" : "Buy";
             }
             cardParent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, UILayout.GridHeight(shown.Count, cols, cellSize, cellSpacing, padding));
         }

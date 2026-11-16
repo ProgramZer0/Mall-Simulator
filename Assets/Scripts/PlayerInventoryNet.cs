@@ -132,9 +132,9 @@ public class PlayerInventoryNet : NetworkBehaviour
         handVisualHidden = false;
 
         if (next == 0) return;
-        if (ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(next, out var def) && def.handVisualPrefab != null)
+        if (ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(next, out var def) && def.HandVisualPrefab != null)
         {
-            currentHandVisual = Instantiate(def.handVisualPrefab, handAnchor);
+            currentHandVisual = Instantiate(def.HandVisualPrefab, handAnchor);
             currentHandVisual.transform.localPosition = Vector3.zero;
             currentHandVisual.transform.localRotation = Quaternion.identity;
             PaintHandVisual();

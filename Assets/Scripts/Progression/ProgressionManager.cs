@@ -8,7 +8,8 @@ using UnityEngine;
 ///
 /// Team level: XP mostly from happy customers (customer AI calls ServerCustomerLeft), a little from
 /// profit. Unhappy customers take XP away, but never below the start of the current level, so a level
-/// is never lost. Levels unlock items (ItemDef Min Level) and more stores (Store Unlock Levels).
+/// is never lost. Levels unlock item categories (Category Unlocks: like a free license that comes with
+/// the level), single items (ItemDef Min Level) and more stores (Store Unlock Levels).
 ///
 /// Store perks: each store earns perk points from its own profit (sale price minus what its team
 /// actually paid for the item). Points belong to the store; spend them on the shop monitor's Perks tab.
@@ -75,6 +76,20 @@ public class ProgressionManager : NetworkBehaviour
     [Tooltip("The level each store needs: the 1st store at the 1st entry, a 2nd at the 2nd... Also capped by the " +
              "MallManager's Max Stores Per Team.")]
     [SerializeField] private int[] storeUnlockLevels = { 1, 5, 10, 15, 20, 30 };
+
+    [Serializable]
+    public class CategoryUnlock
+    {
+        [Tooltip("An item category (the catalog's Categories, not case sensitive).")]
+        public string category;
+        [Tooltip("The team level that unlocks it: items in this category can be ordered from then on.")]
+        [Min(1)] public int level = 1;
+    }
+
+    [Tooltip("Item categories locked until a team reaches a level (like a license, but free and automatic). " +
+             "An item in several locked categories needs the highest of their levels; an item's own Min Level " +
+             "still counts too. Categories not listed are open from the start.")]
+    [SerializeField] private List<CategoryUnlock> categoryUnlocks = new();
 
     [Header("Store Perks")]
     [SerializeField] private List<PerkDef> perks = new();
@@ -203,7 +218,37 @@ public class ProgressionManager : NetworkBehaviour
     public static int LevelOf(ulong team) => Instance != null && Instance.IsSpawned ? Instance.GetLevel(team) : 1;
 
     /// <summary>Can this team order this item yet?</summary>
-    public static bool CanOrder(ulong team, ItemDef def) => def == null || def.minLevel <= LevelOf(team);
+    public static bool CanOrder(ulong team, ItemDef def) => def == null || LevelNeeded(def, team) <= LevelOf(team);
+
+    /// <summary>
+    /// The level this team needs for this item: as LevelNeeded(def), but a franchise the team holds that
+    /// covers the item skips its categories' unlock levels (its own Min Level still counts).
+    /// </summary>
+    public static int LevelNeeded(ItemDef def, ulong team) =>
+        def != null && FranchiseManager.HoldsFranchiseFor(team, def) ? def.minLevel : LevelNeeded(def);
+
+    /// <summary>
+    /// The team level this item needs: the highest of its own Min Level and its categories' unlock levels.
+    /// </summary>
+    public static int LevelNeeded(ItemDef def)
+    {
+        if (def == null) return 0;
+        int need = def.minLevel;
+        var pm = Instance;
+        if (pm == null || pm.categoryUnlocks == null) return need;
+        foreach (var u in pm.categoryUnlocks)
+            if (u != null && u.level > need && def.HasCategory(u.category)) need = u.level;
+        return need;
+    }
+
+    /// <summary>The categories a level unlocks (for "Level 5: Shoes unlocked!" and the like).</summary>
+    public static IEnumerable<string> CategoriesUnlockedAt(int level)
+    {
+        var pm = Instance;
+        if (pm == null || pm.categoryUnlocks == null) yield break;
+        foreach (var u in pm.categoryUnlocks)
+            if (u != null && u.level == level && !string.IsNullOrWhiteSpace(u.category)) yield return u.category.Trim();
+    }
 
     /// <summary>How many stores a team's level allows (no limit without a ProgressionManager).</summary>
     public static int StoresAllowed(ulong team)
@@ -248,9 +293,20 @@ public class ProgressionManager : NetworkBehaviour
         TryGetTeam(team, out var t, out int index);
         long xp = Math.Max(XpForLevel(t.level), (long)t.xp + whole);
         t.xp = (int)Math.Min(int.MaxValue, xp);
+        int before = t.level;
         t.level = Mathf.Max(t.level, LevelForXp(t.xp));
         if (index >= 0) teams[index] = t;
         else teams.Add(t);
+        for (int lv = before + 1; lv <= t.level; lv++) AnnounceUnlocks(team, lv);
+    }
+
+    // Leveled up: tell the team which categories they can order now.
+    private void AnnounceUnlocks(ulong team, int level)
+    {
+        var unlocked = new List<string>(CategoriesUnlockedAt(level));
+        if (unlocked.Count == 0 || NotificationManager.Instance == null) return;
+        NotificationManager.Instance.ServerNotifyTeamText(team, $"Level {level}: new things to sell",
+            $"You can now order {string.Join(", ", unlocked)}.");
     }
 
     /// <summary>

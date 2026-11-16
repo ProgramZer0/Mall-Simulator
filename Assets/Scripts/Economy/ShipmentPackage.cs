@@ -17,26 +17,39 @@ public class ShipmentPackage : NetworkBehaviour
     private readonly NetworkVariable<int> containedUnits =
         new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    // Set before spawning (Netcode warns about writing a NetworkVariable then): kept here and written in
+    // OnNetworkSpawn, before anyone is sent the box. The getters read these until then (also while other
+    // scripts on the box spawn first).
+    private int? pendingItem, pendingUnits;
+    private uint? pendingPaint;
+
     /// <summary>The item inside this box (0 = empty).</summary>
-    public int ContainedItemId => containedItemId.Value;
+    public int ContainedItemId => pendingItem ?? containedItemId.Value;
 
     /// <summary>Products left in the stock crate inside (0 = a full crate).</summary>
-    public int ContainedUnits => containedUnits.Value;
+    public int ContainedUnits => pendingUnits ?? containedUnits.Value;
 
-    /// <summary>Server: how many products are left in the crate inside. Call before Spawn.</summary>
-    public void ServerSetUnits(int units) => containedUnits.Value = Mathf.Max(0, units);
+    /// <summary>Server: how many products are left in the crate inside (before or after Spawn).</summary>
+    public void ServerSetUnits(int units)
+    {
+        units = Mathf.Max(0, units);
+        if (IsSpawned) containedUnits.Value = units;
+        else pendingUnits = units;
+    }
 
     // The paint colors of the item inside (PaintSet, 0 = its own colors).
     private readonly NetworkVariable<uint> containedPaint =
         new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     /// <summary>The paint colors of the item inside (see PaintSet).</summary>
-    public uint ContainedPaint => containedPaint.Value;
+    public uint ContainedPaint => pendingPaint ?? containedPaint.Value;
 
-    /// <summary>Server: the paint colors of the item inside. Call before Spawn.</summary>
+    /// <summary>Server: the paint colors of the item inside (before or after Spawn).</summary>
     public void ServerSetPaint(uint set)
     {
-        if (PaintSet.IsValid(set)) containedPaint.Value = set;
+        if (!PaintSet.IsValid(set)) return;
+        if (IsSpawned) containedPaint.Value = set;
+        else pendingPaint = set;
     }
 
     // Deliveries are held for the team that ordered them for a while (GDD 13a). Only boxes carry
@@ -69,9 +82,21 @@ public class ShipmentPackage : NetworkBehaviour
         reservedUntil.Value = NetworkManager.ServerTime.Time + seconds;
     }
 
-    /// <summary>Server: set what's inside. Call before Spawn so it arrives with the box.</summary>
+    /// <summary>Server: set what's inside (before Spawn, it arrives with the box).</summary>
     public void ServerSetContents(int itemId)
     {
-        containedItemId.Value = itemId;
+        if (IsSpawned) containedItemId.Value = itemId;
+        else pendingItem = itemId;
+    }
+
+    public override void OnNetworkSpawn()
+    {
+        base.OnNetworkSpawn();
+        if (!IsServer) return;
+        if (pendingItem.HasValue) containedItemId.Value = pendingItem.Value;
+        if (pendingUnits.HasValue) containedUnits.Value = pendingUnits.Value;
+        if (pendingPaint.HasValue) containedPaint.Value = pendingPaint.Value;
+        pendingItem = pendingUnits = null;
+        pendingPaint = null;
     }
 }

@@ -122,16 +122,31 @@ public class FranchiseManager : NetworkBehaviour
 
     public double Now => IsSpawned ? NetworkManager.ServerTime.Time : 0;
 
-    /// <summary>The first franchise this item belongs to that the team doesn't hold (null: it can be ordered).</summary>
+    /// <summary>
+    /// A franchise this item belongs to, if the team holds none of them (null: it can be ordered). Holding any
+    /// one franchise that covers the item (one of its categories matches) is enough.
+    /// </summary>
     public FranchiseDef MissingFor(ulong team, ItemDef item)
     {
         if (item == null) return null;
+        FranchiseDef first = null;
         foreach (var f in franchises)
         {
             if (f == null || !f.Covers(item)) continue;
-            if (!TryGetState(f.id, out var s) || s.holder != team) return f;
+            if (TryGetState(f.id, out var s) && s.holder == team) return null; // theirs: unlocked
+            first ??= f;
         }
-        return null;
+        return first;
+    }
+
+    /// <summary>Does the team hold a franchise covering this item? (Then level category unlocks don't apply to it.)</summary>
+    public static bool HoldsFranchiseFor(ulong team, ItemDef item)
+    {
+        var fm = Instance;
+        if (fm == null || !fm.IsSpawned || item == null) return false;
+        foreach (var f in fm.franchises)
+            if (f != null && f.Covers(item) && fm.TryGetState(f.id, out var s) && s.holder == team) return true;
+        return false;
     }
 
     /// <summary>Can this team order this item, franchise-wise?</summary>
