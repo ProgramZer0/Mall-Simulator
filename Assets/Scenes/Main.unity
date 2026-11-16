@@ -23263,7 +23263,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   items:
   - id: 1
-    displayName: Cheap Shirt
+    displayName: Cheap Shirt Hanging
     handVisualPrefab: {fileID: 4223701351420822915, guid: 627734816979ea14a96110368e5f44e5, type: 3}
     worldNetworkPrefab: {fileID: 5968710797386623309, guid: b063450db796f2d4a8a5e20e1751dd09, type: 3}
     showInShop: 0
@@ -23286,9 +23286,155 @@ MonoBehaviour:
     shipmentPrefab: {fileID: -7919701627516103740, guid: 5acf0c0ccc2cf914d946f7057abe3884, type: 3}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  - id: 2
+    displayName: Cheap Shirt Folded
+    handVisualPrefab: {fileID: 4223701351420822915, guid: 627734816979ea14a96110368e5f44e5, type: 3}
+    worldNetworkPrefab: {fileID: 5483348910539199125, guid: a3548a721c1332d4bbc2f70cd7d248c9, type: 3}
+    showInShop: 0
+    icon: {fileID: 0}
+    categories:
+    - T-Shirt
+    - Clothing
+    - Shirts
+    - Cheap
+    category: 
+    price: 0
+    sizes: 0
+    sizePriceStep: 0
+    minLevel: 0
+    inSpecialMarket: 0
+    specialMarketWeight: 0
+    rarity: 0
+    marketPrice: 5
+    deliverySeconds: 30
+    shipmentPrefab: {fileID: -7919701627516103740, guid: 5acf0c0ccc2cf914d946f7057abe3884, type: 3}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
+  - id: 3
+    displayName: Box of Cheap Shirts
+    handVisualPrefab: {fileID: 4223701351420822915, guid: 627734816979ea14a96110368e5f44e5, type: 3}
+    worldNetworkPrefab: {fileID: 8513666520626042969, guid: 8c94803d355b23442b3fb84b75825070, type: 3}
+    showInShop: 1
+    icon: {fileID: 0}
+    categories:
+    - T-Shirt
+    - Clothing
+    - Shirts
+    - Cheap
+    - Boxed
+    category: 
+    price: 80
+    sizes: 0
+    sizePriceStep: 0
+    minLevel: 0
+    inSpecialMarket: 0
+    specialMarketWeight: 0
+    rarity: 0
+    marketPrice: 100
+    deliverySeconds: 30
+    shipmentPrefab: {fileID: -7919701627516103740, guid: 5acf0c0ccc2cf914d946f7057abe3884, type: 3}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
+  - id: 4
+    displayName: Box of test Shirts
+    handVisualPrefab: {fileID: 4223701351420822915, guid: 627734816979ea14a96110368e5f44e5, type: 3}
+    worldNetworkPrefab: {fileID: 8513666520626042969, guid: 627734816979ea14a96110368e5f44e5, type: 3}
+    showInShop: 1
+    icon: {fileID: 0}
+    categories:
+    - T-Shirt
+    - Clothing
+    - Shirts
+    - Cheap
+    - test
+    category: 
+    price: 160
+    sizes: 0
+    sizePriceStep: 0
+    minLevel: 0
+    inSpecialMarket: 0
+    specialMarketWeight: 0
+    rarity: 0
+    marketPrice: 200
+    deliverySeconds: 60
+    shipmentPrefab: {fileID: -7919701627516103740, guid: 5acf0c0ccc2cf914d946f7057abe3884, type: 3}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
+  - id: 5
+    displayName: test Shirt Hanging
+    handVisualPrefab: {fileID: 4223701351420822915, guid: 627734816979ea14a96110368e5f44e5, type: 3}
+    worldNetworkPrefab: {fileID: 5976144729851372552, guid: d74abc845def03c4a8b478d79273ef19, type: 3}
+    showInShop: 0
+    icon: {fileID: 0}
+    categories:
+    - T-Shirt
+    - Clothing
+    - Shirts
+    - test
+    category: 
+    price: 0
+    sizes: 0
+    sizePriceStep: 0
+    minLevel: 0
+    inSpecialMarket: 0
+    specialMarketWeight: 0
+    rarity: 0
+    marketPrice: 10
+    deliverySeconds: 60
+    shipmentPrefab: {fileID: -7919701627516103740, guid: 5acf0c0ccc2cf914d946f7057abe3884, type: 3}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
+  - id: 6
+    displayName: test Shirt Folded
+    handVisualPrefab: {fileID: 4223701351420822915, guid: 627734816979ea14a96110368e5f44e5, type: 3}
+    worldNetworkPrefab: {fileID: 5976144729851372552, guid: d74abc845def03c4a8b478d79273ef19, type: 3}
+    showInShop: 0
+    icon: {fileID: 0}
+    categories:
+    - T-Shirt
+    - Clothing
+    - Shirts
+    - test
+    category: 
+    price: 0
+    sizes: 0
+    sizePriceStep: 0
+    minLevel: 0
+    inSpecialMarket: 0
+    specialMarketWeight: 0
+    rarity: 0
+    marketPrice: 10
+    deliverySeconds: 60
+    shipmentPrefab: {fileID: -7919701627516103740, guid: 5acf0c0ccc2cf914d946f7057abe3884, type: 3}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
+  - id: 7
+    displayName: Box of Cheap Shoes
+    handVisualPrefab: {fileID: 4223701351420822915, guid: 627734816979ea14a96110368e5f44e5, type: 3}
+    worldNetworkPrefab: {fileID: 8513666520626042969, guid: 47890ab733aebdb49aaffc9f69f96879, type: 3}
+    showInShop: 1
+    icon: {fileID: 0}
+    categories:
+    - T-Shirt
+    - Clothing
+    - Shirts
+    - test
+    category: 
+    price: 0
+    sizes: 0
+    sizePriceStep: 0
+    minLevel: 0
+    inSpecialMarket: 0
+    specialMarketWeight: 0
+    rarity: 0
+    marketPrice: 10
+    deliverySeconds: 60
+    shipmentPrefab: {fileID: -7919701627516103740, guid: 5acf0c0ccc2cf914d946f7057abe3884, type: 3}
+    pickupClip: {fileID: 0}
+    placeClip: {fileID: 0}
   defaultPickupClip: {fileID: 8300000, guid: b0b6305f02b720e4490beeeb41c410d6, type: 3}
   defaultPlaceClip: {fileID: 8300000, guid: 382cd51e5d8f86d42b7132faadb6ac88, type: 3}
-  defaultShipmentPrefab: {fileID: 5976144729851372552, guid: 771bc865ce9ffeb42930bb74e38e4209, type: 3}
+  defaultShipmentPrefab: {fileID: -7919701627516103740, guid: ba8daff54a7182c4d88b96467f2c1365, type: 3}
   debugItemLogs: 1
 --- !u!4 &1459986144
 Transform:
