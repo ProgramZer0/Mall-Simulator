@@ -113,12 +113,12 @@ public class LicenseManager : NetworkBehaviour
 
     /// <summary>
     /// The first license this item needs that the team doesn't hold (null: it can be ordered). Each license
-    /// unlocks its own categories, so an item in several licensed categories needs a license for each. A
-    /// franchise the team holds that covers the item unlocks it without licenses.
+    /// unlocks its own categories, so an item in several licensed categories needs a license for each
+    /// (franchise items too).
     /// </summary>
     public LicenseDef MissingFor(ulong team, ItemDef item)
     {
-        if (item == null || FranchiseManager.HoldsFranchiseFor(team, item)) return null;
+        if (item == null) return null;
         foreach (var l in licenses)
             if (l != null && l.Covers(item) && !Holds(team, l.id)) return l;
         return null;
