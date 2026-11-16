@@ -3068,6 +3068,7 @@ GameObject:
   - component: {fileID: 5011704152364166386}
   - component: {fileID: 5372559337576544571}
   - component: {fileID: 1073630106368184950}
+  - component: {fileID: 832469278629718842}
   m_Layer: 3
   m_Name: screen total
   m_TagString: Untagged
@@ -3238,6 +3239,18 @@ MonoBehaviour:
   m_hasFontAssetChanged: 0
   m_renderer: {fileID: 5372559337576544571}
   m_maskType: 0
+--- !u!114 &832469278629718842
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4787948040085538866}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cfde053d8dd04bbd874f1ba797c4e9e4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LookThrough
 --- !u!1 &4797068458108657445
 GameObject:
   m_ObjectHideFlags: 0
@@ -3951,6 +3964,7 @@ MonoBehaviour:
   shelfPrefabs: []
   hangPrefabs: []
   randomVariants: 0
+  shelfPose: 0
   unitsPerCrate: 1
   physicsMode: 1
   stillSeconds: 1
