@@ -410,6 +410,11 @@ public class ItemPickupNet : NetworkBehaviour
 
     public override void OnNetworkDespawn()
     {
+        // Placed in the scene and despawned (taken away in store edit mode) while the game goes on: hide it on
+        // every machine, not just the host (Netcode leaves it standing there, unspawned, on clients).
+        var nm = NetworkManager;
+        if (NetworkObject.IsSceneObject == true && nm != null && nm.IsListening && !nm.ShutdownInProgress)
+            gameObject.SetActive(false);
         SetFalling(false);
         units.OnValueChanged -= OnUnitsChanged;
         All.Remove(this);
