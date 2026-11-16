@@ -137,6 +137,9 @@ public partial class CustomerManager : NetworkBehaviour
     [Tooltip("Customer models (no NetworkObject; colliders are removed). Feet at the pivot, facing +Z. An " +
              "Animator float \"Speed\" gets their walking speed. Empty = plain capsules.")]
     [SerializeField] private List<GameObject> looks = new();
+    [Tooltip("How big children are drawn, compared with adults (their look is scaled).")]
+    [Range(0.3f, 1f)] [SerializeField] private float childScale = 0.65f;
+    private const byte ChildLook = 0x80; // the look byte's top bit: a child (sent with it, so every machine knows)
     [Tooltip("A shopping bag a customer carries after buying in a store (one more per store, up to Max Bags). " +
              "Placed at a child of the look called \"BagAnchor\" if it has one (its pivot is where the hand holds it), " +
              "otherwise at their side. No colliders needed (they're removed).")]
@@ -353,8 +356,13 @@ public partial class CustomerManager : NetworkBehaviour
 
         // Groups (see CustomerGroups.cs)
         public Group group;
+        public Customer follow;        // who they walk with (null: they choose where to go)
+        public bool child;             // a child: always with a parent, never shops themselves
         public int handed;             // things in their basket that others in the group handed them to pay for
         public StorePlot waitFor;      // the store they're waiting outside of
+        public bool meeting;           // a family that split: waiting at the meeting spot
+        public StorePlot partyStore;   // (leading a party) the store they're in, and how it's going for them
+        public float partyMood;
 
         // Checkout
         public CheckoutCounter counter;
@@ -709,7 +717,7 @@ public partial class CustomerManager : NetworkBehaviour
 
     // A new customer near a point (null and why if not). Visit: a store they head straight for and go into.
     private Customer Spawn(Vector3 near, out string why, StorePlot visit = null,
-                           CustomerPersonality personality = null, bool pickGoal = true)
+                           CustomerPersonality personality = null, bool pickGoal = true, bool child = false)
     {
         why = null;
         var settings = StoreAppealSettings.Instance;
@@ -746,6 +754,14 @@ public partial class CustomerManager : NetworkBehaviour
             lane = Random.Range(Mathf.Lerp(-laneSpread, 0f, keepRight), laneSpread),
         };
         c.thief = Random.value < personality.shopliftChance * eventShoplifting;
+        if (child)
+        {
+            c.child = true;
+            c.look |= ChildLook; // drawn smaller everywhere
+            c.thief = false;
+            c.budgetCents = 0; // their parent buys for them
+            c.wants = 0;
+        }
         customers.Add(c);
         byId[c.id] = c;
         MakeView(c.id, c.look, c.pos, c.yaw);
@@ -769,6 +785,13 @@ public partial class CustomerManager : NetworkBehaviour
         {
             if (c.group.Leader == c && c.mode == Mode.Exiting) GroupLeftMall(c);
             else DropFromGroup(c);
+        }
+        // Children with them go too (one left far behind stays, for now on their own).
+        foreach (var kid in customers.ToArray())
+        {
+            if (kid.follow != c) continue;
+            kid.follow = null;
+            if (kid.child && FlatDistance(kid.pos, c.pos) < 6f) Despawn(kid);
         }
         if (c.stolen.Count > 0) GotAway(c);
         AbandonStore(c);
@@ -1175,6 +1198,7 @@ public partial class CustomerManager : NetworkBehaviour
     private void PickGoal(Customer c)
     {
         if (FollowInstead(c)) return; // in a group: the leader chooses
+        if (FamilyPlans(c)) return;   // a family splitting up, or meeting again
         bool done = Time.time >= c.leaveAt || c.storesVisited >= maxStoresPerVisit || BudgetLeft(c) <= 0;
         if (!done && MallManager.Instance != null)
         {
@@ -1435,7 +1459,8 @@ public partial class CustomerManager : NetworkBehaviour
             float w = plot.Appeal.WorthTo(c.personality, s) * tolerance;
             if (c.thief) w *= 1f + s.priceCents / 10000f; // and likes it pricey
             if (s.itemId == c.bargainItem && c.bargainItem != 0) w *= 5f; // what they came over for
-            if (c.group != null) w *= GroupItemBoost(c, s.itemId); // group tastes, "I'll get one too"
+            if (c.group != null) // the children's wishes, group tastes, "I'll get one too"
+                w = Mathf.Max(w, KidsWorth(c, plot, s, tolerance)) * GroupItemBoost(c, s.itemId);
             if (w <= 0.01f) continue;
             scratchPicks.Add((s, w));
         }
@@ -1579,7 +1604,7 @@ public partial class CustomerManager : NetworkBehaviour
 
         float tolerance = 1f + ProgressionManager.StoreStat(plot, PerkStat.PriceTolerance);
         float worth = plot.Appeal.WorthTo(c.personality, s) * tolerance;
-        if (c.group != null) worth *= GroupItemBoost(c, s.itemId) * GroupEagerness(c);
+        if (c.group != null) worth = Mathf.Max(worth, KidsWorth(c, plot, s, tolerance)) * GroupItemBoost(c, s.itemId) * GroupEagerness(c);
         if (!c.thief && Random.value >= Mathf.Clamp01(worth * buyEagerness))
         {
             Log(c, $"looked at {CheckoutCounter.NameOf(s.itemId)} for {CheckoutCounter.FormatAmount(s.priceCents)}, didn't take it");
@@ -2288,10 +2313,12 @@ public partial class CustomerManager : NetworkBehaviour
     private void MakeView(ushort id, byte look, Vector3 pos, float yaw)
     {
         if (views.TryGetValue(id, out var old) && old != null) { old.SetTarget(pos, yaw, snap: true); return; }
-        var prefab = look < looks.Count ? looks[look] : null;
+        bool child = (look & ChildLook) != 0;
+        int index = look & ~ChildLook;
+        var prefab = index < looks.Count ? looks[index] : null;
         // At the scene root, not under one parent: Unity updates separate root hierarchies in parallel,
         // and moving hundreds of children of one parent is slower.
-        views[id] = CustomerView.Create(id, prefab, pos, yaw, null);
+        views[id] = CustomerView.Create(id, prefab, pos, yaw, null, child ? childScale : 1f);
     }
 
     private void RemoveView(ushort id)

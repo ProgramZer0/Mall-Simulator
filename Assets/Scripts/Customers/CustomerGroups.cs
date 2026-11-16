@@ -3,8 +3,13 @@ using UnityEngine;
 using UnityEngine.AI;
 using Random = UnityEngine.Random;
 
-// Customer groups (couples, friends): walking together, choosing stores together, swaying each other.
-// See CustomerGroupDef.
+// Customer groups (couples, friends, families): walking together, choosing stores together, swaying each
+// other, and families splitting up and meeting again. See CustomerGroupDef.
+//
+// Everyone in a group follows someone (Customer.follow), up to a "party leader" who follows no one and
+// makes the choices. Usually that's the group's leader; a family that splits has two parties (each
+// parent with their children), which meet up again later. Children always follow a parent: they never
+// shop themselves, but they pull the family toward stores they like and ask for things.
 public partial class CustomerManager
 {
     private sealed class Group
@@ -13,11 +18,15 @@ public partial class CustomerManager
         public readonly List<Customer> members = new(); // [0] is the leader
         public Customer Leader => members.Count > 0 ? members[0] : null;
 
-        // In the store they're in now: how it's going for them (-1 hate it .. +1 love it), and what's been bought.
-        public StorePlot moodStore;
-        public float mood;
+        // What any of them have bought in the store they're in (for "I'll get one too").
         public readonly HashSet<int> boughtItems = new();
         public readonly HashSet<string> boughtCategories = new();
+
+        // A family that split up: when and where they meet again.
+        public bool split;
+        public int splits;
+        public float meetBy;
+        public Vector3 meetSpot;
     }
 
     private bool groupsLoaded;
@@ -61,129 +70,185 @@ public partial class CustomerManager
         return PickPersonality();
     }
 
+    // Children: any of the family's Child Personalities, evenly (their Spawn Weight is for single customers).
+    private static CustomerPersonality PickChildPersonality(CustomerGroupDef def)
+    {
+        if (def.childPersonalities == null) return null;
+        int n = 0;
+        foreach (var p in def.childPersonalities) if (p != null) n++;
+        if (n == 0) return null;
+        int pick = Random.Range(0, n);
+        foreach (var p in def.childPersonalities)
+            if (p != null && pick-- == 0) return p;
+        return null;
+    }
+
     // A whole group arrives together (the leader picks where to go; the rest follow). How many came.
     private int SpawnGroup(CustomerGroupDef def, Vector3 near)
     {
-        int size = Random.Range(def.size.x, def.size.y + 1);
         var g = new Group { def = def };
+        var adults = new List<Customer>();
+        int nAdults = def.kind == CustomerGroupDef.Kind.Family ? Random.Range(def.adults.x, def.adults.y + 1)
+                                                                 : Random.Range(def.size.x, def.size.y + 1);
+        int nKids = def.kind == CustomerGroupDef.Kind.Family ? Random.Range(def.children.x, def.children.y + 1) : 0;
         float slowest = float.MaxValue;
-        for (int i = 0; i < size; i++)
+        for (int i = 0; i < nAdults; i++)
         {
             var c = Spawn(near + Random.insideUnitSphere * 0.6f, out _, null, PickMemberPersonality(def), pickGoal: false);
             if (c == null) continue;
             c.group = g;
             g.members.Add(c);
+            adults.Add(c);
             slowest = Mathf.Min(slowest, c.speed);
         }
-        if (g.members.Count == 0) return 0;
+        if (adults.Count == 0) return 0;
+        for (int i = 0; i < nKids; i++)
+        {
+            var kp = PickChildPersonality(def);
+            if (kp == null) break;
+            var kid = Spawn(near + Random.insideUnitSphere * 0.6f, out _, null, kp, pickGoal: false, child: true);
+            if (kid == null) continue;
+            kid.group = g;
+            var parent = adults[Random.Range(0, adults.Count)];
+            kid.follow = parent;
+            parent.wants++; // they'll want something for the child too
+            g.members.Add(kid);
+            slowest = Mathf.Min(slowest, kid.speed);
+        }
         if (g.members.Count == 1) { g.members[0].group = null; PickGoal(g.members[0]); return 1; }
 
         // They walk at the slowest one's pace, and keep the same lane.
+        var leader = g.Leader;
         foreach (var m in g.members)
         {
             m.speed = slowest;
-            m.lane = g.Leader.lane;
-            m.leaveAt = g.Leader.leaveAt;
-            m.stayUntil = g.Leader.stayUntil;
+            m.lane = leader.lane;
+            m.leaveAt = leader.leaveAt;
+            m.stayUntil = leader.stayUntil;
+            if (m == leader) continue;
+            if (!m.child) m.follow = leader;
+            m.mode = Mode.Follow;
         }
-        for (int i = 1; i < g.members.Count; i++) g.members[i].mode = Mode.Follow;
-        Log(g.Leader, $"leads a group: {def.Name} of {g.members.Count}");
-        PickGoal(g.Leader);
+        Log(leader, $"leads a group: {def.Name} of {g.members.Count}" + (nKids > 0 ? $" ({g.members.Count - adults.Count} child(ren))" : ""));
+        PickGoal(leader);
         return g.members.Count;
     }
 
-    /* ========================= WALKING TOGETHER ========================= */
+    /* ========================= WHO FOLLOWS WHOM ========================= */
 
-    // Where a member walks: beside the leader, one each side, then a row behind.
-    private Vector3 GroupSlot(Customer c)
+    // The one making the choices for this customer's party (themselves if they follow no one).
+    private static Customer Root(Customer c)
     {
-        var g = c.group;
-        var leader = g.Leader;
-        int slot = g.members.IndexOf(c);
-        Vector3 fwd = Quaternion.Euler(0f, leader.yaw, 0f) * Vector3.forward;
-        Vector3 right = new(fwd.z, 0f, -fwd.x);
-        int row = (slot - 1) / 2;
-        float side = (slot % 2 == 1 ? 1f : -1f) * groupSpacing;
-        return leader.pos + right * side - fwd * (row * groupSpacing * 0.9f + (row > 0 ? 0.3f : 0f));
+        var r = c;
+        for (int i = 0; i < 8 && r.follow != null; i++) r = r.follow;
+        return r;
     }
 
-    // Walking with the leader (in the hallways). Goes in with them when they go into a store.
+    private static bool SameParty(Customer a, Customer b) => a.group != null && a.group == b.group && Root(a) == Root(b);
+
+    // Where a member walks: beside whoever they follow, one each side, then a row behind.
+    private Vector3 GroupSlot(Customer c)
+    {
+        var target = c.follow;
+        int slot = 1;
+        foreach (var m in c.group.members)
+        {
+            if (m == c) break;
+            if (m.follow == target) slot++;
+        }
+        Vector3 fwd = Quaternion.Euler(0f, target.yaw, 0f) * Vector3.forward;
+        Vector3 right = new(fwd.z, 0f, -fwd.x);
+        int row = (slot - 1) / 2;
+        float spacing = c.child ? groupSpacing * 0.75f : groupSpacing; // a child holds close
+        float side = (slot % 2 == 1 ? 1f : -1f) * spacing;
+        return target.pos + right * side - fwd * (row * spacing * 0.9f + (row > 0 ? 0.3f : 0f));
+    }
+
+    // Walking with whoever they follow. Adults go into a store with them; children stay at their side,
+    // in stores too.
     private void ThinkFollow(Customer c)
     {
         var g = c.group;
-        var leader = g?.Leader;
-        if (leader == null || leader == c) { DropFromGroup(c); PickGoal(c); return; }
-
-        // The leader went into a store: in they go too.
-        if (leader.store != null && leader.mode != Mode.Leaving && leader.mode != Mode.Wait && leader.store.IsOpen)
+        var target = c.follow;
+        if (target == null || target == c || !byId.ContainsKey(target.id))
         {
-            Enter(c, leader.store, leader.entrance);
+            target = g != null && g.Leader != c ? g.Leader : null;
+            if (target == null) { c.follow = null; DropFromGroup(c); PickGoal(c); return; }
+            c.follow = target;
+        }
+
+        // Whoever they're with went into a store: in they go too (to shop for themselves).
+        if (!c.child && target.store != null && target.mode != Mode.Leaving && target.mode != Mode.Wait &&
+            target.store.IsOpen)
+        {
+            Enter(c, target.store, target.entrance);
             return;
         }
 
         Vector3 spot = GroupSlot(c);
         if (NavMesh.SamplePosition(spot, out var hit, 1f, CustomerNavMesh.PreferMask)) spot = hit.position;
-        if (leader.arrived && FlatDistance(c.pos, spot) < 0.5f)
+        if (target.arrived && FlatDistance(c.pos, spot) < 0.5f)
         {
-            c.yaw = leader.yaw;
-            c.dirty = true;
+            if (c.child && target.mode == Mode.Looking) Face(c, target.targetPoint); // looking at it too
+            else { c.yaw = target.yaw; c.dirty = true; }
             return;
         }
         if (c.arrived || FlatDistance(c.destination, spot) > 0.8f)
-            if (!PathTo(c, spot)) PathTo(c, leader.pos);
+            if (!PathTo(c, spot)) PathTo(c, target.pos);
     }
 
     // A follower who's fallen behind walks a little faster to catch up.
     private float GroupSpeed(Customer c)
     {
-        if (c.group == null || c.mode != Mode.Follow) return c.speed;
-        var leader = c.group.Leader;
-        return leader != null && FlatDistance(c.pos, leader.pos) > 2.5f ? c.speed * 1.35f : c.speed;
+        if (c.follow == null || c.mode != Mode.Follow) return c.speed;
+        return FlatDistance(c.pos, c.follow.pos) > 2.5f ? c.speed * 1.35f : c.speed;
     }
 
     private static bool SameGroup(Customer a, Customer b) => a.group != null && a.group == b.group;
 
     /* ========================= CHOOSING STORES TOGETHER ========================= */
 
-    // How a store looks to them: to a group, everyone's view averaged (so one keen member can pull them in).
+    // How a store looks to them: to a party, everyone's view averaged (children count Child Pull times,
+    // so kids drag their parents into toy stores).
     private StoreAppeal.Result AppealTo(Customer c, StorePlot plot)
     {
         if (c.group == null || c.group.members.Count <= 1) return plot.Appeal.For(c.personality);
+        var root = Root(c);
         var sum = new StoreAppeal.Result();
-        int n = 0;
+        float n = 0f;
         foreach (var m in c.group.members)
         {
-            if (m.personality == null) continue;
+            if (m.personality == null || Root(m) != root) continue;
+            float w = m.child ? c.group.def.childPull : 1f;
             var r = plot.Appeal.For(m.personality);
-            sum.enterChance += r.enterChance;
-            sum.outsideDraw += r.outsideDraw;
-            sum.insideDraw += r.insideDraw;
-            sum.interest += r.interest;
-            n++;
+            sum.enterChance += r.enterChance * w;
+            sum.outsideDraw += r.outsideDraw * w;
+            sum.insideDraw += r.insideDraw * w;
+            sum.interest += r.interest * w;
+            n += w;
         }
-        if (n == 0) return sum;
-        sum.enterChance /= n;
-        sum.outsideDraw /= n;
-        sum.insideDraw /= n;
-        sum.interest /= n;
+        if (n <= 0f) return plot.Appeal.For(c.personality);
+        sum.enterChance = Mathf.Clamp01(sum.enterChance / n);
+        sum.outsideDraw = Mathf.Clamp01(sum.outsideDraw / n);
+        sum.insideDraw = Mathf.Clamp01(sum.insideDraw / n);
+        sum.interest = Mathf.Clamp01(sum.interest / n);
         return sum;
     }
 
-    // Money left between them (a group isn't done while any of them still has some).
+    // Money left in their party (they aren't done while any of them still has some).
     private static int BudgetLeft(Customer c)
     {
         if (c.group == null) return c.budgetCents;
+        var root = Root(c);
         int sum = 0;
-        foreach (var m in c.group.members) sum += Mathf.Max(0, m.budgetCents);
+        foreach (var m in c.group.members) if (Root(m) == root) sum += Mathf.Max(0, m.budgetCents);
         return sum;
     }
 
-    // A follower doesn't choose where to go: they go with the leader.
+    // A follower doesn't choose where to go: they go with whoever they follow.
     private bool FollowInstead(Customer c)
     {
-        var g = c.group;
-        if (g == null || g.Leader == c) return false;
-        if (g.Leader == null) { DropFromGroup(c); return false; }
+        if (c.group == null || c.follow == null) return false;
         c.mode = Mode.Follow;
         c.goalStore = null;
         c.arrived = true;
@@ -191,23 +256,26 @@ public partial class CustomerManager
         return true;
     }
 
-    // The leader goes into a store: everyone with them comes in too, and the group's mood starts fresh.
-    private void GroupEntered(Customer leader, StorePlot plot)
+    // Someone goes into a store: the adults with them come in too, and their party's mood starts fresh.
+    private void GroupEntered(Customer c, StorePlot plot)
     {
-        var g = leader.group;
-        if (g == null || g.Leader != leader) return;
-        g.moodStore = plot;
-        g.mood = 0f;
-        g.boughtItems.Clear();
-        g.boughtCategories.Clear();
-        foreach (var m in g.members)
-            if (m != leader && (m.mode == Mode.Follow || m.mode == Mode.Wait))
-                Enter(m, plot, leader.entrance);
+        var g = c.group;
+        if (g == null) return;
+        if (c.follow == null)
+        {
+            c.partyStore = plot;
+            c.partyMood = 0f;
+            g.boughtItems.Clear();
+            g.boughtCategories.Clear();
+        }
+        foreach (var m in g.members.ToArray())
+            if (m != c && m.follow == c && !m.child && (m.mode == Mode.Follow || m.mode == Mode.Wait))
+                Enter(m, plot, c.entrance);
     }
 
     /* ========================= SWAYING EACH OTHER ========================= */
 
-    // What each reaction does to the group's mood in the store they're in.
+    // What each reaction does to the party's mood in the store they're in.
     private static float MoodOf(Reaction r) => r switch
     {
         Reaction.Bought => 0.2f,
@@ -224,25 +292,31 @@ public partial class CustomerManager
 
     private void GroupReact(Customer c, Reaction r)
     {
-        var g = c.group;
-        if (g == null || c.store == null || c.store != g.moodStore) return;
-        g.mood = Mathf.Clamp(g.mood + MoodOf(r), -1f, 1f);
+        var root = Root(c);
+        if (c.store == null || c.store != root.partyStore) return;
+        root.partyMood = Mathf.Clamp(root.partyMood + MoodOf(r), -1f, 1f);
     }
 
-    // How much longer (or shorter) the group's mood makes them browse: 1 = as usual.
+    private float PartyMood(Customer c, out CustomerGroupDef def)
+    {
+        def = c.group?.def;
+        if (def == null) return 0f;
+        var root = Root(c);
+        return c.store != null && c.store == root.partyStore ? root.partyMood : 0f;
+    }
+
+    // How much longer (or shorter) the party's mood makes them browse: 1 = as usual.
     private float GroupLooks(Customer c)
     {
-        var g = c.group;
-        if (g == null || c.store != g.moodStore) return 1f;
-        return Mathf.Clamp(1f + g.mood * g.def.sway * 2f, 0.3f, 2.5f);
+        float mood = PartyMood(c, out var def);
+        return def == null ? 1f : Mathf.Clamp(1f + mood * def.sway * 2f, 0.3f, 2.5f);
     }
 
-    // How much keener the group's mood makes them to buy: 1 = as usual.
+    // How much keener the party's mood makes them to buy: 1 = as usual.
     private float GroupEagerness(Customer c)
     {
-        var g = c.group;
-        if (g == null || c.store != g.moodStore) return 1f;
-        return Mathf.Clamp(1f + g.mood * g.def.sway, 0.5f, 1.6f);
+        float mood = PartyMood(c, out var def);
+        return def == null ? 1f : Mathf.Clamp(1f + mood * def.sway, 0.5f, 1.6f);
     }
 
     // Group tastes and "I'll get one too" for something for sale (1 = no change).
@@ -258,6 +332,18 @@ public partial class CustomerManager
         return boost;
     }
 
+    // What it's worth to the children with them ("can I have one?"): their parent buys it for them.
+    private float KidsWorth(Customer c, StorePlot plot, StoreListing.Source s, float tolerance)
+    {
+        var g = c.group;
+        if (g == null || c.child) return 0f;
+        float best = 0f;
+        foreach (var m in g.members)
+            if (m.child && m.follow == c && m.personality != null)
+                best = Mathf.Max(best, plot.Appeal.WorthTo(m.personality, s) * tolerance * g.def.childPull);
+        return best;
+    }
+
     private void GroupBought(Customer c, int itemId)
     {
         var g = c.group;
@@ -268,105 +354,204 @@ public partial class CustomerManager
 
     /* ========================= PAYING AND LEAVING TOGETHER ========================= */
 
-    // A couple pays as one: done shopping, a member hands their things to the leader (if the leader's still
-    // shopping in the same store) and waits by the door. True if they did.
+    // Paying as one: done shopping, a member hands their things to whoever leads their party (if they're
+    // still shopping in the same store) and waits by the door. True if they did.
     private bool HandToPayer(Customer c)
     {
         var g = c.group;
-        var leader = g?.Leader;
-        if (g == null || !g.def.payTogether || leader == null || leader == c || c.thief || leader.thief ||
-            c.basket.Count == 0 || leader.store != c.store) return false;
-        if (leader.mode != Mode.Browsing && leader.mode != Mode.ToShelf && leader.mode != Mode.Looking &&
-            leader.mode != Mode.Entering) return false;
+        if (g == null || !g.def.payTogether || c.thief || c.basket.Count == 0) return false;
+        var payer = Root(c);
+        if (payer == c || payer.thief || payer.store != c.store) return false;
+        if (payer.mode != Mode.Browsing && payer.mode != Mode.ToShelf && payer.mode != Mode.Looking &&
+            payer.mode != Mode.Entering) return false;
         int n = c.basket.Count;
-        leader.basket.AddRange(c.basket);
-        leader.handed += n;
+        payer.basket.AddRange(c.basket);
+        payer.handed += n;
         c.basket.Clear();
-        Log(c, $"handed {n} thing(s) to #{leader.id} to pay for");
+        Log(c, $"handed {n} thing(s) to #{payer.id} to pay for");
         LeaveStore(c, c.satisfaction);
         return true;
     }
 
-    // Out of a store: if any of the group are still in there, wait by the door for them (a while);
+    // Out of a store: if any of their party are still in there, wait by the door for them (a while);
     // otherwise everyone waiting moves on together. True if handled (group member).
     private bool GroupFinishedStore(Customer c, StorePlot plot)
     {
         var g = c.group;
         if (g == null) return false;
+        var root = Root(c);
         c.mode = Mode.Wait;
         c.waitFor = plot;
+        c.meeting = false;
         c.until = Time.time + groupWaitSeconds;
-        if (StillInside(g, plot))
+        if (StillInside(root, plot))
         {
             Log(c, $"waiting outside '{plot.DisplayName}' for the others");
-            Vector3 spot = Near(c.entrance.outside, 1.2f, plot);
-            if (!PathTo(c, spot)) c.arrived = true;
+            if (!PathTo(c, Near(c.entrance.outside, 1.2f, plot))) c.arrived = true;
             return true;
         }
-        MoveOn(g);
+        MoveOn(root);
         return true;
     }
 
-    private static bool StillInside(Group g, StorePlot plot)
+    private static bool StillInside(Customer root, StorePlot plot)
     {
-        foreach (var m in g.members) if (m.store == plot) return true;
+        var g = root.group;
+        if (g == null) return false;
+        foreach (var m in g.members) if (m.store == plot && Root(m) == root) return true;
         return false;
     }
 
-    // Waiting by a store's door: everyone's out (or they've waited long enough), so off they go.
+    // Waiting outside a store (everyone's out, or they've waited long enough: off they go), or at the
+    // family's meeting spot.
     private void ThinkWait(Customer c)
     {
         var g = c.group;
-        if (g == null) { c.store = null; PickGoal(c); return; }
-        if (c.waitFor != null && StillInside(g, c.waitFor) && Time.time < c.until)
+        if (g == null) { c.store = null; c.meeting = false; PickGoal(c); return; }
+        if (c.meeting) { ThinkMeeting(c); return; }
+        var root = Root(c);
+        if (c.waitFor != null && StillInside(root, c.waitFor) && Time.time < c.until)
         {
-            if (c.arrived && c.entrance.outside != Vector3.zero) Face(c, c.entrance.inside);
+            if (c.arrived) Face(c, c.entrance.inside);
             return;
         }
-        MoveOn(g);
+        MoveOn(root);
     }
 
-    // Everyone waiting sets off: the leader picks where next, the rest follow.
-    private void MoveOn(Group g)
+    // Everyone in the party who was waiting sets off: the one leading picks where next, the rest follow.
+    private void MoveOn(Customer root)
     {
-        var leader = g.Leader;
-        if (leader == null) return;
+        var g = root.group;
+        if (g == null) return;
         foreach (var m in g.members)
         {
-            if (m == leader || m.mode != Mode.Wait) continue;
+            if (m == root || m.mode != Mode.Wait || m.meeting || Root(m) != root) continue;
             m.mode = Mode.Follow;
             m.waitFor = null;
             m.arrived = true;
             m.nextThink = Time.time;
         }
-        if (leader.mode == Mode.Wait)
+        if (root.mode == Mode.Wait && !root.meeting)
         {
-            leader.waitFor = null;
-            PickGoal(leader);
+            root.waitFor = null;
+            PickGoal(root);
         }
     }
 
-    // Leaving the group (gone, or running off with stolen things). A new leader takes over if the
-    // leader goes; someone left on their own carries on as a single customer.
+    /* ========================= FAMILIES SPLITTING UP ========================= */
+
+    // Before a party leader picks somewhere new: a family may split up here (the other parent takes their
+    // children elsewhere), and a family that's split heads back to the meeting spot when it's time.
+    // True if that's what they're doing now.
+    private bool FamilyPlans(Customer c)
+    {
+        var g = c.group;
+        if (g == null || g.def.kind != CustomerGroupDef.Kind.Family || c.follow != null) return false;
+        bool done = Time.time >= c.leaveAt || c.storesVisited >= maxStoresPerVisit || BudgetLeft(c) <= 0;
+
+        if (g.split)
+        {
+            if (!done && Time.time < g.meetBy) return false;
+            GoMeet(c);
+            return true;
+        }
+
+        // Split up? The leader decides, with another adult to go off with the children who follow them.
+        if (done || c != g.Leader || g.splits >= 2 || Random.value >= g.def.splitChance) return false;
+        Customer other = null;
+        foreach (var m in g.members)
+            if (m != c && !m.child && m.follow == c && m.mode == Mode.Follow) { other = m; break; }
+        if (other == null) return false;
+        g.split = true;
+        g.splits++;
+        g.meetBy = Time.time + Random.Range(g.def.meetAfterSeconds.x, g.def.meetAfterSeconds.y);
+        g.meetSpot = Near(c.pos, 2f, null); // "meet back here"
+        other.follow = null;
+        other.partyStore = null;
+        Log(c, $"family splits up: #{other.id} goes off on their own, meeting back here in {g.meetBy - Time.time:0} s");
+        other.mode = Mode.Wander;
+        PickGoal(other); // the other party chooses its own way
+        return false;
+    }
+
+    private void GoMeet(Customer c)
+    {
+        var g = c.group;
+        c.mode = Mode.Wait;
+        c.meeting = true;
+        c.waitFor = null;
+        c.goalStore = null;
+        c.until = Time.time + groupWaitSeconds;
+        if (!PathTo(c, Near(g.meetSpot, 1.5f, null))) c.arrived = true;
+        Log(c, "heading back to meet the rest of the family");
+    }
+
+    // At the meeting spot: once every party is there (or they've waited long enough), the family is one
+    // party again, with the leader choosing.
+    private void ThinkMeeting(Customer c)
+    {
+        var g = c.group;
+        bool allHere = true;
+        foreach (var m in g.members)
+            if (m.follow == null && (!m.meeting || !m.arrived)) { allHere = false; break; }
+        if (!allHere && Time.time < c.until) return;
+
+        var leader = g.Leader;
+        foreach (var m in g.members)
+        {
+            if (m == leader || m.follow != null) continue;
+            m.follow = leader; // back together (anyone still in a store catches up when they're done)
+            m.meeting = false;
+            if (m.mode == Mode.Wait) { m.mode = Mode.Follow; m.arrived = true; m.nextThink = Time.time; }
+        }
+        g.split = false;
+        Log(leader, allHere ? "family's back together" : "family's back together (stopped waiting)");
+        leader.meeting = false;
+        if (leader.mode == Mode.Wait) PickGoal(leader);
+    }
+
+    /* ========================= LEAVING THE GROUP ========================= */
+
+    // Leaving the group (gone, or running off with stolen things). Whoever followed them follows whoever
+    // they followed (or the leader); a new leader takes over if the leader goes; someone left on their
+    // own carries on as a single customer.
     private void DropFromGroup(Customer c)
     {
         var g = c.group;
         c.group = null;
+        var was = c.follow;
+        c.follow = null;
         if (g == null) return;
         bool wasLeader = g.Leader == c;
         g.members.Remove(c);
-        if (g.members.Count == 1)
+        var nextLeader = g.Leader;
+        foreach (var m in g.members)
+            if (m.follow == c) m.follow = was != null && was != c ? was : (m != nextLeader ? nextLeader : null);
+
+        int adults = 0;
+        foreach (var m in g.members) if (!m.child) adults++;
+        if (adults == 0 || g.members.Count == 1)
         {
-            var last = g.members[0];
-            last.group = null;
+            // Nobody left to be with: each carries on alone.
+            foreach (var m in g.members.ToArray())
+            {
+                m.group = null;
+                m.follow = null;
+                if (m.mode == Mode.Follow || m.mode == Mode.Wait) { m.store = null; m.meeting = false; PickGoal(m); }
+            }
             g.members.Clear();
-            if (last.mode == Mode.Follow || last.mode == Mode.Wait) { last.store = null; PickGoal(last); }
             return;
         }
-        if (wasLeader && g.members.Count > 0)
+        if (wasLeader && nextLeader != null)
         {
-            var next = g.members[0];
-            if (next.mode == Mode.Follow) { next.store = null; PickGoal(next); }
+            if (nextLeader.child)
+            {
+                // A child can't lead: the first adult does.
+                foreach (var m in g.members) if (!m.child) { g.members.Remove(m); g.members.Insert(0, m); break; }
+                nextLeader = g.Leader;
+            }
+            nextLeader.follow = null;
+            if (nextLeader.mode == Mode.Follow) { nextLeader.store = null; PickGoal(nextLeader); }
         }
     }
 
@@ -379,9 +564,12 @@ public partial class CustomerManager
         {
             if (m == leader) continue;
             m.group = null;
-            if (m.mode == Mode.Follow && FlatDistance(m.pos, leader.pos) < 5f) { Despawn(m); continue; }
+            if (m.child) continue; // with their parent: they go when their parent does (see Despawn)
+            bool withThem = m.mode == Mode.Follow && FlatDistance(m.pos, leader.pos) < 5f;
+            if (withThem) { m.follow = null; Despawn(m); continue; }
+            m.follow = null;
             m.leaveAt = 0f; // done: the exit next time they choose
-            if (m.mode == Mode.Follow || m.mode == Mode.Wait) { m.store = null; PickGoal(m); }
+            if (m.mode == Mode.Follow || m.mode == Mode.Wait) { m.store = null; m.meeting = false; PickGoal(m); }
         }
         g.members.Clear();
         leader.group = null;

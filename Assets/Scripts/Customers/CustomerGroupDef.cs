@@ -13,20 +13,38 @@ using UnityEngine;
 [CreateAssetMenu(menuName = "Mall Sim/Customer Group", fileName = "New Customer Group")]
 public class CustomerGroupDef : ScriptableObject
 {
-    public enum Kind { Couple, Friends }
+    public enum Kind { Couple, Friends, Family }
 
     [Header("About")]
     public string displayName = "Group";
-    [Tooltip("Couple: always together, and one of them pays for both. Friends: together, each pays for their own.")]
+    [Tooltip("Couple: always together, one pays for both. Friends: together, each pays for their own. " +
+             "Family: parents and children; may split up (each parent with some of the children) and meet again.")]
     public Kind kind = Kind.Couple;
     [Tooltip("How common this group is compared with the other groups (2 = twice as common as 1).")]
     [Min(0f)] public float spawnWeight = 1f;
 
     [Header("Who's in it")]
-    [Tooltip("How many people (random between, inclusive). A couple is 2.")]
+    [Tooltip("How many people (random between, inclusive). A couple is 2. Not used by families (see Family).")]
     public Vector2Int size = new(2, 2);
     [Tooltip("Who they can be (each member picked from these by Spawn Weight). Empty: anyone, as for single customers.")]
     public List<CustomerPersonality> personalities = new();
+
+    [Header("Family")]
+    [Tooltip("How many parents (random between, inclusive).")]
+    public Vector2Int adults = new(1, 2);
+    [Tooltip("How many children (random between, inclusive). Each walks with one of the parents, always.")]
+    public Vector2Int children = new(1, 2);
+    [Tooltip("Who the children can be (picked evenly). Give these personalities a Spawn Weight of 0 so they " +
+             "never come on their own. Their tastes pull the family into stores and make the parents buy for them.")]
+    public List<CustomerPersonality> childPersonalities = new();
+    [Tooltip("How much a child's tastes count compared with an adult's, choosing stores and things to buy " +
+             "(1.5: kids get their way a bit more).")]
+    [Min(0f)] public float childPull = 1.5f;
+    [Tooltip("Chance the family splits up each time they choose where to go next (needs 2 parents): one " +
+             "parent goes off with their children, and they meet back where they split.")]
+    [Range(0f, 1f)] public float splitChance = 0.4f;
+    [Tooltip("How long until they meet again (seconds, random between); sooner if a parent's done shopping.")]
+    public Vector2 meetAfterSeconds = new(60f, 150f);
 
     [Header("Shopping together")]
     [Tooltip("Pay as one: while they're in the same store, the others hand their things to the leader, who " +
@@ -58,5 +76,10 @@ public class CustomerGroupDef : ScriptableObject
     {
         size.x = Mathf.Max(2, size.x);
         size.y = Mathf.Max(size.x, size.y);
+        adults.x = Mathf.Max(1, adults.x);
+        adults.y = Mathf.Max(adults.x, adults.y);
+        children.x = Mathf.Max(0, children.x);
+        children.y = Mathf.Max(children.x, children.y);
+        meetAfterSeconds.y = Mathf.Max(meetAfterSeconds.x, meetAfterSeconds.y);
     }
 }

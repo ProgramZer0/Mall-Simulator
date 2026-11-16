@@ -19,17 +19,22 @@ public class CustomerView : MonoBehaviour
     private float shownSpeed;
     private float lift; // the plain capsule's pivot is its middle; a look prefab's is its feet
 
-    public static CustomerView Create(ushort id, GameObject look, Vector3 position, float yaw, Transform parent)
+    public static CustomerView Create(ushort id, GameObject look, Vector3 position, float yaw, Transform parent,
+                                      float scale = 1f)
     {
         GameObject go;
         float lift = 0f;
-        if (look != null) go = Instantiate(look, position, Quaternion.Euler(0f, yaw, 0f), parent);
+        if (look != null)
+        {
+            go = Instantiate(look, position, Quaternion.Euler(0f, yaw, 0f), parent);
+            if (!Mathf.Approximately(scale, 1f)) go.transform.localScale *= scale; // a child
+        }
         else
         {
-            lift = 0.9f;
+            lift = 0.9f * scale;
             go = GameObject.CreatePrimitive(PrimitiveType.Capsule);
             go.transform.SetParent(parent, false);
-            go.transform.localScale = new Vector3(0.6f, 0.9f, 0.6f);
+            go.transform.localScale = new Vector3(0.6f, 0.9f, 0.6f) * scale;
             go.transform.SetPositionAndRotation(position + Vector3.up * lift, Quaternion.Euler(0f, yaw, 0f));
             var r = go.GetComponent<Renderer>();
             if (r != null) r.material.color = Color.HSVToRGB((id * 0.137f) % 1f, 0.45f, 0.85f);
