@@ -126,7 +126,7 @@ public class MarketScreen : MonoBehaviour, IShopScreen
                 bool levelOk = ProgressionManager.CanOrder(LocalTeam, def);
                 bool can = levelOk && money >= d.price;
                 if (row.buyButton != null) row.buyButton.interactable = can;
-                if (row.buttonText != null) row.buttonText.text = !levelOk ? $"Level {def.minLevel}" : money < d.price ? "Not enough money" : "Buy";
+                if (row.buttonText != null) row.buttonText.text = !levelOk ? $"Level {ProgressionManager.LevelNeeded(def)}" : money < d.price ? "Not enough money" : "Buy";
             }
             cardParent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, UILayout.GridHeight(shown.Count, cols, cellSize, cellSpacing, padding));
         }
