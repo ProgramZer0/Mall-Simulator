@@ -392,12 +392,12 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         if (go != null) go.SetActive(true);
         if (icon != null && def.icon != null) icon.sprite = def.icon;
         if (nameText != null) nameText.text = def.displayName;
-        // Locked until the team's level reaches the item's Min Level.
+        // Locked until the team's level reaches the item's level (its Min Level, or its categories' unlock level).
         bool levelLocked = !ProgressionManager.CanOrder(LocalTeam, def);
         bool licenseLocked = !LicenseManager.CanOrder(LocalTeam, def, out var license);
         bool locked = levelLocked || licenseLocked;
         if (priceText != null)
-            priceText.text = levelLocked ? $"Level {def.minLevel}"
+            priceText.text = levelLocked ? $"Level {ProgressionManager.LevelNeeded(def)}"
                 : licenseLocked ? $"Needs {license.displayName}"
                 : $"${MarketModifiers.OrderCost(def) + MarketModifiers.DeliveryFee(def):N0}";
         if (button != null)
@@ -430,7 +430,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     private void OnBuyClicked(ItemDef def)
     {
         if (plot == null) return;
-        if (!ProgressionManager.CanOrder(LocalTeam, def)) { ShowStatus($"Reach level {def.minLevel} to order {def.displayName}."); return; }
+        if (!ProgressionManager.CanOrder(LocalTeam, def)) { ShowStatus($"Reach level {ProgressionManager.LevelNeeded(def)} to order {def.displayName}."); return; }
         if (!LicenseManager.CanOrder(LocalTeam, def, out var needs)) { ShowStatus($"{def.displayName} needs the {needs.displayName} (Licenses tab)."); return; }
         if (!FranchiseManager.CanOrder(LocalTeam, def, out var franchise)) { ShowStatus($"{def.displayName} belongs to the {franchise.displayName} franchise."); return; }
 
