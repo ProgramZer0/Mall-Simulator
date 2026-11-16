@@ -16,6 +16,13 @@ using UnityEngine;
 ///   its ItemPickupNet too. Ids already given never change.
 /// - Lists them all on the open scene's ItemCatalog (by id), and adds any missing ones to the network
 ///   prefab list.
+/// - Size Class left on Auto: set from the prefab's folder (Small / Med / Lrg / Misc), which picks its
+///   default hand model and delivery box (ItemCatalog → Defaults by size).
+/// - A new item that's one product on a shelf or rack (a stock crate's Shelf or Hang Prefab) starts out
+///   not in the shop (you buy the crate). Change it afterwards if you like; it's only set once.
+/// - Empty Defaults by size on the ItemCatalog are filled from prefabs named handSmall / handMed / handLrg /
+///   handMisc and shipmentSmall / shipmentMed / shipmentLrg / shipmentMisc (and Default Shipment Prefab
+///   from one named shipment).
 ///
 /// Tools > Mall Sim > Items > Move Catalog Items Onto Prefabs: one time, for items set up on the
 /// ItemCatalog the old way. Each moves onto its world prefab as an ItemData, keeping its id.
@@ -62,6 +69,7 @@ public static class ItemSetupTool
     public static void UpdateCatalog(bool quiet)
     {
         var report = new StringBuilder();
+        allPrefabs = LoadAllPrefabs();
         var datas = FindItemPrefabs();
         var catalog = FindCatalog();
 
@@ -81,15 +89,33 @@ public static class ItemSetupTool
             }
         }
         int next = used.Count > 0 ? used.Max() + 1 : 1;
+        var products = FindProductPrefabs();
         foreach (var d in needId)
         {
+            bool isNew = d.item == null || d.item.id <= 0;
             while (used.Contains(next)) next++;
             if (next >= Sizes.FirstSizedId) { Debug.LogError("[Items] Out of ids (sizes start at " + Sizes.FirstSizedId + ")."); break; }
             d.item ??= new ItemDef();
             d.item.id = next;
             used.Add(next);
+            if (isNew && products.Contains(d.gameObject) && d.item.showInShop)
+            {
+                d.item.showInShop = false; // one product: players buy the crate
+                report.AppendLine($"'{d.name}' is one product on shelves/racks: not in the shop.");
+            }
             EditorUtility.SetDirty(d);
             report.AppendLine($"'{d.name}' is item {next}.");
+        }
+
+        // Size class from the folder, where it's still Auto.
+        foreach (var d in datas)
+        {
+            if (d.item == null || d.item.sizeClass != ItemDef.SizeClass.Auto) continue;
+            var size = SizeFromFolder(AssetDatabase.GetAssetPath(d));
+            if (size == ItemDef.SizeClass.Auto) continue;
+            d.item.sizeClass = size;
+            EditorUtility.SetDirty(d);
+            report.AppendLine($"'{d.name}' is {size} (from its folder).");
         }
 
         // The ItemPickupNet's id, and what's needed to be an item.
@@ -113,6 +139,7 @@ public static class ItemSetupTool
         else
         {
             var so = new SerializedObject(catalog);
+            FillSizeDefaults(so, report);
             var list = so.FindProperty("itemPrefabs");
             bool same = list.arraySize == sorted.Count;
             for (int i = 0; same && i < sorted.Count; i++)
@@ -132,21 +159,127 @@ public static class ItemSetupTool
         int added = AddToNetworkPrefabs(datas.Select(d => d.gameObject));
         if (added > 0) report.AppendLine($"Added {added} item prefab(s) to the network prefab list.");
 
+        allPrefabs = null;
         AssetDatabase.SaveAssets();
         if (report.Length > 0) Debug.Log($"[Items] Update Item Catalog ({datas.Count} item prefabs):\n{report}");
         else if (!quiet) Debug.Log($"[Items] Update Item Catalog: {datas.Count} item prefabs, all up to date.");
+    }
+
+    // Every prefab in the project, loaded once per update (several passes read it).
+    private static List<(string path, GameObject go)> allPrefabs;
+
+    private static List<(string path, GameObject go)> LoadAllPrefabs()
+    {
+        var list = new List<(string, GameObject)>();
+        foreach (var guid in AssetDatabase.FindAssets("t:Prefab", new[] { "Assets" }))
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            var go = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (go != null) list.Add((path, go));
+        }
+        return list;
+    }
+
+    // Small / Med / Lrg / Misc from the folders on the way to the prefab (Auto if none of them).
+    private static ItemDef.SizeClass SizeFromFolder(string path)
+    {
+        var parts = path.Replace('\\', '/').Split('/');
+        for (int i = parts.Length - 2; i >= 0; i--) // nearest folder first
+        {
+            switch (parts[i].Trim().ToLowerInvariant())
+            {
+                case "small": case "sml": case "sm": return ItemDef.SizeClass.Small;
+                case "med": case "medium": case "md": return ItemDef.SizeClass.Medium;
+                case "lrg": case "large": case "lg": return ItemDef.SizeClass.Large;
+                case "misc": return ItemDef.SizeClass.Misc;
+            }
+        }
+        return ItemDef.SizeClass.Auto;
+    }
+
+    // Prefabs that are one product on a shelf or rack: in some stock crate's Shelf or Hang Prefabs.
+    private static HashSet<GameObject> FindProductPrefabs()
+    {
+        var set = new HashSet<GameObject>();
+        foreach (var (_, go) in allPrefabs)
+        {
+            if (!go.TryGetComponent<ItemPickupNet>(out var pickup) || !pickup.IsStockCrate) continue;
+            var so = new SerializedObject(pickup);
+            foreach (var listName in new[] { "shelfPrefabs", "hangPrefabs" })
+            {
+                var list = so.FindProperty(listName);
+                if (list == null) continue;
+                for (int i = 0; i < list.arraySize; i++)
+                    if (list.GetArrayElementAtIndex(i).objectReferenceValue is GameObject p && p != null) set.Add(p);
+            }
+        }
+        return set;
+    }
+
+    // Empty catalog defaults, from prefabs named for them (handLrg, shipmentLrg...).
+    private static void FillSizeDefaults(SerializedObject catalog, StringBuilder report)
+    {
+        var byName = new Dictionary<string, GameObject>();
+        foreach (var (path, go) in allPrefabs)
+        {
+            string key = System.IO.Path.GetFileNameWithoutExtension(path).Replace(" ", "").Replace("_", "").ToLowerInvariant();
+            if (!byName.ContainsKey(key)) byName[key] = go;
+        }
+        GameObject Named(string kind, params string[] sizes)
+        {
+            foreach (var size in sizes)
+                if (byName.TryGetValue(kind + size, out var go) && go != null) return go;
+            return null;
+        }
+        var slots = new (string field, string[] names)[]
+        {
+            ("small", new[] { "small", "sml", "sm" }),
+            ("medium", new[] { "med", "medium", "md" }),
+            ("large", new[] { "lrg", "large", "lg" }),
+            ("misc", new[] { "misc" }),
+        };
+        bool changed = false;
+        foreach (var (field, names) in slots)
+        {
+            var hand = catalog.FindProperty(field + ".hand");
+            if (hand != null && hand.objectReferenceValue == null && Named("hand", names) is GameObject h)
+            {
+                hand.objectReferenceValue = h;
+                report.AppendLine($"Catalog {field} hand: '{h.name}'.");
+                changed = true;
+            }
+            var ship = catalog.FindProperty(field + ".shipment");
+            if (ship != null && ship.objectReferenceValue == null && Named("shipment", names) is GameObject s &&
+                s.TryGetComponent<NetworkObject>(out var sno))
+            {
+                ship.objectReferenceValue = sno;
+                report.AppendLine($"Catalog {field} shipment: '{s.name}'.");
+                changed = true;
+            }
+        }
+        var def = catalog.FindProperty("defaultShipmentPrefab");
+        if (def != null && def.objectReferenceValue == null && byName.TryGetValue("shipment", out var box) && box != null &&
+            box.TryGetComponent<NetworkObject>(out var bno))
+        {
+            def.objectReferenceValue = bno;
+            report.AppendLine($"Catalog default shipment: '{box.name}'.");
+            changed = true;
+        }
+        if (changed)
+        {
+            catalog.ApplyModifiedPropertiesWithoutUndo();
+            var target = (ItemCatalog)catalog.targetObject;
+            EditorUtility.SetDirty(target);
+            if (!Application.isPlaying) EditorSceneManager.MarkSceneDirty(target.gameObject.scene);
+        }
     }
 
     // Every prefab with an ItemData on its root, in a stable order (by path).
     private static List<ItemData> FindItemPrefabs()
     {
         var found = new List<ItemData>();
-        foreach (var guid in AssetDatabase.FindAssets("t:Prefab", new[] { "Assets" }))
-        {
-            string path = AssetDatabase.GUIDToAssetPath(guid);
-            var go = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-            if (go != null && go.TryGetComponent<ItemData>(out var d)) found.Add(d);
-        }
+        foreach (var (_, go) in allPrefabs)
+            if (go.TryGetComponent<ItemData>(out var d)) found.Add(d);
         return found.OrderBy(d => AssetDatabase.GetAssetPath(d)).ToList();
     }
 
