@@ -145,6 +145,8 @@ MonoBehaviour:
     categories:
     - Applicence
     - Cheap
+    - Furniture
+    - Housing
     category: 
     price: 10
     sizes: 0

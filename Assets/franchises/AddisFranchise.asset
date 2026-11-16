@@ -10,16 +10,16 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bc0d27d68347474d8ee6b20004d2cfd9, type: 3}
-  m_Name: test1 2
+  m_Name: AddisFranchise
   m_EditorClassIdentifier: Assembly-CSharp::FranchiseDef
-  id: 3
-  displayName: test2
+  id: 1
+  displayName: Addis
   description: 
   icon: {fileID: 0}
   categories: []
-  category: 2
+  category: Addis
   startingBid: 2000
   minRaise: 100
   holdSeconds: 3600
   auctionSeconds: 180
-  minLevel: 0
+  minLevel: 8

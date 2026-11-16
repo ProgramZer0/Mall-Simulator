@@ -328,4 +328,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d750dcf5b0143264483d62371c762da9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Decor
-  features: []
+  features:
+  - name: Homey
+    amount: 1
