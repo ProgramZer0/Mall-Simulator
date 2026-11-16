@@ -884,7 +884,7 @@ public class CustomerManager : NetworkBehaviour
         }
         Vector3 offset = corner + wide + side * c.lane;
         if ((offset - corner).sqrMagnitude < 0.0025f) return corner;
-        c.laneTarget = NavMesh.Raycast(corner, offset, out var hit, NavMesh.AllAreas)
+        c.laneTarget = NavMesh.Raycast(corner, offset, out var hit, CustomerNavMesh.PreferMask)
             ? Vector3.Lerp(corner, hit.position, 0.7f) // not right up against the edge
             : offset;
         return c.laneTarget;
@@ -894,14 +894,14 @@ public class CustomerManager : NetworkBehaviour
     private bool CanSeeNext(Customer c)
     {
         Vector3 nextCorner = c.corners[c.corner + 1];
-        if (NavMesh.Raycast(c.pos, nextCorner, out _, NavMesh.AllAreas)) return false;
+        if (NavMesh.Raycast(c.pos, nextCorner, out _, CustomerNavMesh.PreferMask)) return false;
         // Clear by a margin on both sides too, so they don't cut so tight they scrape (and wedge on) the corner.
         Vector3 d = nextCorner - c.pos;
         d.y = 0f;
         if (cornerClearance <= 0f || d.sqrMagnitude < 1e-4f) return true;
         Vector3 side = new Vector3(d.z, 0f, -d.x).normalized * cornerClearance;
-        return !NavMesh.Raycast(c.pos + side, nextCorner + side, out _, NavMesh.AllAreas) &&
-               !NavMesh.Raycast(c.pos - side, nextCorner - side, out _, NavMesh.AllAreas);
+        return !NavMesh.Raycast(c.pos + side, nextCorner + side, out _, CustomerNavMesh.PreferMask) &&
+               !NavMesh.Raycast(c.pos - side, nextCorner - side, out _, CustomerNavMesh.PreferMask);
     }
 
     // Path length after the current corner (only changes when they pass a corner or get a new path).
@@ -1184,7 +1184,7 @@ public class CustomerManager : NetworkBehaviour
         for (int tries = 0; tries < 4; tries++)
         {
             Vector2 r = Random.insideUnitCircle * radius;
-            if (NavMesh.SamplePosition(point + new Vector3(r.x, 0f, r.y), out var hit, 1f, NavMesh.AllAreas) &&
+            if (NavMesh.SamplePosition(point + new Vector3(r.x, 0f, r.y), out var hit, 1f, CustomerNavMesh.PreferMask) &&
                 (notIn == null || !notIn.Contains(hit.position + Vector3.up * 0.1f)))
                 return hit.position;
         }
@@ -1201,7 +1201,7 @@ public class CustomerManager : NetworkBehaviour
         for (int tries = 0; tries < 8; tries++)
         {
             var p = new Vector3(Random.Range(b.min.x, b.max.x), from.y, Random.Range(b.min.z, b.max.z));
-            if (!NavMesh.SamplePosition(p, out var hit, 4f, NavMesh.AllAreas)) continue;
+            if (!NavMesh.SamplePosition(p, out var hit, 4f, CustomerNavMesh.PreferMask)) continue;
             if (Mathf.Abs(hit.position.y - from.y) > 3f || (hit.position - from).sqrMagnitude < 64f) continue; // same floor, a walk away
             bool inStore = false;
             foreach (var plot in MallManager.Instance.Plots)
@@ -1576,8 +1576,8 @@ public class CustomerManager : NetworkBehaviour
             {
                 Vector3 d = Quaternion.Euler(0f, bend, 0f) * dir;
                 Vector3 want = last + d * queueSpacing;
-                if (!NavMesh.SamplePosition(want, out var hit, 0.4f, NavMesh.AllAreas)) continue;
-                if (NavMesh.Raycast(last, hit.position, out _, NavMesh.AllAreas)) continue;
+                if (!NavMesh.SamplePosition(want, out var hit, 0.4f, CustomerNavMesh.PreferMask)) continue;
+                if (NavMesh.Raycast(last, hit.position, out _, CustomerNavMesh.PreferMask)) continue;
                 bool clear = true;
                 for (int j = 0; j < spots.Count - 1 && clear; j++)
                     if (FlatDistance(spots[j], hit.position) < queueSpacing * 0.8f) clear = false;

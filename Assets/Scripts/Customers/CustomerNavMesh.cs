@@ -33,6 +33,19 @@ public class CustomerNavMesh : MonoBehaviour
     [SerializeField] private float maxStep = 0.35f;
     [SerializeField] private float maxSlope = 40f;
 
+    [Header("Avoid zones")]
+    [Tooltip("The navigation area Avoid zones (CustomerNoWalkZone set to Avoid) mark the floor with. 3 or " +
+             "higher, and not used for anything else (name it 'Customer Avoid' under Navigation > Areas if you like).")]
+    [Range(3, 31)] [SerializeField] private int avoidArea = 3;
+    [Tooltip("How many times longer a path through an Avoid zone counts as. Higher: they go further round to keep out.")]
+    [Min(1f)] [SerializeField] private float avoidCost = 20f;
+
+    /// <summary>The navigation area Avoid zones mark.</summary>
+    public static int AvoidArea { get; private set; } = 3;
+
+    /// <summary>Every area but the avoid area: for "can I walk straight there" checks that shouldn't cut through it.</summary>
+    public static int PreferMask => NavMesh.AllAreas & ~(1 << AvoidArea);
+
     [Tooltip("Seconds after the last change before updating (a burst of changes is done together).")]
     [SerializeField] private float rebuildDelay = 1.5f;
     [SerializeField] private bool logBuilds = true;
@@ -118,6 +131,8 @@ public class CustomerNavMesh : MonoBehaviour
         pending = false;
         buildTimer.Restart();
 
+        AvoidArea = avoidArea;
+        NavMesh.SetAreaCost(avoidArea, avoidCost);
         settings = NavMesh.GetSettingsByID(0);
         settings.agentRadius = agentRadius;
         settings.agentHeight = agentHeight;
@@ -132,7 +147,7 @@ public class CustomerNavMesh : MonoBehaviour
         AddItems(bounds);
         AddDoorBlockers(bounds);
         foreach (var zone in CustomerNoWalkZone.All)
-            if (zone != null && bounds.Intersects(zone.WorldBounds)) sources.Add(zone.ToSource());
+            if (zone != null && bounds.Intersects(zone.WorldBounds)) sources.Add(zone.ToSource(avoidArea));
 
         if (data == null)
         {
