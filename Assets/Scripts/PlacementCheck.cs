@@ -34,10 +34,22 @@ public static class PlacementCheck
         if (count > 0 || NoPlaceArea.Find(center, halfExtents, rotation) != null) return false;
 
         // 2) Something underneath to sit on (stops placing items in mid-air).
-        Vector3 up = rotation * Vector3.up;
-        Vector3 baseCenter = center - up * (halfExtents.y + Skin);
-        return Physics.Raycast(baseCenter + up * 0.05f, -up, 0.05f + SupportProbe,
-                               supportMask, QueryTriggerInteraction.Ignore);
+        return HasSupport(center, halfExtents, rotation, supportMask);
+    }
+
+    // Something to stand on under the bottom of a (turned) box: straight down from the middle of its lowest
+    // point in WORLD terms. (The box's own "up" isn't world up for models whose prefab root is turned,
+    // e.g. Blender's -90 on X: looking along that went sideways and found nothing.)
+    private static bool HasSupport(Vector3 center, Vector3 half, Quaternion rotation, LayerMask supportMask) =>
+        Physics.Raycast(BaseCenter(center, half, rotation) + Vector3.up * 0.05f, Vector3.down, 0.05f + SupportProbe,
+                        supportMask, QueryTriggerInteraction.Ignore);
+
+    private static Vector3 BaseCenter(Vector3 center, Vector3 half, Quaternion rotation)
+    {
+        float worldHalfY = Mathf.Abs((rotation * Vector3.right).y) * half.x +
+                           Mathf.Abs((rotation * Vector3.up).y) * half.y +
+                           Mathf.Abs((rotation * Vector3.forward).y) * half.z;
+        return center - Vector3.up * (worldHalfY + Skin);
     }
 
     /// <summary>Why Fits says no, in words (for logs): what's in the way, a No Place Area, or nothing under it.</summary>
@@ -62,9 +74,8 @@ public static class PlacementCheck
         }
         var area = NoPlaceArea.Find(center, halfExtents, rotation);
         if (area != null) return $"inside No Place Area '{area.name}'";
-        Vector3 up = rotation * Vector3.up;
-        Vector3 baseCenter = center - up * (halfExtents.y + Skin);
-        if (!Physics.Raycast(baseCenter + up * 0.05f, -up, 0.05f + SupportProbe, supportMask, QueryTriggerInteraction.Ignore))
+        Vector3 baseCenter = BaseCenter(center, halfExtents, rotation);
+        if (!HasSupport(center, halfExtents, rotation, supportMask))
             return $"nothing to stand on under its base at {baseCenter:F2} (looked {SupportProbe + 0.05f:0.00} m down on the support layers; " +
                    $"test box {halfExtents * 2f:F2} m)";
         return "ok";
@@ -110,9 +121,7 @@ public static class PlacementCheck
         if (Physics.OverlapBoxNonAlloc(center, half, Hits, rotation, blockingMask, QueryTriggerInteraction.Ignore) > 0)
             return false;
 
-        Vector3 up = rotation * Vector3.up;
-        Vector3 baseCenter = center - up * (half.y + Skin);
-        return Physics.Raycast(baseCenter + up * 0.05f, -up, 0.05f + SupportProbe, supportMask, QueryTriggerInteraction.Ignore);
+        return HasSupport(center, half, rotation, supportMask);
     }
 
     /// <summary>The middle of a prefab's model at a pose.</summary>
