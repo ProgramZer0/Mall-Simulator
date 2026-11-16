@@ -187,10 +187,14 @@ public partial class CustomerManager
     {
         var target = c.follow;
         int slot = 1;
-        foreach (var m in c.group.members)
+        // (A child left with their parent after their group broke up has no group: just beside them.)
+        if (c.group != null)
         {
-            if (m == c) break;
-            if (m.follow == target) slot++;
+            foreach (var m in c.group.members)
+            {
+                if (m == c) break;
+                if (m.follow == target) slot++;
+            }
         }
         Vector3 fwd = Quaternion.Euler(0f, target.yaw, 0f) * Vector3.forward;
         Vector3 right = new(fwd.z, 0f, -fwd.x);
