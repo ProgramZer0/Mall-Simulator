@@ -30,6 +30,9 @@ public class CustomerPersonality : ScriptableObject
     [TextArea] public string description;
     [Tooltip("How common they are compared with the others (2 = twice as common as 1).")]
     [Min(0f)] public float spawnWeight = 1f;
+    [Tooltip("A bystander: here to walk the halls, never goes into a store (strolls from spot to spot, " +
+             "stopping a while at each). Put one in a family group for a parent out walking with a child.")]
+    public bool bystander = false;
 
     [Header("Taste")]
     public List<Like> likes = new();

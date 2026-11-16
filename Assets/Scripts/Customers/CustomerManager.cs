@@ -75,6 +75,9 @@ public partial class CustomerManager : NetworkBehaviour
     [SerializeField] private float cornerClearance = 0.5f;
     [Tooltip("Chance a wandering customer's next stop is just a spot in the hallways rather than a store.")]
     [Range(0f, 1f)] [SerializeField] private float roamChance = 0.35f;
+    [Tooltip("Bystanders (personalities set to Bystander) stand around this long at each spot they stroll to " +
+             "(seconds, random between) before walking on.")]
+    [SerializeField] private Vector2 lingerSeconds = new(5f, 25f);
 
     [Header("Shopping")]
     [Tooltip("How many things for sale a customer looks over when deciding what to go and see next.")]
@@ -363,6 +366,7 @@ public partial class CustomerManager : NetworkBehaviour
         public bool meeting;           // a family that split: waiting at the meeting spot
         public StorePlot partyStore;   // (leading a party) the store they're in, and how it's going for them
         public float partyMood;
+        public bool lingering;         // a bystander standing around at a spot they strolled to
 
         // Checkout
         public CheckoutCounter counter;
@@ -754,6 +758,8 @@ public partial class CustomerManager : NetworkBehaviour
             lane = Random.Range(Mathf.Lerp(-laneSpread, 0f, keepRight), laneSpread),
         };
         c.thief = Random.value < personality.shopliftChance * eventShoplifting;
+        if (personality.bystander) // here for a walk: stays a while, whatever their money
+            c.leaveAt = Time.time + Random.Range(minMinutesInMall, maxMinutesInMall) * 60f;
         if (child)
         {
             c.child = true;
@@ -1199,7 +1205,17 @@ public partial class CustomerManager : NetworkBehaviour
     {
         if (FollowInstead(c)) return; // in a group: the leader chooses
         if (FamilyPlans(c)) return;   // a family splitting up, or meeting again
-        bool done = Time.time >= c.leaveAt || c.storesVisited >= maxStoresPerVisit || BudgetLeft(c) <= 0;
+
+        // A bystander just walks the halls (until it's time to go).
+        bool bystander = IsBystander(c);
+        if (bystander && Time.time < c.leaveAt && TryHallwaySpot(c.pos, out var walk))
+        {
+            c.mode = Mode.Wander;
+            c.goalStore = null;
+            c.lingering = false;
+            if (PathTo(c, walk)) { Log(c, "strolling the halls"); return; }
+        }
+        bool done = bystander || Time.time >= c.leaveAt || c.storesVisited >= maxStoresPerVisit || BudgetLeft(c) <= 0;
         if (!done && MallManager.Instance != null)
         {
             // Someone who knows the mall heads for a store that sells what they like; anyone else
@@ -1302,6 +1318,7 @@ public partial class CustomerManager : NetworkBehaviour
 
     private void ThinkWander(Customer c)
     {
+        if (IsBystander(c)) { ThinkStroll(c); return; }
         // Passing an open store: does its storefront pull them in?
         if (MallManager.Instance != null)
         {
@@ -1323,6 +1340,21 @@ public partial class CustomerManager : NetworkBehaviour
         // At the store they were heading for (if passing it didn't already decide).
         if (c.goalStore != null && !c.passed.Contains(c.goalStore) && c.goalStore.IsOpen && c.goalStore.Appeal != null &&
             Consider(c, c.goalStore, c.goalEntrance)) return;
+        PickGoal(c);
+    }
+
+    // A bystander: no stores, just a stroll to a spot, a while standing there, then on to the next.
+    private void ThinkStroll(Customer c)
+    {
+        if (!c.arrived) return;
+        if (!c.lingering)
+        {
+            c.lingering = true;
+            c.until = Time.time + Random.Range(lingerSeconds.x, lingerSeconds.y);
+            return;
+        }
+        if (Time.time < c.until) return;
+        c.lingering = false;
         PickGoal(c);
     }
 

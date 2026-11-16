@@ -144,6 +144,13 @@ public partial class CustomerManager
         return r;
     }
 
+    /// A bystander (or with one): walks the halls, never goes into a store.
+    private static bool IsBystander(Customer c)
+    {
+        var root = Root(c);
+        return root.personality != null && root.personality.bystander;
+    }
+
     private static bool SameParty(Customer a, Customer b) => a.group != null && a.group == b.group && Root(a) == Root(b);
 
     // Where a member walks: beside whoever they follow, one each side, then a row behind.
