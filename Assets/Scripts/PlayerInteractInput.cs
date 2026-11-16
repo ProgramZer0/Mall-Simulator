@@ -71,6 +71,10 @@ public class PlayerInteractInput : NetworkBehaviour
     [Header("Debug")]
     [Tooltip("Draw the fit-test box and log what it overlaps (once a second) while previewing.")]
     [SerializeField] private bool debugPlacement;
+    [Tooltip("Log (once a second) everything the crosshair ray passes through and what each one counts as: " +
+             "seen through (text, LookThrough), a checkout part, or what blocks.")]
+    [SerializeField] private bool debugLook;
+    private float nextLookLog;
 
     private readonly List<(Material mat, Color original)> ghostMaterials = new();
     private bool? ghostShownValid;
@@ -256,7 +260,30 @@ public class PlayerInteractInput : NetworkBehaviour
             best = h.distance;
             found = true;
         }
+        if (debugLook && Time.time >= nextLookLog) LogLook(n, found ? hit.collider : null);
         return found;
+    }
+
+    private void LogLook(int n, Collider chosen)
+    {
+        nextLookLog = Time.time + 1f;
+        var lines = new System.Text.StringBuilder($"[Look] {n} hit(s) along the crosshair (nearest wins, unless seen through):");
+        var sorted = new List<RaycastHit>();
+        for (int i = 0; i < n; i++) sorted.Add(lookHits[i]);
+        sorted.Sort((a, b) => a.distance.CompareTo(b.distance));
+        foreach (var h in sorted)
+        {
+            var c = h.collider;
+            var part = c.GetComponentInParent<CheckoutClickable>();
+            var through = c.GetComponentInParent<LookThrough>();
+            string what = LookThrough.Ignore(c)
+                ? (c.TryGetComponent<TMPro.TMP_Text>(out _) ? "seen through (text)"
+                   : through != null ? $"seen through (LookThrough on '{through.name}')" : "seen through (canvas)")
+                : part != null ? $"checkout part {part.action}" : "solid";
+            lines.Append($"\n  {h.distance:0.00} m  '{c.name}' (layer {LayerMask.LayerToName(c.gameObject.layer)}): {what}" +
+                         (c == chosen ? "   <- looked at" : ""));
+        }
+        Debug.Log(lines.ToString(), chosen);
     }
 
     // The counter's body hit first: a clickable part of it just behind (the card reader, a key...) inside
