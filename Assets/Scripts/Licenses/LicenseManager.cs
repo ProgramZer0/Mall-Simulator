@@ -111,7 +111,11 @@ public class LicenseManager : NetworkBehaviour
     /// <summary>How many licenses a team's level lets it hold.</summary>
     public int AllowedFor(ulong team) => licensesAtStart + (ProgressionManager.LevelOf(team) - 1) / levelsPerExtraLicense;
 
-    /// <summary>The first license this item needs that the team doesn't hold (null: it can be ordered).</summary>
+    /// <summary>
+    /// The first license this item needs that the team doesn't hold (null: it can be ordered). Each license
+    /// unlocks its own categories, so an item in several licensed categories needs a license for each
+    /// (franchise items too).
+    /// </summary>
     public LicenseDef MissingFor(ulong team, ItemDef item)
     {
         if (item == null) return null;

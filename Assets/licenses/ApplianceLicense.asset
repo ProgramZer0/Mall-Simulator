@@ -16,7 +16,8 @@ MonoBehaviour:
   displayName: Appliance License
   description: Sell appliances.
   icon: {fileID: 0}
+  categories: []
   category: Appliance
   price: 2500
   perMall: 2
-  minLevel: 0
+  minLevel: 7

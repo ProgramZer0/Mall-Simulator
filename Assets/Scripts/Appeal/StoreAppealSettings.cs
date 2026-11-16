@@ -83,6 +83,63 @@ public class StoreAppealSettings : MonoBehaviour
     [Min(0.5f)] public float decorReach = 8f;
     [Tooltip("Quality of a store whose categories have no needs listed (0-1). 0.5 = neither helps nor hurts.")]
     [Range(0f, 1f)] public float neutralQuality = 0.5f;
+
+    [Serializable]
+    public class CategoryPair
+    {
+        [Tooltip("An item category. 'Any' = every item for sale. 'Shipment' = delivery boxes left in the store.")]
+        public string categoryA = "Clothing";
+        [Tooltip("The category it goes with (or against). The same as A for 'more of the same nearby'. 'Any' and " +
+                 "'Shipment' work here too (Shipment + Any, negative: boxes lying around hurt everything near them).")]
+        public string categoryB = "Clothing";
+        [Tooltip("How much having B near A (and A near B) helps: 1 = a lot, negative = it hurts (food by " +
+                 "cleaning products).")]
+        [Range(-1f, 1f)] public float effect = 0.5f;
+        [Tooltip("How many shelf spots (or loose items) of the other category within Pair Reach make the " +
+                 "full effect.")]
+        [Min(1)] public int wanted = 2;
+    }
+
+    [Header("Store quality: items that go together")]
+    [Tooltip("Item categories that go together (or don't). Each item for sale counts the spots of the paired " +
+             "category within Pair Reach of it. Pairs not listed don't matter either way.")]
+    public List<CategoryPair> categoryPairs = new();
+    [Tooltip("How close (meters) another item has to be to count as next to it.")]
+    [Min(0.5f)] public float pairReach = 3f;
+    [Tooltip("How much pairs move Quality: a store where every item has all its good pairs gets this much " +
+             "added (0.5 = up to +50%); bad pairs take away the same way.")]
+    [Range(0f, 1f)] public float pairStrength = 0.5f;
+
+    // Pairs by category (both ways), built on first use.
+    private Dictionary<string, List<(string other, float effect, int wanted)>> pairsByCategory;
+
+    /// <summary>Pair category meaning every item for sale.</summary>
+    public const string AnyCategory = "Any";
+    /// <summary>Pair category for delivery boxes left in the store (not for sale).</summary>
+    public const string ShipmentCategory = "Shipment";
+
+    /// <summary>The pairs a category is in: the other category, its effect and how many make it full.</summary>
+    public List<(string other, float effect, int wanted)> PairsFor(string category)
+    {
+        if (pairsByCategory == null)
+        {
+            pairsByCategory = new Dictionary<string, List<(string, float, int)>>(StringComparer.OrdinalIgnoreCase);
+            void Add(string a, string b, float effect, int wanted)
+            {
+                if (!pairsByCategory.TryGetValue(a, out var list)) pairsByCategory[a] = list = new List<(string, float, int)>();
+                list.Add((b, effect, wanted));
+            }
+            foreach (var p in categoryPairs)
+            {
+                if (p == null || string.IsNullOrWhiteSpace(p.categoryA) || string.IsNullOrWhiteSpace(p.categoryB) ||
+                    Mathf.Approximately(p.effect, 0f)) continue;
+                string a = p.categoryA.Trim(), b = p.categoryB.Trim();
+                Add(a, b, p.effect, Mathf.Max(1, p.wanted));
+                if (!string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) Add(b, a, p.effect, Mathf.Max(1, p.wanted));
+            }
+        }
+        return pairsByCategory.TryGetValue(category?.Trim() ?? "", out var found) ? found : null;
+    }
     [Tooltip("The feature that windows set into the store's walls count as.")]
     public string windowFeature = "Window";
 
@@ -121,7 +178,11 @@ public class StoreAppealSettings : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
-    private void OnValidate() => StoreAppeal.MarkAllDirty();
+    private void OnValidate()
+    {
+        pairsByCategory = null;
+        StoreAppeal.MarkAllDirty();
+    }
 
     /// <summary>The needs for a category (null if it has none).</summary>
     public CategoryNeeds NeedsFor(string category)

@@ -555,13 +555,35 @@ public class StockContainer : NetworkBehaviour
         TryGetLayout(GetBox(zone), IsHangRail(zone), itemId, orient, out layout);
 
     // Same result on every machine: it only depends on the prefab, the zone and the orientation.
+    /// <summary>
+    /// A zone's box as products see it: its middle, a turn whose up is world up, and its size along that
+    /// turn's axes. Usually just the box. A box whose own up isn't up (a model imported turned, e.g.
+    /// Blender's -90 on X, with the zone made under it) is stood upright the least turn needed, so
+    /// products stand on its bottom and stack upward instead of filling it sideways.
+    /// </summary>
+    public static void ZoneFrame(BoxCollider box, out Vector3 center, out Quaternion rotation, out Vector3 size)
+    {
+        var t = box.transform;
+        center = t.TransformPoint(box.center);
+        Quaternion boxRot = t.rotation;
+        Vector3 boxSize = ShipmentPacker.ZoneSize(box);
+        Vector3 boxUp = boxRot * Vector3.up;
+        if (Vector3.Dot(boxUp, Vector3.up) > 0.9f) { rotation = boxRot; size = boxSize; return; }
+
+        rotation = Quaternion.FromToRotation(boxUp, Vector3.up) * boxRot;
+        Vector3 bx = boxRot * Vector3.right, by = boxUp, bz = boxRot * Vector3.forward;
+        float Along(Vector3 a) =>
+            Mathf.Abs(Vector3.Dot(a, bx)) * boxSize.x + Mathf.Abs(Vector3.Dot(a, by)) * boxSize.y + Mathf.Abs(Vector3.Dot(a, bz)) * boxSize.z;
+        size = new Vector3(Along(rotation * Vector3.right), Along(rotation * Vector3.up), Along(rotation * Vector3.forward));
+    }
+
     private bool TryGetLayout(BoxCollider box, bool hang, int itemId, int orient, out Layout layout)
     {
         layout = default;
         var prefab = GetStockedPrefab(itemId, hang);
         if (box == null || prefab == null) return false;
 
-        Vector3 size = ShipmentPacker.ZoneSize(box);
+        ZoneFrame(box, out _, out _, out Vector3 size);
         Quaternion o = Orientation.Rotation(orient, hang);
         int max = Mathf.Max(0, maxPerZone);
 
@@ -668,8 +690,7 @@ public class StockContainer : NetworkBehaviour
     // Rails: left to right along the rail, the top of each product on the rail.
     private void GetSlotPose(BoxCollider box, bool hang, Layout l, int index, out Vector3 position, out Quaternion rotation)
     {
-        Vector3 size = ShipmentPacker.ZoneSize(box);
-        Quaternion zoneRot = box.transform.rotation;
+        ZoneFrame(box, out Vector3 zoneCenter, out Quaternion zoneRot, out Vector3 size);
         Vector3 local;
 
         if (hang)
@@ -678,7 +699,7 @@ public class StockContainer : NetworkBehaviour
             float used = (l.capacity - 1) * l.step;
             float along = -used * 0.5f + index * l.step;
             Quaternion frame = l.railAlongZ ? zoneRot : zoneRot * Quaternion.Euler(0f, 90f, 0f); // frame Z = the rail
-            Vector3 railPoint = box.transform.TransformPoint(box.center) + zoneRot * new Vector3(0f, size.y * 0.5f, 0f)
+            Vector3 railPoint = zoneCenter + zoneRot * new Vector3(0f, size.y * 0.5f, 0f)
                               + frame * new Vector3(0f, 0f, along);
             rotation = frame * l.orient;
             position = railPoint - frame * l.hook;
@@ -702,7 +723,7 @@ public class StockContainer : NetworkBehaviour
         }
 
         rotation = zoneRot * l.orient;
-        Vector3 center = box.transform.TransformPoint(box.center) + zoneRot * local;
+        Vector3 center = zoneCenter + zoneRot * local;
         position = center - rotation * l.pivotOffset;
     }
 
