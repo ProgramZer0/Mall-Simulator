@@ -302,6 +302,7 @@ public class PaintBrush : NetworkBehaviour
         string what;
 
         var item = t.GetComponentInParent<ItemPickupNet>();
+        if (item != null && !item.IsSpawned) return; // not a live item (an edit copy, one being taken away)
         if (item != null)
         {
             if (!PaintParts.IsPaintable(item.gameObject)) { prompt = "This can't be painted"; return; }
@@ -395,7 +396,9 @@ public class PaintBrush : NetworkBehaviour
         if (targetPlot == null) return;
         switch (targetKind)
         {
-            case Kind.Item: RequestPaintItemRpc(targetItem.NetworkObject, targetZone, color); break;
+            case Kind.Item:
+                if (targetItem != null && targetItem.IsSpawned) RequestPaintItemRpc(targetItem.NetworkObject, targetZone, color);
+                break;
             case Kind.Wall: RequestPaintWallRpc(targetPlot.PlotId, targetWall.id, color); break;
             case Kind.Front: RequestPaintFrontRpc(targetPlot.PlotId, targetModule, targetZone, color); break;
             case Kind.Floor: RequestPaintFloorRpc(targetPlot.PlotId, color); break;
