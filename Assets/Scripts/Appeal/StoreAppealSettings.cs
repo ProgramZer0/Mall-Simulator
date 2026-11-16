@@ -87,9 +87,10 @@ public class StoreAppealSettings : MonoBehaviour
     [Serializable]
     public class CategoryPair
     {
-        [Tooltip("An item category.")]
+        [Tooltip("An item category. 'Any' = every item for sale. 'Shipment' = delivery boxes left in the store.")]
         public string categoryA = "Clothing";
-        [Tooltip("The category it goes with (or against). The same as A for 'more of the same nearby'.")]
+        [Tooltip("The category it goes with (or against). The same as A for 'more of the same nearby'. 'Any' and " +
+                 "'Shipment' work here too (Shipment + Any, negative: boxes lying around hurt everything near them).")]
         public string categoryB = "Clothing";
         [Tooltip("How much having B near A (and A near B) helps: 1 = a lot, negative = it hurts (food by " +
                  "cleaning products).")]
@@ -111,6 +112,11 @@ public class StoreAppealSettings : MonoBehaviour
 
     // Pairs by category (both ways), built on first use.
     private Dictionary<string, List<(string other, float effect, int wanted)>> pairsByCategory;
+
+    /// <summary>Pair category meaning every item for sale.</summary>
+    public const string AnyCategory = "Any";
+    /// <summary>Pair category for delivery boxes left in the store (not for sale).</summary>
+    public const string ShipmentCategory = "Shipment";
 
     /// <summary>The pairs a category is in: the other category, its effect and how many make it full.</summary>
     public List<(string other, float effect, int wanted)> PairsFor(string category)
