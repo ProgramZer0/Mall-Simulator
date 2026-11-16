@@ -157,13 +157,13 @@ public class PlayerInventoryNet : NetworkBehaviour
         var actor = NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject;
         if (DistanceTo(pickupNO.gameObject, actor.transform.position) > 3.0f) return;
 
-        // Store rules: only from inside your own store, only items inside your own store.
+        // Store rules: only items in your own store or a dock (or a stock crate lying in a hallway).
         if (!MallManager.CanPickupOrPlace(rpcParams.Receive.SenderClientId,
-                actor.transform.position, pickup.transform.position)) return;
+                actor.transform.position, pickup.transform.position, hallwayPickup: pickup.IsStockCrate)) return;
 
         // Deliveries are held for the team that ordered them for a while.
-        // Stacked on a cart: the things on top come off first (nothing is left floating).
-        if (pickup.HasItemOnTopOnCart()) return;
+        // Something stacked on it (on a cart or anywhere): the things on top come off first (nothing is left floating).
+        if (pickup.HasItemOnTop()) return;
 
         // A shelf with stock on it has to be emptied first.
         if (pickupNO.TryGetComponent<StockContainer>(out var container) && container.HasStock) return;
@@ -239,9 +239,9 @@ public class PlayerInventoryNet : NetworkBehaviour
     /// Server: put up to this many products into the held crate (same product, plain colors, with room).
     /// How many went in (0: none fit, or it's not the same thing).
     /// </summary>
-    public int ServerTopUpWith(int itemId, int units)
+    public int ServerTopUpWith(int itemId, int units, uint paint = 0)
     {
-        if (!IsServer || itemId == 0 || HeldItemId.Value != itemId || HeldPaint.Value != 0 || !CanTopUpHeldCrate) return 0;
+        if (!IsServer || itemId == 0 || HeldItemId.Value != itemId || HeldPaint.Value != paint || !CanTopUpHeldCrate) return 0;
         int moved = Mathf.Min(StockContainer.GetUnitsPerCrate(itemId) - HeldUnits.Value, Mathf.Max(1, units));
         if (moved <= 0) return 0;
         HeldUnits.Value += moved;
@@ -357,7 +357,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         else
         {
             if (HeldItemId.Value != 0 || !target.TryGetComponent<ItemPickupNet>(out var item) || item.ItemId == 0) return;
-            if (item.HasItemOnTopOnCart()) return;
+            if (item.HasItemOnTop()) return;
             if (eco != null && eco.IsSpawned && !eco.ServerTrySpendCents(MallManager.GetTeamOf(buyer), price)) return;
             id = item.ItemId;
             HeldItemId.Value = id;
@@ -384,23 +384,24 @@ public class PlayerInventoryNet : NetworkBehaviour
     /// as a crate holding one, or into a held crate of the same product that has room. False if their
     /// hands are full.
     /// </summary>
-    public bool ServerTryTake(int itemId, int units, bool whole)
+    public bool ServerTryTake(int itemId, int units, bool whole, uint paint = 0)
     {
         if (!IsServer || itemId == 0) return false;
         if (whole)
         {
             if (HeldItemId.Value != 0) return false;
             HeldItemId.Value = itemId;
-            HeldPaint.Value = 0;
+            HeldPaint.Value = paint;
             HeldUnits.Value = StockContainer.GetUnitsPerCrate(itemId) == 0 ? 0 : Mathf.Max(1, units);
         }
         else if (HeldItemId.Value == 0)
         {
             HeldItemId.Value = itemId;
-            HeldPaint.Value = 0;
+            HeldPaint.Value = paint;
             HeldUnits.Value = 1;
         }
-        else if (HeldItemId.Value == itemId && HeldUnits.Value < StockContainer.GetUnitsPerCrate(itemId)) HeldUnits.Value++;
+        else if (HeldItemId.Value == itemId && HeldPaint.Value == paint &&
+                 HeldUnits.Value < StockContainer.GetUnitsPerCrate(itemId)) HeldUnits.Value++;
         else return false;
         PlayItemSoundClientRpc(itemId, transform.position, false);
         return true;
@@ -470,12 +471,12 @@ public class PlayerInventoryNet : NetworkBehaviour
         var actor = NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject;
         if (Vector3.Distance(actor.transform.position, position) > 5.0f) { ItemDebug.Log("Place refused: too far."); return; }
 
-        // Store rules: only from inside your own store, only onto a spot inside your own store. Except
+        // Store rules: only onto a spot inside your own store (or a dock, or a cart). Except
         // dropping another team's delivery off in their store.
         ulong sender = rpcParams.Receive.SenderClientId;
         bool dropOff = MallManager.IsDeliveringTo(sender, HeldFromTeam.Value, actor.transform.position, position);
         if (!dropOff && !MallManager.CanPickupOrPlace(sender,
-                actor.transform.position, position)) { ItemDebug.Log("Place refused: store rules (not your store, or you're outside it)."); return; }
+                actor.transform.position, position)) { ItemDebug.Log("Place refused: store rules (not your store)."); return; }
 
         if (!ItemCatalog.Instance.TryGet(id, out var def) || def.worldNetworkPrefab == null) { ItemDebug.Log("Place refused: not in the catalog or no world prefab."); return; }
 
@@ -617,8 +618,13 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (cart != null && spawned.TryGetComponent<ItemPickupNet>(out var pickup)) pickup.ServerPrepareFrozen(carried: true);
         spawned.Spawn(true);
         if (cart != null) cart.ServerLoad(spawned); // on the floor it settles like anything else
-        // Still the delivery of the team that ordered it (not held for them any more, just marked theirs).
-        if (box != null && heldOrderedBy != ulong.MaxValue) box.ServerReserve(heldOrderedBy, 0f);
+        // Left on the dock floor, not on one of the placer's own shipment spots: anyone's now (whoever picks
+        // it up owns it), so a box can't be parked at the dock to get in others' way.
+        bool leftAtDock = cart == null && box != null && LoadingDockZone.GetDockAt(position) != null &&
+                          !MallManager.IsOwnShipmentArea(sender, position);
+        if (leftAtDock) box.ServerReserve(ulong.MaxValue, 0f);
+        // Otherwise still the delivery of the team that ordered it (not held for them any more, just marked theirs).
+        else if (box != null && heldOrderedBy != ulong.MaxValue) box.ServerReserve(heldOrderedBy, 0f);
         heldOrderedBy = ulong.MaxValue;
 
         HeldItemId.Value = 0;

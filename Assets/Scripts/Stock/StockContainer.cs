@@ -258,7 +258,9 @@ public class StockContainer : NetworkBehaviour
     private float coverCheckAt;
     private bool coverPending;
     private ItemPickupNet self;
-    private static readonly Collider[] CoverHits = new Collider[32];
+    // Roomy: every stocked product has a collider, and a full zone's own products (and its neighbours')
+    // are found too; with too small a list the thing actually covering it could be missed.
+    private static readonly Collider[] CoverHits = new Collider[256];
 
     /// <summary>
     /// Is something else placed in this zone (another shelf stacked on it, a box left there)? Then it can't
@@ -476,6 +478,7 @@ public class StockContainer : NetworkBehaviour
     public bool ServerAddOne(int zone, int itemId, int orient, uint? paint = null)
     {
         if (!IsServer || zone < 0 || zone >= zones.Count || !HasRoomFor(zone, itemId, orient, paint)) return false;
+        if (blockWhenCovered && CheckCovered(zone)) return false; // checked now, not the last (maybe stale) look
         var z = zones[zone];
         bool same = z.count > 0 && z.itemId == itemId;
         bool keepPrice = z.pricedItem == itemId && z.price > 0; // the shelf's own price tag stays for the same product

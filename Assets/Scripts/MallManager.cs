@@ -9,8 +9,8 @@ using UnityEngine;
 /// clients can ask the same questions to show feedback, but the host has the final say.
 ///
 /// Rules (from the to-do):
-///  - Pick up / place: only while standing in your own store or at a loading dock, and only
-///    on a spot inside your own store or a dock. Carrying something elsewhere is fine.
+///  - Pick up / place: only things in (spots in) your own store or a dock, wherever you stand.
+///    Stock crates lying in a hallway can be picked up by anyone. Carrying something elsewhere is fine.
 ///  - Interactables (doors, registers, ...): allowed anywhere except another player's store.
 ///    Ones marked Only In Own Zones (carts) only work in your own store or at a dock.
 ///
@@ -296,12 +296,6 @@ public class MallManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Pick up / place: the player must be standing in one of their work zones (own store or
-    /// a dock), and the item / target spot must be in one too. Holding is never checked, so
-    /// carrying something out into the hallway is fine; you just can't set it down there.
-    /// With no MallManager in the scene everything is allowed, so test scenes still work.
-    /// </summary>
-    /// <summary>
     /// True if this spot is on a shipment area of a store this player isn't allowed in, so they
     /// can't block someone else's deliveries by parking things there.
     /// </summary>
@@ -313,7 +307,15 @@ public class MallManager : NetworkBehaviour
         return false;
     }
 
-    public static bool CanPickupOrPlace(ulong clientId, Vector3 playerPosition, Vector3 targetPosition)
+    /// <summary>
+    /// Pick up / place / stock: it's where the item (or the spot) is that counts, not where the player
+    /// stands: in one of their work zones (own store or a dock). Hallway Pickup: it's a stock crate being
+    /// picked up, which may also be lying in a hallway (what a caught shoplifter dropped). Holding is never checked, so
+    /// carrying something out into the hallway is fine; you just can't set it down there.
+    /// With no MallManager in the scene everything is allowed, so test scenes still work.
+    /// </summary>
+    public static bool CanPickupOrPlace(ulong clientId, Vector3 playerPosition, Vector3 targetPosition,
+                                        bool hallwayPickup = false)
     {
         if (Instance == null) return true;
 
@@ -322,20 +324,29 @@ public class MallManager : NetworkBehaviour
         var cart = CartNet.FindCartAt(targetPosition);
         if (cart != null) return cart.CanUse(clientId);
 
-        return Instance.IsWorkZoneFor(clientId, playerPosition) &&
-               Instance.IsWorkZoneFor(clientId, targetPosition);
+        if (Instance.IsWorkZoneFor(clientId, targetPosition)) return true;
+        return hallwayPickup && Instance.GetPlotAt(targetPosition) == null; // lying in a hallway
+    }
+
+    /// <summary>On a shipment area of one of this player's own stores?</summary>
+    public static bool IsOwnShipmentArea(ulong clientId, Vector3 position)
+    {
+        if (Instance == null) return false;
+        foreach (var plot in Instance.plots.Values)
+            if (plot.IsAuthorized(clientId) && plot.IsOnShipmentArea(position)) return true;
+        return false;
     }
 
     /// <summary>
-    /// Dropping off another team's delivery: holding something from a box that team ordered, standing
-    /// in one of that team's stores and setting it down in the same store. Allowed even though it's
-    /// not your store (it earns a help point and tells them).
+    /// Dropping off another team's delivery: holding something from a box that team ordered and setting
+    /// it down in one of that team's stores. Allowed even though it's not your store (it earns a help
+    /// point and tells them).
     /// </summary>
     public static bool IsDeliveringTo(ulong clientId, ulong heldFromTeam, Vector3 playerPosition, Vector3 targetPosition)
     {
         if (Instance == null || heldFromTeam == ulong.MaxValue || heldFromTeam == GetTeamOf(clientId)) return false;
         var plot = Instance.GetPlotAt(targetPosition);
-        return plot != null && plot.HasOwner && plot.OwnerTeamId == heldFromTeam && Instance.GetPlotAt(playerPosition) == plot;
+        return plot != null && plot.HasOwner && plot.OwnerTeamId == heldFromTeam;
     }
 
     /// <summary>

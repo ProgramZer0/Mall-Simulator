@@ -161,6 +161,8 @@ public partial class CustomerManager : NetworkBehaviour
              "Placed at a child of the look called \"BagAnchor\" if it has one (its pivot is where the hand holds it), " +
              "otherwise at their side. No colliders needed (they're removed).")]
     [SerializeField] private GameObject bagPrefab;
+    [Tooltip("Each bag gets a random color from the Paint Palette (the same on every machine). Off: the bag's own colors.")]
+    [SerializeField] private bool randomBagColors = true;
     [SerializeField, Min(0)] private int maxBags = 3;
 
     [Header("Reactions")]
@@ -1938,10 +1940,11 @@ public partial class CustomerManager : NetworkBehaviour
                 if (t.loose != null)
                 {
                     if (!t.loose.IsSpawned) { c.basket.RemoveAt(i); c.satisfaction -= 0.15f; continue; } // someone else got it
+                    uint loosePaint = t.loose.TryGetComponent<ItemPickupNet>(out var lp) ? lp.Paint : 0u;
                     t.loose.NetworkObject.Despawn(true);
-                    purchases.Add(new CheckoutCounter.Purchase { itemId = t.itemId, priceCents = t.priceCents, units = t.units, whole = true });
+                    purchases.Add(new CheckoutCounter.Purchase { itemId = t.itemId, priceCents = t.priceCents, units = t.units, whole = true, paint = loosePaint });
                 }
-                else purchases.Add(new CheckoutCounter.Purchase { itemId = t.itemId, priceCents = t.priceCents, units = 1 });
+                else purchases.Add(new CheckoutCounter.Purchase { itemId = t.itemId, priceCents = t.priceCents, units = 1, paint = t.paint });
             }
             if (purchases.Count == 0) { LeaveStore(c, c.satisfaction); return; }
             c.ticket = counter.ServerAddCustomer(purchases, c.personality != null ? c.personality.cashChance : 0.5f);
@@ -2001,7 +2004,7 @@ public partial class CustomerManager : NetworkBehaviour
         c.counter = null;
         foreach (var t in c.basket)
             if (t.container != null && t.container.IsSpawned)
-                t.container.ServerAddOne(t.zone, t.itemId, t.container.GetZone(t.zone).orient);
+                t.container.ServerAddOne(t.zone, t.itemId, t.container.GetZone(t.zone).orient, t.paint);
         c.basket.Clear();
         if (c.counted && c.store != null && inside.TryGetValue(c.store, out int n)) inside[c.store] = Mathf.Max(0, n - 1);
         c.counted = false;
@@ -2012,7 +2015,7 @@ public partial class CustomerManager : NetworkBehaviour
     {
         var list = new List<CheckoutCounter.Purchase>();
         foreach (var t in c.basket)
-            if (t.loose == null) list.Add(new CheckoutCounter.Purchase { itemId = t.itemId, priceCents = t.priceCents, units = 1 });
+            if (t.loose == null) list.Add(new CheckoutCounter.Purchase { itemId = t.itemId, priceCents = t.priceCents, units = 1, paint = t.paint });
         return list;
     }
 
@@ -2068,7 +2071,7 @@ public partial class CustomerManager : NetworkBehaviour
 
     private void SetBags(ushort id, byte count)
     {
-        if (views.TryGetValue(id, out var v) && v != null) v.SetBags(count, bagPrefab);
+        if (views.TryGetValue(id, out var v) && v != null) v.SetBags(count, bagPrefab, randomBagColors);
     }
 
     /* ========================= THEFT ========================= */

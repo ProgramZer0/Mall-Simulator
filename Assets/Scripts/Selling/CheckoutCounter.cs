@@ -55,9 +55,11 @@ public class CheckoutCounter : NetworkBehaviour
         public int customer;  // LeftBehind (-1): a customer walked off without it; take it, don't scan it
         public byte whole;  // 1: a whole item (sold loose); 0: one product off a shelf
         public byte tag;    // 1: too big for the belt, shown as a price tag
+        public uint paint;  // its color (PaintSet; for one product off a shelf, the products' color)
 
         public bool Equals(BeltItem o) => key == o.key && itemId == o.itemId && priceCents == o.priceCents &&
-                                          units == o.units && customer == o.customer && whole == o.whole && tag == o.tag;
+                                          units == o.units && customer == o.customer && whole == o.whole && tag == o.tag &&
+                                          paint == o.paint;
         public override bool Equals(object obj) => obj is BeltItem o && Equals(o);
         public override int GetHashCode() => key;
     }
@@ -332,6 +334,7 @@ public class CheckoutCounter : NetworkBehaviour
         public int priceCents;
         public int units;
         public bool whole;
+        public uint paint; // its color (0: its own)
     }
 
     /// <summary>
@@ -368,6 +371,7 @@ public class CheckoutCounter : NetworkBehaviour
                 customer = customer,
                 whole = (byte)(p.whole ? 1 : 0),
                 tag = (byte)(IsTooBig(p.itemId, p.whole) ? 1 : 0),
+                paint = p.paint,
             });
         ServerFill();
     }
@@ -717,7 +721,7 @@ public class CheckoutCounter : NetworkBehaviour
             // A whole crate into a held crate of it with room: what fits goes in, the rest stays here.
             if (it.whole != 0 && inventory.HeldItemId.Value != 0)
             {
-                int moved = inventory.ServerTopUpWith(it.itemId, it.units);
+                int moved = inventory.ServerTopUpWith(it.itemId, it.units, it.paint);
                 if (moved <= 0) return;
                 if (moved < it.units)
                 {
@@ -726,7 +730,7 @@ public class CheckoutCounter : NetworkBehaviour
                     return;
                 }
             }
-            else if (!inventory.ServerTryTake(it.itemId, it.whole != 0 ? it.units : 1, it.whole != 0)) return;
+            else if (!inventory.ServerTryTake(it.itemId, it.whole != 0 ? it.units : 1, it.whole != 0, it.paint)) return;
             items.RemoveAt(i);
             ServerFill();
             return;
@@ -873,7 +877,11 @@ public class CheckoutCounter : NetworkBehaviour
     {
         GameObject go;
         if (it.tag == 0 && TryGetShape(it.itemId, it.whole != 0, out var shape))
-            go = StockContainer.MakeVisual(shape.model, transform.position, transform.rotation, null);
+        {
+            // A whole stock crate's color is its products' (the crate itself stays as it is).
+            bool crate = it.whole != 0 && StockContainer.IsStockCrate(it.itemId);
+            go = StockContainer.MakeVisual(shape.model, transform.position, transform.rotation, null, paint: crate ? 0u : it.paint);
+        }
         else if (tagPrefab != null)
             go = StockContainer.MakeVisual(tagPrefab, transform.position, transform.rotation, null);
         else

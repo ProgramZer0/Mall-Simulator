@@ -337,30 +337,46 @@ public class ItemPickupNet : NetworkBehaviour
     private static readonly Collider[] TopHits = new Collider[16];
 
     /// <summary>
-    /// On a cart: is something else on the cart resting on top of this? Then it has to come off first,
-    /// so nothing is left floating.
+    /// Is something else resting on top of this? Then it has to come off first, so nothing is left
+    /// floating. On a cart: things on the same cart. Elsewhere: any placed item (not ones hung on a wall).
+    /// Works with turned models (a Blender model's -90 on X): "on top" is always world up.
     /// </summary>
-    public bool HasItemOnTopOnCart()
+    public bool HasItemOnTop()
     {
-        if (!IsOnCart || !TryGetLocalShape(out Bounds local)) return false;
+        if (!TryGetLocalShape(out Bounds local)) return false;
+        bool onCart = IsOnCart;
 
+        // The item's box, measured along world up and its own facing (flat), wherever its axes point.
         Vector3 scale = transform.lossyScale;
-        Vector3 half = Vector3.Scale(local.extents, new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z)));
-        Vector3 up = transform.up;
-        Vector3 top = transform.TransformPoint(local.center) + up * half.y;
+        Vector3 h = Vector3.Scale(local.extents, new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z)));
+        Vector3 ax = transform.right, ay = transform.up, az = transform.forward;
+        Vector3 flat = Vector3.ProjectOnPlane(az, Vector3.up);
+        if (flat.sqrMagnitude < 0.01f) flat = Vector3.ProjectOnPlane(ay, Vector3.up);
+        Quaternion yaw = Quaternion.LookRotation(flat.normalized, Vector3.up);
+        Vector3 right = yaw * Vector3.right, fwd = yaw * Vector3.forward;
+        float Along(Vector3 dir) => Mathf.Abs(Vector3.Dot(ax, dir)) * h.x + Mathf.Abs(Vector3.Dot(ay, dir)) * h.y +
+                                    Mathf.Abs(Vector3.Dot(az, dir)) * h.z;
+        float up = Along(Vector3.up);
+        Vector3 top = transform.TransformPoint(local.center) + Vector3.up * up;
 
         // A thin slab just above the top, a bit smaller than the footprint (so neighbours beside it
         // don't count, only things sitting on it).
-        Vector3 slabCenter = top + up * 0.06f;
-        Vector3 slabHalf = new(half.x * 0.85f, 0.04f, half.z * 0.85f);
-        int n = Physics.OverlapBoxNonAlloc(slabCenter, slabHalf, TopHits, transform.rotation, ~0, QueryTriggerInteraction.Ignore);
+        Vector3 slabCenter = top + Vector3.up * 0.06f;
+        Vector3 slabHalf = new(Along(right) * 0.85f, 0.04f, Along(fwd) * 0.85f);
+        int n = Physics.OverlapBoxNonAlloc(slabCenter, slabHalf, TopHits, yaw, ~0, QueryTriggerInteraction.Ignore);
         for (int i = 0; i < n; i++)
         {
             var other = TopHits[i].GetComponentInParent<ItemPickupNet>();
-            if (other != null && other != this && other.transform.parent == transform.parent) return true;
+            if (other == null || other == this || !other.IsSpawned) continue;
+            if (onCart) { if (other.transform.parent == transform.parent) return true; continue; }
+            if (other.IsOnCart || other.OnWall) continue;
+            return true;
         }
         return false;
     }
+
+    /// <summary>Hung on a wall (never falls).</summary>
+    public bool OnWall => (pendingFreeze ?? freeze.Value).onWall;
 
     // The item's colliders as a box in its own local space (unscaled).
     private bool TryGetLocalShape(out Bounds local)

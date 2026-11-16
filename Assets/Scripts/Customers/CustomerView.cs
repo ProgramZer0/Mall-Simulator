@@ -113,7 +113,7 @@ public class CustomerView : MonoBehaviour
     /// Show this many shopping bags: at a child called "BagAnchor" if the look has one, else at their
     /// right side; each extra bag hangs a little further along. No prefab: a small paper-bag box.
     /// </summary>
-    public void SetBags(int count, GameObject prefab)
+    public void SetBags(int count, GameObject prefab, bool randomColors = false)
     {
         while (bags.Count > count) { Destroy(bags[^1]); bags.RemoveAt(bags.Count - 1); }
         Transform anchor = FindChild(transform, "BagAnchor");
@@ -130,6 +130,7 @@ public class CustomerView : MonoBehaviour
                 if (r != null) r.material.color = new Color(0.78f, 0.62f, 0.42f);
             }
             bag.name = "Bag";
+            if (randomColors) PaintBag(bag, i);
             foreach (var c in bag.GetComponentsInChildren<Collider>(true)) Destroy(c);
             var t = bag.transform;
             if (anchor != null)
@@ -151,6 +152,19 @@ public class CustomerView : MonoBehaviour
             }
             bags.Add(bag);
         }
+    }
+
+    // A color from the palette, picked from who they are and which bag it is (so every machine agrees
+    // without sending it). Painted where the bag has Paint Parts, else all over.
+    private void PaintBag(GameObject bag, int index)
+    {
+        int n = PaintPalette.Instance != null ? PaintPalette.Instance.Count : 0;
+        if (n == 0) return;
+        uint h = unchecked((uint)Id * 2654435761u ^ (uint)(index + 1) * 40503u);
+        h ^= h >> 15;
+        byte color = (byte)(1 + h % (uint)n);
+        if (PaintParts.ZonesOf(bag).Count > 0) PaintParts.ApplySet(bag, PaintSet.All(color));
+        else foreach (var r in bag.GetComponentsInChildren<Renderer>()) PaintPalette.Apply(r, -1, color);
     }
 
     private static Transform FindChild(Transform root, string name)
