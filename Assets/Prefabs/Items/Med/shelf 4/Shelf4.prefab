@@ -175,7 +175,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
   itemId: 16
-  mounting: 0
+  mounting: 2
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}
   startsOnWall: 0
