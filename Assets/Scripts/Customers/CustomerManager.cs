@@ -279,6 +279,9 @@ public class CustomerManager : NetworkBehaviour
         public string pathProblem; // the last reason a path failed (debug)
         public float lane;         // their side of the path (meters, + = right)
         public int laneCorner = -1;
+        public float nextSeeCheck;      // when to look past the next corner again (see Walk)
+        public int remainingCorner = -1; // RemainingAfter worked out for this corner...
+        public float remaining;          // ...as this
         public Vector3 laneTarget; // the current corner, moved over to their lane
 
         // The visit
@@ -346,7 +349,6 @@ public class CustomerManager : NetworkBehaviour
 
     // Every machine: the drawn customers.
     private readonly Dictionary<ushort, CustomerView> views = new();
-    private Transform viewRoot;
 
     /// <summary>Customers in the mall (host: thinking ones; others: drawn ones).</summary>
     public int Count => IsServer ? customers.Count : views.Count;
@@ -766,6 +768,7 @@ public class CustomerManager : NetworkBehaviour
         c.bestLeft = float.MaxValue;
         c.stuckSince = Time.time;
         c.laneCorner = -1;
+        c.remainingCorner = -1;
         c.stuckRepaths = 0;
         paths++;
         return true;
@@ -781,7 +784,14 @@ public class CustomerManager : NetworkBehaviour
 
         Vector3 to = LaneTarget(c);
         float left = FlatDistance(c.pos, to);
-        if (left < 0.35f || (left < 2f && c.corner < c.corners.Count - 1 && CanSeeNext(c)))
+        // Looking past the next corner costs a few raycasts: a few times a second is plenty.
+        bool seePast = false;
+        if (left < 2f && c.corner < c.corners.Count - 1 && Time.time >= c.nextSeeCheck)
+        {
+            c.nextSeeCheck = Time.time + 0.2f;
+            seePast = CanSeeNext(c);
+        }
+        if (left < 0.35f || seePast)
         {
             c.corner++;
             if (c.corner >= c.corners.Count) { Arrive(c); return; }
@@ -796,7 +806,7 @@ public class CustomerManager : NetworkBehaviour
         float toEnd = FlatDistance(c.pos, c.destination);
         float avoidWeight = Mathf.Clamp01(toEnd - 0.3f);
         if (c.mode == Mode.Exiting && toEnd < exitReach) { Arrive(c); return; } // out the door
-        if (CustomerSpawnPoint.InAnyDoorway(c.pos)) avoidWeight = 0f; // coming and going: straight through
+        if (InDoorway(c.pos)) avoidWeight = 0f; // coming and going: straight through
         Vector3 vel = dir * c.speed + Avoidance(c, dir) * (c.speed * avoidWeight);
         vel = Vector3.ClampMagnitude(vel, c.speed * 1.15f);
         if (vel.magnitude * dt > left && Vector3.Dot(vel, dir) > 0.5f * vel.magnitude)
@@ -829,7 +839,7 @@ public class CustomerManager : NetworkBehaviour
         {
             stuckEvents++;
             c.stuckRepaths++;
-            Log(c, $"stuck at {c.pos:F1} heading for {c.destination:F1} (try {c.stuckRepaths})");
+            if (logDecisions) Log(c, $"stuck at {c.pos:F1} heading for {c.destination:F1} (try {c.stuckRepaths})");
             int tries = c.stuckRepaths;
             // A few new paths; still nowhere: give up on this spot (they decide again from where they are).
             if (tries > 3 || !PathTo(c, c.destination))
@@ -894,10 +904,14 @@ public class CustomerManager : NetworkBehaviour
                !NavMesh.Raycast(c.pos - side, nextCorner - side, out _, NavMesh.AllAreas);
     }
 
+    // Path length after the current corner (only changes when they pass a corner or get a new path).
     private static float RemainingAfter(Customer c)
     {
+        if (c.remainingCorner == c.corner) return c.remaining;
         float sum = 0f;
         for (int i = c.corner + 1; i < c.corners.Count; i++) sum += FlatDistance(c.corners[i - 1], c.corners[i]);
+        c.remainingCorner = c.corner;
+        c.remaining = sum;
         return sum;
     }
 
@@ -987,8 +1001,24 @@ public class CustomerManager : NetworkBehaviour
         }
     }
 
+    // The entrances' doorways (see CustomerSpawnPoint.doorwayRadius), gathered once a frame.
+    private readonly List<(Vector3 at, float r2)> doorways = new();
+
+    private bool InDoorway(Vector3 p)
+    {
+        foreach (var (at, r2) in doorways)
+        {
+            float dx = at.x - p.x, dz = at.z - p.z;
+            if (dx * dx + dz * dz < r2 && Mathf.Abs(at.y - p.y) <= 2f) return true;
+        }
+        return false;
+    }
+
     private void GatherPlayers()
     {
+        doorways.Clear();
+        foreach (var sp in CustomerSpawnPoint.All)
+            if (sp != null && sp.doorwayRadius > 0f) doorways.Add((sp.transform.position, sp.doorwayRadius * sp.doorwayRadius));
         players.Clear();
         foreach (var client in NetworkManager.ConnectedClientsList)
             if (client.PlayerObject != null) players.Add(client.PlayerObject.transform.position);
@@ -1825,27 +1855,37 @@ public class CustomerManager : NetworkBehaviour
     {
         distance = 0f;
         if (cam == null) return 0;
-        ushort best = 0;
-        float bestDist = stopRange;
         Vector3 eye = cam.transform.position, fwd = cam.transform.forward;
+        // Who's on the crosshair line, from plain numbers (no transforms); the nearest few then get a
+        // line-of-sight check, nearest first, until one isn't behind something.
+        inView.Clear();
+        float range2 = stopRange * stopRange;
         foreach (var kv in views)
         {
             var v = kv.Value;
-            if (v == null) continue;
-            Vector3 body = v.transform.position + Vector3.up * 1f;
-            Vector3 to = body - eye;
+            if (ReferenceEquals(v, null)) continue; // a plain check: destroyed views are taken out of the list
+            Vector3 to = v.Shown + Vector3.up * 1f - eye;
+            if (to.sqrMagnitude > range2) continue;
             float along = Vector3.Dot(to, fwd);
-            if (along <= 0f || along > bestDist) continue;
-            float off = (to - fwd * along).magnitude; // how far from the crosshair line
-            if (off > 0.45f) continue;
+            if (along <= 0f || along > stopRange) continue;
+            if ((to - fwd * along).sqrMagnitude > 0.45f * 0.45f) continue; // how far from the crosshair line
+            inView.Add((kv.Key, along));
+        }
+        if (inView.Count == 0) return 0;
+        inView.Sort((a, b) => a.along.CompareTo(b.along));
+        for (int i = 0; i < inView.Count && i < 4; i++)
+        {
+            var (id, along) = inView[i];
+            Vector3 body = eye + fwd * along; // close enough to their middle for "is something in the way"
             if (Physics.Linecast(eye, body, out var hit, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore) &&
                 hit.distance < along - 0.4f) continue;
-            best = kv.Key;
-            bestDist = along;
+            distance = along;
+            return id;
         }
-        distance = bestDist;
-        return best;
+        return 0;
     }
+
+    private readonly List<(ushort id, float along)> inView = new();
 
     /// <summary>Any player: stop the customer they're looking at and check their bag.</summary>
     public void RequestStop(ushort id) => StopCustomerRpc(id);
@@ -2103,13 +2143,10 @@ public class CustomerManager : NetworkBehaviour
     private void MakeView(ushort id, byte look, Vector3 pos, float yaw)
     {
         if (views.TryGetValue(id, out var old) && old != null) { old.SetTarget(pos, yaw, snap: true); return; }
-        if (viewRoot == null)
-        {
-            viewRoot = new GameObject("[Customers]").transform;
-            DontDestroyOnLoad(viewRoot.gameObject);
-        }
         var prefab = look < looks.Count ? looks[look] : null;
-        views[id] = CustomerView.Create(id, prefab, pos, yaw, viewRoot);
+        // At the scene root, not under one parent: Unity updates separate root hierarchies in parallel,
+        // and moving hundreds of children of one parent is slower.
+        views[id] = CustomerView.Create(id, prefab, pos, yaw, null);
     }
 
     private void RemoveView(ushort id)
