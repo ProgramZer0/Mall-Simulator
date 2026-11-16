@@ -154,7 +154,7 @@ public static class StockBoxGenerator
             data.item.displayName = productName;
             data.item.worldNetworkPrefab = null;
             data.item.showInShop = true;
-            FromProduct(s, inst.GetComponent<ItemPickupNet>(), data, Product(hang, shelf), units);
+            FromProduct(s, inst.GetComponent<ItemPickupNet>(), data, Product(hang, shelf), units, CrateIcon(s, template, path, hang, shelf));
             PrefabUtility.RecordPrefabInstancePropertyModifications(data);
 
             PrefabUtility.SaveAsPrefabAsset(inst, path);
@@ -180,7 +180,7 @@ public static class StockBoxGenerator
         if (same && asset.TryGetComponent<ItemData>(out var curData) && curData.item != null)
         {
             var want = curData.item.Copy();
-            ApplyProduct(s, want, product, count);
+            ApplyProduct(s, want, product, count, CrateIcon(s, s.template, path, hang, shelf));
             same = JsonUtility.ToJson(want) == JsonUtility.ToJson(curData.item);
         }
         if (same) return;
@@ -192,7 +192,7 @@ public static class StockBoxGenerator
             if (pickup == null) return;
             var data = root.GetComponent<ItemData>();
             SetModels(pickup, hang, shelf, count);
-            if (data != null) FromProduct(s, pickup, data, product, count);
+            if (data != null) FromProduct(s, pickup, data, product, count, CrateIcon(s, s.template, path, hang, shelf));
             PrefabUtility.SaveAsPrefabAsset(root, path);
             report.AppendLine($"Updated stock crate '{path}': {Describe(hang, shelf)}, {count} per crate.");
         }
@@ -206,13 +206,14 @@ public static class StockBoxGenerator
     /// <summary>
     /// What a crate takes from its product's ItemData (kept in step every run; set it on the product):
     /// price (one product's times how many are in a crate), what one's worth, categories (plus Boxed),
-    /// rarity, sizes and size step, delivery time, level, special market, icon. Always in the shop. And how
+    /// rarity, sizes and size step, delivery time, level, special market. Its icon (see CrateIcon). Always in the shop. And how
     /// its products may sit on shelves, from the product's ItemPickupNet.
     /// </summary>
-    private static void FromProduct(StockBoxSettings s, ItemPickupNet crate, ItemData data, GameObject product, int units)
+    private static void FromProduct(StockBoxSettings s, ItemPickupNet crate, ItemData data, GameObject product, int units,
+                                    Sprite icon)
     {
         if (data.item == null) data.item = new ItemDef();
-        ApplyProduct(s, data.item, product, units);
+        ApplyProduct(s, data.item, product, units, icon);
 
         // Shelf Pose is on the crate but says how its products sit: the product's own setting, if it has one.
         if (crate != null && PoseOf(product) is int pose)
@@ -228,6 +229,87 @@ public static class StockBoxGenerator
         }
     }
 
+    /* ========================= ICONS ========================= */
+
+    // A product model's own icon (its ItemData's), or null.
+    private static Sprite IconOf(GameObject model) =>
+        model != null && model.TryGetComponent<ItemData>(out var d) && d.item != null ? d.item.icon : null;
+
+    /// <summary>
+    /// The crate's icon: its hanging product's icon (else its shelf product's) in front of the box's own icon
+    /// (BoxStock's ItemData). Saved as "&lt;crate&gt; Icon.png" next to the crate, and only drawn again when one
+    /// of the two pictures (or the settings) changes. No product icon: the box's. No box icon: the product's.
+    /// </summary>
+    private static Sprite CrateIcon(StockBoxSettings s, GameObject box, string cratePath, List<GameObject> hang, List<GameObject> shelf)
+    {
+        Sprite product = hang.Select(IconOf).FirstOrDefault(i => i != null) ?? shelf.Select(IconOf).FirstOrDefault(i => i != null);
+        Sprite back = IconOf(box);
+        if (product == null || back == null) return product ?? back;
+
+        string iconPath = Path.ChangeExtension(cratePath, null) + " Icon.png";
+        string key = $"{SourceKey(product)}|{SourceKey(back)}|{s.iconSize}|{s.iconProductScale:0.###}|{s.iconProductOffset}";
+        var importer = AssetImporter.GetAtPath(iconPath) as TextureImporter;
+        if (importer == null || importer.userData != key)
+        {
+            int size = Mathf.Clamp(s.iconSize, 32, 1024);
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            var rt = RenderTexture.GetTemporary(size, size, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            var was = RenderTexture.active;
+            try
+            {
+                RenderTexture.active = rt;
+                GL.Clear(true, true, Color.clear);
+                GL.PushMatrix();
+                GL.LoadPixelMatrix(0, size, size, 0);
+                Draw(back, new Rect(0, 0, size, size));
+                float w = size * Mathf.Clamp(s.iconProductScale, 0.1f, 1f);
+                Vector2 at = new Vector2((size - w) * 0.5f, (size - w) * 0.5f) +
+                             new Vector2(s.iconProductOffset.x, -s.iconProductOffset.y) * size;
+                Draw(product, new Rect(at.x, at.y, w, w));
+                GL.PopMatrix();
+                tex.ReadPixels(new Rect(0, 0, size, size), 0, 0);
+                tex.Apply();
+            }
+            finally
+            {
+                RenderTexture.active = was;
+                RenderTexture.ReleaseTemporary(rt);
+            }
+            File.WriteAllBytes(iconPath, tex.EncodeToPNG());
+            Object.DestroyImmediate(tex);
+            AssetDatabase.ImportAsset(iconPath, ImportAssetOptions.ForceUpdate);
+            importer = (TextureImporter)AssetImporter.GetAtPath(iconPath);
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.alphaIsTransparency = true;
+            importer.mipmapEnabled = false;
+            importer.userData = key;
+            importer.SaveAndReimport();
+        }
+        return AssetDatabase.LoadAssetAtPath<Sprite>(iconPath);
+    }
+
+    // A sprite drawn into a square, keeping its shape (centered).
+    private static void Draw(Sprite sprite, Rect into)
+    {
+        Rect r = sprite.textureRect;
+        var t = sprite.texture;
+        float aspect = r.width / Mathf.Max(1f, r.height);
+        Rect dest = into;
+        if (aspect > 1f) { dest.height = into.width / aspect; dest.y += (into.height - dest.height) * 0.5f; }
+        else { dest.width = into.height * aspect; dest.x += (into.width - dest.width) * 0.5f; }
+        var source = new Rect(r.x / t.width, r.y / t.height, r.width / t.width, r.height / t.height);
+        Graphics.DrawTexture(dest, t, source, 0, 0, 0, 0);
+    }
+
+    // Which picture, and which version of it (so an edited icon is drawn again).
+    private static string SourceKey(Sprite sprite)
+    {
+        string path = AssetDatabase.GetAssetPath(sprite);
+        return AssetDatabase.TryGetGUIDAndLocalFileIdentifier(sprite, out string guid, out long id)
+            ? $"{guid}:{id}:{AssetDatabase.GetAssetDependencyHash(path)}" : sprite.name;
+    }
+
     // The product's Shelf Pose (on its ItemPickupNet), if it has one.
     private static int? PoseOf(GameObject product)
     {
@@ -236,9 +318,10 @@ public static class StockBoxGenerator
         return from != null ? from.enumValueIndex : (int?)null;
     }
 
-    private static void ApplyProduct(StockBoxSettings s, ItemDef item, GameObject product, int units)
+    private static void ApplyProduct(StockBoxSettings s, ItemDef item, GameObject product, int units, Sprite icon)
     {
         item.showInShop = true;
+        if (icon != null) item.icon = icon;
         if (product == null) return;
 
         if (product.TryGetComponent<ItemData>(out var pd) && pd.item != null)
@@ -262,7 +345,6 @@ public static class StockBoxGenerator
             item.minLevel = p.minLevel;
             item.inSpecialMarket = p.inSpecialMarket;
             item.specialMarketWeight = p.specialMarketWeight;
-            if (p.icon != null) item.icon = p.icon;
         }
     }
 

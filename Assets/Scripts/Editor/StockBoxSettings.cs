@@ -50,6 +50,15 @@ public class StockBoxSettings : ScriptableObject
     [Tooltip("The crate is named after its product's folder, plus this (\"Cheap Jeans Stock\").")]
     public string nameSuffix = " Stock";
 
+    [Header("Crate icon")]
+    [Tooltip("The crate's icon is its product's (the hanging one's, else the shelf one's) in front of the box's " +
+             "icon (an ItemData on the box). Pixels square.")]
+    public int iconSize = 256;
+    [Tooltip("How big the product is drawn over the box (1 = as big as the box).")]
+    [Range(0.1f, 1f)] public float iconProductScale = 0.8f;
+    [Tooltip("Where the product sits over the box, as a share of the icon (0, 0 = middle; y up).")]
+    public Vector2 iconProductOffset = Vector2.zero;
+
     [Header("Products per crate")]
     [Tooltip("How many fit: the box's size over one product's (the shelf model if it has one, else the hanging " +
              "one), times this for the gaps. A product folder named with x and a number (\"Cheap Jeans x12\") " +
