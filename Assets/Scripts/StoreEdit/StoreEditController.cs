@@ -2578,6 +2578,7 @@ public class StoreEditController : NetworkBehaviour
             var counts = new int[stock.Length];
             var orients = new int[stock.Length];
             var seeds = new int[stock.Length];
+            var paints = new uint[stock.Length];
             bool any = false;
             for (int z = 0; z < stock.Length; z++)
             {
@@ -2585,18 +2586,20 @@ public class StoreEditController : NetworkBehaviour
                 counts[z] = stock[z].count;
                 orients[z] = stock[z].orient;
                 seeds[z] = stock[z].seed;
+                paints[z] = stock[z].paint;
                 any |= stock[z].count > 0;
             }
-            if (any) ReceiveEditStockRpc(sessionId, i, stockIds, counts, orients, seeds);
+            if (any) ReceiveEditStockRpc(sessionId, i, stockIds, counts, orients, seeds, paints);
         }
     }
 
     /// <summary>Editor: show the stock on one shelf's local copy (sent after its item).</summary>
     [Rpc(SendTo.Owner)]
-    private void ReceiveEditStockRpc(int sessionId, int index, int[] itemIds, int[] counts, int[] orients, int[] seeds)
+    private void ReceiveEditStockRpc(int sessionId, int index, int[] itemIds, int[] counts, int[] orients, int[] seeds,
+                                     uint[] paints)
     {
         if (sessionId != clientSessionId || index < 0 || index >= localItems.Count || localItems[index] == null) return;
-        localItems[index].ShowStock(itemIds, counts, orients, seeds);
+        localItems[index].ShowStock(itemIds, counts, orients, seeds, paints);
     }
 
     /// <summary>Editor: build local copies of the store's items (and hide the real ones on this screen).</summary>
