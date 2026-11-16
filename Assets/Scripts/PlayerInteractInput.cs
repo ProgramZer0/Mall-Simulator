@@ -164,8 +164,13 @@ public class PlayerInteractInput : NetworkBehaviour
     private bool hideForStocking; // the held crate is out of sight while stocking from it
 
     // A customer in front of you, closer than whatever else you're looking at.
+    private float nextCustomerLook;
+
+    // Ten times a second is plenty for "F: stop them" (it checks every customer's position).
     private void UpdateLookedAtCustomer()
     {
+        if (Time.time < nextCustomerLook) return;
+        nextCustomerLook = Time.time + 0.1f;
         lookedAtCustomer = 0;
         var customers = CustomerManager.Instance;
         if (customers == null) return;

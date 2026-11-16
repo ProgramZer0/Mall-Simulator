@@ -1863,7 +1863,7 @@ public class CustomerManager : NetworkBehaviour
         foreach (var kv in views)
         {
             var v = kv.Value;
-            if (v == null) continue;
+            if (ReferenceEquals(v, null)) continue; // a plain check: destroyed views are taken out of the list
             Vector3 to = v.Shown + Vector3.up * 1f - eye;
             if (to.sqrMagnitude > range2) continue;
             float along = Vector3.Dot(to, fwd);
