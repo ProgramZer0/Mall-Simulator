@@ -386,19 +386,19 @@ public static class ItemSetupTool
     }
 }
 
-/// <summary>ItemData in the Inspector: the id shown (not edited), the rest of the entry as usual.</summary>
-[CustomEditor(typeof(ItemData))]
+/// <summary>
+/// ItemData in the Inspector: the id shown (not edited; given by Tools > Mall Sim > Items > Update Item
+/// Catalog), the rest of the entry as usual. Several selected at once can be edited together.
+/// </summary>
+[CustomEditor(typeof(ItemData)), CanEditMultipleObjects]
 public class ItemDataEditor : Editor
 {
     public override void OnInspectorGUI()
     {
         serializedObject.Update();
-        var data = (ItemData)target;
-        using (new EditorGUILayout.HorizontalScope())
-        {
-            EditorGUILayout.LabelField("Item Id", data.Id > 0 ? data.Id.ToString() : "none yet (given before Play)");
-            if (GUILayout.Button("Update Item Catalog", GUILayout.Width(150))) ItemSetupTool.UpdateCatalog(quiet: false);
-        }
+        var id = serializedObject.FindProperty("item.id");
+        string shown = id.hasMultipleDifferentValues ? "—" : id.intValue > 0 ? id.intValue.ToString() : "none yet (given before Play)";
+        EditorGUILayout.LabelField("Item Id", shown);
         EditorGUILayout.Space(4);
 
         var prop = serializedObject.FindProperty("item");
