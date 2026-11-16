@@ -53,6 +53,59 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.31109136, y: 0.83645463, z: 0.58705455}
   m_Center: {x: -0.023192734, y: 0.0006335974, z: 0.00040996078}
+--- !u!1 &5906711487208071690
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5327915215688033367}
+  - component: {fileID: 1676034122045151543}
+  m_Layer: 3
+  m_Name: boxCol (1)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5327915215688033367
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5906711487208071690}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0.618}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 9036826465454545812}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &1676034122045151543
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5906711487208071690}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.31109136, y: 0.83645463, z: 0.58705455}
+  m_Center: {x: -0.023192734, y: 0.0006335974, z: 0.00040996078}
 --- !u!1 &8036485127719048047
 GameObject:
   m_ObjectHideFlags: 0
@@ -93,6 +146,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1896878543057236061}
+  - {fileID: 5327915215688033367}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &6895877467843971255
@@ -236,6 +290,7 @@ MonoBehaviour:
   shelfPrefabs: []
   hangPrefabs: []
   randomVariants: 0
+  shelfPose: 0
   unitsPerCrate: 1
   physicsMode: 1
   stillSeconds: 4
@@ -287,10 +342,13 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   stockZones:
   - {fileID: 3294059487721268210}
+  - {fileID: 1676034122045151543}
   hangRails: []
   spacing: 0.01
   hangSpacing: 0
   maxPerZone: 100
+  fillFromRight: 1
+  fillFromFront: 1
   blockWhenCovered: 1
   coverMargin: 0.02
 --- !u!64 &-8443274913375080159

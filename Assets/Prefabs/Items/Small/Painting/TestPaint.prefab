@@ -175,7 +175,7 @@ MonoBehaviour:
     rarity: 0
     marketPrice: 5
     deliverySeconds: 60
-    shipmentPrefab: {fileID: 0}
+    shipmentPrefab: {fileID: 8949743630989440838, guid: ef05c615a04bbfc4e895985a1de605f6, type: 3}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
 --- !u!114 &323429474624334279
@@ -200,6 +200,7 @@ MonoBehaviour:
   shelfPrefabs: []
   hangPrefabs: []
   randomVariants: 0
+  shelfPose: 0
   unitsPerCrate: 1
   physicsMode: 1
   stillSeconds: 4

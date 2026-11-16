@@ -7350,10 +7350,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CustomerManager
   ShowTopMostFoldoutHeaderGroup: 1
-  maxCustomers: 500
-  arrivalsPerMinute: 100
-  maxBystanders: 60
-  bystanderArrivalsPerMinute: 20
+  maxCustomers: 400
+  arrivalsPerMinute: 60
+  maxBystanders: 300
+  bystanderArrivalsPerMinute: 40
   maxStoresPerVisit: 8
   maxMinutesInMall: 30
   minMinutesInMall: 5
@@ -7366,7 +7366,7 @@ MonoBehaviour:
   groupSpacing: 0.7
   groupWaitSeconds: 90
   groupWaitDistance: 2.5
-  walkSpeed: {x: 1.1, y: 1.5}
+  walkSpeed: {x: 1.1, y: 1.9}
   passRange: 20
   storeCapacity: 20
   sightRange: 20
@@ -23377,7 +23377,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.11731859, y: 0.4684036}
   m_AnchorMax: {x: 0.36263925, y: 0.5454196}
-  m_AnchoredPosition: {x: -4.1220093, y: 1.5399933}
+  m_AnchoredPosition: {x: -4.1219177, y: 1.5399933}
   m_SizeDelta: {x: -11.881897, y: -4.8294067}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1405366925
@@ -23867,7 +23867,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.8175, y: 0.91367}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0.3449707, y: 0.22364807}
+  m_AnchoredPosition: {x: 0.3449707, y: 0.22366333}
   m_SizeDelta: {x: -0.69000244, y: -0.44885254}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1419451457
@@ -37796,7 +37796,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!1 &4154378063395139584
 GameObject:
   m_ObjectHideFlags: 0
@@ -37996,7 +37996,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!23 &5089262721669709909
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -38064,7 +38064,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!1 &5956691172464362032
 GameObject:
   m_ObjectHideFlags: 0
