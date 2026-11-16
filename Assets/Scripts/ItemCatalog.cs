@@ -5,6 +5,11 @@ using UnityEngine;
 public class ItemCatalog : MonoBehaviour
 {
     public static ItemCatalog Instance { get; private set; }
+    [Tooltip("Items whose entry is on their prefab (ItemData). Filled by Tools > Mall Sim > Items > Update " +
+             "Item Catalog (and before Play); no need to edit by hand. The shop lists them in this order.")]
+    [SerializeField] private List<ItemData> itemPrefabs = new();
+    [Tooltip("Older items set up here instead of on their prefab. Tools > Mall Sim > Items > Move Catalog " +
+             "Items Onto Prefabs moves them over.")]
     [SerializeField] private List<ItemDef> items = new();
 
     [Header("Default Item Sounds")]
@@ -35,8 +40,9 @@ public class ItemCatalog : MonoBehaviour
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         ItemDebug.On = debugItemLogs;
+        BuildAll();
         map = new Dictionary<int, ItemDef>();
-        foreach (var it in items)
+        foreach (var it in all)
         {
             if (it == null) continue;
             if (it.id >= Sizes.FirstSizedId)
@@ -45,7 +51,7 @@ public class ItemCatalog : MonoBehaviour
             map[it.id] = it;
         }
         // Each size of a sized item is its own item (own id, price, stock, price tag), made here.
-        foreach (var it in items)
+        foreach (var it in all)
         {
             if (it == null || it.sizes == ItemDef.SizeSet.None) continue;
             var list = new List<ItemDef>();
@@ -65,7 +71,48 @@ public class ItemCatalog : MonoBehaviour
         }
     }
 
-    public bool TryGet(int id, out ItemDef def) => map.TryGetValue(id, out def);
+    // Every item: those set up on their prefabs (copies of their ItemData, with the prefab as the world
+    // prefab), then the older ones listed here. A repeated id keeps the first.
+    private List<ItemDef> all;
+
+    private void BuildAll()
+    {
+        all = new List<ItemDef>();
+        var seen = new HashSet<int>();
+        foreach (var data in itemPrefabs)
+        {
+            if (data == null || data.item == null) continue;
+            if (data.item.id <= 0)
+            {
+                Debug.LogWarning($"[ItemCatalog] '{data.name}' has no id yet: run Tools > Mall Sim > Items > Update Item Catalog.", data);
+                continue;
+            }
+            var def = data.item.Copy();
+            def.worldNetworkPrefab = data.GetComponent<NetworkObject>();
+            if (!seen.Add(def.id))
+            {
+                Debug.LogWarning($"[ItemCatalog] '{data.name}' repeats id {def.id}: left out. Run Update Item Catalog.", data);
+                continue;
+            }
+            all.Add(def);
+        }
+        foreach (var it in items)
+        {
+            if (it == null) continue;
+            if (!seen.Add(it.id))
+            {
+                Debug.LogWarning($"[ItemCatalog] '{it.displayName}' (listed on the catalog) repeats id {it.id}: left out.", this);
+                continue;
+            }
+            all.Add(it);
+        }
+    }
+
+    public bool TryGet(int id, out ItemDef def)
+    {
+        if (map == null) { def = null; return false; }
+        return map.TryGetValue(id, out def);
+    }
 
     /// <summary>A sized item's sizes, smallest first (null if it has none).</summary>
     public IReadOnlyList<ItemDef> GetSizes(int itemId)
@@ -78,6 +125,7 @@ public class ItemCatalog : MonoBehaviour
     // Items used to have one Category; move it into Categories so nothing set up is lost.
     private void OnValidate()
     {
+        all = null; // rebuilt from the lists next time it's asked
         if (items == null) return;
         bool changed = false;
         foreach (var it in items)
@@ -91,7 +139,14 @@ public class ItemCatalog : MonoBehaviour
 #endif
 
     /// <summary>Every item in the catalog, in the order listed (the shop shows them in this order).</summary>
-    public IReadOnlyList<ItemDef> Items => items;
+    public IReadOnlyList<ItemDef> Items
+    {
+        get
+        {
+            if (all == null) BuildAll();
+            return all;
+        }
+    }
 }
 
 [System.Serializable]
@@ -176,6 +231,19 @@ public class ItemDef
     /// <summary>Which size (0 = smallest), -1 if it isn't a size.</summary>
     public int SizeIndex => sizeIndex;
     public string SizeName => IsSize ? Sizes.Name(sizeOf.sizes, sizeIndex) : "";
+
+    /// <summary>A copy of this entry (the catalog uses copies of what's on prefabs, so play never changes them).</summary>
+    public ItemDef Copy()
+    {
+        var c = (ItemDef)MemberwiseClone();
+        c.categories = categories != null ? new List<string>(categories) : new List<string>();
+        c.categorySet = null;
+        c.ghostTemplate = null;
+        c.localBoundsComputed = false;
+        c.sizeOf = null;
+        c.sizeIndex = -1;
+        return c;
+    }
 
     /// <summary>One size of this item (ItemCatalog makes them).</summary>
     public ItemDef MakeSize(int index)
