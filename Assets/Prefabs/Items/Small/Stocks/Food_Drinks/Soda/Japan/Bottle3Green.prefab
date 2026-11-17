@@ -127,7 +127,7 @@ MonoBehaviour:
     inSpecialMarket: 0
     specialMarketWeight: 1
     rarity: 0
-    marketPrice: 0
+    marketPrice: 20
     deliverySeconds: 30
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
