@@ -41,6 +41,15 @@ public class PaintParts : MonoBehaviour
 
     public byte Current { get; private set; }
 
+#if UNITY_EDITOR
+    // Added in the editor: starts with the renderer on this object (all its materials), if it has one.
+    private void Reset()
+    {
+        parts = new List<Part>();
+        if (TryGetComponent<Renderer>(out var r)) parts.Add(new Part { renderer = r, materialIndex = -1 });
+    }
+#endif
+
     /// <summary>Its name for prompts: Zone Name, or the object's name.</summary>
     public string DisplayName => string.IsNullOrEmpty(zoneName) ? name : zoneName;
 
