@@ -72,8 +72,11 @@ public static class ItemSetupTool
     public static void UpdateCatalog(bool quiet)
     {
         var report = new StringBuilder();
-        StockBoxGenerator.Run(report); // crates for new products first, so they get ids below
         allPrefabs = LoadAllPrefabs();
+        FillFromFolders(FindItemPrefabs(), report); // first, so made crates copy their products' categories
+        int before = report.Length;
+        StockBoxGenerator.Run(report); // crates for new products, so they get ids below
+        if (report.Length != before) allPrefabs = LoadAllPrefabs(); // (something made or changed)
         var datas = FindItemPrefabs();
         var catalog = FindCatalog();
 
@@ -182,6 +185,69 @@ public static class ItemSetupTool
             if (go != null) list.Add((path, go));
         }
         return list;
+    }
+
+    /// <summary>A name or folder name as words: underscores are spaces (and no doubled spaces).</summary>
+    public static string Words(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        string t = text.Replace('_', ' ');
+        while (t.Contains("  ")) t = t.Replace("  ", " ");
+        return t.Trim();
+    }
+
+    // Folders that say where in the project, not what it is: not categories.
+    private static readonly HashSet<string> NotCategories = new(System.StringComparer.OrdinalIgnoreCase)
+    {
+        "assets", "prefabs", "items", "small", "sml", "sm", "med", "medium", "md", "lrg", "large", "lg", "misc",
+    };
+
+    /// <summary>
+    /// Categories from the folders an item's prefab is in (under Items, without the size folders):
+    /// Items/Small/Stocks/Pants/Jeans/Cheap → Stocks, Pants, Jeans, Cheap.
+    /// </summary>
+    public static List<string> FolderCategories(string assetPath)
+    {
+        var parts = assetPath.Replace('\\', '/').Split('/');
+        int start = 0;
+        for (int i = 0; i < parts.Length - 1; i++)
+            if (string.Equals(parts[i], "Items", System.StringComparison.OrdinalIgnoreCase)) start = i + 1;
+        var cats = new List<string>();
+        for (int i = start; i < parts.Length - 1; i++)
+        {
+            string c = Words(parts[i]);
+            if (c.Length == 0 || NotCategories.Contains(c)) continue;
+            if (!cats.Exists(x => string.Equals(x, c, System.StringComparison.OrdinalIgnoreCase))) cats.Add(c);
+        }
+        return cats;
+    }
+
+    // Items with no categories get their folders'; names still the prefab's (underscores and all) get words.
+    private static void FillFromFolders(List<ItemData> datas, StringBuilder report)
+    {
+        foreach (var d in datas)
+        {
+            if (d.item == null) continue;
+            bool changed = false;
+            if (!d.item.Categories.Any())
+            {
+                var cats = FolderCategories(AssetDatabase.GetAssetPath(d));
+                if (cats.Count > 0)
+                {
+                    d.item.categories = cats;
+                    d.item.CategoriesChanged();
+                    report.AppendLine($"'{d.name}' categories from its folders: {string.Join(", ", cats)}.");
+                    changed = true;
+                }
+            }
+            string name = d.item.displayName;
+            if ((string.IsNullOrWhiteSpace(name) || name == d.gameObject.name) && Words(d.gameObject.name) != name)
+            {
+                d.item.displayName = Words(d.gameObject.name);
+                changed = true;
+            }
+            if (changed) EditorUtility.SetDirty(d);
+        }
     }
 
     // Small / Med / Lrg / Misc from the folders on the way to the prefab (Auto if none of them).

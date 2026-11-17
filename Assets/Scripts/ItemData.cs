@@ -21,7 +21,7 @@ public class ItemData : MonoBehaviour
     private void OnValidate()
     {
         item ??= new ItemDef();
-        if (string.IsNullOrWhiteSpace(item.displayName)) item.displayName = gameObject.name;
+        if (string.IsNullOrWhiteSpace(item.displayName)) item.displayName = gameObject.name.Replace('_', ' ').Trim();
         item.MigrateCategory();
         item.CategoriesChanged();
         // The id is the one source of truth: keep the ItemPickupNet's in step with it.
