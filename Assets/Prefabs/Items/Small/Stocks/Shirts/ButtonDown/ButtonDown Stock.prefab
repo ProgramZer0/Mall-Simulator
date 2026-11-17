@@ -21,9 +21,17 @@ PrefabInstance:
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: shelfPrefabs.Array.size
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: 'hangPrefabs.Array.data[0]'
       value: 
       objectReference: {fileID: 2987026370053173943, guid: e0e2644f315acbe4592f322ecd3879b2, type: 3}
+    - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: 'shelfPrefabs.Array.data[0]'
+      value: 
+      objectReference: {fileID: 1304027735852132738, guid: 2cd2961fb7c6ed747a25bcc54c965752, type: 3}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.id
       value: 55

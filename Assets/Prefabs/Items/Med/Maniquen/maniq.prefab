@@ -15,9 +15,9 @@ GameObject:
   - component: {fileID: -3466762604157177853}
   - component: {fileID: 5620994197713683640}
   - component: {fileID: 8111690074518622407}
-  - component: {fileID: 7763246439610956298}
   - component: {fileID: -3506604066726038744}
   - component: {fileID: 8848683542101434657}
+  - component: {fileID: 7769191194004293684}
   m_Layer: 3
   m_Name: maniq
   m_TagString: Untagged
@@ -181,6 +181,7 @@ MonoBehaviour:
   shelfPrefabs: []
   hangPrefabs: []
   randomVariants: 0
+  shelfPose: 0
   unitsPerCrate: 1
   physicsMode: 1
   stillSeconds: 4
@@ -201,22 +202,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Sellable
   ShowTopMostFoldoutHeaderGroup: 1
   sellWhenLoose: 1
---- !u!114 &7763246439610956298
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 640511178853749887}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PaintParts
-  parts:
-  - renderer: {fileID: 269815029135026698}
-    materialIndex: 0
-  zoneName: 
 --- !u!64 &-3506604066726038744
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -256,3 +241,19 @@ MonoBehaviour:
     amount: 1
   - name: ShirtDecor
     amount: 1
+--- !u!114 &7769191194004293684
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 640511178853749887}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PaintParts
+  parts:
+  - renderer: {fileID: 269815029135026698}
+    materialIndex: -1
+  zoneName: 
