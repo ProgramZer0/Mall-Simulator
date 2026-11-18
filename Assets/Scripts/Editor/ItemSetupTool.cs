@@ -74,6 +74,8 @@ public static class ItemSetupTool
         var report = new StringBuilder();
         allPrefabs = LoadAllPrefabs();
         FillFromFolders(FindItemPrefabs(), report); // first, so made crates copy their products' categories
+        NumberDefs<LicenseDef>(report, "License", l => l.id, (l, id) => l.id = id, l => l.displayName, (l, n) => l.displayName = n);
+        NumberDefs<FranchiseDef>(report, "Franchise", f => f.id, (f, id) => f.id = id, f => f.displayName, (f, n) => f.displayName = n);
         int before = report.Length;
         StockBoxGenerator.Run(report); // crates for new products, so they get ids below
         if (report.Length != before) allPrefabs = LoadAllPrefabs(); // (something made or changed)
@@ -185,6 +187,49 @@ public static class ItemSetupTool
             if (go != null) list.Add((path, go));
         }
         return list;
+    }
+
+    /// <summary>
+    /// Licenses and franchises: each gets a unique id (one with 0, or one another already has, gets the next
+    /// free number; the first found, by its path, keeps a shared one), and one still named the default
+    /// ("License", "Franchise") or nothing is named after its asset. Ids already in use never change, so
+    /// what players have bought stays theirs.
+    /// </summary>
+    private static void NumberDefs<T>(StringBuilder report, string defaultName, System.Func<T, int> getId,
+                                      System.Action<T, int> setId, System.Func<T, string> getName,
+                                      System.Action<T, string> setName) where T : ScriptableObject
+    {
+        var defs = AssetDatabase.FindAssets($"t:{typeof(T).Name}")
+            .Select(AssetDatabase.GUIDToAssetPath)
+            .OrderBy(p => p, System.StringComparer.Ordinal)
+            .Select(p => (path: p, def: AssetDatabase.LoadAssetAtPath<T>(p)))
+            .Where(x => x.def != null)
+            .ToList();
+        var used = new HashSet<int>();
+        var renumber = new List<T>();
+        foreach (var (_, def) in defs)
+        {
+            int id = getId(def);
+            if (id <= 0 || !used.Add(id)) renumber.Add(def);
+        }
+        int next = 1;
+        foreach (var def in renumber)
+        {
+            while (used.Contains(next)) next++;
+            int was = getId(def);
+            setId(def, next);
+            used.Add(next);
+            EditorUtility.SetDirty(def);
+            report.AppendLine($"{defaultName} '{def.name}' had id {was}{(was > 0 ? " (another has it)" : "")}: now {next}.");
+        }
+        foreach (var (_, def) in defs)
+        {
+            string name = getName(def);
+            if (!string.IsNullOrWhiteSpace(name) && name != defaultName) continue;
+            setName(def, Words(def.name));
+            EditorUtility.SetDirty(def);
+            report.AppendLine($"{defaultName} '{def.name}' named '{Words(def.name)}'.");
+        }
     }
 
     /// <summary>A name or folder name as words: underscores are spaces (and no doubled spaces).</summary>
