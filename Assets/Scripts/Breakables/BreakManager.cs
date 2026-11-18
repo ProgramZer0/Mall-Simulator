@@ -26,6 +26,9 @@ public class BreakManager : NetworkBehaviour
     [SerializeField, Min(0f)] private float repairSeconds = 30f;
     [Tooltip("How far away a broken thing can be reported from (meters).")]
     [SerializeField, Min(1f)] private float reportRange = 15f;
+    [Tooltip("Broken this long with nobody reporting it, shoppers start complaining: every player is told " +
+             "something's broken (not what or where). 0: never.")]
+    [SerializeField, Min(0f)] private float complainAfterSeconds = 60f;
     [SerializeField] private bool debugLogs;
 
     public enum State : byte { Working, Broken, Reported }
@@ -43,6 +46,7 @@ public class BreakManager : NetworkBehaviour
     private readonly List<Breakable> ordered = new();
     private readonly Dictionary<Breakable, ushort> indexOf = new();
     private readonly Dictionary<ushort, float> repairAt = new(); // host
+    private readonly Dictionary<ushort, float> complainAt = new(); // host: broken, nobody's said yet
     private float startedAt, nextRoll;
 
     private void Awake()
@@ -100,6 +104,20 @@ public class BreakManager : NetworkBehaviour
             if (ordered[i] != null) ordered[i].SetBroken(off.Contains((ushort)i));
     }
 
+    private State StateAt(ushort index)
+    {
+        foreach (var e in broken.Each()) if (e.index == index) return e.state;
+        return State.Working;
+    }
+
+    /// <summary>Every machine: how many are in this state (Broken: nobody's reported them yet).</summary>
+    public int Count(State state)
+    {
+        int n = 0;
+        if (broken != null) foreach (var e in broken.Each()) if (e.state == state) n++;
+        return n;
+    }
+
     /// <summary>Every machine: how it is.</summary>
     public State StateOf(Breakable b)
     {
@@ -126,6 +144,19 @@ public class BreakManager : NetworkBehaviour
                 if (debugLogs) Debug.Log($"[BreakManager] Fixed {Describe(kv.Key)}.", this);
             }
 
+        // Broken a while and nobody's reported it: shoppers complain.
+        if (complainAt.Count > 0)
+            foreach (var kv in new List<KeyValuePair<ushort, float>>(complainAt))
+            {
+                if (now < kv.Value) continue;
+                complainAt.Remove(kv.Key);
+                if (StateAt(kv.Key) != State.Broken || NotificationManager.Instance == null) continue;
+                string noun = kv.Key < ordered.Count && ordered[kv.Key] != null ? ordered[kv.Key].Noun : "thing";
+                foreach (var client in NetworkManager.ConnectedClientsList)
+                    NotificationManager.Instance.ServerNotifyClientText(client.ClientId, "Shoppers are complaining",
+                        $"There's a broken {noun} somewhere in the mall, and it's keeping shoppers away. Find it and report it.");
+            }
+
         // Once a second: maybe something breaks.
         if (now < nextRoll) return;
         nextRoll = now + 1f;
@@ -146,6 +177,7 @@ public class BreakManager : NetworkBehaviour
             pick -= ordered[i].BreakWeight;
             if (pick > 0f) continue;
             broken.Add(new Entry { index = (ushort)i, state = State.Broken });
+            if (complainAfterSeconds > 0f) complainAt[(ushort)i] = Time.time + complainAfterSeconds;
             if (debugLogs) Debug.Log($"[BreakManager] Broke {Describe((ushort)i)}.", ordered[i]);
             return;
         }
@@ -163,6 +195,7 @@ public class BreakManager : NetworkBehaviour
     {
         if (!IsServer || b == null || !indexOf.TryGetValue(b, out ushort i) || StateOf(b) != State.Working) return;
         broken.Add(new Entry { index = i, state = State.Broken });
+        if (complainAfterSeconds > 0f) complainAt[i] = Time.time + complainAfterSeconds;
     }
 
     private string Describe(ushort i) => i < ordered.Count && ordered[i] != null ? $"{ordered[i].Noun} '{ordered[i].name}'" : $"#{i}";
@@ -191,6 +224,7 @@ public class BreakManager : NetworkBehaviour
 
         broken[at] = new Entry { index = index, state = State.Reported };
         repairAt[index] = Time.time + repairSeconds;
+        complainAt.Remove(index);
         string noun = ordered[index].Noun;
         if (HelpPoints.Instance != null) HelpPoints.Instance.ServerAward(sender, HelpPoints.HelpAction.ReportedBroken);
         if (NotificationManager.Instance != null)
