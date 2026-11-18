@@ -380,7 +380,8 @@ public class PlayerInteractInput : NetworkBehaviour
 
         // Show the product where it'll go.
         if (stockTarget != null && !stockTargetIsTake && stockZone >= 0 &&
-            stockTarget.TryGetNextSlot(stockZone, held, stockOrient, out Vector3 slotPos, out Quaternion slotRot))
+            stockTarget.TryGetNextSlot(stockZone, held, stockOrient, out Vector3 slotPos, out Quaternion slotRot,
+                                       inventory.HeldPaint.Value))
             ShowStockPreview(stockTarget.GetNextModel(stockZone, held), slotPos, slotRot);
         else DestroyStockPreview();
     }
@@ -651,7 +652,14 @@ public class PlayerInteractInput : NetworkBehaviour
 
         int held = inventory.HeldItemId.Value;
         string text = $"{ItemName(held)}: {inventory.HeldUnits.Value}/{StockContainer.GetUnitsPerCrate(held)} in crate";
-        if (stockZone >= 0)
+        if (stockZone >= 0 && SplittingAt(stockZone))
+        {
+            // Something else is there: this starts a new part of the spot, where its stock ends.
+            var z = stockTarget.GetZone(stockZone);
+            text = $"F: Start {ItemName(held)} here, after the {ItemName(z.itemId)}   ({inventory.HeldUnits.Value}/" +
+                   $"{StockContainer.GetUnitsPerCrate(held)} in crate, room for {stockTarget.GetCapacity(stockZone, held, stockOrient, inventory.HeldPaint.Value)})";
+        }
+        else if (stockZone >= 0)
         {
             var z = stockTarget.GetZone(stockZone);
             text = $"F: Stock {text}   (shelf {(z.itemId == held ? z.count : 0)}/{stockTarget.GetCapacity(stockZone, held, stockOrient)})";
@@ -666,12 +674,18 @@ public class PlayerInteractInput : NetworkBehaviour
         if (zone < 0) return "";
         string text = $"\n{stockTurnKey}: Turn";
         var z = stockTarget.GetZone(zone);
-        int item = z.count > 0 ? z.itemId : inventory.HeldItemId.Value;
-        bool tipped = StockContainer.Orientation.Lying(StockContainer.AllowedOrient(item, z.count > 0 ? z.orient : stockOrient));
+        bool own = z.count > 0 && !SplittingAt(zone); // (starting a new part: it's the held product being turned)
+        int item = own ? z.itemId : inventory.HeldItemId.Value;
+        bool tipped = StockContainer.Orientation.Lying(StockContainer.AllowedOrient(item, own ? z.orient : stockOrient));
         if (stockTarget.IsHangRail(zone)) text += $"   {stockLayKey}: Tip over";
         else if (StockContainer.CanTip(item)) text += $"   {stockLayKey}: {(tipped ? "Stand up" : "Lay down")}";
         return text;
     }
+
+    // Stocking here would start a new part of the spot, after the different product that's there.
+    private bool SplittingAt(int zone) =>
+        stockTarget != null && !stockTargetIsTake && zone == stockZone && inventory.HeldItemId.Value != 0 &&
+        stockTarget.WouldSplit(zone, inventory.HeldItemId.Value, inventory.HeldPaint.Value);
 
     // Why the held crate's product can't go on the shelf being looked at.
     private string CantStockNote()
@@ -679,7 +693,7 @@ public class PlayerInteractInput : NetworkBehaviour
         int held = inventory.HeldItemId.Value;
         var z = stockTarget.GetZone(blockedZone);
         string kind = stockTarget.IsHangRail(blockedZone) ? "rack" : "shelf";
-        if (z.count > 0 && z.itemId != held) return $"This {kind} spot has {ItemName(z.itemId)}";
+        if (z.count > 0 && z.itemId != held) return $"This {kind} spot has {ItemName(z.itemId)}, with no room left after it";
         if (stockTarget.IsCovered(blockedZone)) return $"This {kind} spot is covered: clear it to stock it";
         if (z.count > 0 && z.paint != inventory.HeldPaint.Value)
             return $"This {kind} spot has {(z.paint == 0 ? "plain" : PaintPalette.NameOf(PaintSet.Get(z.paint, 0)))} ones (one color per spot)";
@@ -733,6 +747,7 @@ public class PlayerInteractInput : NetworkBehaviour
         if ((!turn && !lay) || zone < 0) return;
 
         var z = stockTarget.GetZone(zone);
+        if (SplittingAt(zone)) z = default; // starting a new part: turn the held product, not what's there
         int current = z.count > 0 ? z.orient : stockOrient;
         int itemId = z.count > 0 ? z.itemId : inventory.HeldItemId.Value;
         if (lay && !turn && !stockTarget.IsHangRail(zone) && !StockContainer.CanTip(itemId)) return; // only one way it can sit

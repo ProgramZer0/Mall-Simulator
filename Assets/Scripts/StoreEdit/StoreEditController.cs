@@ -2574,32 +2574,18 @@ public class StoreEditController : NetworkBehaviour
         {
             var stock = session[i].stock;
             if (stock == null) continue;
-            var stockIds = new int[stock.Length];
-            var counts = new int[stock.Length];
-            var orients = new int[stock.Length];
-            var seeds = new int[stock.Length];
-            var paints = new uint[stock.Length];
             bool any = false;
-            for (int z = 0; z < stock.Length; z++)
-            {
-                stockIds[z] = stock[z].itemId;
-                counts[z] = stock[z].count;
-                orients[z] = stock[z].orient;
-                seeds[z] = stock[z].seed;
-                paints[z] = stock[z].paint;
-                any |= stock[z].count > 0;
-            }
-            if (any) ReceiveEditStockRpc(sessionId, i, stockIds, counts, orients, seeds, paints);
+            foreach (var z in stock) any |= z.count > 0;
+            if (any) ReceiveEditStockRpc(sessionId, i, stock); // (each zone, and its part of the shelf if it's split)
         }
     }
 
     /// <summary>Editor: show the stock on one shelf's local copy (sent after its item).</summary>
     [Rpc(SendTo.Owner)]
-    private void ReceiveEditStockRpc(int sessionId, int index, int[] itemIds, int[] counts, int[] orients, int[] seeds,
-                                     uint[] paints)
+    private void ReceiveEditStockRpc(int sessionId, int index, StockContainer.ZoneStock[] stock)
     {
         if (sessionId != clientSessionId || index < 0 || index >= localItems.Count || localItems[index] == null) return;
-        localItems[index].ShowStock(itemIds, counts, orients, seeds, paints);
+        localItems[index].ShowStock(stock);
     }
 
     /// <summary>Editor: build local copies of the store's items (and hide the real ones on this screen).</summary>

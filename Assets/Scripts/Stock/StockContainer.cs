@@ -23,8 +23,16 @@ using UnityEngine;
 /// zone, and can change it later if everything still fits. How many fit is worked out from the
 /// product's size in that orientation.
 ///
-/// Over the network each zone is just (item id, count, orientation); every machine lays out the
-/// models itself. Zone colliders are made triggers and switched off at runtime (authoring only).
+/// A zone can hold several products side by side: stocking a different product into a zone with room
+/// left after what's there starts a new PART of it, from where the last product's stock ends (in fill
+/// order: Fill From Right). The part before keeps to the width it uses at that moment, so restocking it
+/// never pushes into the next one, and nothing moves. A part that empties keeps its place for a new
+/// product; empty parts next to each other join back up (all empty: the whole zone again). Clothes
+/// rails split the same way, along the rail. To everything else a part is just a zone (its own number,
+/// product, count, price): the first part keeps the zone's number, later ones are added after.
+///
+/// Over the network each zone (part) is just (item id, count, orientation, which part); every machine
+/// lays out the models itself. Zone colliders are made triggers and switched off at runtime (authoring only).
 /// </summary>
 public class StockContainer : NetworkBehaviour
 {
@@ -38,13 +46,38 @@ public class StockContainer : NetworkBehaviour
         public int price;      // sale price in cents (0 = not for sale); kept while the zone is empty
         public int pricedItem; // the product the price was set for (restocking with something else clears it)
         public uint paint;     // the products' colors (PaintSet, 0 = their own): one color per zone
+        public ushort from, to; // a part of a zone: the share of its width it covers, in fill order (0-65535; both 0: all)
+        public byte box;        // a part added after the zones: which zone it's part of, +1 (0: the zone with its own number)
+        public byte flags;      // 1: joined back into another part (unused, but keeps its number)
 
         /// <summary>Is what's in this zone for sale? (Stocked, priced, and the product has a Sellable.)</summary>
         public bool IsForSale => count > 0 && price > 0 && pricedItem == itemId && Sellable.IsSellable(itemId);
 
+        /// <summary>A part that joined back into another (nothing there any more).</summary>
+        public bool Dead => (flags & 1) != 0;
+        /// <summary>The whole zone (not split).</summary>
+        public bool Whole => from == 0 && (to == 0 || to == ushort.MaxValue);
+        /// <summary>Where it starts and ends across the zone's width, 0-1 in fill order.</summary>
+        public float From => Whole ? 0f : from / 65535f;
+        public float To => Whole ? 1f : to / 65535f;
+
+        /// <summary>Cover this share of the zone's width (0-1, fill order).</summary>
+        public void SetSpan(float start, float end)
+        {
+            if (start <= 0.0001f && end >= 0.9999f) { from = 0; to = 0; return; }
+            from = (ushort)Mathf.Clamp(Mathf.RoundToInt(start * 65535f), 0, 65535);
+            to = (ushort)Mathf.Clamp(Mathf.RoundToInt(end * 65535f), 0, 65535);
+            if (to == 0) to = 1;
+        }
+
+        /// <summary>Emptied: the product gone, the price tag and where it is kept.</summary>
+        public ZoneStock Emptied() =>
+            new() { price = price, pricedItem = pricedItem, from = from, to = to, box = box, flags = flags };
+
         public bool Equals(ZoneStock other) =>
             itemId == other.itemId && count == other.count && orient == other.orient && seed == other.seed &&
-            price == other.price && pricedItem == other.pricedItem && paint == other.paint;
+            price == other.price && pricedItem == other.pricedItem && paint == other.paint &&
+            from == other.from && to == other.to && box == other.box && flags == other.flags;
         public override bool Equals(object obj) => obj is ZoneStock other && Equals(other);
         public override int GetHashCode() => (((itemId * 397 ^ count) * 31 + orient) * 31 + seed) * 31 + price;
     }
@@ -72,12 +105,18 @@ public class StockContainer : NetworkBehaviour
     [Tooltip("Shelf spaces: BoxColliders products are lined up and stacked in. Products face the blue arrow.")]
     [SerializeField] private BoxCollider[] stockZones;
     [Tooltip("Clothes rails: BoxColliders whose top, along their longer side, is the rail. Products hang from it " +
-             "by the top of their Hang Prefab (or a child named HangPoint). Only the length matters.")]
+             "by the top of their Hang Prefab (or a child named HangPoint). Only the length matters, unless Clothes " +
+             "Fit Rail Box is on (then the box is the space they hang in).")]
     [SerializeField] private BoxCollider[] hangRails;
     [Tooltip("Space left between products on shelves, in meters.")]
     [SerializeField] private float spacing = 0.01f;
     [Tooltip("Distance between hangers on a rail, in meters. 0 = the product's own thickness plus Spacing.")]
     [SerializeField] private float hangSpacing = 0f;
+    [Tooltip("Hang rails are the space clothes hang in, like a shelf zone: the box's top is the rail, its height " +
+             "how far down they may hang, its depth (across the rail) how wide they may be. Clothes that don't fit " +
+             "aren't hung there (\"doesn't fit\"). Off: only the rail's length matters, and clothes may hang " +
+             "below the box (size the boxes before turning this on).")]
+    [SerializeField] private bool clothesFitRailBox = false;
     [Tooltip("Never more than this many products in one zone, however small they are.")]
     [SerializeField] private int maxPerZone = 100;
     [Tooltip("Shelves fill the bottom layer first (then stack up), starting from this side as a shopper facing " +
@@ -97,8 +136,8 @@ public class StockContainer : NetworkBehaviour
     public static readonly List<StockContainer> All = new();
 
     private NetworkList<ZoneStock> zones;
-    private List<GameObject>[] visuals;
-    private ZoneStock[] visualState;
+    private readonly List<List<GameObject>> visuals = new();
+    private readonly List<ZoneStock> visualState = new();
     private ZoneStock[] pendingStock; // server: contents to restore when spawned (edit mode)
     private StockVisualFollower visualRoot; // unscaled holder that follows this furniture
 
@@ -111,15 +150,35 @@ public class StockContainer : NetworkBehaviour
     private int ShelfCount => stockZones != null ? stockZones.Length : 0;
     private int RailCount => hangRails != null ? hangRails.Length : 0;
 
-    /// <summary>Shelf zones first, then hang rails.</summary>
-    public int ZoneCount => ShelfCount + RailCount;
+    /// <summary>The zones set up on the prefab: shelf zones first, then hang rails.</summary>
+    private int AuthoredCount => ShelfCount + RailCount;
+
+    /// <summary>
+    /// Zones: the ones set up on the prefab (shelf zones, then hang rails), then any parts added by
+    /// splitting them (see the class notes). Some numbers may be unused (parts joined back up): GetBox
+    /// is null for those.
+    /// </summary>
+    public int ZoneCount => zones != null && zones.Count > AuthoredCount ? zones.Count : AuthoredCount;
+
+    // A zone's entry, whether or not it's spawned yet (default: not there).
+    private ZoneStock Entry(int zone) => zones != null && zone >= 0 && zone < zones.Count ? zones[zone] : default;
+
+    // Which of the prefab's zones a zone (part) is in.
+    private static int BoxIndexOf(int zone, ZoneStock z) => z.box > 0 ? z.box - 1 : zone;
+
+    private BoxCollider AuthoredBox(int b) =>
+        b < 0 ? null : b < ShelfCount ? stockZones[b] : b < AuthoredCount ? hangRails[b - ShelfCount] : null;
 
     /// <summary>Is this zone a hang rail (not a shelf space)?</summary>
-    public bool IsHangRail(int zone) => zone >= ShelfCount && zone < ZoneCount;
+    public bool IsHangRail(int zone)
+    {
+        int b = BoxIndexOf(zone, Entry(zone));
+        return b >= ShelfCount && b < AuthoredCount;
+    }
 
     /// <summary>The product models in a zone, in the order they went in (local; for outlines and the like).</summary>
     public IReadOnlyList<GameObject> GetZoneModels(int zone) =>
-        visuals != null && zone >= 0 && zone < visuals.Length ? visuals[zone] : System.Array.Empty<GameObject>();
+        zone >= 0 && zone < visuals.Count ? visuals[zone] : System.Array.Empty<GameObject>();
 
     /// <summary>The model that taking one out of this zone removes (the last one in), or null.</summary>
     public GameObject GetTakeModel(int zone)
@@ -129,32 +188,64 @@ public class StockContainer : NetworkBehaviour
         return null;
     }
 
-    /// <summary>A zone's box in world space (centre, rotation, full size).</summary>
+    /// <summary>A zone's box in world space (centre, rotation with world up, full size): a part's own share.</summary>
     public bool TryGetZoneBox(int zone, out Vector3 center, out Quaternion rotation, out Vector3 size)
     {
-        var box = GetBox(zone);
         center = default; rotation = default; size = default;
+        var box = GetBox(zone);
         if (box == null) return false;
-        center = box.transform.TransformPoint(box.center);
-        rotation = box.transform.rotation;
-        Vector3 s = box.transform.lossyScale;
-        size = Vector3.Scale(box.size, new Vector3(Mathf.Abs(s.x), Mathf.Abs(s.y), Mathf.Abs(s.z)));
+        SegmentFrame(box, IsHangRail(zone), Entry(zone), out center, out rotation, out size, out _);
         return true;
     }
 
-    private BoxCollider GetBox(int zone) =>
-        zone < 0 ? null : zone < ShelfCount ? stockZones[zone] : zone < ZoneCount ? hangRails[zone - ShelfCount] : null;
+    // The prefab's zone a zone (part) is in; null if there's no such zone or it's an unused number.
+    private BoxCollider GetBox(int zone)
+    {
+        if (zone < 0) return null;
+        var z = Entry(zone);
+        return z.Dead ? null : AuthoredBox(BoxIndexOf(zone, z));
+    }
+
+    /// <summary>
+    /// A zone (part)'s box as products see it: the zone's ZoneFrame, narrowed to the part's share of its
+    /// width (across shelves, from the Fill From Right side; along rails). Rail Along Z: which way the
+    /// whole rail runs (a short part mustn't turn it).
+    /// </summary>
+    private void SegmentFrame(BoxCollider box, bool hang, ZoneStock z, out Vector3 center, out Quaternion rotation,
+                              out Vector3 size, out bool railAlongZ)
+    {
+        ZoneFrame(box, out center, out rotation, out size);
+        railAlongZ = size.z > size.x;
+        if (z.Whole) return;
+        float f0 = z.From, f1 = z.To;
+        if (hang)
+        {
+            float length = railAlongZ ? size.z : size.x;
+            float mid = -length * 0.5f + (f0 + f1) * 0.5f * length;
+            center += rotation * ((railAlongZ ? Vector3.forward : Vector3.right) * mid);
+            if (railAlongZ) size.z = (f1 - f0) * length; else size.x = (f1 - f0) * length;
+        }
+        else
+        {
+            // Fill order runs from the Fill From Right side (the zone's -x) across.
+            float width = size.x;
+            float mid = -width * 0.5f + (f0 + f1) * 0.5f * width;
+            center += rotation * new Vector3(fillFromRight ? mid : -mid, 0f, 0f);
+            size.x = (f1 - f0) * width;
+        }
+    }
+
+    // How wide the whole zone is along the way it splits (across a shelf, along a rail).
+    private static float SplitLength(Vector3 zoneSize, bool hang) =>
+        hang ? Mathf.Max(zoneSize.x, zoneSize.z) : zoneSize.x;
 
     private void Awake()
     {
         zones = new NetworkList<ZoneStock>(null, NetworkVariableReadPermission.Everyone,
                                            NetworkVariableWritePermission.Server);
-        visuals = new List<GameObject>[ZoneCount];
-        visualState = new ZoneStock[ZoneCount];
-        for (int i = 0; i < ZoneCount; i++)
+        for (int i = 0; i < AuthoredCount; i++)
         {
-            visuals[i] = new List<GameObject>();
-            var box = GetBox(i);
+            var box = AuthoredBox(i);
             if (box != null) box.enabled = false; // authoring only
         }
     }
@@ -164,7 +255,8 @@ public class StockContainer : NetworkBehaviour
         if (IsServer)
         {
             zones.Clear();
-            for (int i = 0; i < ZoneCount; i++)
+            int n = Mathf.Max(AuthoredCount, pendingStock != null ? pendingStock.Length : 0); // (split parts too)
+            for (int i = 0; i < n; i++)
                 zones.Add(pendingStock != null && i < pendingStock.Length ? pendingStock[i] : default);
             pendingStock = null;
         }
@@ -180,7 +272,7 @@ public class StockContainer : NetworkBehaviour
         All.Remove(this);
         zones.OnListChanged -= OnZonesChanged;
         StoreListing.Untrack(this);
-        for (int i = 0; i < ZoneCount; i++) SetVisuals(i, default);
+        for (int i = 0; i < visuals.Count; i++) SetVisuals(i, default);
         if (visualRoot != null) Destroy(visualRoot.gameObject);
         visualRoot = null;
     }
@@ -230,20 +322,112 @@ public class StockContainer : NetworkBehaviour
         return z.count > 0 && z.itemId == itemId ? z.orient : wanted;
     }
 
-    /// <summary>How many of this product fit in a zone in that orientation (0 if it can't go there).</summary>
-    public int GetCapacity(int zone, int itemId, int orient) =>
-        Accepts(zone, itemId) && TryGetLayout(zone, itemId, OrientFor(zone, itemId, orient), out var l) ? l.capacity : 0;
+    /// <summary>
+    /// How many of this product fit in a zone in that orientation (0 if it can't go there). A zone holding
+    /// something else: how many fit in the new part it would start after it (see WouldSplit).
+    /// </summary>
+    public int GetCapacity(int zone, int itemId, int orient, uint? paint = null)
+    {
+        if (!Accepts(zone, itemId)) return 0;
+        if (WouldSplit(zone, itemId, paint))
+            return TryGetTail(zone, out var tail) && TryGetLayout(GetBox(zone), IsHangRail(zone), tail, itemId, orient, out var t)
+                ? t.capacity : 0;
+        return TryGetLayout(zone, itemId, OrientFor(zone, itemId, orient), out var l) ? l.capacity : 0;
+    }
+
+    /* ========================= SPLITTING ========================= */
+
+    /// <summary>
+    /// Would one of this product start a new part of this zone? It holds a different product (or the same in
+    /// another color), so the new one goes after it: where its stock ends now. (See the class notes.)
+    /// </summary>
+    public bool WouldSplit(int zone, int itemId, uint? paint = null)
+    {
+        var z = GetZone(zone);
+        return z.count > 0 && GetBox(zone) != null && (z.itemId != itemId || (paint.HasValue && z.paint != paint.Value));
+    }
+
+    // The part a new product would start after what's in this zone: from where its stock ends now (in fill
+    // order) to the end of the zone's part. False if there's no width left.
+    private bool TryGetTail(int zone, out ZoneStock tail)
+    {
+        tail = default;
+        var box = GetBox(zone);
+        var z = GetZone(zone);
+        if (box == null || z.count <= 0) return false;
+        float end = UsedEnd(box, IsHangRail(zone), z);
+        if (z.To - end < 0.001f) return false;
+        tail.box = (byte)(BoxIndexOf(zone, z) + 1);
+        tail.SetSpan(end, z.To);
+        if (tail.Whole) return false; // (can't be: it starts after something)
+        return true;
+    }
+
+    // Where a part's stock ends now, as a share of the zone's width in fill order: the columns used on a
+    // shelf (the front row so far, or all of them once a row's full), the hangers on a rail.
+    private float UsedEnd(BoxCollider box, bool hang, ZoneStock z)
+    {
+        ZoneFrame(box, out _, out _, out Vector3 full);
+        float length = SplitLength(full, hang);
+        if (length <= 0f || !TryGetLayout(box, hang, z, z.itemId, z.orient, out var l)) return z.To;
+        float used = hang
+            ? Mathf.Min(l.railLength, z.count * l.step + spacing)
+            : Mathf.Min(z.count, l.nx) * l.cell.x;
+        // A whole zone (centred) is lined up from its starting side once split, so measure from there.
+        return Mathf.Min(z.To, z.From + used / length);
+    }
+
+    // A number for a new part: an unused one (a part that joined back up) if there is one, else a new one.
+    private int FreePartNumber()
+    {
+        for (int i = AuthoredCount; i < zones.Count; i++) if (zones[i].Dead) return i;
+        return zones.Count;
+    }
+
+    // Server: empty parts of a zone next to each other join back into one (the zone's own number stays).
+    // All of it empty again: the whole zone, as it started.
+    private void ServerJoinEmptyParts(int boxIndex)
+    {
+        var parts = new List<int>();
+        for (int i = 0; i < zones.Count; i++)
+            if (!zones[i].Dead && BoxIndexOf(i, zones[i]) == boxIndex) parts.Add(i);
+        if (parts.Count < 2) return;
+        parts.Sort((a, b) => zones[a].From.CompareTo(zones[b].From));
+        for (int k = 0; k < parts.Count - 1;)
+        {
+            var a = zones[parts[k]];
+            var b = zones[parts[k + 1]];
+            if (a.count > 0 || b.count > 0) { k++; continue; }
+            // The zone's own number keeps going; the other number is put aside.
+            int keep = parts[k + 1] == boxIndex ? parts[k + 1] : parts[k];
+            int drop = keep == parts[k] ? parts[k + 1] : parts[k];
+            var kept = zones[keep];
+            kept.SetSpan(a.From, b.To);
+            if (kept.price == 0) { var d = zones[drop]; kept.price = d.price; kept.pricedItem = d.pricedItem; }
+            zones[keep] = kept;
+            zones[drop] = new ZoneStock { box = (byte)(boxIndex + 1), flags = 1 };
+            parts[k] = keep;
+            parts.RemoveAt(k + 1);
+        }
+    }
 
     /// <summary>How many of this product fit in a zone turned exactly this way (0: not that way).</summary>
-    public int CapacityAt(int zone, int itemId, int orient) =>
-        Accepts(zone, itemId) && TryGetLayout(zone, itemId, orient, out var l) ? l.capacity : 0;
+    public int CapacityAt(int zone, int itemId, int orient)
+    {
+        if (!Accepts(zone, itemId)) return 0;
+        if (WouldSplit(zone, itemId))
+            return TryGetTail(zone, out var tail) && TryGetLayout(GetBox(zone), IsHangRail(zone), tail, itemId, orient, out var t)
+                ? t.capacity : 0;
+        return TryGetLayout(zone, itemId, orient, out var l) ? l.capacity : 0;
+    }
 
     /// <summary>Why one more of this product can't go in this zone (for logs); "ok" if it can.</summary>
     public string WhyCantStock(int zone, int itemId, int orient)
     {
-        if (zone < 0 || zone >= ZoneCount) return $"no zone {zone}";
+        if (zone < 0 || zone >= ZoneCount || GetBox(zone) == null) return $"no zone {zone}";
         var z = GetZone(zone);
-        if (z.count > 0 && z.itemId != itemId) return $"zone holds {ItemDebug.Describe(z.itemId)}";
+        if (WouldSplit(zone, itemId) && GetCapacity(zone, itemId, orient) <= 0)
+            return $"zone holds {ItemDebug.Describe(z.itemId)}, with no room left after it";
         if (IsCovered(zone)) return "something is placed in the way (covered)";
         if (!Accepts(zone, itemId)) return $"the crate has no {(IsHangRail(zone) ? "Hang" : "Shelf")} Prefab for this zone";
         if (!TryGetLayout(zone, itemId, OrientFor(zone, itemId, orient), out var l)) return "the product doesn't fit this zone in that orientation";
@@ -311,11 +495,10 @@ public class StockContainer : NetworkBehaviour
     /// </summary>
     public bool HasRoomFor(int zone, int itemId, int orient, uint? paint = null)
     {
-        if (IsCovered(zone)) return false;
+        if (GetBox(zone) == null || IsCovered(zone)) return false;
+        if (WouldSplit(zone, itemId, paint)) return GetCapacity(zone, itemId, orient, paint) > 0; // a new part after it
         var z = GetZone(zone);
-        if (z.count > 0 && z.itemId != itemId) return false;
-        if (z.count > 0 && paint.HasValue && z.paint != paint.Value) return false;
-        return Mathf.Max(0, z.count) < GetCapacity(zone, itemId, orient);
+        return Mathf.Max(0, z.count) < GetCapacity(zone, itemId, orient, paint);
     }
 
     /// <summary>
@@ -376,15 +559,24 @@ public class StockContainer : NetworkBehaviour
     }
 
     /// <summary>Where the next product put in this zone would go (for the placement preview).</summary>
-    public bool TryGetNextSlot(int zone, int itemId, int orient, out Vector3 position, out Quaternion rotation)
+    public bool TryGetNextSlot(int zone, int itemId, int orient, out Vector3 position, out Quaternion rotation,
+                               uint? paint = null)
     {
         position = default;
         rotation = default;
+        var box = GetBox(zone);
+        if (box == null || !Accepts(zone, itemId)) return false;
+        if (WouldSplit(zone, itemId, paint))
+        {
+            // The first of a new part, where the stock there ends now.
+            if (!TryGetTail(zone, out var tail) || !TryGetLayout(box, IsHangRail(zone), tail, itemId, orient, out var t)) return false;
+            GetSlotPose(box, IsHangRail(zone), tail, t, 0, out position, out rotation);
+            return true;
+        }
         var z = GetZone(zone);
         int index = z.count > 0 && z.itemId == itemId ? z.count : 0;
-        if (!Accepts(zone, itemId) || !TryGetLayout(zone, itemId, OrientFor(zone, itemId, orient), out var layout) ||
-            index >= layout.capacity) return false;
-        GetSlotPose(GetBox(zone), IsHangRail(zone), layout, index, out position, out rotation);
+        if (!TryGetLayout(zone, itemId, OrientFor(zone, itemId, orient), out var layout) || index >= layout.capacity) return false;
+        GetSlotPose(box, IsHangRail(zone), Entry(zone), layout, index, out position, out rotation);
         return true;
     }
 
@@ -451,21 +643,18 @@ public class StockContainer : NetworkBehaviour
             ? pickup : null;
     }
 
-    /// <summary>The middle of a zone, in the world.</summary>
-    public Vector3 GetZoneCenter(int zone)
-    {
-        var box = GetBox(zone);
-        return box != null ? box.transform.TransformPoint(box.center) : transform.position;
-    }
+    /// <summary>The middle of a zone (a part's own middle), in the world.</summary>
+    public Vector3 GetZoneCenter(int zone) =>
+        TryGetZoneBox(zone, out Vector3 center, out _, out _) ? center : transform.position;
 
     private float DistanceToZone(int zone, Vector3 point)
     {
-        var box = GetBox(zone);
-        Vector3 local = box.transform.InverseTransformPoint(point) - box.center;
-        Vector3 half = box.size * 0.5f;
+        if (!TryGetZoneBox(zone, out Vector3 center, out Quaternion rotation, out Vector3 size)) return float.MaxValue;
+        Vector3 local = Quaternion.Inverse(rotation) * (point - center);
+        Vector3 half = size * 0.5f;
         Vector3 clamped = new(Mathf.Clamp(local.x, -half.x, half.x), Mathf.Clamp(local.y, -half.y, half.y),
                               Mathf.Clamp(local.z, -half.z, half.z));
-        return Vector3.Distance(point, box.transform.TransformPoint(clamped + box.center));
+        return Vector3.Distance(point, center + rotation * clamped);
     }
 
     /* ========================= SERVER ========================= */
@@ -475,10 +664,31 @@ public class StockContainer : NetworkBehaviour
     /// zone keeps its own. False if it's full, holds something else, or doesn't take this product.
     /// </summary>
     /// <summary>Server: one more product in a zone (paint: its colors; null: the zone's own, for putting back).</summary>
-    public bool ServerAddOne(int zone, int itemId, int orient, uint? paint = null)
+    /// <summary>Split: may it start a new part after something else in the zone (false: putting things back).</summary>
+    public bool ServerAddOne(int zone, int itemId, int orient, uint? paint = null, bool split = true) =>
+        ServerAddOne(zone, itemId, orient, paint, split, out _);
+
+    /// <summary>
+    /// Server: as ServerAddOne; Into: the zone it went in (a new part, when it started one after something
+    /// else, see WouldSplit).
+    /// </summary>
+    public bool ServerAddOne(int zone, int itemId, int orient, uint? paint, bool split, out int into)
     {
+        into = zone;
         if (!IsServer || zone < 0 || zone >= zones.Count || !HasRoomFor(zone, itemId, orient, paint)) return false;
         if (blockWhenCovered && CheckCovered(zone)) return false; // checked now, not the last (maybe stale) look
+        if (WouldSplit(zone, itemId, paint))
+        {
+            if (!split) return false;
+            // A new part, from where what's here ends now; what's here keeps to the width it uses.
+            if (!TryGetTail(zone, out var tail)) return false;
+            var head = zones[zone];
+            head.SetSpan(head.From, tail.From);
+            zones[zone] = head;
+            int at = FreePartNumber();
+            if (at < zones.Count) zones[at] = tail; else zones.Add(tail);
+            zone = into = at;
+        }
         var z = zones[zone];
         bool same = z.count > 0 && z.itemId == itemId;
         bool keepPrice = z.pricedItem == itemId && z.price > 0; // the shelf's own price tag stays for the same product
@@ -486,16 +696,15 @@ public class StockContainer : NetworkBehaviour
         // No price of its own: use the store's price for this product, if "Set for all" gave it one.
         if (price == 0 && StorePlot.TryGetStorePriceAt(GetZoneCenter(zone), itemId, false, out int storePrice))
             price = storePrice;
-        zones[zone] = new ZoneStock
-        {
-            itemId = itemId,
-            count = (same ? z.count : 0) + 1,
-            orient = OrientFor(zone, itemId, orient),
-            seed = same ? z.seed : UnityEngine.Random.Range(1, int.MaxValue),
-            price = price,
-            pricedItem = price > 0 ? itemId : 0,
-            paint = same ? z.paint : paint ?? 0,
-        };
+        var now = z; // (where it is in the zone stays)
+        now.itemId = itemId;
+        now.count = (same ? z.count : 0) + 1;
+        now.orient = OrientFor(zone, itemId, orient);
+        now.seed = same ? z.seed : UnityEngine.Random.Range(1, int.MaxValue);
+        now.price = price;
+        now.pricedItem = price > 0 ? itemId : 0;
+        now.paint = same ? z.paint : paint ?? 0;
+        zones[zone] = now;
         return true;
     }
 
@@ -521,10 +730,16 @@ public class StockContainer : NetworkBehaviour
         var z = zones[zone];
         if (z.count <= 0) return 0;
         int taken = z.itemId;
-        zones[zone] = z.count == 1
-            ? new ZoneStock { price = z.price, pricedItem = z.pricedItem } // empty, but keeps its price tag
-            : new ZoneStock { itemId = z.itemId, count = z.count - 1, orient = z.orient, seed = z.seed, paint = z.paint,
-                              price = z.price, pricedItem = z.pricedItem };
+        if (z.count == 1)
+        {
+            zones[zone] = z.Emptied(); // empty, but keeps its price tag (and its place in the zone)
+            if (!z.Whole) ServerJoinEmptyParts(BoxIndexOf(zone, z));
+        }
+        else
+        {
+            z.count--;
+            zones[zone] = z;
+        }
         return taken;
     }
 
@@ -589,10 +804,15 @@ public class StockContainer : NetworkBehaviour
         public Quaternion orient;   // product rotation relative to the zone
         public Vector3 pivotOffset; // from the product's pivot to the middle of its model (scaled, unrotated)
         public Vector3 half;        // product half size along the zone's axes, in this orientation
+        public bool anchored;       // a part of a zone: lined up from its starting side (a whole zone is centred)
     }
 
-    private bool TryGetLayout(int zone, int itemId, int orient, out Layout layout) =>
-        TryGetLayout(GetBox(zone), IsHangRail(zone), itemId, orient, out layout);
+    private bool TryGetLayout(int zone, int itemId, int orient, out Layout layout)
+    {
+        layout = default;
+        var box = GetBox(zone);
+        return box != null && TryGetLayout(box, IsHangRail(zone), Entry(zone), itemId, orient, out layout);
+    }
 
     // Same result on every machine: it only depends on the prefab, the zone and the orientation.
     /// <summary>
@@ -617,14 +837,14 @@ public class StockContainer : NetworkBehaviour
         size = new Vector3(Along(rotation * Vector3.right), Along(rotation * Vector3.up), Along(rotation * Vector3.forward));
     }
 
-    private bool TryGetLayout(BoxCollider box, bool hang, int itemId, int orient, out Layout layout)
+    private bool TryGetLayout(BoxCollider box, bool hang, ZoneStock part, int itemId, int orient, out Layout layout)
     {
         layout = default;
         var prefab = GetStockedPrefab(itemId, hang);
         if (box == null || prefab == null) return false;
 
         if (!hang) orient = AllowedOrient(itemId, orient);
-        ZoneFrame(box, out _, out _, out Vector3 size);
+        SegmentFrame(box, hang, part, out _, out _, out Vector3 size, out bool railAlongZ);
         Quaternion o = Orientation.Rotation(orient, hang);
         int max = Mathf.Max(0, maxPerZone);
 
@@ -641,7 +861,7 @@ public class StockContainer : NetworkBehaviour
             float autoYaw = tipped.x < tipped.z - 1e-4f ? 90f : 0f;
             o = Quaternion.Euler(0f, Orientation.Turns(orient) * 90f + autoYaw, 0f) * tip;
             Vector3 h = RotatedExtents(o, model.half);
-            bool alongZ = size.z > size.x;
+            bool alongZ = railAlongZ;
             float length = alongZ ? size.z : size.x;
             float step = hangSpacing > 0f ? hangSpacing : h.z * 2f + spacing;
             int n = length <= h.z * 2f ? 1 : Mathf.FloorToInt((length - h.z * 2f) / step + 1e-4f) + 1;
@@ -649,8 +869,16 @@ public class StockContainer : NetworkBehaviour
             // Always hang from the top of the model as it hangs (after turning/tipping), unless it has a HangPoint.
             Vector3 c = o * model.center;
             Vector3 hook = model.hasHangPoint ? o * model.hook : new Vector3(c.x, c.y + h.y, c.z);
+            if (length < h.z * 2f - 1e-4f) n = 0; // a part too short for even one
+            if (clothesFitRailBox)
+            {
+                // Hung from the rail (the box's top): how far it drops below, and how wide it is across the rail.
+                float drop = hook.y - (c.y - h.y);
+                float across = alongZ ? size.x : size.z;
+                if (drop > size.y + 1e-3f || h.x * 2f > across + 1e-3f) n = 0;
+            }
             layout = new Layout { capacity = Mathf.Min(n, max), step = step, orient = o, half = h,
-                                  railLength = length, railAlongZ = alongZ, hook = hook };
+                                  railLength = length, railAlongZ = alongZ, hook = hook, anchored = !part.Whole };
         }
         else
         {
@@ -661,7 +889,7 @@ public class StockContainer : NetworkBehaviour
             int ny = Mathf.Max(0, Mathf.FloorToInt((size.y + spacing) / cell.y));
             int nz = Mathf.Max(0, Mathf.FloorToInt((size.z + spacing) / cell.z));
             layout = new Layout { nx = nx, ny = ny, nz = nz, capacity = Mathf.Min(nx * ny * nz, max), cell = cell,
-                                  orient = o, pivotOffset = product.pivotOffset, half = h };
+                                  orient = o, pivotOffset = product.pivotOffset, half = h, anchored = !part.Whole };
         }
         return layout.capacity > 0;
     }
@@ -729,16 +957,18 @@ public class StockContainer : NetworkBehaviour
 
     // Shelves: front row first (the zone's +Z side), left to right, then the next row back, then up a layer.
     // Rails: left to right along the rail, the top of each product on the rail.
-    private void GetSlotPose(BoxCollider box, bool hang, Layout l, int index, out Vector3 position, out Quaternion rotation)
+    private void GetSlotPose(BoxCollider box, bool hang, ZoneStock part, Layout l, int index, out Vector3 position,
+                             out Quaternion rotation)
     {
-        ZoneFrame(box, out Vector3 zoneCenter, out Quaternion zoneRot, out Vector3 size);
+        SegmentFrame(box, hang, part, out Vector3 zoneCenter, out Quaternion zoneRot, out Vector3 size, out _);
         Vector3 local;
 
         if (hang)
         {
-            // Hang points spaced along the rail (the box's top, down its longer side), centred on it.
+            // Hang points spaced along the rail (the box's top, down its longer side), centred on it; a part
+            // of a rail lines them up from its start, so a part that's cut short keeps them where they are.
             float used = (l.capacity - 1) * l.step;
-            float along = -used * 0.5f + index * l.step;
+            float along = l.anchored ? -l.railLength * 0.5f + l.half.z + index * l.step : -used * 0.5f + index * l.step;
             Quaternion frame = l.railAlongZ ? zoneRot : zoneRot * Quaternion.Euler(0f, 90f, 0f); // frame Z = the rail
             Vector3 railPoint = zoneCenter + zoneRot * new Vector3(0f, size.y * 0.5f, 0f)
                               + frame * new Vector3(0f, 0f, along);
@@ -754,12 +984,14 @@ public class StockContainer : NetworkBehaviour
             int row = inLayer / l.nx;
             int col = inLayer % l.nx;
 
-            // Centre the grid in the zone so leftover space is shared on both sides.
+            // Centre the grid in the zone so leftover space is shared on both sides. A part of a zone lines
+            // its columns up from its starting side instead (so cutting it short, or starting the next part
+            // where it ends, moves nothing).
             float usedX = l.nx * l.cell.x - spacing;
             float usedZ = l.nz * l.cell.z - spacing;
             // Bottom layer first. A shopper facing the shelf (the zone's front, its blue arrow, toward them)
             // has their right at -x: Fill From Right starts there; Fill From Front starts at +z.
-            float x = -usedX * 0.5f + l.half.x + col * l.cell.x;
+            float x = (l.anchored ? -size.x * 0.5f : -usedX * 0.5f) + l.half.x + col * l.cell.x;
             float z = usedZ * 0.5f - l.half.z - row * l.cell.z;
             local = new Vector3(fillFromRight ? x : -x, -size.y * 0.5f + l.half.y + layer * l.cell.y, fillFromFront ? z : -z);
         }
@@ -777,10 +1009,10 @@ public class StockContainer : NetworkBehaviour
     /// <summary>The copy's BoxColliders that match this prefab's zones (null where missing).</summary>
     public BoxCollider[] FindZonesOnCopy(Transform copyRoot)
     {
-        var result = new BoxCollider[ZoneCount];
-        for (int i = 0; i < ZoneCount; i++)
+        var result = new BoxCollider[AuthoredCount];
+        for (int i = 0; i < AuthoredCount; i++)
         {
-            var box = GetBox(i);
+            var box = AuthoredBox(i);
             if (box == null) continue;
             var t = FollowPath(copyRoot, PathFrom(transform, box.transform));
             result[i] = t != null ? t.GetComponent<BoxCollider>() : null;
@@ -818,27 +1050,28 @@ public class StockContainer : NetworkBehaviour
     /// Lays out the stock on an edit-mode copy, so it moves with it (see EditStock). Nothing of it can be
     /// clicked, so clicks reach the copy.
     /// </summary>
-    public EditStock BuildStockOnCopy(Transform copyRoot, int[] itemIds, int[] counts, int[] orients, int[] seeds,
-                                      uint[] paints = null)
+    public EditStock BuildStockOnCopy(Transform copyRoot, ZoneStock[] stock)
     {
         var made = new EditStock();
+        if (stock == null) return made;
         Transform holder = null; // only for products that can't be batched
         var frameInv = Matrix4x4.TRS(copyRoot.position, copyRoot.rotation, Vector3.one).inverse;
         var copyZones = FindZonesOnCopy(copyRoot);
-        for (int i = 0; i < copyZones.Length && i < itemIds.Length && i < counts.Length; i++)
+        for (int i = 0; i < stock.Length; i++)
         {
-            var box = copyZones[i];
-            var prefab = GetStockedPrefab(itemIds[i], IsHangRail(i));
-            int orient = orients != null && i < orients.Length ? orients[i] : 0;
-            int seed = seeds != null && i < seeds.Length ? seeds[i] : 0;
-            uint paint = paints != null && i < paints.Length ? paints[i] : 0u;
-            if (box == null || prefab == null || counts[i] <= 0 ||
-                !TryGetLayout(box, IsHangRail(i), itemIds[i], orient, out var layout)) continue;
+            var part = stock[i];
+            int b = BoxIndexOf(i, part); // (a part of a zone: that zone's box)
+            if (part.Dead || part.count <= 0 || b < 0 || b >= copyZones.Length) continue;
+            var box = copyZones[b];
+            bool hang = b >= ShelfCount;
+            var prefab = GetStockedPrefab(part.itemId, hang);
+            uint paint = part.paint;
+            if (box == null || prefab == null || !TryGetLayout(box, hang, part, part.itemId, part.orient, out var layout)) continue;
 
-            for (int k = 0; k < counts[i] && k < layout.capacity; k++)
+            for (int k = 0; k < part.count && k < layout.capacity; k++)
             {
-                GetSlotPose(box, IsHangRail(i), layout, k, out Vector3 pos, out Quaternion rot);
-                var model = GetVariantPrefab(itemIds[i], IsHangRail(i), seed, k) ?? prefab;
+                GetSlotPose(box, hang, part, layout, k, out Vector3 pos, out Quaternion rot);
+                var model = GetVariantPrefab(part.itemId, hang, part.seed, k) ?? prefab;
                 var template = BatchedTemplateFor(model, out var shape);
                 shape = PaintedShape(model, shape, paint);
                 if (shape != null)
@@ -913,14 +1146,16 @@ public class StockContainer : NetworkBehaviour
         SetVisuals(zone, GetZone(zone));
     }
 
-    // Adds or removes models at the end, so buying one only removes one. A different product or
-    // orientation rebuilds the zone.
+    // Adds or removes models at the end, so buying one only removes one. A different product,
+    // orientation or place in the zone (a part cut short when the next one started) rebuilds it.
     private void SetVisuals(int zone, ZoneStock state)
     {
+        while (visuals.Count <= zone) { visuals.Add(new List<GameObject>()); visualState.Add(default); }
         var list = visuals[zone];
         var shown = visualState[zone];
         if (shown.itemId != state.itemId || shown.orient != state.orient || shown.seed != state.seed ||
-            shown.paint != state.paint)
+            shown.paint != state.paint || shown.from != state.from || shown.to != state.to || shown.box != state.box ||
+            shown.flags != state.flags)
         {
             foreach (var go in list) if (go != null) Destroy(go);
             list.Clear();
@@ -942,7 +1177,7 @@ public class StockContainer : NetworkBehaviour
         var root = GetVisualRoot();
         while (list.Count < state.count && list.Count < layout.capacity)
         {
-            GetSlotPose(box, IsHangRail(zone), layout, list.Count, out Vector3 pos, out Quaternion rot);
+            GetSlotPose(box, IsHangRail(zone), state, layout, list.Count, out Vector3 pos, out Quaternion rot);
             var model = GetVariantPrefab(state.itemId, IsHangRail(zone), state.seed, list.Count) ?? prefab;
             list.Add(MakeVisual(model, pos, rot, root, batched: true, paint: state.paint));
         }
