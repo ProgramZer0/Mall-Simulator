@@ -380,6 +380,7 @@ public class PlayerInteractInput : NetworkBehaviour
         int held = inventory.HeldItemId.Value;
         bool holdingCrate = held != 0 && StockContainer.IsStockCrate(held);
         bool placePending = Time.time < placePendingUntil || Time.time < stockQuietUntil;
+        StockContainer.SplitView = cam.transform.forward; // a shelf spot not split yet splits the way you face it
 
         if ((held == 0 || holdingCrate) && !previewActive && !placePending &&
             Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit,
@@ -418,6 +419,42 @@ public class PlayerInteractInput : NetworkBehaviour
                                        inventory.HeldPaint.Value))
             ShowStockPreview(stockTarget.GetNextModel(stockZone, held), slotPos, slotRot);
         else DestroyStockPreview();
+
+        // Starting a new part of the spot: a line where it starts.
+        if (stockTarget != null && !stockTargetIsTake && stockZone >= 0 &&
+            stockTarget.TryGetSplitLine(stockZone, held, inventory.HeldPaint.Value, out Vector3 la, out Vector3 lb))
+            ShowSplitLine(la, lb);
+        else HideSplitLine();
+    }
+
+    [Tooltip("The line showing where a shelf spot will split when a different product is stocked into it.")]
+    [SerializeField] private Color splitLineColor = new(1f, 0.85f, 0.2f, 1f);
+    [SerializeField, Min(0.001f)] private float splitLineWidth = 0.015f;
+    private LineRenderer splitLine;
+
+    private void ShowSplitLine(Vector3 a, Vector3 b)
+    {
+        if (splitLine == null)
+        {
+            var go = new GameObject("Split Line");
+            splitLine = go.AddComponent<LineRenderer>();
+            splitLine.positionCount = 2;
+            splitLine.useWorldSpace = true;
+            splitLine.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            splitLine.receiveShadows = false;
+            var shader = Shader.Find("Sprites/Default");
+            if (shader != null) splitLine.material = new Material(shader);
+        }
+        splitLine.startWidth = splitLine.endWidth = splitLineWidth;
+        splitLine.startColor = splitLine.endColor = splitLineColor;
+        splitLine.SetPosition(0, a);
+        splitLine.SetPosition(1, b);
+        splitLine.gameObject.SetActive(true);
+    }
+
+    private void HideSplitLine()
+    {
+        if (splitLine != null) splitLine.gameObject.SetActive(false);
     }
 
     private void ClearStockTarget()
@@ -427,6 +464,7 @@ public class PlayerInteractInput : NetworkBehaviour
         putBackZone = -1;
         blockedZone = -1;
         DestroyStockPreview();
+        HideSplitLine();
         if (IsOwner) TargetOutline.For(this).Hide();
     }
 
@@ -495,6 +533,7 @@ public class PlayerInteractInput : NetworkBehaviour
     public override void OnDestroy()
     {
         DestroyStockPreview();
+        if (splitLine != null) { if (splitLine.material != null) Destroy(splitLine.material); Destroy(splitLine.gameObject); }
         TargetOutline.Release(this);
         base.OnDestroy();
     }
@@ -831,7 +870,7 @@ public class PlayerInteractInput : NetworkBehaviour
         if (stockTargetIsTake) inventory.RequestUnstockServerRpc(stockTarget.NetworkObject, stockZone);
         else
         {
-            inventory.RequestStockServerRpc(stockTarget.NetworkObject, stockZone, stockOrient);
+            inventory.RequestStockServerRpc(stockTarget.NetworkObject, stockZone, stockOrient, cam.transform.forward);
             // Last product: the crate empties and goes away, so hide it until the server answers.
             if (inventory.HeldUnits.Value <= 1)
             {

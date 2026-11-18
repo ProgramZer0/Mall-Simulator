@@ -48,13 +48,16 @@ public class StockContainer : NetworkBehaviour
         public uint paint;     // the products' colors (PaintSet, 0 = their own): one color per zone
         public ushort from, to; // a part of a zone: the share of its width it covers, in fill order (0-65535; both 0: all)
         public byte box;        // a part added after the zones: which zone it's part of, +1 (0: the zone with its own number)
-        public byte flags;      // 1: joined back into another part (unused, but keeps its number)
+        public byte flags;      // 1: joined back into another part (unused, but keeps its number); 2: split front to back
 
         /// <summary>Is what's in this zone for sale? (Stocked, priced, and the product has a Sellable.)</summary>
         public bool IsForSale => count > 0 && price > 0 && pricedItem == itemId && Sellable.IsSellable(itemId);
 
         /// <summary>A part that joined back into another (nothing there any more).</summary>
         public bool Dead => (flags & 1) != 0;
+        /// <summary>Its zone is split front to back (parts one behind another) rather than side by side.</summary>
+        public bool AcrossDepth => (flags & 2) != 0;
+        public void SetAcrossDepth(bool on) => flags = (byte)(on ? flags | 2 : flags & ~2);
         /// <summary>The whole zone (not split).</summary>
         public bool Whole => from == 0 && (to == 0 || to == ushort.MaxValue);
         /// <summary>Where it starts and ends across the zone's width, 0-1 in fill order.</summary>
@@ -119,11 +122,16 @@ public class StockContainer : NetworkBehaviour
     [SerializeField] private bool clothesFitRailBox = false;
     [Tooltip("Never more than this many products in one zone, however small they are.")]
     [SerializeField] private int maxPerZone = 100;
-    [Tooltip("Shelves fill the bottom layer first (then stack up), starting from this side as a shopper facing " +
-             "the shelf sees it...")]
+    [Tooltip("Shelves fill column by column (each column front to back, then stacked up, before the next one), " +
+             "starting from this side as a shopper facing the shelf sees it. A product takes only the width it " +
+             "needs, so another can start after it...")]
     [SerializeField] private bool fillFromRight = true;
     [Tooltip("...and from the front (nearest the shopper) or the back.")]
     [SerializeField] private bool fillFromFront = true;
+    [Tooltip("Starting a second product on a shelf spot splits it the way you face it: facing the front, side by " +
+             "side; from its end, front to back. It leans toward splitting along the spot's long side, more the " +
+             "longer it is than deep: this much per extra length (0: just the way you face).")]
+    [SerializeField, Range(0f, 1f)] private float splitLongSideLean = 0.25f;
     [Tooltip("A zone with another placed thing in it (a shelf stacked on top, a box left there) is covered: " +
              "nothing can be stocked there and customers can't take from it until it's clear. What's already in " +
              "it can still be taken out by players.")]
@@ -225,9 +233,17 @@ public class StockContainer : NetworkBehaviour
             center += rotation * ((railAlongZ ? Vector3.forward : Vector3.right) * mid);
             if (railAlongZ) size.z = (f1 - f0) * length; else size.x = (f1 - f0) * length;
         }
+        else if (z.AcrossDepth)
+        {
+            // Front to back: from the Fill From Front side (the zone's +z) back.
+            float depth = size.z;
+            float mid = -depth * 0.5f + (f0 + f1) * 0.5f * depth;
+            center += rotation * new Vector3(0f, 0f, fillFromFront ? -mid : mid);
+            size.z = (f1 - f0) * depth;
+        }
         else
         {
-            // Fill order runs from the Fill From Right side (the zone's -x) across.
+            // Side by side: from the Fill From Right side (the zone's -x) across.
             float width = size.x;
             float mid = -width * 0.5f + (f0 + f1) * 0.5f * width;
             center += rotation * new Vector3(fillFromRight ? mid : -mid, 0f, 0f);
@@ -235,9 +251,33 @@ public class StockContainer : NetworkBehaviour
         }
     }
 
-    // How wide the whole zone is along the way it splits (across a shelf, along a rail).
-    private static float SplitLength(Vector3 zoneSize, bool hang) =>
-        hang ? Mathf.Max(zoneSize.x, zoneSize.z) : zoneSize.x;
+    // How long the whole zone is along the way it splits (across a shelf or front to back, along a rail).
+    private static float SplitLength(Vector3 zoneSize, bool hang, bool acrossDepth) =>
+        hang ? Mathf.Max(zoneSize.x, zoneSize.z) : acrossDepth ? zoneSize.z : zoneSize.x;
+
+    // Which way a zone splits: the way its parts already are; a whole one, the way the player faces it
+    // (facing the front: side by side; from an end: front to back), leaning toward its long side.
+    private bool SplitAcrossDepth(int zone, Vector3 view)
+    {
+        var box = GetBox(zone);
+        if (box == null || IsHangRail(zone)) return false;
+        int b = BoxIndexOf(zone, Entry(zone));
+        for (int i = 0; i < ZoneCount; i++)
+        {
+            var z = Entry(i);
+            if (!z.Dead && !z.Whole && BoxIndexOf(i, z) == b) return z.AcrossDepth; // already split: that way
+        }
+        ZoneFrame(box, out _, out Quaternion rot, out Vector3 size);
+        Vector3 flat = Vector3.ProjectOnPlane(view, Vector3.up);
+        if (flat.sqrMagnitude < 1e-6f) return false;
+        flat.Normalize();
+        float alongX = Mathf.Abs(Vector3.Dot(flat, rot * Vector3.right));   // looking along its width (from an end)
+        float alongZ = Mathf.Abs(Vector3.Dot(flat, rot * Vector3.forward)); // looking at its front or back
+        float w = Mathf.Max(size.x, 0.01f), d = Mathf.Max(size.z, 0.01f);
+        float lean = splitLongSideLean * (Mathf.Max(w, d) / Mathf.Min(w, d) - 1f);
+        // Front to back needs looking along the width; the long side gets the benefit of the doubt.
+        return w >= d ? alongX > alongZ + lean : alongX + lean > alongZ;
+    }
 
     private void Awake()
     {
@@ -347,34 +387,87 @@ public class StockContainer : NetworkBehaviour
         return z.count > 0 && GetBox(zone) != null && (z.itemId != itemId || (paint.HasValue && z.paint != paint.Value));
     }
 
-    // The part a new product would start after what's in this zone: from where its stock ends now (in fill
-    // order) to the end of the zone's part. False if there's no width left.
-    private bool TryGetTail(int zone, out ZoneStock tail)
+    /// <summary>
+    /// Which way the local player (or, on the host, the player stocking right now) is looking: a zone not
+    /// split yet splits the way they face it (see SplitAcrossDepth). Set before asking about stocking.
+    /// </summary>
+    public static Vector3 SplitView;
+
+    // The part a new product would start after what's in this zone: from where its stock ends (in fill
+    // order, the way the zone splits) to the end of the zone's part. Head: what's there, as it'll be laid
+    // out once split. False if there's no room left.
+    private bool TryGetTail(int zone, out ZoneStock tail) => TryGetTail(zone, out tail, out _);
+
+    private bool TryGetTail(int zone, out ZoneStock tail, out ZoneStock head)
     {
         tail = default;
+        head = default;
         var box = GetBox(zone);
         var z = GetZone(zone);
         if (box == null || z.count <= 0) return false;
-        float end = UsedEnd(box, IsHangRail(zone), z);
+        bool depth = SplitAcrossDepth(zone, SplitView);
+        head = z;
+        head.SetAcrossDepth(depth); // (a whole zone is laid out that way once split)
+        float end = UsedEnd(box, IsHangRail(zone), head);
         if (z.To - end < 0.001f) return false;
         tail.box = (byte)(BoxIndexOf(zone, z) + 1);
+        tail.SetAcrossDepth(depth);
         tail.SetSpan(end, z.To);
         if (tail.Whole) return false; // (can't be: it starts after something)
+        head.SetSpan(head.From, end);
         return true;
     }
 
-    // Where a part's stock ends now, as a share of the zone's width in fill order: the columns used on a
-    // shelf (the front row so far, or all of them once a row's full), the hangers on a rail.
+    // Where a part's stock ends, as a share of the zone in fill order the way it splits: the columns used
+    // (side by side) or slices used (front to back) on a shelf, the hangers on a rail.
     private float UsedEnd(BoxCollider box, bool hang, ZoneStock z)
     {
         ZoneFrame(box, out _, out _, out Vector3 full);
-        float length = SplitLength(full, hang);
+        float length = SplitLength(full, hang, z.AcrossDepth);
         if (length <= 0f || !TryGetLayout(box, hang, z, z.itemId, z.orient, out var l)) return z.To;
-        float used = hang
-            ? Mathf.Min(l.railLength, z.count * l.step + spacing)
-            : Mathf.Min(z.count, l.nx) * l.cell.x;
+        float used = hang ? Mathf.Min(l.railLength, z.count * l.step + spacing)
+            : z.AcrossDepth ? Mathf.Min(Mathf.CeilToInt(z.count / (float)Mathf.Max(1, l.nx * l.ny)), l.nz) * l.cell.z // slices
+            : Mathf.Min(Mathf.CeilToInt(z.count / (float)Mathf.Max(1, l.nz * l.ny)), l.nx) * l.cell.x;               // columns
         // A whole zone (centred) is lined up from its starting side once split, so measure from there.
         return Mathf.Min(z.To, z.From + used / length);
+    }
+
+    /// <summary>
+    /// Where stocking this product here would split the zone (WouldSplit): a line across it at the split,
+    /// on the shelf's floor (across the rail, on a rail), so the player sees where the new part starts.
+    /// </summary>
+    public bool TryGetSplitLine(int zone, int itemId, uint? paint, out Vector3 a, out Vector3 b)
+    {
+        a = b = default;
+        var box = GetBox(zone);
+        if (box == null || !WouldSplit(zone, itemId, paint) || !TryGetTail(zone, out var tail)) return false;
+        bool hang = IsHangRail(zone);
+        ZoneFrame(box, out Vector3 center, out Quaternion rot, out Vector3 size);
+        float f = tail.From;
+        Vector3 la, lb;
+        if (hang)
+        {
+            bool alongZ = size.z > size.x;
+            float length = alongZ ? size.z : size.x, c = -length * 0.5f + f * length;
+            float across = (alongZ ? size.x : size.z) * 0.5f, top = size.y * 0.5f;
+            la = alongZ ? new Vector3(-across, top, c) : new Vector3(c, top, -across);
+            lb = alongZ ? new Vector3(across, top, c) : new Vector3(c, top, across);
+        }
+        else if (tail.AcrossDepth)
+        {
+            float c = -size.z * 0.5f + f * size.z, z = fillFromFront ? -c : c, y = -size.y * 0.5f + 0.01f;
+            la = new Vector3(-size.x * 0.5f, y, z);
+            lb = new Vector3(size.x * 0.5f, y, z);
+        }
+        else
+        {
+            float c = -size.x * 0.5f + f * size.x, x = fillFromRight ? c : -c, y = -size.y * 0.5f + 0.01f;
+            la = new Vector3(x, y, -size.z * 0.5f);
+            lb = new Vector3(x, y, size.z * 0.5f);
+        }
+        a = center + rot * la;
+        b = center + rot * lb;
+        return true;
     }
 
     // A number for a new part: an unused one (a part that joined back up) if there is one, else a new one.
@@ -403,6 +496,7 @@ public class StockContainer : NetworkBehaviour
             int drop = keep == parts[k] ? parts[k + 1] : parts[k];
             var kept = zones[keep];
             kept.SetSpan(a.From, b.To);
+            if (kept.Whole) kept.SetAcrossDepth(false); // all one again: fills the usual way
             if (kept.price == 0) { var d = zones[drop]; kept.price = d.price; kept.pricedItem = d.pricedItem; }
             zones[keep] = kept;
             zones[drop] = new ZoneStock { box = (byte)(boxIndex + 1), flags = 1 };
@@ -495,7 +589,8 @@ public class StockContainer : NetworkBehaviour
     /// </summary>
     public bool HasRoomFor(int zone, int itemId, int orient, uint? paint = null)
     {
-        if (GetBox(zone) == null || IsCovered(zone)) return false;
+        // A covered rail takes nothing; a shelf only loses the places something's in the way of (ApplyCover).
+        if (GetBox(zone) == null || (IsHangRail(zone) && IsCovered(zone))) return false;
         if (WouldSplit(zone, itemId, paint)) return GetCapacity(zone, itemId, orient, paint) > 0; // a new part after it
         var z = GetZone(zone);
         return Mathf.Max(0, z.count) < GetCapacity(zone, itemId, orient, paint);
@@ -676,14 +771,13 @@ public class StockContainer : NetworkBehaviour
     {
         into = zone;
         if (!IsServer || zone < 0 || zone >= zones.Count || !HasRoomFor(zone, itemId, orient, paint)) return false;
-        if (blockWhenCovered && CheckCovered(zone)) return false; // checked now, not the last (maybe stale) look
+        if (blockWhenCovered && IsHangRail(zone) && CheckCovered(zone)) return false; // checked now, not the last (maybe stale) look
         if (WouldSplit(zone, itemId, paint))
         {
             if (!split) return false;
-            // A new part, from where what's here ends now; what's here keeps to the width it uses.
-            if (!TryGetTail(zone, out var tail)) return false;
-            var head = zones[zone];
-            head.SetSpan(head.From, tail.From);
+            // A new part, from where what's here ends now; what's here keeps to the room it uses (laid out
+            // the way the zone splits, so it may move this once).
+            if (!TryGetTail(zone, out var tail, out var head)) return false;
             zones[zone] = head;
             int at = FreePartNumber();
             if (at < zones.Count) zones[at] = tail; else zones.Add(tail);
@@ -805,13 +899,68 @@ public class StockContainer : NetworkBehaviour
         public Vector3 pivotOffset; // from the product's pivot to the middle of its model (scaled, unrotated)
         public Vector3 half;        // product half size along the zone's axes, in this orientation
         public bool anchored;       // a part of a zone: lined up from its starting side (a whole zone is centred)
+        public bool acrossDepth;    // filled front to back first, in slices (a zone split front to back)
+        public int slots;           // places in it, covered or not (capacity: the ones nothing's put in the way of)
+        public int[] order;         // shelves partly covered: the free places first, then the covered ones (null: in order)
     }
 
     private bool TryGetLayout(int zone, int itemId, int orient, out Layout layout)
     {
         layout = default;
         var box = GetBox(zone);
-        return box != null && TryGetLayout(box, IsHangRail(zone), Entry(zone), itemId, orient, out layout);
+        if (box == null || !TryGetLayout(box, IsHangRail(zone), Entry(zone), itemId, orient, out layout)) return false;
+        if (!IsHangRail(zone) && blockWhenCovered && IsSpawned) ApplyCover(zone, box, ref layout, itemId, orient);
+        return true;
+    }
+
+    /* ========================= PARTLY COVERED SHELVES ========================= */
+
+    // Something put on part of a shelf spot only takes that part: the places it's in the way of don't count
+    // (products go in the free ones, in fill order). Worked out again whenever anything is placed or moved.
+    private struct CoverKey { public int version, itemId, orient, capacity; public ushort from, to; public byte flags; }
+    private readonly Dictionary<int, (CoverKey key, int[] order, int free)> coverCache = new();
+    private static readonly Collider[] SlotHits = new Collider[64];
+
+    private void ApplyCover(int zone, BoxCollider box, ref Layout l, int itemId, int orient)
+    {
+        var part = Entry(zone);
+        var key = new CoverKey { version = ItemPickupNet.LayoutVersion, itemId = itemId, orient = orient, capacity = l.capacity,
+                                 from = part.from, to = part.to, flags = part.flags };
+        if (!coverCache.TryGetValue(zone, out var c) || !c.key.Equals(key))
+        {
+            var free = new List<int>();
+            var covered = new List<int>();
+            if (self == null) self = GetComponent<ItemPickupNet>();
+            for (int i = 0; i < l.capacity; i++)
+            {
+                ShelfSlot(box, part, l, i, out Vector3 center, out Quaternion frame);
+                (SlotInTheWay(center, l.half, frame) ? covered : free).Add(i);
+            }
+            int[] order = null;
+            if (covered.Count > 0) { free.AddRange(covered); order = free.ToArray(); }
+            c = (key, order, l.capacity - covered.Count);
+            coverCache[zone] = c;
+        }
+        if (c.order == null) return;
+        l.order = c.order;
+        l.capacity = c.free;
+    }
+
+    // Another placed item where a product would go? (This furniture and its products, items on carts and
+    // edit-mode copies don't count.)
+    private bool SlotInTheWay(Vector3 center, Vector3 half, Quaternion frame)
+    {
+        Vector3 h = Vector3.Max(half * 0.85f, Vector3.one * 0.005f);
+        int n = Physics.OverlapBoxNonAlloc(center, h, SlotHits, frame, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < n; i++)
+        {
+            var col = SlotHits[i];
+            if (col == null || col.transform.IsChildOf(transform)) continue;
+            var item = col.GetComponentInParent<ItemPickupNet>();
+            if (item == null || item == self || !item.IsSpawned || item.IsOnCart) continue;
+            return true;
+        }
+        return false;
     }
 
     // Same result on every machine: it only depends on the prefab, the zone and the orientation.
@@ -877,7 +1026,7 @@ public class StockContainer : NetworkBehaviour
                 float across = alongZ ? size.x : size.z;
                 if (drop > size.y + 1e-3f || h.x * 2f > across + 1e-3f) n = 0;
             }
-            layout = new Layout { capacity = Mathf.Min(n, max), step = step, orient = o, half = h,
+            layout = new Layout { capacity = Mathf.Min(n, max), slots = Mathf.Min(n, max), step = step, orient = o, half = h,
                                   railLength = length, railAlongZ = alongZ, hook = hook, anchored = !part.Whole };
         }
         else
@@ -888,8 +1037,10 @@ public class StockContainer : NetworkBehaviour
             int nx = Mathf.Max(0, Mathf.FloorToInt((size.x + spacing) / cell.x));
             int ny = Mathf.Max(0, Mathf.FloorToInt((size.y + spacing) / cell.y));
             int nz = Mathf.Max(0, Mathf.FloorToInt((size.z + spacing) / cell.z));
-            layout = new Layout { nx = nx, ny = ny, nz = nz, capacity = Mathf.Min(nx * ny * nz, max), cell = cell,
-                                  orient = o, pivotOffset = product.pivotOffset, half = h, anchored = !part.Whole };
+            layout = new Layout { nx = nx, ny = ny, nz = nz, capacity = Mathf.Min(nx * ny * nz, max),
+                                  slots = Mathf.Min(nx * ny * nz, max), cell = cell,
+                                  orient = o, pivotOffset = product.pivotOffset, half = h, anchored = !part.Whole,
+                                  acrossDepth = part.AcrossDepth };
         }
         return layout.capacity > 0;
     }
@@ -955,13 +1106,12 @@ public class StockContainer : NetworkBehaviour
                            Mathf.Abs(x.z) + Mathf.Abs(y.z) + Mathf.Abs(z.z));
     }
 
-    // Shelves: front row first (the zone's +Z side), left to right, then the next row back, then up a layer.
-    // Rails: left to right along the rail, the top of each product on the rail.
+    // Shelves: column by column across the zone (from the Fill From Right side); each column front to back,
+    // then up a layer. Rails: along the rail, the top of each product on the rail.
     private void GetSlotPose(BoxCollider box, bool hang, ZoneStock part, Layout l, int index, out Vector3 position,
                              out Quaternion rotation)
     {
         SegmentFrame(box, hang, part, out Vector3 zoneCenter, out Quaternion zoneRot, out Vector3 size, out _);
-        Vector3 local;
 
         if (hang)
         {
@@ -976,13 +1126,41 @@ public class StockContainer : NetworkBehaviour
             position = railPoint - frame * l.hook;
             return;
         }
-        else
+        // A partly covered shelf: the k-th product goes in the k-th free place.
+        if (l.order != null && index >= 0 && index < l.order.Length) index = l.order[index];
+        ShelfSlot(box, part, l, index, out Vector3 slotCenter, out zoneRot);
+        rotation = zoneRot * l.orient;
+        position = slotCenter - rotation * l.pivotOffset;
+    }
+
+    // Where a shelf place's product's middle is (its box lined up with the zone: Frame).
+    private void ShelfSlot(BoxCollider box, ZoneStock part, Layout l, int index, out Vector3 center, out Quaternion frame)
+    {
+        SegmentFrame(box, false, part, out Vector3 zoneCenter, out Quaternion zoneRot, out Vector3 size, out _);
+        Vector3 local;
         {
-            int perLayer = l.nx * l.nz;
-            int layer = index / perLayer;
-            int inLayer = index % perLayer;
-            int row = inLayer / l.nx;
-            int col = inLayer % l.nx;
+            // Column by column from the Fill From Right side: each column fills front to back (Fill From
+            // Front), then stacks up a layer, before the next column starts. So a product takes up the width
+            // it needs and no more, leaving the rest of the zone free for the next product (see WouldSplit).
+            int col, row, layer;
+            if (l.acrossDepth)
+            {
+                // Split front to back: slice by slice from the Fill From Front side, each slice across (from
+                // the Fill From Right side) then stacked up, before the next slice back.
+                int perSlice = Mathf.Max(1, l.nx * l.ny);
+                row = index / perSlice;
+                int inSlice = index % perSlice;
+                layer = inSlice / Mathf.Max(1, l.nx);
+                col = inSlice % Mathf.Max(1, l.nx);
+            }
+            else
+            {
+                int perColumn = Mathf.Max(1, l.nz * l.ny);
+                col = index / perColumn;
+                int inColumn = index % perColumn;
+                layer = inColumn / Mathf.Max(1, l.nz);
+                row = inColumn % Mathf.Max(1, l.nz);
+            }
 
             // Centre the grid in the zone so leftover space is shared on both sides. A part of a zone lines
             // its columns up from its starting side instead (so cutting it short, or starting the next part
@@ -991,14 +1169,13 @@ public class StockContainer : NetworkBehaviour
             float usedZ = l.nz * l.cell.z - spacing;
             // Bottom layer first. A shopper facing the shelf (the zone's front, its blue arrow, toward them)
             // has their right at -x: Fill From Right starts there; Fill From Front starts at +z.
-            float x = (l.anchored ? -size.x * 0.5f : -usedX * 0.5f) + l.half.x + col * l.cell.x;
-            float z = usedZ * 0.5f - l.half.z - row * l.cell.z;
+            float x = (l.anchored && !l.acrossDepth ? -size.x * 0.5f : -usedX * 0.5f) + l.half.x + col * l.cell.x;
+            float z = (l.anchored && l.acrossDepth ? size.z * 0.5f : usedZ * 0.5f) - l.half.z - row * l.cell.z;
             local = new Vector3(fillFromRight ? x : -x, -size.y * 0.5f + l.half.y + layer * l.cell.y, fillFromFront ? z : -z);
         }
 
-        rotation = zoneRot * l.orient;
-        Vector3 center = zoneCenter + zoneRot * local;
-        position = center - rotation * l.pivotOffset;
+        frame = zoneRot;
+        center = zoneCenter + zoneRot * local;
     }
 
     /* ========================= EDIT MODE STAND-INS ========================= */
@@ -1175,7 +1352,7 @@ public class StockContainer : NetworkBehaviour
         if (prefab == null || !TryGetLayout(zone, state.itemId, state.orient, out var layout)) return;
 
         var root = GetVisualRoot();
-        while (list.Count < state.count && list.Count < layout.capacity)
+        while (list.Count < state.count && list.Count < layout.slots) // (stock already there when something was put in the way stays)
         {
             GetSlotPose(box, IsHangRail(zone), state, layout, list.Count, out Vector3 pos, out Quaternion rot);
             var model = GetVariantPrefab(state.itemId, IsHangRail(zone), state.seed, list.Count) ?? prefab;
