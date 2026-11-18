@@ -129,7 +129,12 @@ public static class StockBoxGenerator
             int? fixedUnits = AmountInName.Match(folderName) is { Success: true } m ? int.Parse(m.Groups[1].Value) : null;
             string productName = ItemSetupTool.Words(AmountInName.Replace(folderName, ""));
             if (made.TryGetValue(folder, out var existing))
-                Update(s, existing.path, hang, shelf, recalcUnits || fixedUnits.HasValue ? Units(s, template, hang, shelf, fixedUnits) : (int?)null, report);
+            {
+                // Keep Units on the crate: its amount is yours.
+                bool keep = existing.go.TryGetComponent<ItemPickupNet>(out var crate) && crate.KeepUnits;
+                bool work = !keep && (recalcUnits || fixedUnits.HasValue);
+                Update(s, existing.path, hang, shelf, work ? Units(s, template, hang, shelf, fixedUnits) : (int?)null, report);
+            }
             else
                 Make(s, template, folder, productName, hang, shelf, Units(s, template, hang, shelf, fixedUnits), report);
         }
