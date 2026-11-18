@@ -36,6 +36,7 @@ public class StoreListing : MonoBehaviour
         public int priceCents;           // what one costs (a part-used crate sells for its share)
         public int listCents;            // the price tag (the same, except for part-used crates)
         public int quantity;
+        public byte paint;               // its main color (PaintPalette id; 0: its own colors)
 
         public Vector3 Position => item != null ? item.transform.position
                                  : container != null ? container.GetZoneCenter(zone) : Vector3.zero;
@@ -43,7 +44,8 @@ public class StoreListing : MonoBehaviour
         public Key Key => item != null ? new Key(item, -1) : new Key(container, zone);
 
         internal bool SameAs(Source o) =>
-            itemId == o.itemId && priceCents == o.priceCents && listCents == o.listCents && quantity == o.quantity;
+            itemId == o.itemId && priceCents == o.priceCents && listCents == o.listCents && quantity == o.quantity &&
+            paint == o.paint;
     }
 
     /// <summary>Which thing a source is: a shelf and its zone, or a loose item (zone -1).</summary>
@@ -177,6 +179,7 @@ public class StoreListing : MonoBehaviour
                 {
                     container = c, zone = zone, itemId = stock.itemId,
                     priceCents = stock.price, listCents = stock.price, quantity = stock.count,
+                    paint = PaintSet.Get(stock.paint, 0),
                 };
             }
         }
@@ -202,7 +205,8 @@ public class StoreListing : MonoBehaviour
             !(s.TryGetComponent<ItemPickupNet>(out var p) && (p.IsOnCart || !p.IsFrozen))) // riding a cart or still falling isn't on display
         {
             to = ListingAt(s.transform.position);
-            want = new Source { item = s, zone = -1, itemId = s.ItemId, priceCents = s.SalePrice, listCents = s.Price, quantity = 1 };
+            want = new Source { item = s, zone = -1, itemId = s.ItemId, priceCents = s.SalePrice, listCents = s.Price, quantity = 1,
+                                paint = p != null ? PaintSet.Get(p.Paint, 0) : (byte)0 };
         }
         Place(key, to, want);
     }

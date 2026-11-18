@@ -21,7 +21,8 @@ using UnityEngine;
 ///   inside. Customer AI uses this.
 ///
 /// The maths (all tunable, see StoreAppealSettings and the Store Appeal Tuning Guide):
-///   item value  = like × price score × rarity × attractiveness × demand × competition
+///   item value  = like × price score × rarity × attractiveness × demand × competition × color
+///                 (color: how its color suits the item and the customer, see ColorRules)
 ///                 (competition: other open stores selling the same item lower it)
 ///   draw        = 1 - e^(-total value / saturation), so more on display helps, less and less
 ///   quality     × (1 + Looks Matter × (Quality - 0.5)): good stores up to +50%, bad ones down to -50%
@@ -50,6 +51,7 @@ public class StoreAppeal : MonoBehaviour
         public bool seenFromOutside;
         public Vector3 position;
         public float competition; // 1 = nobody else sells it
+        public byte paint;        // its main color (ColorRules taste)
     }
 
     // One bit of decor (or a window) and where it is.
@@ -207,7 +209,8 @@ public class StoreAppeal : MonoBehaviour
             : Mathf.Clamp(1f - p.priceSensitivity * (ratio - 1f), 0f, 2f);
 
         float rarity = settings != null ? settings.RarityMultiplier(o.def.rarity, p.exoticLove) : 1f;
-        return like * priceScore * rarity * MarketModifiers.Attractiveness(o.def) * MarketModifiers.Demand(o.def) * o.competition;
+        return like * priceScore * rarity * MarketModifiers.Attractiveness(o.def) * MarketModifiers.Demand(o.def) * o.competition *
+               ColorRules.Factor(o.def, p, o.paint);
     }
 
     /* ========================= COMPETITION ========================= */
@@ -406,6 +409,7 @@ public class StoreAppeal : MonoBehaviour
             seenFromOutside = seen.seen,
             position = at,
             competition = CompetitionFor(s.itemId),
+            paint = s.paint,
         };
         return !had || before.def != def || (before.position - at).sqrMagnitude > 0.0025f;
     }

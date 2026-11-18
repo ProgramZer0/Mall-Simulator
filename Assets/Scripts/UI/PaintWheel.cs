@@ -121,7 +121,16 @@ public class PaintWheel : MonoBehaviour
     public void SetOpen(bool open)
     {
         if (root == null) return;
-        if (open) Build();
+        if (open)
+        {
+            Build();
+            for (int i = 0; i < swatches.Count; i++) // locked colors dimmed (the team may have levelled up since)
+            {
+                if (swatches[i] == null) continue;
+                PaintPalette.StyleSwatch(swatches[i], (byte)i, originalSwatchColor);
+                PaintPalette.DimIfLocked(swatches[i], (byte)i);
+            }
+        }
         root.gameObject.SetActive(open);
     }
 
@@ -130,7 +139,7 @@ public class PaintWheel : MonoBehaviour
     {
         for (int i = 0; i < swatches.Count; i++)
             if (swatches[i] != null) swatches[i].rectTransform.localScale = Vector3.one * (i == id ? hoverScale : 1f);
-        if (nameText != null) nameText.text = PaintPalette.NameOf(id);
+        if (nameText != null) nameText.text = PaintPalette.PickerName(id);
     }
 
     private void Build()

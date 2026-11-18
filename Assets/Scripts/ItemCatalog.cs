@@ -326,6 +326,15 @@ public class ItemDef
              "player: their prices are judged against it (and it'll move with events and seasons). For stock " +
              "crates this is per product (one shirt), not the whole crate.")]
     public float marketPrice = 0f;
+    [Header("Colors")]
+    [Tooltip("Only these colors (Original always can). Empty: its franchise's colors, else its categories' " +
+             "(PaintPalette → Limits), else any color that isn't Exclusive. Exclusive colors listed here can be used.")]
+    [PaletteColor] public List<string> colors = new();
+    [Tooltip("How each color suits this item with customers (a white washing machine +, a green one -). Colors " +
+             "not listed: neutral. Adds to each customer's own color taste.")]
+    public List<ColorTaste> colorTastes = new();
+
+    [Header("Delivery")]
     [Tooltip("Default seconds from ordering until it arrives (used when the order doesn't give its own time).")]
     public float deliverySeconds = 30f;
     [Tooltip("What arrives at the shipment area: a box (NetworkObject + ItemPickupNet + ShipmentPackage). " +

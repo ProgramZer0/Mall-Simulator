@@ -15,7 +15,7 @@ using UnityEngine;
 /// folder: a variant of the box with those models and a products-per-crate worked out from the sizes, then
 /// gives it an id like any item. Add another color to the folder later and it's added to the crate.
 ///
-/// The crate's price, categories (plus Boxed), rarity, sizes, delivery time and so on come from its product's
+/// The crate's price, categories (plus Boxed), rarity, colors and color tastes, sizes, delivery time and so on come from its product's
 /// ItemData (the shelf model's, else the hanging one's) and are kept in step every run: set them on the product.
 /// Its name and amount are its own to change. Crates made by hand are left alone, and so are their products.
 /// </summary>
@@ -339,6 +339,10 @@ public static class StockBoxGenerator
             item.category = null;
             item.CategoriesChanged();
             item.rarity = p.rarity;
+            item.colors = p.colors != null ? new List<string>(p.colors) : new List<string>();
+            item.colorTastes = p.colorTastes != null
+                ? p.colorTastes.Where(t => t != null).Select(t => new ColorTaste { color = t.color, weight = t.weight }).ToList()
+                : new List<ColorTaste>();
             item.sizes = p.sizes;
             item.sizePriceStep = p.sizePriceStep;
             item.deliverySeconds = p.deliverySeconds;

@@ -13,4 +13,8 @@ public class BuyItemSlot : MonoBehaviour
     public Button buyButton;
     [Tooltip("Optional.")] public TMP_Text nameText;
     [Tooltip("Optional.")] public TMP_Text priceText;
+    [Tooltip("Optional: little swatches of the colors the item is limited to (its own, its franchise's or its " +
+             "categories'), made here. Hidden when it comes in any color. Its height is the swatch size; a " +
+             "Horizontal Layout Group lays them out, else they're placed in a row.")]
+    public RectTransform colors;
 }

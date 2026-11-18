@@ -13,6 +13,9 @@ using UnityEngine;
 ///
 /// Paint replaces the material's base color (URP "_BaseColor", Built-in "_Color") and the texture
 /// still shows through, so paintable materials look truest with a white base color.
+///
+/// Each color can unlock at a team level, and can be Exclusive: only on items (or franchises) that list
+/// it. Which colors an item may come in, and how its colors go down with customers: see ColorRules.
 /// </summary>
 public class PaintPalette : MonoBehaviour
 {
@@ -23,6 +26,20 @@ public class PaintPalette : MonoBehaviour
     {
         public string name;
         public Color color;
+        [Tooltip("Team level it can be used from (0 or 1: from the start). Locked colors show dimmed.")]
+        [Min(0)] public int unlockLevel;
+        [Tooltip("Only on items or franchises that list it in their Colors (a special finish): never offered for " +
+                 "anything else, walls and floors included.")]
+        public bool exclusive;
+    }
+
+    /// <summary>Colors a category of items is limited to (an item's own Colors list comes first).</summary>
+    [Serializable]
+    public class CategoryColors
+    {
+        public string category;
+        [Tooltip("The colors these items may come in (Original always can). Exclusive colors listed here can be used.")]
+        [PaletteColor] public List<string> colors = new();
     }
 
     [Tooltip("Up to 255 colors. Synced by their place in the list: add new ones at the end.")]
@@ -43,6 +60,12 @@ public class PaintPalette : MonoBehaviour
     };
     [Tooltip("Name shown for color 0 (the model's own colors).")]
     [SerializeField] private string originalName = "Original";
+
+    [Header("Limits")]
+    [Tooltip("Categories limited to some colors (\"Appliances: White, Black, Silver\"). An item in several takes " +
+             "the colors of all of them. An item's own Colors, or its franchise's, come first.")]
+    [SerializeField] private List<CategoryColors> categoryColors = new();
+    public IReadOnlyList<CategoryColors> CategoryLimits => categoryColors;
 
     [Header("Swatch icons (color wheel and buy menu)")]
     [Tooltip("A white icon, tinted to each color: one swatch is made from it for every color in the list, so adding " +
@@ -122,6 +145,70 @@ public class PaintPalette : MonoBehaviour
         color = Instance.colors[id - 1].color;
         return true;
     }
+
+    /// <summary>Team level a color can be used from (0 for Original or an unknown id).</summary>
+    public static int UnlockLevelOf(byte id) =>
+        id != 0 && Instance != null && id <= Instance.Count ? Instance.colors[id - 1].unlockLevel : 0;
+
+    /// <summary>
+    /// A color's name for pickers: "Green (level 5)" while it's locked for the local player's team,
+    /// "Gold (exclusive)" for an exclusive one.
+    /// </summary>
+    public static string PickerName(byte id)
+    {
+        string n = NameOf(id);
+        if (id == 0) return n;
+        if (!ColorRules.IsUnlocked(id, LocalTeam)) return $"{n} (level {UnlockLevelOf(id)})";
+        return IsExclusive(id) ? $"{n} (exclusive)" : n;
+    }
+
+    /// <summary>Locked for the local player's team: drawn dimmed in pickers.</summary>
+    public static bool IsLockedHere(byte id) => !ColorRules.IsUnlocked(id, LocalTeam);
+
+    private static ulong LocalTeam =>
+        Unity.Netcode.NetworkManager.Singleton != null ? MallManager.GetTeamOf(Unity.Netcode.NetworkManager.Singleton.LocalClientId) : 0;
+
+    /// <summary>Dim a picker swatch while its color is locked (call after StyleSwatch).</summary>
+    public static void DimIfLocked(UnityEngine.UI.Image image, byte id, float dimAlpha = 0.3f)
+    {
+        if (image == null || !IsLockedHere(id)) return;
+        var c = image.color;
+        c.a *= dimAlpha;
+        image.color = c;
+    }
+
+    /// <summary>Only on items or franchises that list it?</summary>
+    public static bool IsExclusive(byte id) =>
+        id != 0 && Instance != null && id <= Instance.Count && Instance.colors[id - 1].exclusive;
+
+    private Dictionary<string, byte> byName;
+
+    /// <summary>A color's id from its name (not case sensitive; "Original" is 0). False if there's none.</summary>
+    public static bool TryGetId(string name, out byte id)
+    {
+        id = 0;
+        var p = Instance;
+        if (p == null || string.IsNullOrWhiteSpace(name)) return false;
+        if (p.byName == null)
+        {
+            p.byName = new Dictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < p.Count; i++)
+                if (!string.IsNullOrWhiteSpace(p.colors[i].name)) p.byName.TryAdd(p.colors[i].name.Trim(), (byte)(i + 1));
+        }
+        if (string.Equals(name.Trim(), p.originalName, StringComparison.OrdinalIgnoreCase)) return true;
+        return p.byName.TryGetValue(name.Trim(), out id);
+    }
+
+    /// <summary>Every color's name, Original first (for editor drop-downs).</summary>
+    public IEnumerable<string> Names()
+    {
+        yield return originalName;
+        for (int i = 0; i < Count; i++) yield return colors[i].name;
+    }
+
+#if UNITY_EDITOR
+    private void OnValidate() { byName = null; ColorRules.Forget(); }
+#endif
 
     public static string NameOf(byte id)
     {
