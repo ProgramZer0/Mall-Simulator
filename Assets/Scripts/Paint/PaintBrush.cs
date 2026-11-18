@@ -247,8 +247,6 @@ public class PaintBrush : NetworkBehaviour
 
     /* ========================= COLOR WHEEL ========================= */
 
-    private int WheelCount => PaintPalette.Instance != null ? PaintPalette.Instance.Count + 1 : 1;
-
     private void OpenWheel()
     {
         if (PaintPalette.Instance == null) return;
@@ -264,8 +262,9 @@ public class PaintBrush : NetworkBehaviour
     {
         Vector2 fromCenter = (Vector2)Input.mousePosition - new Vector2(Screen.width, Screen.height) * 0.5f;
         if (fromCenter.sqrMagnitude < 30f * 30f) return; // still in the middle: keep the current pick
-        wheelHover = (byte)PaintWheel.Pick(fromCenter, WheelCount);
-        if (PaintWheel.Instance != null) PaintWheel.Instance.Highlight(wheelHover);
+        if (PaintWheel.Instance == null) return;
+        wheelHover = PaintWheel.Instance.PickColor(fromCenter);
+        PaintWheel.Instance.Highlight(wheelHover);
     }
 
     private void CloseWheel(bool pick)

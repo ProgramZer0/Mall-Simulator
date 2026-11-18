@@ -27,7 +27,8 @@ public class PaintWheel : MonoBehaviour
     [SerializeField] private Color originalSwatchColor = new(1f, 1f, 1f, 0.35f);
 
     private readonly List<Image> swatches = new();
-    private int builtFor = -1;
+    private readonly List<byte> shown = new();   // the color on each swatch: only colors the team has unlocked
+    private readonly List<byte> wanted = new();
 
     public bool IsOpen => root != null && root.gameObject.activeSelf;
 
@@ -121,16 +122,7 @@ public class PaintWheel : MonoBehaviour
     public void SetOpen(bool open)
     {
         if (root == null) return;
-        if (open)
-        {
-            Build();
-            for (int i = 0; i < swatches.Count; i++) // locked colors dimmed (the team may have levelled up since)
-            {
-                if (swatches[i] == null) continue;
-                PaintPalette.StyleSwatch(swatches[i], (byte)i, originalSwatchColor);
-                PaintPalette.DimIfLocked(swatches[i], (byte)i);
-            }
-        }
+        if (open) Build(); // (the team may have unlocked more colors since)
         root.gameObject.SetActive(open);
     }
 
@@ -138,7 +130,7 @@ public class PaintWheel : MonoBehaviour
     public void Highlight(byte id)
     {
         for (int i = 0; i < swatches.Count; i++)
-            if (swatches[i] != null) swatches[i].rectTransform.localScale = Vector3.one * (i == id ? hoverScale : 1f);
+            if (swatches[i] != null) swatches[i].rectTransform.localScale = Vector3.one * (shown[i] == id ? hoverScale : 1f);
         if (nameText != null) nameText.text = PaintPalette.PickerName(id);
     }
 
@@ -146,22 +138,38 @@ public class PaintWheel : MonoBehaviour
     {
         var palette = PaintPalette.Instance;
         int count = palette != null ? palette.Count + 1 : 1;
-        if (builtFor == count) return;
-        builtFor = count;
+        wanted.Clear();
+        for (int i = 0; i < count; i++)
+            if (!PaintPalette.IsLockedHere((byte)i)) wanted.Add((byte)i); // locked colors aren't shown
+        if (swatches.Count == wanted.Count && shown.Count == wanted.Count)
+        {
+            bool same = true;
+            for (int i = 0; i < wanted.Count && same; i++) same = shown[i] == wanted[i];
+            if (same) return;
+        }
         foreach (var s in swatches) if (s != null) Destroy(s.gameObject);
         swatches.Clear();
+        shown.Clear();
         if (swatchPrefab == null) { Debug.LogWarning("[PaintWheel] Needs a Swatch Prefab.", this); return; }
 
-        for (int i = 0; i < count; i++)
+        for (int i = 0; i < wanted.Count; i++)
         {
+            byte id = wanted[i];
             var img = Instantiate(swatchPrefab, root);
             img.gameObject.SetActive(true);
-            img.name = $"Swatch {PaintPalette.NameOf((byte)i)}";
-            PaintPalette.StyleSwatch(img, (byte)i, originalSwatchColor); // the palette's icon, tinted
-            Vector2 dir = Direction(i, count);
-            img.rectTransform.anchoredPosition = dir * radius;
+            img.name = $"Swatch {PaintPalette.NameOf(id)}";
+            PaintPalette.StyleSwatch(img, id, originalSwatchColor); // the palette's icon, tinted
+            img.rectTransform.anchoredPosition = Direction(i, wanted.Count) * radius;
             swatches.Add(img);
+            shown.Add(id);
         }
+    }
+
+    /// <summary>The color a direction from the middle points at (of those shown).</summary>
+    public byte PickColor(Vector2 fromCenter)
+    {
+        if (shown.Count == 0) return 0;
+        return shown[Pick(fromCenter, shown.Count)];
     }
 
     /// <summary>Where swatch i of count sits on the ring (0 at the top, going clockwise).</summary>

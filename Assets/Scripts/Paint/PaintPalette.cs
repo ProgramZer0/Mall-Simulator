@@ -14,7 +14,7 @@ using UnityEngine;
 /// Paint replaces the material's base color (URP "_BaseColor", Built-in "_Color") and the texture
 /// still shows through, so paintable materials look truest with a white base color.
 ///
-/// Each color can unlock at a team level, and can be Exclusive: only on items (or franchises) that list
+/// Each color can unlock at a team level (hidden from pickers until then), and can be Exclusive: only on items (or franchises) that list
 /// it. Which colors an item may come in, and how its colors go down with customers: see ColorRules.
 /// </summary>
 public class PaintPalette : MonoBehaviour
@@ -151,8 +151,8 @@ public class PaintPalette : MonoBehaviour
         id != 0 && Instance != null && id <= Instance.Count ? Instance.colors[id - 1].unlockLevel : 0;
 
     /// <summary>
-    /// A color's name for pickers: "Green (level 5)" while it's locked for the local player's team,
-    /// "Gold (exclusive)" for an exclusive one.
+    /// A color's name for pickers: "Gold (exclusive)" for an exclusive one ("Green (level 5)" if a locked one
+    /// is ever shown).
     /// </summary>
     public static string PickerName(byte id)
     {
@@ -162,20 +162,11 @@ public class PaintPalette : MonoBehaviour
         return IsExclusive(id) ? $"{n} (exclusive)" : n;
     }
 
-    /// <summary>Locked for the local player's team: drawn dimmed in pickers.</summary>
+    /// <summary>Locked for the local player's team: not shown in pickers.</summary>
     public static bool IsLockedHere(byte id) => !ColorRules.IsUnlocked(id, LocalTeam);
 
     private static ulong LocalTeam =>
         Unity.Netcode.NetworkManager.Singleton != null ? MallManager.GetTeamOf(Unity.Netcode.NetworkManager.Singleton.LocalClientId) : 0;
-
-    /// <summary>Dim a picker swatch while its color is locked (call after StyleSwatch).</summary>
-    public static void DimIfLocked(UnityEngine.UI.Image image, byte id, float dimAlpha = 0.3f)
-    {
-        if (image == null || !IsLockedHere(id)) return;
-        var c = image.color;
-        c.a *= dimAlpha;
-        image.color = c;
-    }
 
     /// <summary>Only on items or franchises that list it?</summary>
     public static bool IsExclusive(byte id) =>

@@ -327,8 +327,8 @@ public class ItemDef
              "crates this is per product (one shirt), not the whole crate.")]
     public float marketPrice = 0f;
     [Header("Colors")]
-    [Tooltip("Only these colors (Original always can). Empty: its franchise's colors, else its categories' " +
-             "(PaintPalette → Limits), else any color that isn't Exclusive. Exclusive colors listed here can be used.")]
+    [Tooltip("Only these colors (Original always can). Empty: its categories' (PaintPalette → Limits), else any " +
+             "color that isn't Exclusive. Its franchise's colors are always extra. Exclusive colors listed here can be used.")]
     [PaletteColor] public List<string> colors = new();
     [Tooltip("How each color suits this item with customers (a white washing machine +, a green one -). Colors " +
              "not listed: neutral. Adds to each customer's own color taste.")]

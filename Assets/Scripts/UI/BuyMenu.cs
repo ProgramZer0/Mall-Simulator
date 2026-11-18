@@ -420,14 +420,21 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         if (go != null && go.TryGetComponent<BuyItemSlot>(out var slot)) ShowColors(slot.colors, def);
     }
 
-    // The colors an item is limited to (its own, its franchise's or its categories'), as little swatches.
-    // Nothing shown when it can be any color.
+    private static readonly List<byte> tileColors = new();
+
+    // The colors an item is limited to (its own or its categories', with its franchise's), or just its
+    // franchise's extra colors, as little swatches: only colors the team has unlocked. Nothing shown when
+    // it can be any color.
     private static void ShowColors(RectTransform into, ItemDef def)
     {
         if (into == null) return;
-        var limit = PaintParts.IsPaintable(def) ? ColorRules.LimitOf(def) : null;
-        into.gameObject.SetActive(limit != null && limit.Count > 0);
-        if (limit == null) return;
+        tileColors.Clear();
+        if (PaintParts.IsPaintable(def))
+            foreach (var c in ColorRules.ShownFor(def))
+                if (!PaintPalette.IsLockedHere(c)) tileColors.Add(c);
+        var limit = tileColors;
+        into.gameObject.SetActive(limit.Count > 0);
+        if (limit.Count == 0) return;
         float size = into.rect.height > 1f ? into.rect.height : 14f;
         int i = 0;
         for (; i < limit.Count; i++)

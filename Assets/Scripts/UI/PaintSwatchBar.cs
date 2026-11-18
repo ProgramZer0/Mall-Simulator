@@ -39,17 +39,18 @@ public class PaintSwatchBar : MonoBehaviour
         RefreshLocks(); // (the team may have levelled up since)
     }
 
-    // Locked colors dimmed (they can be picked, but buying in them says when they unlock).
+    // Only colors the team has unlocked are shown.
     private void RefreshLocks()
     {
         foreach (var s in swatches)
         {
             if (s.button == null) continue;
-            PaintPalette.StyleSwatch(s.button.image, s.id, originalSwatchColor, turn: false);
-            PaintPalette.DimIfLocked(s.button.image, s.id);
+            bool locked = PaintPalette.IsLockedHere(s.id);
+            s.button.gameObject.SetActive(!locked);
             var label = s.button.GetComponentInChildren<TMP_Text>(true);
             if (label != null) label.text = PaintPalette.PickerName(s.id);
         }
+        if (PaintPalette.IsLockedHere(Selected)) SetSelected(0);
     }
 
     /// <summary>Pick a color without raising Picked (e.g. to show what something already is).</summary>

@@ -7,11 +7,12 @@ using UnityEngine;
 ///
 /// Limits (first one that lists any colors):
 ///   1. the item's own Colors (ItemDef → Colors),
-///   2. its franchise's (FranchiseDef → Colors): the brand's colors,
-///   3. its categories' (PaintPalette → Limits; an item in several gets all of theirs),
-///   4. none: any color that isn't Exclusive.
-/// Original (the model's own colors) is always allowed. Exclusive colors only where a list names them.
-/// On top of that, a color can only be used once the team reaches its Unlock Level (PaintPalette).
+///   2. its categories' (PaintPalette → Limits; an item in several gets all of theirs),
+///   3. none: any color that isn't Exclusive.
+/// Plus, always, its franchise's Colors (FranchiseDef → Colors): the brand's colors are extra colors for
+/// every item the franchise covers. Original (the model's own colors) is always allowed. Exclusive colors
+/// only where a list names them. And a color can only be used once the team reaches its Unlock Level
+/// (PaintPalette); until then pickers don't show it.
 /// Walls, floors and storefronts: any unlocked color that isn't Exclusive.
 ///
 /// Taste: an item's Color Tastes (how a color suits it) plus the customer's own (CustomerPersonality),
@@ -21,7 +22,7 @@ using UnityEngine;
 public static class ColorRules
 {
     private static readonly byte[] NoLimit = new byte[0];
-    private static readonly Dictionary<ItemDef, byte[]> limits = new();
+    private static readonly Dictionary<ItemDef, (byte[] limit, byte[] extra)> limits = new();
     private static readonly Dictionary<List<ColorTaste>, float[]> tastes = new();
     private static readonly List<byte> scratch = new();
 
@@ -32,25 +33,52 @@ public static class ColorRules
         tastes.Clear();
     }
 
-    /// <summary>The colors an item is limited to (Original not listed but always fine), or null: no limit.</summary>
+    /// <summary>
+    /// The colors an item is limited to, its franchise's included (Original not listed but always fine), or
+    /// null: any color that isn't Exclusive (plus its franchise's, see ExtraOf).
+    /// </summary>
     public static IReadOnlyList<byte> LimitOf(ItemDef def)
     {
-        if (def == null) return null;
+        var limit = Entry(def).limit;
+        return limit == null || limit == NoLimit ? null : limit;
+    }
+
+    /// <summary>Its franchise's colors: extra colors on top of whatever else it may be (empty if none).</summary>
+    public static IReadOnlyList<byte> ExtraOf(ItemDef def) => Entry(def).extra ?? NoLimit;
+
+    /// <summary>
+    /// The colors worth showing for an item (on its buy tile): its limit with its franchise's colors, or just
+    /// the franchise's when it can otherwise be any color. Empty: nothing special.
+    /// </summary>
+    public static IReadOnlyList<byte> ShownFor(ItemDef def) => LimitOf(def) ?? ExtraOf(def);
+
+    private static (byte[] limit, byte[] extra) Entry(ItemDef def)
+    {
+        if (def == null) return (null, null);
         def = def.BaseDef; // sizes share their item's colors
-        if (!limits.TryGetValue(def, out var list))
+        if (!limits.TryGetValue(def, out var e))
         {
-            list = Build(def);
-            if (PaintPalette.Instance != null) limits[def] = list; // (not before the palette's there)
+            scratch.Clear();
+            var franchise = FranchiseManager.FranchiseOf(def);
+            if (franchise != null) AddNames(franchise.colors, scratch);
+            var extra = scratch.ToArray();
+            var limit = Build(def);
+            if (limit != NoLimit && extra.Length > 0) // the brand's colors on top of the limit
+            {
+                var both = new List<byte>(limit);
+                foreach (var c in extra) if (!both.Contains(c)) both.Add(c);
+                limit = both.ToArray();
+            }
+            e = (limit, extra);
+            if (PaintPalette.Instance != null) limits[def] = e; // (not before the palette's there)
         }
-        return list == NoLimit ? null : list;
+        return e;
     }
 
     private static byte[] Build(ItemDef def)
     {
         scratch.Clear();
         if (AddNames(def.colors, scratch)) return scratch.ToArray();
-        var franchise = FranchiseManager.FranchiseOf(def);
-        if (franchise != null && AddNames(franchise.colors, scratch)) return scratch.ToArray();
         bool any = false;
         var palette = PaintPalette.Instance;
         if (palette != null)
@@ -94,11 +122,14 @@ public static class ColorRules
         {
             if (!Contains(limit, id))
             {
-                why = limit.Count > 0 ? $"{what} only comes in {List(limit)}" : $"{what} only comes in its own colors";
+                // (only the colors the team can use are named)
+                var open = new List<byte>();
+                foreach (var c in limit) if (IsUnlocked(c, team)) open.Add(c);
+                why = open.Count > 0 ? $"{what} only comes in {List(open)}" : $"{what} only comes in its own colors";
                 return false;
             }
         }
-        else if (PaintPalette.IsExclusive(id))
+        else if (PaintPalette.IsExclusive(id) && !Contains(ExtraOf(def), id))
         {
             why = $"{color} is an exclusive color: {what} doesn't come in it";
             return false;
@@ -144,8 +175,9 @@ public static class ColorRules
         }
         scratch.Clear();
         scratch.Add(0);
+        var extra = ExtraOf(def);
         for (int i = 1; i <= palette.Count; i++)
-            if (!PaintPalette.IsExclusive((byte)i)) scratch.Add((byte)i);
+            if (!PaintPalette.IsExclusive((byte)i) || Contains(extra, (byte)i)) scratch.Add((byte)i);
         return scratch[Random.Range(0, scratch.Count)];
     }
 
