@@ -283,7 +283,40 @@ public class PlayerInteractInput : NetworkBehaviour
             lines.Append($"\n  {h.distance:0.00} m  '{c.name}' (layer {LayerMask.LayerToName(c.gameObject.layer)}): {what}" +
                          (c == chosen ? "   <- looked at" : ""));
         }
+        LogSeenButNotSolid(lines, n);
         Debug.Log(lines.ToString(), chosen);
+    }
+
+    // Debug Look: things drawn under the crosshair that the ray went straight through (no collider hit),
+    // with why: no collider, switched off, a trigger, a layer the look skips, ignoring the player... For
+    // "I could see it but not pick it up, and walked through it". Slow (searches the scene): debug only.
+    private void LogSeenButNotSolid(System.Text.StringBuilder lines, int n)
+    {
+        var ray = new Ray(cam.transform.position, cam.transform.forward);
+        var hitRoots = new HashSet<Transform>();
+        for (int i = 0; i < n; i++) if (lookHits[i].collider != null) hitRoots.Add(lookHits[i].collider.transform.root);
+        var cc = GetComponentInParent<CharacterController>();
+        var reported = new HashSet<GameObject>();
+        foreach (var r in FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+        {
+            if (r == null || !r.enabled || !r.gameObject.activeInHierarchy || r is ParticleSystemRenderer) continue;
+            if (!r.bounds.IntersectRay(ray, out float d) || d > interactRange) continue;
+            if (r.transform.IsChildOf(transform) || hitRoots.Contains(r.transform.root)) continue; // (the player; things the ray hit)
+            var item = r.GetComponentInParent<ItemPickupNet>();
+            var owner = item != null ? item.gameObject : r.transform.root.gameObject;
+            if (!reported.Add(owner)) continue;
+            var sb = new System.Text.StringBuilder($"\n  SEEN, NOT HIT: {d:0.00} m  '{owner.name}' (renderer '{r.name}', root '{r.transform.root.name}')");
+            if (item != null)
+                sb.Append($" item {ItemDebug.Describe(item.ItemId)}, spawned {item.IsSpawned}, frozen {item.IsFrozen}, on cart {item.IsOnCart}, " +
+                          $"parent '{(item.transform.parent != null ? item.transform.parent.name : "none")}'");
+            var cols = owner.GetComponentsInChildren<Collider>(true);
+            if (cols.Length == 0) sb.Append("; NO colliders");
+            foreach (var c in cols)
+                sb.Append($"; collider '{c.name}' {c.GetType().Name} enabled {c.enabled}, active {c.gameObject.activeInHierarchy}, trigger {c.isTrigger}, " +
+                          $"layer {LayerMask.LayerToName(c.gameObject.layer)}" +
+                          (cc != null && c.enabled && cc.enabled ? $", ignores you {Physics.GetIgnoreCollision(cc, c)}" : ""));
+            lines.Append(sb);
+        }
     }
 
     // The counter's body hit first: a clickable part of it just behind (the card reader, a key...) inside
