@@ -204,24 +204,36 @@ public static class ItemSetupTool
     };
 
     /// <summary>
-    /// Categories from the folders an item's prefab is in (under Items, without the size folders):
-    /// Items/Small/Stocks/Pants/Jeans/Cheap → Stocks, Pants, Jeans, Cheap.
+    /// Categories from the folders an item's prefab is in: under Items, without the size folders, Stocks, or
+    /// the item's own folder (that's just the item: Books/Book1/Book1.prefab is Books). Only its own folder
+    /// left: that one. Items/Small/Stocks/Pants/Jeans/Cheap/x.prefab → Pants, Jeans.
+    /// All: every folder name (only the size folders left out), for spotting categories that came from folders.
     /// </summary>
-    public static List<string> FolderCategories(string assetPath)
+    public static List<string> FolderCategories(string assetPath, bool all = false)
     {
         var parts = assetPath.Replace('\\', '/').Split('/');
         int start = 0;
         for (int i = 0; i < parts.Length - 1; i++)
             if (string.Equals(parts[i], "Items", System.StringComparison.OrdinalIgnoreCase)) start = i + 1;
+        int own = parts.Length - 2; // the folder the prefab is in
         var cats = new List<string>();
+        string ownName = null;
         for (int i = start; i < parts.Length - 1; i++)
         {
             string c = Words(parts[i]);
-            if (c.Length == 0 || NotCategories.Contains(c)) continue;
+            if (c.Length == 0 || SizeFolders.Contains(c)) continue;
+            if (!all && NotCategories.Contains(c)) continue;
+            if (!all && i == own) { ownName = c; continue; }
             if (!cats.Exists(x => string.Equals(x, c, System.StringComparison.OrdinalIgnoreCase))) cats.Add(c);
         }
+        if (cats.Count == 0 && ownName != null) cats.Add(ownName);
         return cats;
     }
+
+    private static readonly HashSet<string> SizeFolders = new(System.StringComparer.OrdinalIgnoreCase)
+    {
+        "assets", "prefabs", "items", "small", "sml", "sm", "med", "medium", "md", "lrg", "large", "lg", "misc",
+    };
 
     // Items with no categories get their folders'; names still the prefab's (underscores and all) get words.
     private static void FillFromFolders(List<ItemData> datas, StringBuilder report)
@@ -230,18 +242,23 @@ public static class ItemSetupTool
         {
             if (d.item == null) continue;
             bool changed = false;
-            // Given its folders' categories before folder names like Stocks were left out: those again.
+            // Given its folders' categories before some folders were left out (Stocks, its own folder): its
+            // folders' categories as they are now. (Only when every category it has is one of its folders' names,
+            // and it has all of today's: then they came from its folders, not from you.)
             var had = d.item.Categories.ToList();
-            if (had.Count > 0 && had.Any(NotCategories.Contains))
+            if (had.Count > 0)
             {
-                var now = FolderCategories(AssetDatabase.GetAssetPath(d));
-                var without = had.Where(c => !NotCategories.Contains(c)).ToList();
-                if (without.Count == now.Count && !without.Except(now, System.StringComparer.OrdinalIgnoreCase).Any())
+                string path = AssetDatabase.GetAssetPath(d);
+                var now = FolderCategories(path);
+                var folders = FolderCategories(path, all: true);
+                var cmp = System.StringComparer.OrdinalIgnoreCase;
+                bool fromFolders = had.All(c => folders.Contains(c, cmp)) && now.All(c => had.Contains(c, cmp));
+                if (fromFolders && had.Count != now.Count)
                 {
                     d.item.categories = now;
                     d.item.category = null;
                     d.item.CategoriesChanged();
-                    report.AppendLine($"'{d.name}' categories: {string.Join(", ", now)} (left out {string.Join(", ", had.Where(NotCategories.Contains))}).");
+                    report.AppendLine($"'{d.name}' categories: {string.Join(", ", now)} (left out {string.Join(", ", had.Where(c => !now.Contains(c, cmp)))}).");
                     changed = true;
                 }
             }
