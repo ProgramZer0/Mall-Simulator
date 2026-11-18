@@ -117,6 +117,8 @@ MonoBehaviour:
     icon: {fileID: 0}
     categories:
     - Food Drinks
+    - Snacks
+    - Food
     category: 
     price: 10
     sizes: 0

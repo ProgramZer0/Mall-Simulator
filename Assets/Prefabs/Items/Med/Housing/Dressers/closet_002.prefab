@@ -119,6 +119,7 @@ MonoBehaviour:
     categories:
     - furniture
     - Dressers
+    - Housing
     category: 
     price: 10
     sizes: 0

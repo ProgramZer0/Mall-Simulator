@@ -119,7 +119,7 @@ MonoBehaviour:
     categories:
     - furniture
     - Lamps
-    - Standing Lamps
+    - Housing
     category: 
     price: 10
     sizes: 0

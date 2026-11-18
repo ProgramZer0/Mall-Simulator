@@ -248,7 +248,7 @@ MonoBehaviour:
     icon: {fileID: 0}
     categories:
     - Wall
-    - waallkits
+    - Wall Kits
     category: 
     price: 10
     sizes: 0

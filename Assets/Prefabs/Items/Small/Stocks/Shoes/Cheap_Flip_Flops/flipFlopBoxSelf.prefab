@@ -158,7 +158,7 @@ MonoBehaviour:
     - Clothing
     - Shoes
     - Cheap
-    - FlipFlops
+    - Flip Flops
     category: 
     price: 10
     sizes: 2
@@ -168,6 +168,8 @@ MonoBehaviour:
     specialMarketWeight: 0
     rarity: 0
     marketPrice: 5
+    colors: []
+    colorTastes: []
     deliverySeconds: 30
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
