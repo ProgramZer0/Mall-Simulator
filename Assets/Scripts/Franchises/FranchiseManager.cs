@@ -139,7 +139,7 @@ public class FranchiseManager : NetworkBehaviour
         return first;
     }
 
-    /// <summary>Does the team hold a franchise covering this item? (Then level category unlocks don't apply to it.)</summary>
+    /// <summary>Does the team hold a franchise covering this item?</summary>
     public static bool HoldsFranchiseFor(ulong team, ItemDef item)
     {
         var fm = Instance;

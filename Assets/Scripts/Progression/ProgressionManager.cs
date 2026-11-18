@@ -221,11 +221,10 @@ public class ProgressionManager : NetworkBehaviour
     public static bool CanOrder(ulong team, ItemDef def) => def == null || LevelNeeded(def, team) <= LevelOf(team);
 
     /// <summary>
-    /// The level this team needs for this item: as LevelNeeded(def), but a franchise the team holds that
-    /// covers the item skips its categories' unlock levels (its own Min Level still counts).
+    /// The level this team needs for this item: the same for every team (a franchise doesn't skip its
+    /// categories' unlock levels; kept for the callers that pass a team).
     /// </summary>
-    public static int LevelNeeded(ItemDef def, ulong team) =>
-        def != null && FranchiseManager.HoldsFranchiseFor(team, def) ? def.minLevel : LevelNeeded(def);
+    public static int LevelNeeded(ItemDef def, ulong team) => LevelNeeded(def);
 
     /// <summary>
     /// The team level this item needs: the highest of its own Min Level and its categories' unlock levels.
