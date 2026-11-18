@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &5117950334657424799
+--- !u!1 &1023316470197531339
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,51 +8,51 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 8712206802597056051}
-  - component: {fileID: 944294088045424209}
-  - component: {fileID: 1629560910736007797}
-  - component: {fileID: 7204160759607867458}
-  - component: {fileID: 1246576121944112675}
-  - component: {fileID: 6428075530093319802}
-  - component: {fileID: 2618755472482469580}
-  - component: {fileID: -1388654157987448700}
+  - component: {fileID: 5363538590736105579}
+  - component: {fileID: 5019915660705745062}
+  - component: {fileID: 7853062776315823248}
+  - component: {fileID: 5335958812691386331}
+  - component: {fileID: 4568427210095836023}
+  - component: {fileID: 8009676930177191562}
+  - component: {fileID: 6976060419679931760}
+  - component: {fileID: 7649003980022798008}
   m_Layer: 3
-  m_Name: Bottle3BlueSelf
+  m_Name: PipeSelf
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &8712206802597056051
+--- !u!4 &5363538590736105579
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5117950334657424799}
+  m_GameObject: {fileID: 1023316470197531339}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.399, y: 0, z: -0.779}
+  m_LocalRotation: {x: -0.7071068, y: -0, z: -0, w: 0.7071067}
+  m_LocalPosition: {x: 1.01, y: 0, z: 1.023}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &944294088045424209
+--- !u!33 &5019915660705745062
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5117950334657424799}
-  m_Mesh: {fileID: -6043438931221294817, guid: 3233c60071738884497db234e22cf377, type: 3}
---- !u!23 &1629560910736007797
+  m_GameObject: {fileID: 1023316470197531339}
+  m_Mesh: {fileID: -6402532953415861574, guid: 3f8b1abcdbe22a84e844a5224ffe1192, type: 3}
+--- !u!23 &7853062776315823248
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5117950334657424799}
+  m_GameObject: {fileID: 1023316470197531339}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -71,7 +71,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: -6309423400349450919, guid: 3233c60071738884497db234e22cf377, type: 3}
+  - {fileID: -876546973899608171, guid: 3f8b1abcdbe22a84e844a5224ffe1192, type: 3}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -95,31 +95,31 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!114 &7204160759607867458
+--- !u!114 &5335958812691386331
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5117950334657424799}
+  m_GameObject: {fileID: 1023316470197531339}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 68ea5bd60ebf4b6cbb486691048c82e9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
-    id: 147
-    displayName: Bottle3Blue
+    id: 130
+    displayName: Pipe
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 1
-    showInShop: 1
+    showInShop: 0
     icon: {fileID: 0}
     categories:
-    - Drinks
-    - Soda
-    - Grape
-    - Cheap
+    - Action Figures
+    - Pipes
+    - Toys
+    - Display
     category: 
     price: 10
     sizes: 0
@@ -128,24 +128,26 @@ MonoBehaviour:
     inSpecialMarket: 0
     specialMarketWeight: 1
     rarity: 0
-    marketPrice: 20
+    marketPrice: 30
+    colors: []
+    colorTastes: []
     deliverySeconds: 30
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
---- !u!114 &1246576121944112675
+--- !u!114 &4568427210095836023
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5117950334657424799}
+  m_GameObject: {fileID: 1023316470197531339}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 1344475791
+  GlobalObjectIdHash: 100778074
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -158,20 +160,20 @@ MonoBehaviour:
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
---- !u!114 &6428075530093319802
+--- !u!114 &8009676930177191562
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5117950334657424799}
+  m_GameObject: {fileID: 1023316470197531339}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e10f8b40f6b8eb840bbcc1e91cc063b2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 147
+  itemId: 130
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}
@@ -187,13 +189,13 @@ MonoBehaviour:
   maxFallSeconds: 20
   lostFallDistance: 30
   stillSpeed: 0.05
---- !u!114 &2618755472482469580
+--- !u!114 &6976060419679931760
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5117950334657424799}
+  m_GameObject: {fileID: 1023316470197531339}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8028e5d34a457954d9b326e1b499f1b0, type: 3}
@@ -201,19 +203,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Sellable
   ShowTopMostFoldoutHeaderGroup: 1
   sellWhenLoose: 1
---- !u!114 &-1388654157987448700
+--- !u!114 &7649003980022798008
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5117950334657424799}
+  m_GameObject: {fileID: 1023316470197531339}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4d2db9c878466aa4a821c7b2d1df4904, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PaintParts
   parts:
-  - renderer: {fileID: 1629560910736007797}
+  - renderer: {fileID: 7853062776315823248}
     materialIndex: -1
   zoneName: 

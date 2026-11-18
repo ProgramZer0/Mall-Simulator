@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1001 &7125114258577789941
+--- !u!1001 &3202414069576111205
 PrefabInstance:
   m_ObjectHideFlags: 0
   serializedVersion: 2
@@ -10,11 +10,11 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: itemId
-      value: 201
+      value: 187
       objectReference: {fileID: 0}
     - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: unitsPerCrate
-      value: 1
+      value: 24
       objectReference: {fileID: 0}
     - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: shelfPrefabs.Array.size
@@ -23,18 +23,22 @@ PrefabInstance:
     - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: 'shelfPrefabs.Array.data[0]'
       value: 
-      objectReference: {fileID: 9021955018366281472, guid: 989396421c703e94ab5646654963b3f3, type: 3}
+      objectReference: {fileID: 8382075715850389565, guid: 280d77c630a8093478dbde45f46faa78, type: 3}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.id
-      value: 201
+      value: 187
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: item.price
+      value: 240
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.displayName
-      value: Pot
+      value: Cola
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.marketPrice
-      value: 5
+      value: 20
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.deliverySeconds
@@ -42,18 +46,26 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.categories.Array.size
-      value: 3
+      value: 5
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: 'item.categories.Array.data[0]'
-      value: KitchenWare
+      value: Drinks
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: 'item.categories.Array.data[1]'
-      value: pots
+      value: Sodas
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: 'item.categories.Array.data[2]'
+      value: Cheap
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: 'item.categories.Array.data[3]'
+      value: Cola
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: 'item.categories.Array.data[4]'
       value: Boxed
       objectReference: {fileID: 0}
     - target: {fileID: 2129252736326913349, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
@@ -98,11 +110,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4223701351420822915, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: m_Name
-      value: Pot Stock
+      value: Cola Stock
       objectReference: {fileID: 0}
     - target: {fileID: 8513666520626042969, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: GlobalObjectIdHash
-      value: 2128762514
+      value: 1530270982
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

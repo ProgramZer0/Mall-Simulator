@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1001 &2197911802851109191
+--- !u!1001 &7125114258577789941
 PrefabInstance:
   m_ObjectHideFlags: 0
   serializedVersion: 2
@@ -10,11 +10,11 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: itemId
-      value: 209
+      value: 201
       objectReference: {fileID: 0}
     - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: unitsPerCrate
-      value: 18
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: shelfPrefabs.Array.size
@@ -23,18 +23,14 @@ PrefabInstance:
     - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: 'shelfPrefabs.Array.data[0]'
       value: 
-      objectReference: {fileID: 8951166026372585009, guid: 79640c93c8abe6543802db2981e99b40, type: 3}
+      objectReference: {fileID: 9021955018366281472, guid: 989396421c703e94ab5646654963b3f3, type: 3}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.id
-      value: 209
-      objectReference: {fileID: 0}
-    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
-      propertyPath: item.price
-      value: 180
+      value: 201
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.displayName
-      value: BoardGame
+      value: Pot
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.marketPrice
@@ -46,26 +42,18 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.categories.Array.size
-      value: 5
+      value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: 'item.categories.Array.data[0]'
-      value: Toys
+      value: Kitchenware
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: 'item.categories.Array.data[1]'
-      value: Family
+      value: Boxed
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: 'item.categories.Array.data[2]'
-      value: Kids
-      objectReference: {fileID: 0}
-    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
-      propertyPath: 'item.categories.Array.data[3]'
-      value: BoardGames
-      objectReference: {fileID: 0}
-    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
-      propertyPath: 'item.categories.Array.data[4]'
       value: Boxed
       objectReference: {fileID: 0}
     - target: {fileID: 2129252736326913349, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
@@ -110,11 +98,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4223701351420822915, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: m_Name
-      value: BoardGame Stock
+      value: Pot Stock
       objectReference: {fileID: 0}
     - target: {fileID: 8513666520626042969, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: GlobalObjectIdHash
-      value: 1556149443
+      value: 2128762514
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

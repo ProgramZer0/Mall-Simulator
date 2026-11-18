@@ -17,7 +17,7 @@ MonoBehaviour:
   description: Sell clothing.
   icon: {fileID: 0}
   categories: []
-  category: Cosmetics
+  category: Cosmentics
   price: 1500
   perMall: 3
   minLevel: 0

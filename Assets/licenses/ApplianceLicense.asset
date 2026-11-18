@@ -17,7 +17,7 @@ MonoBehaviour:
   description: Sell appliances.
   icon: {fileID: 0}
   categories: []
-  category: Appliance
+  category: Appliances
   price: 2500
   perMall: 2
   minLevel: 7

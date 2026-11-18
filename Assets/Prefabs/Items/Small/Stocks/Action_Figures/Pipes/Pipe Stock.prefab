@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1001 &3005501370469209926
+--- !u!1001 &137488744254222344
 PrefabInstance:
   m_ObjectHideFlags: 0
   serializedVersion: 2
@@ -10,7 +10,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: itemId
-      value: 198
+      value: 177
       objectReference: {fileID: 0}
     - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: unitsPerCrate
@@ -23,10 +23,10 @@ PrefabInstance:
     - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: 'shelfPrefabs.Array.data[0]'
       value: 
-      objectReference: {fileID: 3661377902607539468, guid: 44199d6ce98c79242a5656168022bf25, type: 3}
+      objectReference: {fileID: 1023316470197531339, guid: be8ae7a183c3f4941840050e261bbb38, type: 3}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.id
-      value: 198
+      value: 177
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.price
@@ -34,11 +34,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.displayName
-      value: Knife
+      value: Pipe
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.marketPrice
-      value: 5
+      value: 30
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.deliverySeconds
@@ -46,18 +46,26 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.categories.Array.size
-      value: 3
+      value: 5
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: 'item.categories.Array.data[0]'
-      value: KitchenWare
+      value: Action Figures
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: 'item.categories.Array.data[1]'
-      value: Knifes
+      value: Pipes
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: 'item.categories.Array.data[2]'
+      value: Toys
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: 'item.categories.Array.data[3]'
+      value: Display
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: 'item.categories.Array.data[4]'
       value: Boxed
       objectReference: {fileID: 0}
     - target: {fileID: 2129252736326913349, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
@@ -102,11 +110,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4223701351420822915, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: m_Name
-      value: Knife Stock
+      value: Pipe Stock
       objectReference: {fileID: 0}
     - target: {fileID: 8513666520626042969, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: GlobalObjectIdHash
-      value: 31012598
+      value: 1003429197
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
