@@ -13,7 +13,8 @@ MonoBehaviour:
   m_Name: Mall Walker
   m_EditorClassIdentifier: Assembly-CSharp::CustomerPersonality
   displayName: Mall Walker
-  description: Here for a walk. Strolls the halls, stops for a while here and there, never goes into a store.
+  description: Here for a walk. Strolls the halls, stops for a while here and there,
+    never goes into a store.
   spawnWeight: 0.6
   bystander: 1
   likes: []
@@ -22,6 +23,31 @@ MonoBehaviour:
   exoticLove: 0
   looksMatter: 0
   curiosity: 0
+  colorTastes:
+  - color: White
+    weight: 0
+  - color: Charcoal
+    weight: 0
+  - color: Red
+    weight: 0
+  - color: Orange
+    weight: 0
+  - color: Yellow
+    weight: 0
+  - color: Green
+    weight: 0
+  - color: Teal
+    weight: 0
+  - color: Blue
+    weight: 0
+  - color: Purple
+    weight: 0
+  - color: Pink
+    weight: 0
+  - color: Brown
+    weight: 0
+  - color: Beige
+    weight: 0
   knowsTheMall: 0.5
   budgetDollars: {x: 0, y: 0}
   wantItems: {x: 0, y: 0}

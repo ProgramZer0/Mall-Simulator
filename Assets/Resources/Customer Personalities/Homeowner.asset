@@ -14,7 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CustomerPersonality
   displayName: Homeowner
   description: Here for appliances. Careful with money, buys one or two big things.
-  spawnWeight: 1.0
+  spawnWeight: 1
+  bystander: 0
   likes:
   - category: Appliance
     weight: 1.5
@@ -23,7 +24,33 @@ MonoBehaviour:
   exoticLove: 0.3
   looksMatter: 0.7
   curiosity: 0.1
+  colorTastes:
+  - color: White
+    weight: 0
+  - color: Charcoal
+    weight: 0
+  - color: Red
+    weight: 0
+  - color: Orange
+    weight: 0
+  - color: Yellow
+    weight: 0
+  - color: Green
+    weight: 0
+  - color: Teal
+    weight: 0
+  - color: Blue
+    weight: 0
+  - color: Purple
+    weight: 0
+  - color: Pink
+    weight: 0
+  - color: Brown
+    weight: 0
+  - color: Beige
+    weight: 0
   knowsTheMall: 0.8
   budgetDollars: {x: 200, y: 1500}
-  shopliftChance: 0.005
   wantItems: {x: 1, y: 2}
+  shopliftChance: 0.005
+  cashChance: 0.5

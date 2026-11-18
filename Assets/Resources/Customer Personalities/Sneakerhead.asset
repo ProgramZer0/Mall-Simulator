@@ -15,17 +15,44 @@ MonoBehaviour:
   displayName: Sneakerhead
   description: Lives for shoes, especially rare ones. Doesn't mind paying.
   spawnWeight: 0.7
+  bystander: 0
   likes:
   - category: shoes
-    weight: 2.0
+    weight: 2
   - category: Clothing
     weight: 0.5
   otherThings: 0.05
   priceSensitivity: 0.8
-  exoticLove: 2.0
+  exoticLove: 2
   looksMatter: 0.8
   curiosity: 0.05
+  colorTastes:
+  - color: White
+    weight: 0
+  - color: Charcoal
+    weight: 0
+  - color: Red
+    weight: 0
+  - color: Orange
+    weight: 0
+  - color: Yellow
+    weight: 0
+  - color: Green
+    weight: 0
+  - color: Teal
+    weight: 0
+  - color: Blue
+    weight: 0
+  - color: Purple
+    weight: 0
+  - color: Pink
+    weight: 0
+  - color: Brown
+    weight: 0
+  - color: Beige
+    weight: 0
   knowsTheMall: 0.7
   budgetDollars: {x: 100, y: 400}
-  shopliftChance: 0.03
   wantItems: {x: 1, y: 2}
+  shopliftChance: 0.03
+  cashChance: 0.5

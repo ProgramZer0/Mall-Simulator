@@ -110,7 +110,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
     id: 84
-    displayName: fridge_001
+    displayName: fridge 001
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 3
@@ -130,6 +130,8 @@ MonoBehaviour:
     specialMarketWeight: 1
     rarity: 0
     marketPrice: 0
+    colors: []
+    colorTastes: []
     deliverySeconds: 30
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}

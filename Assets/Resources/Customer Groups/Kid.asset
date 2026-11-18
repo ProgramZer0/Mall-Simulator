@@ -13,8 +13,10 @@ MonoBehaviour:
   m_Name: Kid
   m_EditorClassIdentifier: Assembly-CSharp::CustomerPersonality
   displayName: Kid
-  description: Comes with a parent (never alone). Loves toys and treats, doesn't care what things cost.
+  description: Comes with a parent (never alone). Loves toys and treats, doesn't
+    care what things cost.
   spawnWeight: 0
+  bystander: 0
   likes:
   - category: Toys
     weight: 1.5
@@ -25,6 +27,31 @@ MonoBehaviour:
   exoticLove: 1
   looksMatter: 1.5
   curiosity: 0.3
+  colorTastes:
+  - color: White
+    weight: 0
+  - color: Charcoal
+    weight: 0
+  - color: Red
+    weight: 0
+  - color: Orange
+    weight: 0
+  - color: Yellow
+    weight: 0
+  - color: Green
+    weight: 0
+  - color: Teal
+    weight: 0
+  - color: Blue
+    weight: 0
+  - color: Purple
+    weight: 0
+  - color: Pink
+    weight: 0
+  - color: Brown
+    weight: 0
+  - color: Beige
+    weight: 0
   knowsTheMall: 0.1
   budgetDollars: {x: 0, y: 0}
   wantItems: {x: 0, y: 0}

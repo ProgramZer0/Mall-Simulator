@@ -13,19 +13,47 @@ MonoBehaviour:
   m_Name: Bargain Hunter
   m_EditorClassIdentifier: Assembly-CSharp::CustomerPersonality
   displayName: Bargain Hunter
-  description: Hunts for deals. Buys several cheap things and walks out if prices are high.
-  spawnWeight: 2.0
+  description: Hunts for deals. Buys several cheap things and walks out if prices
+    are high.
+  spawnWeight: 2
+  bystander: 0
   likes:
   - category: Clothing
     weight: 0.8
   - category: shoes
     weight: 0.6
   otherThings: 0.3
-  priceSensitivity: 2.0
+  priceSensitivity: 2
   exoticLove: 0.2
   looksMatter: 0.5
   curiosity: 0.15
+  colorTastes:
+  - color: White
+    weight: 0
+  - color: Charcoal
+    weight: 0
+  - color: Red
+    weight: 0
+  - color: Orange
+    weight: 0
+  - color: Yellow
+    weight: 0
+  - color: Green
+    weight: 0
+  - color: Teal
+    weight: 0
+  - color: Blue
+    weight: 0
+  - color: Purple
+    weight: 0
+  - color: Pink
+    weight: 0
+  - color: Brown
+    weight: 0
+  - color: Beige
+    weight: 0
   knowsTheMall: 0.3
   budgetDollars: {x: 15, y: 60}
-  shopliftChance: 0.06
   wantItems: {x: 2, y: 5}
+  shopliftChance: 0.06
+  cashChance: 0.5

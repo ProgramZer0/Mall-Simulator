@@ -23,3 +23,5 @@ MonoBehaviour:
   holdSeconds: 3600
   auctionSeconds: 180
   minLevel: 0
+  colors:
+  - DeepBlue

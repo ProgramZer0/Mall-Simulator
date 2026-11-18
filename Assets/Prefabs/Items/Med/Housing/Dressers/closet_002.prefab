@@ -110,7 +110,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
     id: 105
-    displayName: closet_002
+    displayName: closet 002
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 2
@@ -128,6 +128,8 @@ MonoBehaviour:
     specialMarketWeight: 1
     rarity: 0
     marketPrice: 0
+    colors: []
+    colorTastes: []
     deliverySeconds: 30
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}

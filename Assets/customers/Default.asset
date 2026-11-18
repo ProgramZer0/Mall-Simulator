@@ -15,9 +15,52 @@ MonoBehaviour:
   displayName: Shopper
   description: 
   spawnWeight: 1
+  bystander: 0
   likes: []
   otherThings: 0.2
   priceSensitivity: 1
   exoticLove: 0.5
   looksMatter: 1
   curiosity: 0.1
+  colorTastes:
+  - color: White
+    weight: 0
+  - color: Charcoal
+    weight: 0
+  - color: Red
+    weight: 0
+  - color: Orange
+    weight: 0
+  - color: Yellow
+    weight: 0
+  - color: Green
+    weight: 0
+  - color: Teal
+    weight: 0
+  - color: Blue
+    weight: 0
+  - color: Purple
+    weight: 0
+  - color: Pink
+    weight: 0
+  - color: Brown
+    weight: 0
+  - color: Beige
+    weight: 0
+  - color: Magenta
+    weight: 0
+  - color: Lavender
+    weight: 0
+  - color: Gold
+    weight: 0
+  - color: Silver
+    weight: 0
+  - color: DeepBlue
+    weight: 0
+  - color: Turqours
+    weight: 0
+  knowsTheMall: 0.3
+  budgetDollars: {x: 20, y: 150}
+  wantItems: {x: 1, y: 4}
+  shopliftChance: 0.02
+  cashChance: 0.5
