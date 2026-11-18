@@ -681,8 +681,20 @@ public class PlayerInteractInput : NetworkBehaviour
                     : stockTarget != null ? StockPrompt()
                     : OnlyBrokenLooked ? BrokenPrompt()
                     : lookedAtBuriedCartItem ? "Take the things on top off first"
-                    : lookedAtCustomer != 0 && lookedAtPickup == null ? "F: Stop them and check their bag"
+                    : lookedAtCustomer != 0 && lookedAtPickup == null ? CustomerPrompt()
                     : PickupPrompt();
+    }
+
+    private string CustomerPrompt()
+    {
+        var mark = CustomerManager.Instance != null ? CustomerManager.Instance.MarkOf(lookedAtCustomer) : CustomerManager.LostMark.None;
+        return mark switch
+        {
+            CustomerManager.LostMark.LostChild => "F: Help them find their family",
+            CustomerManager.LostMark.Following => "Following you: take them to their parents",
+            CustomerManager.LostMark.Searching => "They lost their child (F: stop them and check their bag)",
+            _ => "F: Stop them and check their bag",
+        };
     }
 
     // The prompt goes to the Canvas (InteractPromptUI) when there is one.

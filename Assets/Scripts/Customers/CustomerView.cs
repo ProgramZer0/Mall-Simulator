@@ -107,6 +107,11 @@ public class CustomerView : MonoBehaviour
         bubbleIcon.color = new Color(1f, 1f, 1f, c.a);
     }
 
+    /// <summary>Where their feet are shown.</summary>
+    public Vector3 Feet => transform.position - Vector3.up * lift;
+    /// <summary>A child (set when made).</summary>
+    public bool IsChild { get; set; }
+
     private readonly System.Collections.Generic.List<GameObject> bags = new();
 
     /// <summary>
