@@ -2018,7 +2018,7 @@ public partial class CustomerManager : NetworkBehaviour
         c.counter = null;
         foreach (var t in c.basket)
             if (t.container != null && t.container.IsSpawned)
-                t.container.ServerAddOne(t.zone, t.itemId, t.container.GetZone(t.zone).orient, t.paint);
+                t.container.ServerAddOne(t.zone, t.itemId, t.container.GetZone(t.zone).orient, t.paint, split: false);
         c.basket.Clear();
         if (c.counted && c.store != null && inside.TryGetValue(c.store, out int n)) inside[c.store] = Mathf.Max(0, n - 1);
         c.counted = false;

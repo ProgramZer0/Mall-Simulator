@@ -304,7 +304,7 @@ public class MallBenchmark : MonoBehaviour
                 if (shelf == null || !shelf.IsSpawned || shelf.ZoneCount == 0) { buyBudget -= 1f; continue; }
                 int zone = Random.Range(0, shelf.ZoneCount);
                 int item = shelf.ServerRemoveOne(zone);
-                if (item != 0 && restock) shelf.ServerAddOne(zone, item, shelf.GetZone(zone).orient);
+                if (item != 0 && restock) shelf.ServerAddOne(zone, item, shelf.GetZone(zone).orient, split: false);
                 buyBudget -= 1f;
                 buysDone++;
             }
