@@ -105,12 +105,18 @@ public class StockContainer : NetworkBehaviour
     [Tooltip("Shelf spaces: BoxColliders products are lined up and stacked in. Products face the blue arrow.")]
     [SerializeField] private BoxCollider[] stockZones;
     [Tooltip("Clothes rails: BoxColliders whose top, along their longer side, is the rail. Products hang from it " +
-             "by the top of their Hang Prefab (or a child named HangPoint). Only the length matters.")]
+             "by the top of their Hang Prefab (or a child named HangPoint). Only the length matters, unless Clothes " +
+             "Fit Rail Box is on (then the box is the space they hang in).")]
     [SerializeField] private BoxCollider[] hangRails;
     [Tooltip("Space left between products on shelves, in meters.")]
     [SerializeField] private float spacing = 0.01f;
     [Tooltip("Distance between hangers on a rail, in meters. 0 = the product's own thickness plus Spacing.")]
     [SerializeField] private float hangSpacing = 0f;
+    [Tooltip("Hang rails are the space clothes hang in, like a shelf zone: the box's top is the rail, its height " +
+             "how far down they may hang, its depth (across the rail) how wide they may be. Clothes that don't fit " +
+             "aren't hung there (\"doesn't fit\"). Off: only the rail's length matters, and clothes may hang " +
+             "below the box (size the boxes before turning this on).")]
+    [SerializeField] private bool clothesFitRailBox = false;
     [Tooltip("Never more than this many products in one zone, however small they are.")]
     [SerializeField] private int maxPerZone = 100;
     [Tooltip("Shelves fill the bottom layer first (then stack up), starting from this side as a shopper facing " +
@@ -864,6 +870,13 @@ public class StockContainer : NetworkBehaviour
             Vector3 c = o * model.center;
             Vector3 hook = model.hasHangPoint ? o * model.hook : new Vector3(c.x, c.y + h.y, c.z);
             if (length < h.z * 2f - 1e-4f) n = 0; // a part too short for even one
+            if (clothesFitRailBox)
+            {
+                // Hung from the rail (the box's top): how far it drops below, and how wide it is across the rail.
+                float drop = hook.y - (c.y - h.y);
+                float across = alongZ ? size.x : size.z;
+                if (drop > size.y + 1e-3f || h.x * 2f > across + 1e-3f) n = 0;
+            }
             layout = new Layout { capacity = Mathf.Min(n, max), step = step, orient = o, half = h,
                                   railLength = length, railAlongZ = alongZ, hook = hook, anchored = !part.Whole };
         }
