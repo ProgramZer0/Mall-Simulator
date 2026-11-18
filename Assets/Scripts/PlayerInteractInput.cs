@@ -38,6 +38,7 @@ public class PlayerInteractInput : NetworkBehaviour
     // If the server rejects the place (HeldItemId never changes), it reappears after this.
     [SerializeField] private float placeResponseTimeout = 0.5f;
     private float placePendingUntil = -1f;
+    private float stockQuietUntil = -1f; // no shelf highlights/prompts until then (just put something down)
 
     [Header("Ghost Settings")]
     [Tooltip("How strongly an invalid placement is washed toward Invalid Color. 0 = no tint at all.")]
@@ -378,7 +379,7 @@ public class PlayerInteractInput : NetworkBehaviour
 
         int held = inventory.HeldItemId.Value;
         bool holdingCrate = held != 0 && StockContainer.IsStockCrate(held);
-        bool placePending = Time.time < placePendingUntil;
+        bool placePending = Time.time < placePendingUntil || Time.time < stockQuietUntil;
 
         if ((held == 0 || holdingCrate) && !previewActive && !placePending &&
             Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit,
@@ -1028,6 +1029,9 @@ public class PlayerInteractInput : NetworkBehaviour
         }
         if (inventory.HeldItemId.Value == 0)
         {
+            // Just put down: a moment before shelves light up again (the item's on its way to everyone,
+            // and whether it covers a shelf spot is only looked at again a moment later).
+            if (placePendingUntil > 0f) stockQuietUntil = Time.time + 0.3f;
             DestroyGhost();
             previewActive = false;
             placePendingUntil = -1f;
