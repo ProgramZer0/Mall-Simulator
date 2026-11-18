@@ -98,6 +98,9 @@ public class ItemPickupNet : NetworkBehaviour
     // Older single-model fields; moved into the lists above automatically.
     [Tooltip("How many products a full crate holds.")]
     [Min(1)] [SerializeField] private int unitsPerCrate = 1;
+    [Tooltip("A crate made from the BoxStock box: keep Units Per Crate as set here (Recalculate Stock Crate Amounts " +
+             "and a product folder named xN leave it alone).")]
+    [SerializeField] private bool keepUnits;
 
     [Header("Physics")]
     [Tooltip("Frozen: stays where it's put.\n" +
@@ -215,6 +218,8 @@ public class ItemPickupNet : NetworkBehaviour
     }
 #endif
     public int UnitsPerCrate => Mathf.Max(1, unitsPerCrate);
+    /// <summary>Editor: a made crate whose Units Per Crate stays as set (StockBoxGenerator).</summary>
+    public bool KeepUnits => keepUnits;
 
     // Products left in this crate. 0 means "full", so crates spawned from a prefab start full.
     private readonly NetworkVariable<int> units =

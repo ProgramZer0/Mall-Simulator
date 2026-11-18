@@ -76,6 +76,8 @@ public static class ItemSetupTool
         FillFromFolders(FindItemPrefabs(), report); // first, so made crates copy their products' categories
         NumberDefs<LicenseDef>(report, "License", l => l.id, (l, id) => l.id = id, l => l.displayName, (l, n) => l.displayName = n);
         NumberDefs<FranchiseDef>(report, "Franchise", f => f.id, (f, id) => f.id = id, f => f.displayName, (f, n) => f.displayName = n);
+        ListInManager<LicenseDef, LicenseManager>("licenses", report);
+        ListInManager<FranchiseDef, FranchiseManager>("franchises", report);
         int before = report.Length;
         StockBoxGenerator.Run(report); // crates for new products, so they get ids below
         if (report.Length != before) allPrefabs = LoadAllPrefabs(); // (something made or changed)
@@ -332,6 +334,41 @@ public static class ItemSetupTool
             EditorUtility.SetDirty(def);
             report.AppendLine($"{defaultName} '{def.name}' named '{Words(def.name)}'.");
         }
+    }
+
+    /// <summary>
+    /// Every license (franchise) in the project in the open scene's LicenseManager (FranchiseManager) list,
+    /// added at the end; nothing taken out, so you can still order them, or leave one out by deleting it.
+    /// </summary>
+    private static void ListInManager<TDef, TManager>(string field, StringBuilder report)
+        where TDef : ScriptableObject where TManager : Object
+    {
+        var manager = Object.FindFirstObjectByType<TManager>(FindObjectsInactive.Include);
+        if (manager == null) return;
+        var so = new SerializedObject(manager);
+        var list = so.FindProperty(field);
+        if (list == null) return;
+        var have = new HashSet<Object>();
+        for (int i = 0; i < list.arraySize; i++)
+        {
+            var o = list.GetArrayElementAtIndex(i).objectReferenceValue;
+            if (o != null) have.Add(o);
+        }
+        var added = new List<string>();
+        foreach (var path in AssetDatabase.FindAssets($"t:{typeof(TDef).Name}").Select(AssetDatabase.GUIDToAssetPath)
+                     .OrderBy(p => p, System.StringComparer.Ordinal))
+        {
+            var def = AssetDatabase.LoadAssetAtPath<TDef>(path);
+            if (def == null || have.Contains(def)) continue;
+            list.arraySize++;
+            list.GetArrayElementAtIndex(list.arraySize - 1).objectReferenceValue = def;
+            added.Add(def.name);
+        }
+        if (added.Count == 0) return;
+        so.ApplyModifiedPropertiesWithoutUndo();
+        EditorUtility.SetDirty(manager);
+        if (!Application.isPlaying && manager is Component c) EditorSceneManager.MarkSceneDirty(c.gameObject.scene);
+        report.AppendLine($"Added to the {typeof(TManager).Name}: {string.Join(", ", added)}.");
     }
 
     /// <summary>A name or folder name as words: underscores are spaces (and no doubled spaces).</summary>
