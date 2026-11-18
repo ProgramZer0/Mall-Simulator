@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1e8bdf0706eb432eb0518bd36f44927a, type: 3}
   m_Name: ToysLicense
   m_EditorClassIdentifier: Assembly-CSharp::LicenseDef
-  id: 12
+  id: 13
   displayName: Toys License
   description: Sell clothing.
   icon: {fileID: 0}

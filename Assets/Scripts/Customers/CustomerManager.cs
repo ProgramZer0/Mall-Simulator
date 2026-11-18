@@ -134,9 +134,11 @@ public partial class CustomerManager : NetworkBehaviour
     [Tooltip("How long a caught shoplifter stands still (after dropping what they took) before running for the exit.")]
     [SerializeField] private float caughtStopSeconds = 1.2f;
     [Tooltip("A customer who can't find a way out of a store (something's in the way) says so, gets less happy " +
-             "and the store's team is told. If they're still stuck after this long (seconds), they're let out at " +
+             "and the store's team is told. If they're still stuck after this long (seconds), they're put outside " +
              "the door and leave very unhappy. (Each store keeps one doorway clear: MallManager > Doorways.)")]
-    [SerializeField, Min(1f)] private float trappedLetOutSeconds = 30f;
+    [SerializeField, Min(1f)] private float trappedLetOutSeconds = 180f;
+    [Tooltip("XP the store's team loses when a trapped customer has to be put outside (on top of a very unhappy visit).")]
+    [SerializeField, Min(0f)] private float trappedXpLoss = 100f;
     [Tooltip("How close a player must be to stop a customer (meters).")]
     [SerializeField] private float stopRange = 3f;
 
@@ -2318,6 +2320,14 @@ public partial class CustomerManager : NetworkBehaviour
         }
         else if (plot.HasOwner && ProgressionManager.Instance != null)
             ProgressionManager.Instance.ServerCustomerLeft(plot.OwnerTeamId, -1f);
+        if (plot.HasOwner && ProgressionManager.Instance != null && trappedXpLoss > 0f)
+        {
+            ProgressionManager.Instance.ServerAddXp(plot.OwnerTeamId, -trappedXpLoss);
+            if (NotificationManager.Instance != null)
+                NotificationManager.Instance.ServerNotifyTeamText(plot.OwnerTeamId, $"Customer stuck in {plot.DisplayName}",
+                $"They were stuck for {trappedLetOutSeconds / 60f:0.#} minutes and had to be let out: -{trappedXpLoss:0} XP. " +
+                "Keep a way to the door clear.");
+        }
         DropFromGroup(c);
         c.trappedSince = -1f;
         c.pos = door;

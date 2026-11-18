@@ -118,7 +118,7 @@ MonoBehaviour:
     icon: {fileID: 0}
     categories:
     - furniture
-    - Toy
+    - Toys
     - Chak Boards
     category: 
     price: 10

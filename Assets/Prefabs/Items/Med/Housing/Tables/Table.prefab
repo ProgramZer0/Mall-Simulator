@@ -117,6 +117,8 @@ MonoBehaviour:
     icon: {fileID: 0}
     categories:
     - furniture
+    - Housing
+    - Tables
     category: 
     price: 10
     sizes: 0
@@ -126,6 +128,8 @@ MonoBehaviour:
     specialMarketWeight: 1
     rarity: 0
     marketPrice: 0
+    colors: []
+    colorTastes: []
     deliverySeconds: 30
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
