@@ -173,7 +173,7 @@ MonoBehaviour:
     - Dresses
     category: 
     price: 10
-    sizes: 0
+    sizes: 1
     sizePriceStep: 0.03
     minLevel: 0
     inSpecialMarket: 0
