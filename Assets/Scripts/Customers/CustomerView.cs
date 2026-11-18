@@ -107,41 +107,10 @@ public class CustomerView : MonoBehaviour
         bubbleIcon.color = new Color(1f, 1f, 1f, c.a);
     }
 
-    // A label that stays over their head (lost child, searching family), seen through walls.
-    private TMPro.TextMeshPro markText;
-
-    /// <summary>Show a label over their head until cleared (null or empty: clear).</summary>
-    public void SetMark(string text, Color color)
-    {
-        if (string.IsNullOrEmpty(text)) { if (markText != null) markText.gameObject.SetActive(false); return; }
-        if (markText == null)
-        {
-            var go = new GameObject("Mark", typeof(RectTransform));
-            go.transform.SetParent(transform, false);
-            go.transform.localPosition = Vector3.up * (2.6f - lift);
-            markText = go.AddComponent<TMPro.TextMeshPro>();
-            markText.alignment = TMPro.TextAlignmentOptions.Center;
-            markText.fontSize = 2.6f;
-            markText.outlineWidth = 0.25f;
-            markText.fontStyle = TMPro.FontStyles.Bold;
-            markText.rectTransform.sizeDelta = new Vector2(6f, 1f);
-            markText.isOverlay = true; // seen through walls
-        }
-        markText.gameObject.SetActive(true);
-        markText.text = text;
-        markText.color = color;
-    }
-
-    private void UpdateMark()
-    {
-        var cam = Camera.main;
-        if (cam == null) return;
-        var t = markText.transform;
-        t.rotation = Quaternion.LookRotation(t.position - cam.transform.position);
-        // Same size on screen however far (so it can be found across the mall), never smaller than up close.
-        float d = Vector3.Distance(t.position, cam.transform.position);
-        t.localScale = Vector3.one * Mathf.Max(1f, d / 12f) / Mathf.Max(0.01f, transform.lossyScale.y);
-    }
+    /// <summary>Where their feet are shown.</summary>
+    public Vector3 Feet => transform.position - Vector3.up * lift;
+    /// <summary>A child (set when made).</summary>
+    public bool IsChild { get; set; }
 
     private readonly System.Collections.Generic.List<GameObject> bags = new();
 
@@ -229,7 +198,6 @@ public class CustomerView : MonoBehaviour
     public void Tick(float dt, float ease, float settle)
     {
         if (bubble != null) UpdateBubble();
-        if (markText != null && markText.gameObject.activeSelf) UpdateMark();
         if (tr == null) tr = transform;
         Vector3 goal = target + Vector3.up * lift;
         tr.GetPositionAndRotation(out Vector3 before, out Quaternion was);

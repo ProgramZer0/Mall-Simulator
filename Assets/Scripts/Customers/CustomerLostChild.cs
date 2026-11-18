@@ -37,20 +37,10 @@ public partial class CustomerManager
     [Tooltip("XP for the team of the player who brings a lost child back.")]
     [SerializeField, Min(0f)] private float reunionXp = 30f;
 
-    [Header("Lost Children: Marks")]
-    [Tooltip("Over the lost child (F to help).")]
-    [SerializeField] private string lostMarkText = "Lost child";
-    [Tooltip("Over the child while they follow a player.")]
-    [SerializeField] private string followingMarkText = "Following";
-    [Tooltip("Over the family looking for them.")]
-    [SerializeField] private string searchingMarkText = "Lost their child";
-    [SerializeField] private Color lostMarkColor = new(0.45f, 0.8f, 1f);
-    [SerializeField] private Color searchingMarkColor = new(1f, 0.6f, 0.2f);
-
-    /// <summary>What's shown over a customer's head (sent to everyone).</summary>
+    /// <summary>Who's lost, following a player, or searching (sent to everyone: the interact prompt).</summary>
     public enum LostMark : byte { None, LostChild, Following, Searching }
 
-    // Every machine: who's marked (so a new view, or a late joiner, shows it).
+    // Every machine: who's marked.
     private readonly System.Collections.Generic.Dictionary<ushort, byte> marks = new();
 
     /* ========================= GETTING LOST ========================= */
@@ -86,13 +76,14 @@ public partial class CustomerManager
         root.nextThink = Time.time;
         React(root, Reaction.LostChild);
         MarkParty(root, LostMark.Searching);
+        CaseRpc(kid.id, root.id, true);
         Log(kid, $"got lost (from {parent.id}); family {root.id} searching");
 
         var notes = NotificationManager.Instance;
         if (notes != null)
             foreach (var client in NetworkManager.ConnectedClientsList)
                 notes.ServerNotifyClientText(client.ClientId, "Lost child!",
-                    "A family has lost their child in the mall. Find the child (marked) and bring them back to their family (marked).");
+                    "A family has lost their child. Open Lost & Found on your phone to see where the child and their parents are.");
         return true;
     }
 
@@ -146,6 +137,7 @@ public partial class CustomerManager
     {
         Log(kid, "lost, and their family's gone: leaving");
         SetMark(kid, LostMark.None);
+        CaseRpc(kid.id, 0, false);
         Despawn(kid);
     }
 
@@ -165,7 +157,7 @@ public partial class CustomerManager
         Log(kid, $"following player {player}");
         if (NotificationManager.Instance != null)
             NotificationManager.Instance.ServerNotifyClientText(player, "They're following you",
-                "Bring the child to their family (marked). Stay close, or they'll get lost again.");
+                "Bring the child to their parents (Lost & Found on your phone shows where). Stay close, or they'll get lost again.");
         return true;
     }
 
@@ -246,6 +238,7 @@ public partial class CustomerManager
         kid.arrived = true;
         kid.nextThink = Time.time;
         SetMark(kid, LostMark.None);
+        CaseRpc(kid.id, 0, false);
 
         var root = Root(kid);
         if (root.searchingFor == kid) StopSearching(root);
@@ -314,21 +307,79 @@ public partial class CustomerManager
     private void MarkRpc(ushort id, byte mark, RpcParams rpcParams = default)
     {
         if (mark == 0) marks.Remove(id); else marks[id] = mark;
-        ShowMark(id, mark);
-    }
-
-    private void ShowMark(ushort id, byte mark)
-    {
-        if (!views.TryGetValue(id, out var v) || v == null) return;
-        switch ((LostMark)mark)
-        {
-            case LostMark.LostChild: v.SetMark(lostMarkText, lostMarkColor); break;
-            case LostMark.Following: v.SetMark(followingMarkText, lostMarkColor); break;
-            case LostMark.Searching: v.SetMark(searchingMarkText, searchingMarkColor); break;
-            default: v.SetMark(null, default); break;
-        }
     }
 
     /// <summary>Every machine: a customer's mark (for the interact prompt).</summary>
     public LostMark MarkOf(ushort id) => marks.TryGetValue(id, out byte m) ? (LostMark)m : LostMark.None;
+
+    /* ========================= LOST & FOUND (every machine) ========================= */
+
+    /// <summary>A lost child and the family looking for them (Family: the one leading the party).</summary>
+    public struct LostCase
+    {
+        public ushort kid, family;
+        public float since; // Time.time it came in, on this machine
+    }
+
+    private readonly System.Collections.Generic.List<LostCase> cases = new();
+
+    /// <summary>Every machine: the lost children right now, oldest first.</summary>
+    public System.Collections.Generic.IReadOnlyList<LostCase> LostCases => cases;
+    /// <summary>Every machine: the list changed.</summary>
+    public static event System.Action LostCasesChanged;
+    /// <summary>Every machine: a child just got lost (not sent for ones lost before you joined).</summary>
+    public static event System.Action<LostCase> LostCaseOpened;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetLostEvents()
+    {
+        LostCasesChanged = null;
+        LostCaseOpened = null;
+    }
+
+    // Open: family is who leads their party. Closed: just the kid. Fresh: just now (not a late joiner's catch-up).
+    [Rpc(SendTo.Everyone, AllowTargetOverride = true)]
+    private void CaseRpc(ushort kid, ushort family, bool open, bool fresh = true, RpcParams rpcParams = default)
+    {
+        int at = cases.FindIndex(x => x.kid == kid);
+        if (!open)
+        {
+            if (at < 0) return;
+            cases.RemoveAt(at);
+            LostCasesChanged?.Invoke();
+            return;
+        }
+        var lost = new LostCase { kid = kid, family = family, since = Time.time };
+        if (at >= 0) cases[at] = lost; else cases.Add(lost);
+        LostCasesChanged?.Invoke();
+        if (fresh) LostCaseOpened?.Invoke(lost);
+    }
+
+    // Host: the open cases, for a player who just joined.
+    private void SendCases(ulong clientId)
+    {
+        foreach (var c in customers)
+            if (c.mode == Mode.Lost || c.mode == Mode.WithHelper)
+            {
+                var family = FamilyOf(c);
+                if (family != null) CaseRpc(c.id, Root(family).id, true, false, RpcTarget.Single(clientId, RpcTargetUse.Temp));
+            }
+    }
+
+    // A customer's view went away (they left): their case goes with them.
+    private void ForgetCasesOf(ushort id)
+    {
+        if (cases.RemoveAll(x => x.kid == id || x.family == id) > 0) LostCasesChanged?.Invoke();
+    }
+
+    /// <summary>Every machine: where a customer is shown (their feet), and whether they're a child.</summary>
+    public bool TryGetShown(ushort id, out Vector3 feet, out bool child)
+    {
+        feet = default;
+        child = false;
+        if (!views.TryGetValue(id, out var v) || v == null) return false;
+        feet = v.Feet;
+        child = v.IsChild;
+        return true;
+    }
 }

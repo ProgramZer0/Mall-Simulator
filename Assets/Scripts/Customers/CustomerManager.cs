@@ -417,7 +417,7 @@ public partial class CustomerManager : NetworkBehaviour
         public ulong helper = ulong.MaxValue; // (a lost child) the player they're following
         public float helperFarSince = -1f;
         public Customer searchingFor;  // (a family's party leader) the child they're looking for
-        public byte mark;              // what everyone's shown over their head (LostMark)
+        public byte mark;              // lost, following a player, searching (LostMark): sent to everyone
 
         // Checkout
         public CheckoutCounter counter;
@@ -2623,6 +2623,7 @@ public partial class CustomerManager : NetworkBehaviour
         }
         foreach (var c in customers) // lost children and their families: marked for them too
             if (c.mark != 0) MarkRpc(c.id, c.mark, RpcTarget.Single(clientId, RpcTargetUse.Temp));
+        SendCases(clientId);
     }
 
     private void MakeView(ushort id, byte look, Vector3 pos, float yaw)
@@ -2636,7 +2637,7 @@ public partial class CustomerManager : NetworkBehaviour
         // At the scene root, not under one parent: Unity updates separate root hierarchies in parallel,
         // and moving hundreds of children of one parent is slower.
         views[id] = CustomerView.Create(id, prefab, pos, yaw, null, child && !childModel ? childScale : 1f);
-        if (marks.TryGetValue(id, out byte mark)) ShowMark(id, mark);
+        views[id].IsChild = child;
     }
 
     private void RemoveView(ushort id)
@@ -2644,6 +2645,7 @@ public partial class CustomerManager : NetworkBehaviour
         if (views.TryGetValue(id, out var v) && v != null) Destroy(v.gameObject);
         views.Remove(id);
         marks.Remove(id);
+        ForgetCasesOf(id);
     }
 
     /* ========================= DEBUG ========================= */

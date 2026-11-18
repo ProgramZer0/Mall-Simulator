@@ -672,7 +672,8 @@ public class PlayerInteractInput : NetworkBehaviour
         return mark switch
         {
             CustomerManager.LostMark.LostChild => "F: Help them find their family",
-            CustomerManager.LostMark.Following => "Following: take them to their family (marked)",
+            CustomerManager.LostMark.Following => "Following you: take them to their parents",
+            CustomerManager.LostMark.Searching => "They lost their child (F: stop them and check their bag)",
             _ => "F: Stop them and check their bag",
         };
     }
