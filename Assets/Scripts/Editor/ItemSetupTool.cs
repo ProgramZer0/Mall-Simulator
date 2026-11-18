@@ -172,6 +172,108 @@ public static class ItemSetupTool
         AssetDatabase.SaveAssets();
         if (report.Length > 0) Debug.Log($"[Items] Update Item Catalog ({datas.Count} item prefabs):\n{report}");
         else if (!quiet) Debug.Log($"[Items] Update Item Catalog: {datas.Count} item prefabs, all up to date.");
+        Debug.Log(UnlockReport(datas));
+    }
+
+    /* ========================= UNLOCK REPORT ========================= */
+
+    [MenuItem(MenuRoot + "Log Unlocks", priority = 11)]
+    private static void UnlockReportMenu()
+    {
+        allPrefabs = LoadAllPrefabs();
+        Debug.Log(UnlockReport(FindItemPrefabs()));
+        allPrefabs = null;
+    }
+
+    /// <summary>
+    /// Which item categories open up when: by level (ProgressionManager → Category Unlocks, in the open
+    /// scene), by license, by franchise, and what's left (orderable from the start). With how many items
+    /// each has, and unlocks naming a category no item has (a typo, or not made yet).
+    /// </summary>
+    private static string UnlockReport(List<ItemData> datas)
+    {
+        var cmp = System.StringComparer.OrdinalIgnoreCase;
+        var items = new Dictionary<string, int>(cmp); // category → items in it
+        foreach (var d in datas)
+            if (d.item != null)
+                foreach (var c in d.item.Categories.Distinct(cmp))
+                    items[c] = items.TryGetValue(c, out int n) ? n + 1 : 1;
+        var covered = new HashSet<string>(cmp);
+        var missing = new List<string>();
+        string Cat(string c)
+        {
+            c = c.Trim();
+            covered.Add(c);
+            return items.TryGetValue(c, out int n) ? $"{c} ({n})" : $"{c} (no items)";
+        }
+        void Missing(string c, string where) { if (!items.ContainsKey(c.Trim())) missing.Add($"{c.Trim()} ({where})"); }
+
+        var sb = new StringBuilder("[Items] Unlocks (category (items in it)):\n");
+
+        // Levels, in order.
+        sb.Append("LEVELS\n");
+        var pm = Object.FindFirstObjectByType<ProgressionManager>(FindObjectsInactive.Include);
+        var byLevel = new SortedDictionary<int, List<string>>();
+        if (pm != null)
+        {
+            var list = new SerializedObject(pm).FindProperty("categoryUnlocks");
+            for (int i = 0; list != null && i < list.arraySize; i++)
+            {
+                var e = list.GetArrayElementAtIndex(i);
+                string c = e.FindPropertyRelative("category").stringValue;
+                int level = e.FindPropertyRelative("level").intValue;
+                if (string.IsNullOrWhiteSpace(c)) continue;
+                if (!byLevel.TryGetValue(level, out var at)) byLevel[level] = at = new List<string>();
+                at.Add(c);
+            }
+        }
+        if (pm == null) sb.Append("  (no ProgressionManager in the open scene)\n");
+        else if (byLevel.Count == 0) sb.Append("  (none)\n");
+        foreach (var kv in byLevel)
+        {
+            sb.Append($"  Level {kv.Key}: {string.Join(", ", kv.Value.Select(Cat))}\n");
+            foreach (var c in kv.Value) Missing(c, $"level {kv.Key}");
+        }
+
+        // Licenses and franchises: the managers' lists in the open scene, else every one in the project.
+        void Defs<T>(string title, string field, System.Func<T, string> describe, System.Func<T, IEnumerable<string>> cats)
+            where T : ScriptableObject
+        {
+            sb.Append(title).Append('\n');
+            var defs = new List<T>();
+            var manager = typeof(T) == typeof(LicenseDef)
+                ? (Object)Object.FindFirstObjectByType<LicenseManager>(FindObjectsInactive.Include)
+                : Object.FindFirstObjectByType<FranchiseManager>(FindObjectsInactive.Include);
+            if (manager != null)
+            {
+                var list = new SerializedObject(manager).FindProperty(field);
+                for (int i = 0; list != null && i < list.arraySize; i++)
+                    if (list.GetArrayElementAtIndex(i).objectReferenceValue is T t) defs.Add(t);
+            }
+            else
+                foreach (var guid in AssetDatabase.FindAssets($"t:{typeof(T).Name}"))
+                    if (AssetDatabase.LoadAssetAtPath<T>(AssetDatabase.GUIDToAssetPath(guid)) is T t) defs.Add(t);
+            if (defs.Count == 0) sb.Append("  (none)\n");
+            foreach (var d in defs)
+            {
+                var list = cats(d).Where(c => !string.IsNullOrWhiteSpace(c)).ToList();
+                sb.Append($"  {describe(d)}: {(list.Count > 0 ? string.Join(", ", list.Select(Cat)) : "no categories")}\n");
+                foreach (var c in list) Missing(c, describe(d));
+            }
+        }
+        Defs<LicenseDef>("LICENSES", "licenses",
+            l => $"{l.displayName} (${l.price:N0}{(l.minLevel > 1 ? $", level {l.minLevel}" : "")})", l => l.AllCategories);
+        Defs<FranchiseDef>("FRANCHISES", "franchises",
+            f => $"{f.displayName} (bids from ${f.startingBid:N0}{(f.minLevel > 1 ? $", level {f.minLevel}" : "")})", f => f.AllCategories);
+
+        // Everything else: orderable from the start.
+        var left = items.Keys.Where(c => !covered.Contains(c)).OrderBy(c => c, cmp).ToList();
+        sb.Append("FROM THE START (no level, license or franchise)\n");
+        sb.Append(left.Count > 0 ? $"  {string.Join(", ", left.Select(c => $"{c} ({items[c]})"))}\n" : "  (none)\n");
+
+        if (missing.Count > 0)
+            sb.Append($"NO ITEM HAS THESE (a typo, or not made yet)\n  {string.Join(", ", missing.Distinct(cmp))}\n");
+        return sb.ToString();
     }
 
     // Every prefab in the project, loaded once per update (several passes read it).
