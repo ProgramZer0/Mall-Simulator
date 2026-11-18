@@ -268,7 +268,17 @@ public class PlayerInventoryNet : NetworkBehaviour
 
     /// <summary>Put one product from the held stock crate into a container's zone.</summary>
     [ServerRpc]
-    public void RequestStockServerRpc(NetworkObjectReference containerRef, int zone, int orient, ServerRpcParams rpcParams = default)
+    public void RequestStockServerRpc(NetworkObjectReference containerRef, int zone, int orient, Vector3 view,
+                                      ServerRpcParams rpcParams = default)
+    {
+        // A shelf spot not split yet splits the way the stocking player faces it.
+        var viewWas = StockContainer.SplitView;
+        StockContainer.SplitView = view;
+        try { StockOne(containerRef, zone, orient, rpcParams); }
+        finally { StockContainer.SplitView = viewWas; }
+    }
+
+    private void StockOne(NetworkObjectReference containerRef, int zone, int orient, ServerRpcParams rpcParams)
     {
         int id = HeldItemId.Value;
         ItemDebug.Log($"Stock {ItemDebug.Describe(id)} into zone {zone} (orient {orient}).");
