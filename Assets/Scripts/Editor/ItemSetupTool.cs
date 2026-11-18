@@ -200,6 +200,7 @@ public static class ItemSetupTool
     private static readonly HashSet<string> NotCategories = new(System.StringComparer.OrdinalIgnoreCase)
     {
         "assets", "prefabs", "items", "small", "sml", "sm", "med", "medium", "md", "lrg", "large", "lg", "misc",
+        "stocks", "stock",
     };
 
     /// <summary>
@@ -229,6 +230,21 @@ public static class ItemSetupTool
         {
             if (d.item == null) continue;
             bool changed = false;
+            // Given its folders' categories before folder names like Stocks were left out: those again.
+            var had = d.item.Categories.ToList();
+            if (had.Count > 0 && had.Any(NotCategories.Contains))
+            {
+                var now = FolderCategories(AssetDatabase.GetAssetPath(d));
+                var without = had.Where(c => !NotCategories.Contains(c)).ToList();
+                if (without.Count == now.Count && !without.Except(now, System.StringComparer.OrdinalIgnoreCase).Any())
+                {
+                    d.item.categories = now;
+                    d.item.category = null;
+                    d.item.CategoriesChanged();
+                    report.AppendLine($"'{d.name}' categories: {string.Join(", ", now)} (left out {string.Join(", ", had.Where(NotCategories.Contains))}).");
+                    changed = true;
+                }
+            }
             if (!d.item.Categories.Any())
             {
                 var cats = FolderCategories(AssetDatabase.GetAssetPath(d));
