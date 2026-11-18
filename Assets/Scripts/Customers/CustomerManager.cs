@@ -160,9 +160,12 @@ public partial class CustomerManager : NetworkBehaviour
     [Tooltip("Customer models (no NetworkObject; colliders are removed). Feet at the pivot, facing +Z. An " +
              "Animator float \"Speed\" gets their walking speed. Empty = plain capsules.")]
     [SerializeField] private List<GameObject> looks = new();
-    [Tooltip("How big children are drawn, compared with adults (their look is scaled).")]
+    [Tooltip("Child models (as Looks). Empty: children are an adult look drawn smaller (Child Scale). Up to 64.")]
+    [SerializeField] private List<GameObject> childLooks = new();
+    [Tooltip("How big children are drawn, compared with adults, when they use an adult look (no Child Looks).")]
     [Range(0.3f, 1f)] [SerializeField] private float childScale = 0.65f;
     private const byte ChildLook = 0x80; // the look byte's top bit: a child (sent with it, so every machine knows)
+    private const byte ChildModel = 0x40; // ...and this one: the rest is a Child Looks number (not a Looks one)
     [Tooltip("A shopping bag a customer carries after buying in a store (one more per store, up to Max Bags). " +
              "Placed at a child of the look called \"BagAnchor\" if it has one (its pivot is where the hand holds it), " +
              "otherwise at their side. No colliders needed (they're removed).")]
@@ -213,6 +216,9 @@ public partial class CustomerManager : NetworkBehaviour
         CheaperElsewhere, // put it back: another store sells it for less (and they'll go there)
         Caught,         // a shoplifter, stopped by a player
         Trapped,        // can't get out of a store: something's in the way
+        LostChild,      // a parent: their child's gone
+        LostMyFamily,   // the child: can't see their family
+        Reunited,       // the family's together again
     }
 
     [Serializable]
@@ -240,6 +246,9 @@ public partial class CustomerManager : NetworkBehaviour
         { Reaction.CheaperElsewhere, ("Cheaper elsewhere", new Color(1f, 0.85f, 0.3f)) },
         { Reaction.Caught, ("Busted!", new Color(1f, 0.25f, 0.25f)) },
         { Reaction.Trapped, ("Let me out!", new Color(1f, 0.35f, 0.3f)) },
+        { Reaction.LostChild, ("Where's my kid?!", new Color(1f, 0.55f, 0.2f)) },
+        { Reaction.LostMyFamily, ("Mom? Dad?", new Color(0.55f, 0.8f, 1f)) },
+        { Reaction.Reunited, ("Thank you!", new Color(0.45f, 0.95f, 0.45f)) },
     };
 
     // Host: how often each reaction happened in each store (for tuning; see StoreReport).
@@ -305,6 +314,9 @@ public partial class CustomerManager : NetworkBehaviour
         Follow,      // in a group, walking with the leader
         Wait,        // in a group, waiting outside a store for the others
         Caught,      // a shoplifter stopped by a player: stands there a moment, then runs for the exit
+        Lost,        // a child who wandered off from their family (see CustomerLostChild.cs)
+        WithHelper,  // a lost child following the player who found them
+        Searching,   // a family looking for their lost child
     }
 
     private struct Taken
@@ -397,6 +409,15 @@ public partial class CustomerManager : NetworkBehaviour
         public float partyMood;
         public bool lingering;         // a bystander standing around at a spot they strolled to
         public bool bystanderSlot;     // counts toward Max Bystanders (not Max Customers)
+
+        // Lost children (see CustomerLostChild.cs)
+        public Customer lostFrom;      // (a lost child) the parent they wandered off from
+        public float lostSince;
+        public Vector3 lostAt;         // where they wandered off (their family searches around there)
+        public ulong helper = ulong.MaxValue; // (a lost child) the player they're following
+        public float helperFarSince = -1f;
+        public Customer searchingFor;  // (a family's party leader) the child they're looking for
+        public byte mark;              // lost, following a player, searching (LostMark): sent to everyone
 
         // Checkout
         public CheckoutCounter counter;
@@ -822,7 +843,9 @@ public partial class CustomerManager : NetworkBehaviour
         if (child)
         {
             c.child = true;
-            c.look |= ChildLook; // drawn smaller everywhere
+            // Their own child models when there are some (drawn as they are), else an adult look made smaller.
+            if (childLooks.Count > 0) c.look = (byte)(Random.Range(0, Mathf.Min(childLooks.Count, 64)) | ChildModel);
+            c.look |= ChildLook; // a child, on every machine
             c.thief = false;
             c.budgetCents = 0; // their parent buys for them
             c.wants = 0;
@@ -851,9 +874,11 @@ public partial class CustomerManager : NetworkBehaviour
             if (c.group.Leader == c && c.mode == Mode.Exiting) GroupLeftMall(c);
             else DropFromGroup(c);
         }
-        // Children with them go too (one left far behind stays, for now on their own).
+        // Children with them go too (one left far behind stays, for now on their own). A child of theirs
+        // who's lost goes home with them (wherever they are).
         foreach (var kid in customers.ToArray())
         {
+            if (kid.lostFrom == c && byId.ContainsKey(kid.id)) { kid.lostFrom = null; Despawn(kid); continue; }
             if (kid.follow != c) continue;
             kid.follow = null;
             if (kid.child && FlatDistance(kid.pos, c.pos) < 6f) Despawn(kid);
@@ -1266,6 +1291,9 @@ public partial class CustomerManager : NetworkBehaviour
             case Mode.Caught:
                 if (Time.time >= c.until) RunForExit(c);
                 break;
+            case Mode.Lost: ThinkLost(c); break;
+            case Mode.WithHelper: ThinkWithHelper(c); break;
+            case Mode.Searching: ThinkSearching(c); break;
         }
     }
 
@@ -2220,6 +2248,7 @@ public partial class CustomerManager : NetworkBehaviour
         if (!byId.TryGetValue(id, out var c)) return;
         var player = NetworkManager.ConnectedClients.TryGetValue(sender, out var client) ? client.PlayerObject : null;
         if (player == null || (player.transform.position - c.pos).sqrMagnitude > (stopRange + 1f) * (stopRange + 1f)) return;
+        if (HelpLostChild(c, sender)) return; // a lost child: they follow the player now
         if (Time.time - c.stoppedAt < 5f) return;
         c.stoppedAt = Time.time;
         var notes = NotificationManager.Instance;
@@ -2592,23 +2621,31 @@ public partial class CustomerManager : NetworkBehaviour
             }
             EveryoneRpc(ids, lookIds, positions, yaws, bags, RpcTarget.Single(clientId, RpcTargetUse.Temp));
         }
+        foreach (var c in customers) // lost children and their families: marked for them too
+            if (c.mark != 0) MarkRpc(c.id, c.mark, RpcTarget.Single(clientId, RpcTargetUse.Temp));
+        SendCases(clientId);
     }
 
     private void MakeView(ushort id, byte look, Vector3 pos, float yaw)
     {
         if (views.TryGetValue(id, out var old) && old != null) { old.SetTarget(pos, yaw, snap: true); return; }
         bool child = (look & ChildLook) != 0;
-        int index = look & ~ChildLook;
-        var prefab = index < looks.Count ? looks[index] : null;
+        bool childModel = child && (look & ChildModel) != 0; // one of the Child Looks (already child-sized)
+        int index = look & (childModel ? 0x3F : 0x7F);
+        var list = childModel ? childLooks : looks;
+        var prefab = index < list.Count ? list[index] : null;
         // At the scene root, not under one parent: Unity updates separate root hierarchies in parallel,
         // and moving hundreds of children of one parent is slower.
-        views[id] = CustomerView.Create(id, prefab, pos, yaw, null, child ? childScale : 1f);
+        views[id] = CustomerView.Create(id, prefab, pos, yaw, null, child && !childModel ? childScale : 1f);
+        views[id].IsChild = child;
     }
 
     private void RemoveView(ushort id)
     {
         if (views.TryGetValue(id, out var v) && v != null) Destroy(v.gameObject);
         views.Remove(id);
+        marks.Remove(id);
+        ForgetCasesOf(id);
     }
 
     /* ========================= DEBUG ========================= */

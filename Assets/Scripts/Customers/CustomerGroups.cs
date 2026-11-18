@@ -27,6 +27,8 @@ public partial class CustomerManager
         public int splits;
         public float meetBy;
         public Vector3 meetSpot;
+
+        public bool lostOnce; // a child of theirs has already been lost this visit
     }
 
     private bool groupsLoaded;
@@ -208,6 +210,7 @@ public partial class CustomerManager
     // in stores too.
     private void ThinkFollow(Customer c)
     {
+        if (c.child && MaybeGetLost(c)) return; // wandered off (see CustomerLostChild.cs)
         var g = c.group;
         var target = c.follow;
         if (target == null || target == c || !byId.ContainsKey(target.id))
@@ -240,6 +243,7 @@ public partial class CustomerManager
     // A follower who's fallen behind walks a little faster to catch up.
     private float GroupSpeed(Customer c)
     {
+        if (c.mode == Mode.WithHelper) return HelperSpeed(c); // a lost child keeping up with a player
         if (c.follow == null || c.mode != Mode.Follow) return c.speed;
         return FlatDistance(c.pos, c.follow.pos) > 2.5f ? c.speed * 1.35f : c.speed;
     }
