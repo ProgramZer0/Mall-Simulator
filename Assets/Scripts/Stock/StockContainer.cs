@@ -119,8 +119,9 @@ public class StockContainer : NetworkBehaviour
     [SerializeField] private bool clothesFitRailBox = false;
     [Tooltip("Never more than this many products in one zone, however small they are.")]
     [SerializeField] private int maxPerZone = 100;
-    [Tooltip("Shelves fill the bottom layer first (then stack up), starting from this side as a shopper facing " +
-             "the shelf sees it...")]
+    [Tooltip("Shelves fill column by column (each column front to back, then stacked up, before the next one), " +
+             "starting from this side as a shopper facing the shelf sees it. A product takes only the width it " +
+             "needs, so another can start after it...")]
     [SerializeField] private bool fillFromRight = true;
     [Tooltip("...and from the front (nearest the shopper) or the back.")]
     [SerializeField] private bool fillFromFront = true;
@@ -364,7 +365,7 @@ public class StockContainer : NetworkBehaviour
     }
 
     // Where a part's stock ends now, as a share of the zone's width in fill order: the columns used on a
-    // shelf (the front row so far, or all of them once a row's full), the hangers on a rail.
+    // shelf (its columns so far), the hangers on a rail.
     private float UsedEnd(BoxCollider box, bool hang, ZoneStock z)
     {
         ZoneFrame(box, out _, out _, out Vector3 full);
@@ -372,7 +373,7 @@ public class StockContainer : NetworkBehaviour
         if (length <= 0f || !TryGetLayout(box, hang, z, z.itemId, z.orient, out var l)) return z.To;
         float used = hang
             ? Mathf.Min(l.railLength, z.count * l.step + spacing)
-            : Mathf.Min(z.count, l.nx) * l.cell.x;
+            : Mathf.Min(Mathf.CeilToInt(z.count / (float)Mathf.Max(1, l.nz * l.ny)), l.nx) * l.cell.x; // columns used
         // A whole zone (centred) is lined up from its starting side once split, so measure from there.
         return Mathf.Min(z.To, z.From + used / length);
     }
@@ -955,8 +956,8 @@ public class StockContainer : NetworkBehaviour
                            Mathf.Abs(x.z) + Mathf.Abs(y.z) + Mathf.Abs(z.z));
     }
 
-    // Shelves: front row first (the zone's +Z side), left to right, then the next row back, then up a layer.
-    // Rails: left to right along the rail, the top of each product on the rail.
+    // Shelves: column by column across the zone (from the Fill From Right side); each column front to back,
+    // then up a layer. Rails: along the rail, the top of each product on the rail.
     private void GetSlotPose(BoxCollider box, bool hang, ZoneStock part, Layout l, int index, out Vector3 position,
                              out Quaternion rotation)
     {
@@ -978,11 +979,14 @@ public class StockContainer : NetworkBehaviour
         }
         else
         {
-            int perLayer = l.nx * l.nz;
-            int layer = index / perLayer;
-            int inLayer = index % perLayer;
-            int row = inLayer / l.nx;
-            int col = inLayer % l.nx;
+            // Column by column from the Fill From Right side: each column fills front to back (Fill From
+            // Front), then stacks up a layer, before the next column starts. So a product takes up the width
+            // it needs and no more, leaving the rest of the zone free for the next product (see WouldSplit).
+            int perColumn = Mathf.Max(1, l.nz * l.ny);
+            int col = index / perColumn;
+            int inColumn = index % perColumn;
+            int layer = inColumn / Mathf.Max(1, l.nz);
+            int row = inColumn % Mathf.Max(1, l.nz);
 
             // Centre the grid in the zone so leftover space is shared on both sides. A part of a zone lines
             // its columns up from its starting side instead (so cutting it short, or starting the next part
