@@ -114,6 +114,7 @@ public class PlayerInteractInput : NetworkBehaviour
             lookedAtMonitor = null;
             lookedAtVote = null;
             lookedAtCustomer = 0;
+            lookedAtBroken = null;
             lookedAtCart = null;
             lookedAtDoor = null;
             lookedAtCounter = null;
@@ -161,6 +162,8 @@ public class PlayerInteractInput : NetworkBehaviour
     private int lookedAtBuyPrice;                   // cents
     private VoteButton lookedAtVote;                // a mall vote kiosk's button
     private ushort lookedAtCustomer;                // a customer close enough to stop (0 = none)
+    private Breakable lookedAtBroken;               // a broken light or screen (to report), maybe far off
+    private BreakManager.State lookedAtBrokenState;
     private bool lookedAtBuriedCartItem; // something with other things stacked on it (on a cart or not)
     [Tooltip("Lock / unlock a door your store owns.")]
     [SerializeField] private KeyCode doorLockKey = KeyCode.L;
@@ -196,6 +199,7 @@ public class PlayerInteractInput : NetworkBehaviour
         lookedAtCheckoutPart = null;
         lookedAtPickup = null;
         lookedAtBuriedCartItem = false;
+        lookedAtBroken = null;
         pushedCart = CartNet.GetPushedBy(OwnerClientId);
         FindPickupTarget();
         FindBuyTarget();
@@ -239,7 +243,21 @@ public class PlayerInteractInput : NetworkBehaviour
             var vote = hit.collider.GetComponentInParent<VoteButton>();
             if (vote != null && vote.Prompt(OwnerClientId) != null) lookedAtVote = vote;
         }
+
+        // Something broken (a light, a screen), maybe up on the ceiling: report it (empty hands).
+        var breaks = BreakManager.Instance;
+        if (breaks != null && breaks.IsSpawned && inventory.HeldItemId.Value == 0)
+            lookedAtBroken = breaks.FindLooked(cam.transform.position, cam.transform.forward, out lookedAtBrokenState);
     }
+
+    private string BrokenPrompt() => lookedAtBrokenState == BreakManager.State.Reported
+        ? $"Broken {lookedAtBroken.Noun}: reported, maintenance is on the way"
+        : $"F: Report broken {lookedAtBroken.Noun}";
+
+    // Reporting it is what F does: nothing else is in front of you.
+    private bool OnlyBrokenLooked => lookedAtBroken != null && lookedAtPickup == null && lookedAtCustomer == 0 &&
+        pushedCart == null && lookedAtCart == null && lookedAtDoor == null && lookedAtCounter == null &&
+        lookedAtMonitor == null && lookedAtSign == null && lookedAtVote == null && lookedAtBuy == null && stockTarget == null;
 
     private static readonly RaycastHit[] partHits = new RaycastHit[16];
     private static readonly RaycastHit[] lookHits = new RaycastHit[16];
@@ -647,7 +665,7 @@ public class PlayerInteractInput : NetworkBehaviour
         if (!IsOwner || (lookedAtSign == null && lookedAtMonitor == null && stockTarget == null &&
                          lookedAtCart == null && pushedCart == null && lookedAtDoor == null &&
                          lookedAtCounter == null && lookedAtPickup == null && lookedAtBuy == null && lookedAtVote == null &&
-                         !lookedAtBuriedCartItem && lookedAtCustomer == 0) ||
+                         !lookedAtBuriedCartItem && lookedAtCustomer == 0 && lookedAtBroken == null) ||
             (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return null;
 
         return pushedCart != null ? "F: Let go of cart"
@@ -661,6 +679,7 @@ public class PlayerInteractInput : NetworkBehaviour
                     : lookedAtSign != null ? SignPrompt()
                     : lookedAtBuy != null ? BuyPrompt()
                     : stockTarget != null ? StockPrompt()
+                    : OnlyBrokenLooked ? BrokenPrompt()
                     : lookedAtBuriedCartItem ? "Take the things on top off first"
                     : lookedAtCustomer != 0 && lookedAtPickup == null ? "F: Stop them and check their bag"
                     : PickupPrompt();
@@ -927,6 +946,13 @@ public class PlayerInteractInput : NetworkBehaviour
         }
 
         if (!Input.GetKeyDown(KeyCode.F)) return;
+
+        // Something broken and nothing else in front of you: report it (a help point).
+        if (OnlyBrokenLooked)
+        {
+            if (lookedAtBrokenState == BreakManager.State.Broken && BreakManager.Instance != null) BreakManager.Instance.Report(lookedAtBroken);
+            return;
+        }
 
         // A customer and nothing else in front of you: stop them and check their bag (shoplifters).
         if (lookedAtCustomer != 0 && pushedCart == null && lookedAtCart == null && lookedAtDoor == null &&
