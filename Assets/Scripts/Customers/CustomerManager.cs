@@ -1078,6 +1078,9 @@ public partial class CustomerManager : NetworkBehaviour
     // Debug counts (since play started).
     private int paths, pathFailures, stuckEvents;
 
+    /// <summary>Every machine: how many customers are shown here.</summary>
+    public int CustomersShown => views.Count;
+
     /// <summary>One line for overlays: how many customers are doing what, and path trouble so far.</summary>
     public string DebugSummary()
     {

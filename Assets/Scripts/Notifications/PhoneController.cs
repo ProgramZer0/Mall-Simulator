@@ -86,6 +86,8 @@ public class PhoneController : MonoBehaviour
     {
         Notifications.Changed += RefreshHint;
         ownerChecked = false;
+        // First-time tips need the Help topics before the phone's ever been brought up.
+        if (HelpApp.Prefab == null && phonePrefab != null) HelpApp.Prefab = phonePrefab.GetComponentInChildren<HelpApp>(true);
         RefreshHint();
     }
 
@@ -133,6 +135,8 @@ public class PhoneController : MonoBehaviour
     {
         if (IsOpen || !EnsurePhone()) return;
         IsOpen = true;
+        // A first-time tip is up: straight to its Help topic.
+        if (HelpTips.HasPending) app = HelpApp.Prefab != null ? HelpApp.Prefab.AppName : "Help";
         if (homeKey == KeyCode.Escape) UIState.MarkEscapeTaken();
         phone.gameObject.SetActive(true);
         raisedAt = Time.unscaledTime;
