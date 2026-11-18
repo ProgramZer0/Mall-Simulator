@@ -48,6 +48,35 @@ public class CustomerPersonality : ScriptableObject
     [Tooltip("Chance they wander into an open store even if nothing in the window catches their eye.")]
     [Range(0f, 1f)] public float curiosity = 0.1f;
 
+    [Header("Colors")]
+    [Tooltip("How much this kind of customer likes each color (-1 put off, 0 neutral, 1 love it). Every palette " +
+             "color is listed, neutral, once a PaintPalette is in the open scene; colors not listed are neutral. " +
+             "Adds to the item's own Color Tastes.")]
+    public List<ColorTaste> colorTastes = new();
+
+#if UNITY_EDITOR
+    private void OnValidate()
+    {
+        // Every palette color, neutral unless set (the palette in the open scene).
+        var palette = PaintPalette.Instance != null ? PaintPalette.Instance : FindFirstObjectByType<PaintPalette>();
+        if (palette == null) return;
+        colorTastes ??= new List<ColorTaste>();
+        bool original = true, added = false;
+        foreach (var name in palette.Names())
+        {
+            if (original) { original = false; continue; } // (Original: the model's own colors, no taste)
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            if (!colorTastes.Exists(t => t != null && string.Equals(t.color, name, System.StringComparison.OrdinalIgnoreCase)))
+            {
+                colorTastes.Add(new ColorTaste { color = name, weight = 0f });
+                added = true;
+            }
+        }
+        if (added) UnityEditor.EditorUtility.SetDirty(this);
+        ColorRules.Forget();
+    }
+#endif
+
     [Header("Shopping")]
     [Tooltip("Chance they head straight for stores that sell what they like (they know the mall), instead " +
              "of wandering to a random store and following whatever catches their eye on the way.")]

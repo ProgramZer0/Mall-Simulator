@@ -33,7 +33,25 @@ public class PaintSwatchBar : MonoBehaviour
     /// <summary>A swatch was clicked.</summary>
     public event Action<byte> Picked;
 
-    private void OnEnable() => Build();
+    private void OnEnable()
+    {
+        Build();
+        RefreshLocks(); // (the team may have levelled up since)
+    }
+
+    // Only colors the team has unlocked are shown.
+    private void RefreshLocks()
+    {
+        foreach (var s in swatches)
+        {
+            if (s.button == null) continue;
+            bool locked = PaintPalette.IsLockedHere(s.id);
+            s.button.gameObject.SetActive(!locked);
+            var label = s.button.GetComponentInChildren<TMP_Text>(true);
+            if (label != null) label.text = PaintPalette.PickerName(s.id);
+        }
+        if (PaintPalette.IsLockedHere(Selected)) SetSelected(0);
+    }
 
     /// <summary>Pick a color without raising Picked (e.g. to show what something already is).</summary>
     public void SetSelected(byte id)
@@ -84,6 +102,6 @@ public class PaintSwatchBar : MonoBehaviour
     {
         foreach (var s in swatches)
             if (s.selected != null) s.selected.SetActive(s.id == Selected);
-        if (nameText != null) nameText.text = PaintPalette.NameOf(Selected);
+        if (nameText != null) nameText.text = PaintPalette.PickerName(Selected);
     }
 }

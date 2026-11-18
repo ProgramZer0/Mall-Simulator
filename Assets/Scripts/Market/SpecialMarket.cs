@@ -175,10 +175,9 @@ public class SpecialMarket : NetworkBehaviour
         Vector2 range = marketOnly ? marketOnlyPrice : shopItemPrice;
         int price = Mathf.Max(1, Mathf.RoundToInt(usual * UnityEngine.Random.Range(range.x, range.y)));
         int count = UnityEngine.Random.Range(Mathf.Max(1, amount.x), Mathf.Max(amount.x, amount.y) + 1);
-        // A paintable item: a random color (its own colors count as one of them).
-        byte paint = PaintParts.IsPaintable(item) && PaintPalette.Instance != null
-            ? (byte)UnityEngine.Random.Range(0, PaintPalette.Instance.Count + 1)
-            : (byte)0;
+        // A paintable item: a random color it comes in (its own colors count as one of them; levels don't
+        // matter here, so a deal can be a color the buyer hasn't unlocked yet).
+        byte paint = PaintParts.IsPaintable(item) ? ColorRules.RandomFor(item) : (byte)0;
 
         deals.Add(new Deal
         {

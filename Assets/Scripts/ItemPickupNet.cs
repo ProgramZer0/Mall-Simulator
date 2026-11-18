@@ -253,7 +253,11 @@ public class ItemPickupNet : NetworkBehaviour
         else pendingPaint = PaintSet.With(Paint, zone, id);
     }
 
-    private void OnPaintChanged(uint before, uint now) => ApplyPaint();
+    private void OnPaintChanged(uint before, uint now)
+    {
+        ApplyPaint();
+        StoreListing.Track(gameObject); // its color counts with customers
+    }
 
     // A stock crate's paint is its products' color, not the box's.
     private void ApplyPaint() => PaintParts.ApplySet(gameObject, isStockCrate ? 0u : paint.Value);

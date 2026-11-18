@@ -247,8 +247,6 @@ public class PaintBrush : NetworkBehaviour
 
     /* ========================= COLOR WHEEL ========================= */
 
-    private int WheelCount => PaintPalette.Instance != null ? PaintPalette.Instance.Count + 1 : 1;
-
     private void OpenWheel()
     {
         if (PaintPalette.Instance == null) return;
@@ -264,8 +262,9 @@ public class PaintBrush : NetworkBehaviour
     {
         Vector2 fromCenter = (Vector2)Input.mousePosition - new Vector2(Screen.width, Screen.height) * 0.5f;
         if (fromCenter.sqrMagnitude < 30f * 30f) return; // still in the middle: keep the current pick
-        wheelHover = (byte)PaintWheel.Pick(fromCenter, WheelCount);
-        if (PaintWheel.Instance != null) PaintWheel.Instance.Highlight(wheelHover);
+        if (PaintWheel.Instance == null) return;
+        wheelHover = PaintWheel.Instance.PickColor(fromCenter);
+        PaintWheel.Instance.Highlight(wheelHover);
     }
 
     private void CloseWheel(bool pick)
@@ -317,7 +316,15 @@ public class PaintBrush : NetworkBehaviour
             targetObject = zones.Count > 1 ? zones[targetZone].gameObject : item.gameObject;
             current = PaintSet.Get(item.Paint, targetZone);
             fee = palette.ItemFee;
-            what = ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(item.ItemId, out var def) ? def.displayName : "Item";
+            var def = ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(item.ItemId, out var d) ? d : null;
+            what = def != null ? def.displayName : "Item";
+            // Not a color this item comes in (or not unlocked yet): say so.
+            if (current != color && !ColorRules.Allows(def, color, Team, out string why))
+            {
+                prompt = why;
+                targetKind = Kind.None;
+                return;
+            }
             string zone = PaintParts.ZoneName(item.gameObject, targetZone);
             if (zone.Length > 0) what += $" ({zone})";
         }
@@ -356,6 +363,12 @@ public class PaintBrush : NetworkBehaviour
             }
             else return;
             targetPlot = plot;
+            if (current != color && !ColorRules.AllowsPlain(color, Team, out string why))
+            {
+                prompt = why;
+                targetKind = Kind.None;
+                return;
+            }
         }
 
         if (current == color)
@@ -416,6 +429,8 @@ public class PaintBrush : NetworkBehaviour
         if (zone < 0 || zone >= PaintParts.ZonesOf(item.gameObject).Count || PaintSet.Get(item.Paint, zone) == paint) return;
         var plot = PlotOf(item);
         if (!ServerCanPaint(rpcParams, plot, paint, item.transform.position, out var palette, storeBuffer)) return;
+        var def = ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(item.ItemId, out var d) ? d : null;
+        if (!ColorRules.Allows(def, paint, Team, out _)) return;
         if (ServerPay(palette.ItemFee)) item.ServerSetZonePaint(zone, paint);
     }
 
@@ -425,6 +440,7 @@ public class PaintBrush : NetworkBehaviour
         if (MallManager.Instance == null || !MallManager.Instance.TryGetPlot(plotId, out var plot)) return;
         if (!plot.TryGetBuiltWallById(wallId, out var wall) || wall.paint == paint) return;
         if (!ServerCanPaint(rpcParams, plot, paint, (wall.a + wall.b) * 0.5f, out var palette, wall.Length * 0.5f)) return;
+        if (!ColorRules.AllowsPlain(paint, Team, out _)) return;
         if (ServerPay(palette.WallFee(wall.Length))) plot.ServerPaintWall(wallId, paint);
     }
 
@@ -434,6 +450,7 @@ public class PaintBrush : NetworkBehaviour
         if (MallManager.Instance == null || !MallManager.Instance.TryGetPlot(plotId, out var plot) ||
             plot.GetFrontPaint(moduleId, zone) == paint) return;
         if (!ServerCanPaint(rpcParams, plot, paint, transform.position, out var palette)) return;
+        if (!ColorRules.AllowsPlain(paint, Team, out _)) return;
         if (ServerPay(palette.FrontFee)) plot.ServerPaintFront(moduleId, zone, paint);
     }
 
@@ -442,6 +459,7 @@ public class PaintBrush : NetworkBehaviour
     {
         if (MallManager.Instance == null || !MallManager.Instance.TryGetPlot(plotId, out var plot) || plot.FloorPaint == paint) return;
         if (!plot.HasPaintableFloor || !ServerCanPaint(rpcParams, plot, paint, transform.position, out var palette)) return;
+        if (!ColorRules.AllowsPlain(paint, Team, out _)) return;
         if (ServerPay(palette.FloorFee)) plot.ServerPaintFloor(paint);
     }
 
@@ -455,6 +473,8 @@ public class PaintBrush : NetworkBehaviour
         if (!PaintPalette.IsValid(paint) || !plot.IsAuthorized(OwnerClientId) || plot.IsRenovating) return false;
         return Vector3.Distance(transform.position, at) <= range + 3f + extraReach;
     }
+
+    private ulong Team => MallManager.GetTeamOf(OwnerClientId);
 
     private bool ServerPay(int fee)
     {

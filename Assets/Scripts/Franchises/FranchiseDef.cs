@@ -30,6 +30,9 @@ public class FranchiseDef : ScriptableObject
     [Min(10f)] public float auctionSeconds = 180f;
     [Tooltip("Team level needed to bid (0 or 1 = from the start).")]
     [Min(0)] public int minLevel = 0;
+    [Tooltip("The brand's colors: extra colors for everything it covers, on top of the colors each item comes in " +
+             "anyway. Exclusive colors listed here can be used on them.")]
+    [PaletteColor] public List<string> colors = new();
 
     /// <summary>Every category it covers (Categories, plus the old single Category if still set).</summary>
     public IEnumerable<string> AllCategories

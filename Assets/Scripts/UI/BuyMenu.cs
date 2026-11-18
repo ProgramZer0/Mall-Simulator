@@ -417,6 +417,47 @@ public class BuyMenu : MonoBehaviour, IShopScreen
             button.onClick.AddListener(() => OnBuyClicked(def));
             button.interactable = !locked;
         }
+        if (go != null && go.TryGetComponent<BuyItemSlot>(out var slot)) ShowColors(slot.colors, def);
+    }
+
+    private static readonly List<byte> tileColors = new();
+
+    // The colors an item is limited to (its own or its categories', with its franchise's), or just its
+    // franchise's extra colors, as little swatches: only colors the team has unlocked. Nothing shown when
+    // it can be any color.
+    private static void ShowColors(RectTransform into, ItemDef def)
+    {
+        if (into == null) return;
+        tileColors.Clear();
+        if (PaintParts.IsPaintable(def))
+            foreach (var c in ColorRules.ShownFor(def))
+                if (!PaintPalette.IsLockedHere(c)) tileColors.Add(c);
+        var limit = tileColors;
+        into.gameObject.SetActive(limit.Count > 0);
+        if (limit.Count == 0) return;
+        float size = into.rect.height > 1f ? into.rect.height : 14f;
+        int i = 0;
+        for (; i < limit.Count; i++)
+        {
+            Image dot;
+            if (i < into.childCount) dot = into.GetChild(i).GetComponent<Image>();
+            else
+            {
+                var go = new GameObject("Color", typeof(RectTransform), typeof(Image));
+                go.transform.SetParent(into, false);
+                dot = go.GetComponent<Image>();
+                dot.raycastTarget = false;
+                var rt = (RectTransform)go.transform;
+                rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0f, 0.5f);
+                rt.sizeDelta = new Vector2(size, size);
+            }
+            if (dot == null) continue;
+            dot.gameObject.SetActive(true);
+            PaintPalette.StyleSwatch(dot, limit[i], Color.white, turn: false);
+            if (into.GetComponent<LayoutGroup>() == null)
+                ((RectTransform)dot.transform).anchoredPosition = new Vector2(i * (size + 2f), 0f);
+        }
+        for (; i < into.childCount; i++) into.GetChild(i).gameObject.SetActive(false);
     }
 
     /// <summary>Show only the current page and update the page buttons and label.</summary>
@@ -447,6 +488,8 @@ public class BuyMenu : MonoBehaviour, IShopScreen
 
         // Paintable items come in the picked color; the rest ignore it.
         byte paint = paintBar != null && PaintParts.IsPaintable(def) ? paintBar.Selected : (byte)0;
+        // ...if it comes in that color (and it's unlocked).
+        if (!ColorRules.Allows(def, paint, LocalTeam, out string why)) { ShowStatus($"{why}."); return; }
 
         // Sized: which sizes, and how many of each.
         var sizes = ItemCatalog.Instance != null ? ItemCatalog.Instance.GetSizes(def.id) : null;

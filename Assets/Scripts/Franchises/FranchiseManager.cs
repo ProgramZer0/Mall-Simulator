@@ -157,6 +157,14 @@ public class FranchiseManager : NetworkBehaviour
     }
 
     /// <summary>Is this item a franchise's (whoever holds it)?</summary>
+    /// <summary>The first franchise covering this item (null if none).</summary>
+    public static FranchiseDef FranchiseOf(ItemDef item)
+    {
+        if (Instance == null || item == null) return null;
+        foreach (var f in Instance.franchises) if (f != null && f.Covers(item)) return f;
+        return null;
+    }
+
     public static bool IsFranchiseItem(ItemDef item)
     {
         if (Instance == null || item == null) return false;

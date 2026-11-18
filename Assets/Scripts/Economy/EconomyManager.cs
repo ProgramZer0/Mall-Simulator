@@ -458,9 +458,12 @@ public class EconomyManager : NetworkBehaviour
         });
         for (int i = 0; i < itemIds.Length; i++)
         {
-            // Paint only sticks to items that can be painted, and only with a real color.
+            // Paint only sticks to items that can be painted, only with a real color, and (from the shop) only a
+            // color the item comes in that the team has unlocked; otherwise it comes in its own colors.
             byte paint = paints != null && i < paints.Length ? paints[i] : (byte)0;
             if (!PaintPalette.IsValid(paint) || !(ItemCatalog.Instance.TryGet(itemIds[i], out var d) && PaintParts.IsPaintable(d)))
+                paint = 0;
+            else if (!anyoneMayBuy && !ColorRules.Allows(d, paint, team, out _))
                 paint = 0;
             orderLines.Add(new OrderLine { orderId = id, itemId = itemIds[i], quantity = quantities[i], paint = paint });
         }

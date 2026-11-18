@@ -110,6 +110,12 @@ public class StoreAppealSettings : MonoBehaviour
              "added (0.5 = up to +50%); bad pairs take away the same way.")]
     [Range(0f, 1f)] public float pairStrength = 0.5f;
 
+    [Header("Colors")]
+    [Tooltip("How much an item's color sways what it's worth to a customer: 1 + this × (the item's taste for its " +
+             "color + the customer's), each -1..1 (ItemDef and CustomerPersonality → Color Tastes). 0.15: a " +
+             "loved color up to +30%, a disliked one down to -30%.")]
+    [Range(0f, 0.5f)] public float colorStrength = 0.15f;
+
     // Pairs by category (both ways), built on first use.
     private Dictionary<string, List<(string other, float effect, int wanted)>> pairsByCategory;
 
