@@ -127,7 +127,7 @@ public static class StockBoxGenerator
             var (hang, shelf) = kv.Value;
             string folderName = Path.GetFileName(folder);
             int? fixedUnits = AmountInName.Match(folderName) is { Success: true } m ? int.Parse(m.Groups[1].Value) : null;
-            string productName = AmountInName.Replace(folderName, "").Trim();
+            string productName = ItemSetupTool.Words(AmountInName.Replace(folderName, ""));
             if (made.TryGetValue(folder, out var existing))
                 Update(s, existing.path, hang, shelf, recalcUnits || fixedUnits.HasValue ? Units(s, template, hang, shelf, fixedUnits) : (int?)null, report);
             else
