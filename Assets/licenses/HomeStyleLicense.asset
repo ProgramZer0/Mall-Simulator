@@ -12,12 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1e8bdf0706eb432eb0518bd36f44927a, type: 3}
   m_Name: HomeStyleLicense
   m_EditorClassIdentifier: Assembly-CSharp::LicenseDef
-  id: 1
-  displayName: Jackets License
+  id: 7
+  displayName: Homestyle License
   description: Sell clothing.
   icon: {fileID: 0}
   categories: []
-  category: Jackets
+  category: Housing
   price: 1500
   perMall: 3
   minLevel: 0

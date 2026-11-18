@@ -170,9 +170,7 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 0}
     categories:
-    - Stocks
     - Dresses
-    - SLDressShortBackless
     category: 
     price: 10
     sizes: 0

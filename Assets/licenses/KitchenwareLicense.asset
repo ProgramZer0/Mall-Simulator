@@ -10,14 +10,14 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1e8bdf0706eb432eb0518bd36f44927a, type: 3}
-  m_Name: KitchenLicense
+  m_Name: KitchenwareLicense
   m_EditorClassIdentifier: Assembly-CSharp::LicenseDef
-  id: 1
-  displayName: Jackets License
+  id: 9
+  displayName: Kitchenware License
   description: Sell clothing.
   icon: {fileID: 0}
   categories: []
-  category: Jackets
+  category: Kitchenware
   price: 1500
   perMall: 3
   minLevel: 0

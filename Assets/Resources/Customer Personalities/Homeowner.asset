@@ -49,6 +49,18 @@ MonoBehaviour:
     weight: 0
   - color: Beige
     weight: 0
+  - color: Magenta
+    weight: 0
+  - color: Lavender
+    weight: 0
+  - color: Gold
+    weight: 0
+  - color: Silver
+    weight: 0
+  - color: DeepBlue
+    weight: 0
+  - color: Turqours
+    weight: 0
   knowsTheMall: 0.8
   budgetDollars: {x: 200, y: 1500}
   wantItems: {x: 1, y: 2}

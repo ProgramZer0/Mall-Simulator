@@ -120,7 +120,8 @@ MonoBehaviour:
     categories:
     - furniture
     - Tables
-    - CoffeeTables
+    - Coffee Tables
+    - Housing
     category: 
     price: 10
     sizes: 0

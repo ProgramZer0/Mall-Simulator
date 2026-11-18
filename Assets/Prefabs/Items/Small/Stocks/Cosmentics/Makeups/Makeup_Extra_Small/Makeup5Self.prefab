@@ -115,7 +115,9 @@ MonoBehaviour:
     sizeClass: 1
     showInShop: 0
     icon: {fileID: 0}
-    categories: []
+    categories:
+    - Cosmentics
+    - Makeups
     category: 
     price: 10
     sizes: 0

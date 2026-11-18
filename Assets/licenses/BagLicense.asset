@@ -13,11 +13,11 @@ MonoBehaviour:
   m_Name: BagLicense
   m_EditorClassIdentifier: Assembly-CSharp::LicenseDef
   id: 1
-  displayName: Jackets License
+  displayName: Bag License
   description: Sell clothing.
   icon: {fileID: 0}
   categories: []
-  category: Jackets
+  category: Bags
   price: 1500
   perMall: 3
   minLevel: 0

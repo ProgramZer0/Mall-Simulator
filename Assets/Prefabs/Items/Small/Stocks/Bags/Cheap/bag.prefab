@@ -116,9 +116,7 @@ MonoBehaviour:
     showInShop: 1
     icon: {fileID: 0}
     categories:
-    - Stocks
     - Bags
-    - Cheap
     category: 
     price: 10
     sizes: 0

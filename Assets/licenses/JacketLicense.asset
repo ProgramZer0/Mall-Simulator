@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1e8bdf0706eb432eb0518bd36f44927a, type: 3}
   m_Name: JacketLicense
   m_EditorClassIdentifier: Assembly-CSharp::LicenseDef
-  id: 1
+  id: 8
   displayName: Jackets License
   description: Sell clothing.
   icon: {fileID: 0}

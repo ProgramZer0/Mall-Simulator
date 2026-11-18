@@ -7210,8 +7210,6 @@ MonoBehaviour:
   xpPerProfitDollar: 0.1
   storeUnlockLevels: 01000000050000000a0000000f000000140000001e000000
   categoryUnlocks:
-  - category: Expensive
-    level: 20
   - category: Window
     level: 2
   - category: Door
@@ -7222,6 +7220,66 @@ MonoBehaviour:
     level: 10
   - category: Shoes
     level: 8
+  - category: Lamps
+    level: 9
+  - category: Standered
+    level: 20
+  - category: Advanced
+    level: 30
+  - category: Luxury
+    level: 40
+  - category: Basic
+    level: 10
+  - category: Tables
+    level: 3
+  - category: Containers
+    level: 15
+  - category: Workout
+    level: 4
+  - category: BathroomWare
+    level: 20
+  - category: Pets
+    level: 25
+  - category: Counter
+    level: 5
+  - category: Liquor
+    level: 17
+  - category: Books
+    level: 4
+  - category: Fragrences
+    level: 10
+  - category: Lipsticks
+    level: 12
+  - category: Makeups
+    level: 14
+  - category: Dresses
+    level: 6
+  - category: Pants
+    level: 2
+  - category: Sodas
+    level: 5
+  - category: Japan
+    level: 30
+  - category: Pipes
+    level: 26
+  - category: Saws
+    level: 10
+  - category: ScrewDrivers
+    level: 15
+  - category: Hatchets
+    level: 18
+  - category: Shovels
+    level: 20
+  - category: TapeMeasures
+    level: 20
+  - category: Pans
+    level: 5
+  - category: Button Down
+    level: 10
+  - category: Board Games
+    level: 10
+  - category: Trains
+    level: 12
   perks:
   - {fileID: 11400000, guid: e57b649638304d6599d99174674770bb, type: 2}
   - {fileID: 11400000, guid: 04fd2707fc2c45d596888c14f1dd6785, type: 2}
@@ -12592,7 +12650,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0.67477095}
-  m_AnchoredPosition: {x: -0.08679199, y: -1.4302826}
+  m_AnchoredPosition: {x: -0.08679199, y: -1.4303284}
   m_SizeDelta: {x: 0.8699951, y: -2.4200134}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &744671981
@@ -16548,7 +16606,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -11.486786, y: 39.86139}
+  m_AnchoredPosition: {x: -11.486877, y: 39.86139}
   m_SizeDelta: {x: -676.79443, y: -356.55322}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &962819998
@@ -21341,7 +21399,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0.857234}
-  m_AnchoredPosition: {x: -0.014831543, y: -1.2429962}
+  m_AnchoredPosition: {x: -0.014831543, y: -1.242981}
   m_SizeDelta: {x: -0.08999634, y: -1.9200134}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1283808628
@@ -29750,7 +29808,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.80500007, y: 0.89400005}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 4.442871, y: 2.0925446}
+  m_AnchoredPosition: {x: 4.442871, y: 2.0925598}
   m_SizeDelta: {x: -10.365601, y: -11.665192}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1690225560
@@ -32579,7 +32637,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.6228019, y: 0}
   m_AnchorMax: {x: 1, y: 0.632}
-  m_AnchoredPosition: {x: 0.8800049, y: -0.6031189}
+  m_AnchoredPosition: {x: 0.8800049, y: -0.6031494}
   m_SizeDelta: {x: 0.22998047, y: -1.2100067}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1854907482
@@ -33349,7 +33407,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0.062415693, y: 1}
-  m_AnchoredPosition: {x: -1.845459, y: 0.00022125244}
+  m_AnchoredPosition: {x: -1.84552, y: 0.00022125244}
   m_SizeDelta: {x: -2.7530975, y: -0.8370018}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1890857566
@@ -34236,7 +34294,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0.53722984, y: 0.11374079}
-  m_AnchoredPosition: {x: -1.9899902, y: -1.059845}
+  m_AnchoredPosition: {x: -1.9899902, y: -1.0597534}
   m_SizeDelta: {x: -0.049987793, y: -1.8370056}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &1928707708

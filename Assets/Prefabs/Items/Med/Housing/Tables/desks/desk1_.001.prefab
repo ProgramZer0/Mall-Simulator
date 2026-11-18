@@ -121,6 +121,7 @@ MonoBehaviour:
     - furniture
     - Tables
     - Desks
+    - Housing
     category: 
     price: 10
     sizes: 0

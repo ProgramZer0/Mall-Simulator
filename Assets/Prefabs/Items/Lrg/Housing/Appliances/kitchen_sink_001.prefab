@@ -120,6 +120,7 @@ MonoBehaviour:
     - furniture
     - Housing
     - Kitchenware
+    - Appliances
     category: 
     price: 10
     sizes: 0
