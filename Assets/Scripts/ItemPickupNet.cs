@@ -372,6 +372,9 @@ public class ItemPickupNet : NetworkBehaviour
         {
             var other = TopHits[i].GetComponentInParent<ItemPickupNet>();
             if (other == null || other == this || !other.IsSpawned) continue;
+            // Sitting on it: its bottom is at (or above) this one's top. A taller neighbour standing beside it
+            // reaches into the slab too, but starts down by the floor (or the cart's bed).
+            if (TopHits[i].bounds.min.y < top.y - 0.08f) continue;
             if (onCart) { if (other.transform.parent == transform.parent) return true; continue; }
             if (other.IsOnCart || other.OnWall) continue;
             return true;
