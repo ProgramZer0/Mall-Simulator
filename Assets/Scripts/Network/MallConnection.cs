@@ -100,6 +100,7 @@ public class MallConnection : MonoBehaviour
     private NetworkManager nm;
     private bool leaving;
     private bool approving; // our Approve is the NetworkManager's approval callback
+    private bool relayHost; // hosting online: the Relay spot is made once the mall's loaded
 
     private void Awake()
     {
@@ -139,8 +140,10 @@ public class MallConnection : MonoBehaviour
         var t = Transport;
         if (nm == null || t == null) return "No NetworkManager with a Unity Transport.";
         if (nm.IsListening) return "Already in a mall.";
+        t.SetProtocol(UnityTransport.ProtocolType.UnityTransport); // (after trying online: back to direct)
         t.SetConnectionData("127.0.0.1", port, "0.0.0.0");
         JoinCode = null;
+        relayHost = false;
         return StartHosting(port, maxPlayers);
     }
 
@@ -151,19 +154,33 @@ public class MallConnection : MonoBehaviour
         var t = Transport;
         if (nm == null || t == null) return "No NetworkManager with a Unity Transport.";
         if (nm.IsListening) return "Already in a mall.";
+        try { await SignIn(); }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"[Connection] Couldn't sign in to Unity Services: {e}");
+            return $"Couldn't reach Unity Services ({e.Message}). Try Direct IP.";
+        }
+        // The Relay spot is made once the mall's loaded (it expires if the host doesn't connect to it soon).
+        relayHost = true;
+        JoinCode = null;
+        return StartHosting(0, maxPlayers);
+    }
+
+    // The Relay spot for the host, and its join code. Error: why not.
+    private async Task<string> MakeRelay()
+    {
         try
         {
-            await SignIn();
-            var allocation = await RelayService.Instance.CreateAllocationAsync(Mathf.Clamp(maxPlayers, 1, MaxPlayersLimit) - 1);
+            var allocation = await RelayService.Instance.CreateAllocationAsync(Mathf.Clamp(MaxPlayers, 1, MaxPlayersLimit) - 1);
             JoinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
-            t.SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, "dtls"));
+            Transport.SetRelayServerData(AllocationUtils.ToRelayServerData(allocation, "dtls"));
+            return null;
         }
         catch (Exception e)
         {
             Debug.LogWarning($"[Connection] Couldn't host online: {e}");
-            return $"Couldn't host online ({e.Message}). Try Direct IP.";
+            return $"Couldn't host online ({e.Message}). Is Relay turned on for the project in the Unity Cloud dashboard? Try Direct IP.";
         }
-        return StartHosting(0, maxPlayers);
     }
 
     /// <summary>Join a mall by its join code. Error: why not (null: connecting).</summary>
@@ -204,7 +221,12 @@ public class MallConnection : MonoBehaviour
         names.Clear();
         names[NetworkManager.ServerClientId] = PlayerName;
         leaving = false;
-        if (string.IsNullOrEmpty(gameScene) || SceneManager.GetActiveScene().name == gameScene) return StartHostHere();
+        if (string.IsNullOrEmpty(gameScene) || SceneManager.GetActiveScene().name == gameScene)
+        {
+            if (!relayHost) return StartHostHere();
+            StartHostWhenReady();
+            return null;
+        }
         if (!Application.CanStreamedLevelBeLoaded(gameScene)) return $"The '{gameScene}' scene isn't in Build Settings.";
         SceneManager.sceneLoaded += OnGameSceneLoaded;
         SceneManager.LoadScene(gameScene, LoadSceneMode.Single);
@@ -215,7 +237,18 @@ public class MallConnection : MonoBehaviour
     {
         if (scene.name != gameScene) return;
         SceneManager.sceneLoaded -= OnGameSceneLoaded;
-        string error = StartHostHere();
+        StartHostWhenReady();
+    }
+
+    private async void StartHostWhenReady()
+    {
+        string error = null;
+#if MALLSIM_RELAY
+        if (relayHost) error = await MakeRelay();
+#else
+        await System.Threading.Tasks.Task.Yield();
+#endif
+        if (error == null) error = StartHostHere();
         if (error != null) BackToMenu(error);
     }
 
@@ -250,6 +283,7 @@ public class MallConnection : MonoBehaviour
             catch { ip = null; }
             if (ip == null) return "That isn't an IP address.";
         }
+        t.SetProtocol(UnityTransport.ProtocolType.UnityTransport);
         t.SetConnectionData(ip, port);
         JoinCode = null;
         return StartJoining();
