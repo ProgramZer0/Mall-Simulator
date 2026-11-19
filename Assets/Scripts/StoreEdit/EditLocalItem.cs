@@ -121,6 +121,12 @@ public class EditLocalItem : MonoBehaviour
     /// <summary>See-through (e.g. a window or door where it can't go).</summary>
     public bool Faded { get; private set; }
 
+    /// <summary>
+    /// While the appeal view has everything grey (EditAppealView), a renderer's real materials (null: as it
+    /// is), so fading goes back to the real look, not the grey one.
+    /// </summary>
+    public static System.Func<Renderer, Material[]> RealMaterials;
+
     private Renderer[] fadeRenderers;
     private Material[][] fadeOriginal;
     private Material[][] fadeMaterials;
@@ -135,7 +141,8 @@ public class EditLocalItem : MonoBehaviour
         {
             fadeRenderers = GetComponentsInChildren<Renderer>(true);
             fadeOriginal = new Material[fadeRenderers.Length][];
-            for (int i = 0; i < fadeRenderers.Length; i++) fadeOriginal[i] = fadeRenderers[i].sharedMaterials;
+            for (int i = 0; i < fadeRenderers.Length; i++)
+                fadeOriginal[i] = RealMaterials?.Invoke(fadeRenderers[i]) ?? fadeRenderers[i].sharedMaterials;
         }
         if (on && fadeMaterials == null)
         {
