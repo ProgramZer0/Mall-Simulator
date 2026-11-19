@@ -7334,6 +7334,10 @@ MonoBehaviour:
     categoryB: Housing
     effect: 0.12
     wanted: 2
+  - categoryA: Boxed
+    categoryB: all
+    effect: -1
+    wanted: 1
   pairReach: 3
   pairStrength: 0.5
   colorStrength: 0.15
@@ -21148,7 +21152,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -0.8377075, y: -0.011291504}
+  m_AnchoredPosition: {x: -0.83771515, y: -0.011291504}
   m_SizeDelta: {x: -2.32, y: -0.2859993}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1238963663
