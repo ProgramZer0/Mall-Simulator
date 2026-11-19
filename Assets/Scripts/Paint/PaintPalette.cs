@@ -262,6 +262,13 @@ public class PaintPalette : MonoBehaviour
     public static void Apply(Renderer renderer, int materialIndex, byte id, bool coverTexture)
     {
         if (renderer == null) return;
+        ApplyOne(renderer, materialIndex, id, coverTexture);
+        // A wall box that's drawn as its cut copy (holes for windows and doors): the copy shows the paint.
+        if (renderer.TryGetComponent<CuttableWall>(out var wall)) wall.MirrorPaint(renderer, materialIndex, id, coverTexture);
+    }
+
+    private static void ApplyOne(Renderer renderer, int materialIndex, byte id, bool coverTexture)
+    {
         if (DebugApply) LogApply(renderer, materialIndex, id, coverTexture);
         int count = renderer.sharedMaterials.Length;
         block ??= new MaterialPropertyBlock();
