@@ -79,11 +79,24 @@ public class DoorNet : NetworkBehaviour
     public bool IsManual => trigger == Trigger.Manual;
 
     /// <summary>
-    /// Customers walk through it: unlocked, and automatic, public, or a door in a store's front wall
-    /// (they open manual ones themselves and shut them behind them). Other doors (staff, back rooms,
-    /// docks) are walls to them.
+    /// Customers walk through it:
+    /// - automatic doors: unlocked (they open for them), or standing open;
+    /// - public manual doors: always (they open them themselves and shut them behind them);
+    /// - a manual door in a store's front wall: only while it's open, locked or not (lock it open and
+    ///   nobody else can shut your customers out). Closed, it's a wall to them.
+    /// Other doors (staff, back rooms, docks) are walls to them. Nobody gets through a door the store has
+    /// shut (renovating, or behind a segment not bought).
     /// </summary>
-    public bool CustomersCanUse => !IsLocked && (trigger == Trigger.Automatic || isPublic || IsStorefrontDoor);
+    public bool CustomersCanUse
+    {
+        get
+        {
+            if (IsShutByStore) return false;
+            if (trigger == Trigger.Automatic) return IsOpen || !IsLocked;
+            if (isPublic) return true;
+            return IsStorefrontDoor && IsOpen;
+        }
+    }
 
     /// <summary>A door players put in a store's front wall (the way customers come in).</summary>
     public bool IsStorefrontDoor =>
@@ -175,7 +188,12 @@ public class DoorNet : NetworkBehaviour
         }
     }
 
-    private void OnStateChanged(sbyte previous, sbyte current) => motion.SetOpen(current != 0, current);
+    private void OnStateChanged(sbyte previous, sbyte current)
+    {
+        motion.SetOpen(current != 0, current);
+        // Open or shut decides whether customers can use a storefront door (and a locked automatic one).
+        if ((previous != 0) != (current != 0) && (trigger == Trigger.Manual ? !isPublic : IsLocked)) CustomerVersion++;
+    }
 
     /* ========================= RULES ========================= */
 
@@ -275,7 +293,7 @@ public class DoorNet : NetworkBehaviour
         if (!IsSpawned || !IsServer || Time.time < nextSense) return;
         if (trigger != Trigger.Automatic)
         {
-            if (isPublic || IsStorefrontDoor) UpdatePublicManual();
+            if (isPublic) UpdatePublicManual(); // (storefront doors: customers only use them while they're open)
             return;
         }
         nextSense = Time.time + 0.2f;
