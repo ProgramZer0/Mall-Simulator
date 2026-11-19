@@ -144,6 +144,7 @@ public class CustomerNavMesh : MonoBehaviour
         NavMeshBuilder.CollectSources(bounds, layers, NavMeshCollectGeometry.PhysicsColliders, 0, markups, sources);
         AddedAsItem.Clear();
         sources.RemoveAll(Skip);
+        BoxUnreadableMeshes();
         AddItems(bounds);
         AddDoorBlockers(bounds);
         foreach (var zone in CustomerNoWalkZone.All)
@@ -156,6 +157,26 @@ public class CustomerNavMesh : MonoBehaviour
         }
         building = NavMeshBuilder.UpdateNavMeshDataAsync(data, settings, sources, bounds);
         prepMs = buildTimer.Elapsed.TotalMilliseconds; // the part on the main thread (the rest runs in the background)
+    }
+
+    // A mesh collider whose model doesn't have Read/Write on can't be read in a build (the editor lets it,
+    // with a warning): use its bounding box instead, which works everywhere.
+    private void BoxUnreadableMeshes()
+    {
+        for (int i = 0; i < sources.Count; i++)
+        {
+            var s = sources[i];
+            if (s.shape != NavMeshBuildSourceShape.Mesh || !(s.sourceObject is Mesh mesh) || mesh.isReadable) continue;
+            var b = mesh.bounds;
+            sources[i] = new NavMeshBuildSource
+            {
+                shape = NavMeshBuildSourceShape.Box,
+                transform = s.transform * Matrix4x4.Translate(b.center),
+                size = b.size,
+                area = s.area,
+                component = s.component,
+            };
+        }
     }
 
     private static bool Skip(NavMeshBuildSource s)
