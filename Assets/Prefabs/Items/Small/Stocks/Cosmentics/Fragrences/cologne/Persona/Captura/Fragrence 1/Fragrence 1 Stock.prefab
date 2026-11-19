@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1001 &4127869674682063859
+--- !u!1001 &8125592799467486337
 PrefabInstance:
   m_ObjectHideFlags: 0
   serializedVersion: 2
@@ -10,7 +10,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: itemId
-      value: 243
+      value: 330
       objectReference: {fileID: 0}
     - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: unitsPerCrate
@@ -26,11 +26,15 @@ PrefabInstance:
       objectReference: {fileID: 8770950047354305333, guid: de8b1499738f36b4fbae8950f1af3f54, type: 3}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.id
-      value: 243
+      value: 330
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.price
       value: 240
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: item.showInShop
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.displayName
@@ -84,14 +88,6 @@ PrefabInstance:
       propertyPath: 'item.categories.Array.data[5]'
       value: Boxed
       objectReference: {fileID: 0}
-    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
-      propertyPath: 'item.categories.Array.data[6]'
-      value: Boxed
-      objectReference: {fileID: 0}
-    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
-      propertyPath: 'item.categories.Array.data[7]'
-      value: Boxed
-      objectReference: {fileID: 0}
     - target: {fileID: 2129252736326913349, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: m_LocalPosition.x
       value: -27.30884
@@ -138,7 +134,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8513666520626042969, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: GlobalObjectIdHash
-      value: 3601007963
+      value: 2075710152
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
