@@ -221,6 +221,27 @@ public static class PlacementCheck
         return HasSupport(center, half, rotation, supportMask);
     }
 
+    /// <summary>Same as FitsPrefab, and why not: the first thing in the way, or "nothing under it".</summary>
+    public static bool FitsPrefab(GameObject prefab, Vector3 position, Quaternion rotation,
+                                  LayerMask blockingMask, LayerMask supportMask, out string why)
+    {
+        why = null;
+        if (prefab == null) { why = "no box"; return false; }
+        var box = ShipmentPacker.GetBox(prefab);
+        Vector3 half = new(Mathf.Max(0.001f, box.half.x - Skin), Mathf.Max(0.001f, box.half.y - Skin),
+                           Mathf.Max(0.001f, box.half.z - Skin));
+        Vector3 center = position + rotation * box.pivotOffset;
+        int n = Physics.OverlapBoxNonAlloc(center, half, Hits, rotation, blockingMask, QueryTriggerInteraction.Ignore);
+        if (n > 0)
+        {
+            var c = Hits[0];
+            why = $"'{c.name}' is in the way (layer {LayerMask.LayerToName(c.gameObject.layer)})";
+            return false;
+        }
+        if (!HasSupport(center, half, rotation, supportMask)) { why = "nothing under it to stand on"; return false; }
+        return true;
+    }
+
     /// <summary>The middle of a prefab's model at a pose.</summary>
     public static Vector3 PrefabCenter(GameObject prefab, Vector3 position, Quaternion rotation) =>
         prefab == null ? position : position + rotation * ShipmentPacker.GetBox(prefab).pivotOffset;
