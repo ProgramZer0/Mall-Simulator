@@ -82,19 +82,36 @@ public class Breakable : MonoBehaviour
         broken = on;
         for (int i = 0; i < lights.Length; i++)
             if (lights[i] != null) lights[i].intensity = on && lightLook == LightLook.Off ? 0f : intensity[i];
-        if (brokenMaterial != null)
-            for (int i = 0; i < swapRenderers.Length; i++)
-            {
-                var r = swapRenderers[i];
-                if (r == null || materials[i] == null) continue;
-                if (!on) { r.sharedMaterials = materials[i]; continue; }
-                var swapped = new Material[materials[i].Length];
-                for (int k = 0; k < swapped.Length; k++) swapped[k] = brokenMaterial;
-                r.sharedMaterials = swapped;
-            }
+        SwapLook(on);
         foreach (var g in showWhenBroken) if (g != null) g.SetActive(on);
         foreach (var g in hideWhenBroken) if (g != null) g.SetActive(!on);
         enabled = on && lightLook == LightLook.Flicker && lights.Length > 0;
+    }
+
+    private Material[][] swapped;
+    private bool lookOff;
+
+    // Swap Renderers to Broken Material (off) or back to their own (on).
+    private void SwapLook(bool off)
+    {
+        if (brokenMaterial == null || off == lookOff && swapped != null) return;
+        lookOff = off;
+        if (swapped == null)
+        {
+            swapped = new Material[swapRenderers.Length][];
+            for (int i = 0; i < swapRenderers.Length; i++)
+            {
+                if (materials[i] == null) continue;
+                swapped[i] = new Material[materials[i].Length];
+                for (int k = 0; k < swapped[i].Length; k++) swapped[i][k] = brokenMaterial;
+            }
+        }
+        for (int i = 0; i < swapRenderers.Length; i++)
+        {
+            var r = swapRenderers[i];
+            if (r == null || materials[i] == null) continue;
+            r.sharedMaterials = off ? swapped[i] : materials[i];
+        }
     }
 
     // Broken and flickering: off mostly, with short bursts of light.
@@ -106,6 +123,7 @@ public class Breakable : MonoBehaviour
         float level = lit ? Random.Range(0.5f, 1f) : Random.Range(0f, 0.08f);
         for (int i = 0; i < lights.Length; i++)
             if (lights[i] != null) lights[i].intensity = intensity[i] * level;
+        SwapLook(!lit); // the bulb's on look while it's lit, Broken Material (its off look) while it isn't
     }
 
     private Bounds lookBounds;
