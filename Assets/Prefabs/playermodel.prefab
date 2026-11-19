@@ -160,6 +160,7 @@ GameObject:
   - component: {fileID: 5788814363474388794}
   - component: {fileID: 9197958977072773821}
   - component: {fileID: 8280867193190613937}
+  - component: {fileID: 5139187396665977111}
   m_Layer: 7
   m_Name: playermodel
   m_TagString: Player
@@ -372,6 +373,8 @@ MonoBehaviour:
   waitForFloorSeconds: 5
   fallRescueDistance: 15
   killHeight: -50
+  groundedGrace: 0.15
+  debugFalls: 0
   cameraRoot: {fileID: 4351029141827459660}
   freeLookButton: 1
   freeLookMaxAngle: 150
@@ -412,11 +415,14 @@ MonoBehaviour:
   validAlpha: 0.79
   invalidAlpha: 0.12
   debugPlacement: 0
+  debugLook: 0
   doorLockKey: 108
   stockPreviewAlpha: 0.37
   putBackKey: 103
   stockTurnKey: 114
   stockLayKey: 116
+  splitLineColor: {r: 1, g: 0.85, b: 0.2, a: 1}
+  splitLineWidth: 0.015
   takeOutlineColor: {r: 1, g: 0.85, b: 0.2, a: 1}
   stockOutlineColor: {r: 0.3, g: 0.9, b: 1, a: 1}
   blockedOutlineColor: {r: 1, g: 0.35, b: 0.3, a: 1}
@@ -472,6 +478,9 @@ MonoBehaviour:
     m_InternalValue: 0
   HeldFromTeam:
     m_InternalValue: 18446744073709551615
+  HeldBoxed:
+    m_InternalValue: 0
+  handFadeAlpha: 0.25
 --- !u!114 &1450381561150076667
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -527,6 +536,8 @@ MonoBehaviour:
   wallEraseKey: 101
   removeKey: 127
   logEditSave: 1
+  logEditStart: 1
+  logBoxDrop: 0
   wallHangHeight: 1.5
   wallSnapDistance: 0.6
   pitch: 55
@@ -604,6 +615,7 @@ MonoBehaviour:
   handOffset: {x: 0.3, y: -0.25, z: 0.15}
   handRotation: {x: 0, y: -90, z: 0}
   range: 4
+  debugLogs: 0
   storeBuffer: 0.75
   outlineColor: {r: 1, g: 0.85, b: 0.3, a: 1}
 --- !u!114 &8280867193190613937
@@ -628,6 +640,23 @@ MonoBehaviour:
   notificationsApp: Notifications
   hintText: {fileID: 0}
   hintFormat: 'Tab: Phone ({0})'
+--- !u!114 &5139187396665977111
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4772898928607901605}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 23263a35180548249cb14ccd39a58697, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerNameTag
+  ShowTopMostFoldoutHeaderGroup: 1
+  height: 2.15
+  fontSize: 2.4
+  color: {r: 1, g: 1, b: 1, a: 1}
+  showWithin: 30
 --- !u!1 &5427521708554327154
 GameObject:
   m_ObjectHideFlags: 0
@@ -746,6 +775,7 @@ MonoBehaviour:
   - renderer: {fileID: 1362587244130411287}
     materialIndex: 0
   zoneName: 
+  coverTexture: 0
 --- !u!4 &8547537089434203678 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 2726311716024838651, guid: 98bf8115d9cb9ba4c9745c93f567b4c6, type: 3}
