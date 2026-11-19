@@ -46,6 +46,8 @@ public class EconomyManager : NetworkBehaviour
     [Header("Deliveries")]
     [Tooltip("Seconds a delivery is held for the team that ordered it before anyone may take it (GDD: 10 minutes).")]
     [SerializeField] private float reservationSeconds = 600f;
+    [Tooltip("A delivery's boxes come down one at a time, this many seconds apart (0: all at once).")]
+    [SerializeField, Min(0f)] private float boxSpawnInterval = 0.3f;
     [Tooltip("Most items (boxes) one purchase may contain.")]
     [SerializeField] private int maxItemsPerOrder = 100;
     [Tooltip("What a delivery box may not overlap when it's set down (items, boxes, walls, players...). " +
@@ -478,7 +480,7 @@ public class EconomyManager : NetworkBehaviour
     private void Update()
     {
         ImGuiHost.Set(this, showDebugHud && Debug.isDebugBuild && IsSpawned ? drawHud ??= DrawHud : null);
-        if (IsServer && IsSpawned) ServerUpdateOrders();
+        if (IsServer && IsSpawned) { ServerSpawnQueued(); ServerUpdateOrders(); }
         if (devHotkeys && IsSpawned && !UIState.IsMenuOpen) DevKeys();
     }
 
@@ -512,7 +514,9 @@ public class EconomyManager : NetworkBehaviour
 
             if (left > 0f) continue;
 
-            // Due. Waiting for room: only look again every Fit Check Interval.
+            // Due. Another delivery's boxes still coming down in this store: after them (their spots are taken).
+            if (QueuedFor(o.plotId)) continue;
+            // Waiting for room: only look again every Fit Check Interval.
             if (o.blocked && fitCache.TryGetValue(o.orderId, out var c) && now < c.nextCheck) continue;
 
             if (!ServerDeliver(o, plot))
@@ -575,12 +579,56 @@ public class EconomyManager : NetworkBehaviour
         return mask;
     }
 
-    /// <summary>Plans fresh spots and spawns every box of a delivery. False if it doesn't fit right now.</summary>
+    // Boxes planned but not down yet (Box Spawn Interval apart), in order.
+    private struct QueuedBox
+    {
+        public NetworkObject prefab;
+        public int itemId, plotId;
+        public byte paint;
+        public Pose pose;
+        public ulong teamId;
+        public float at; // Time.time it comes down
+    }
+    private readonly List<QueuedBox> queued = new();
+
+    private bool QueuedFor(int plotId)
+    {
+        foreach (var q in queued) if (q.plotId == plotId) return true;
+        return false;
+    }
+
+    // Host: the boxes whose turn it is.
+    private void ServerSpawnQueued()
+    {
+        int done = 0;
+        while (done < queued.Count && Time.time >= queued[done].at)
+        {
+            var q = queued[done++];
+            if (q.prefab != null) SpawnBox(q.prefab, q.itemId, q.paint, q.pose, q.teamId);
+        }
+        if (done > 0) queued.RemoveRange(0, done);
+    }
+
+    /// <summary>
+    /// Plans fresh spots for every box of a delivery, then sets them down one at a time (Box Spawn Interval
+    /// apart; the first straight away). False if it doesn't fit right now.
+    /// </summary>
     private bool ServerDeliver(OrderInfo order, StorePlot plot)
     {
         if (!PlanOrder(order, plot) || plan.Count != planItems.Count) return false;
+        float t = Time.time;
+        foreach (var q in queued) if (q.at + boxSpawnInterval > t) t = q.at + boxSpawnInterval; // after any still coming
         for (int i = 0; i < plan.Count; i++)
-            SpawnBox(planItems[i].prefab, planItems[i].itemId, planItems[i].paint, plan[i], order.teamId);
+        {
+            var box = new QueuedBox
+            {
+                prefab = planItems[i].prefab, itemId = planItems[i].itemId, paint = planItems[i].paint,
+                pose = plan[i], teamId = order.teamId, plotId = order.plotId, at = t + i * boxSpawnInterval,
+            };
+            if (boxSpawnInterval <= 0f) SpawnBox(box.prefab, box.itemId, box.paint, box.pose, box.teamId);
+            else queued.Add(box);
+        }
+        ServerSpawnQueued(); // the first one now
         return true;
     }
 

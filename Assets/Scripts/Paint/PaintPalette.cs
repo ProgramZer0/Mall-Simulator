@@ -217,17 +217,52 @@ public class PaintPalette : MonoBehaviour
 
     /* ========================= APPLYING ========================= */
 
+    // What painting this renderer does: each material, whether it has a base color to tint, and its texture
+    // (a white base color on a dark texture: white paint changes nothing; Cover Texture fixes that).
+    private static void LogApply(Renderer renderer, int materialIndex, byte id, bool coverTexture)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"[Paint] '{renderer.name}' (under '{(renderer.transform.root != null ? renderer.transform.root.name : "")}'): " +
+                  $"{NameOf(id)} (id {id}){(coverTexture ? ", covering the texture" : "")}{(renderer.enabled ? "" : ", renderer OFF")}");
+        var mats = renderer.sharedMaterials;
+        for (int i = 0; i < mats.Length; i++)
+        {
+            if (materialIndex >= 0 && i != materialIndex) continue;
+            var m = mats[i];
+            if (m == null) { sb.Append($"\n  material {i}: none"); continue; }
+            bool baseColor = m.HasProperty(BaseColorId), color = m.HasProperty(ColorId);
+            Texture tex = m.HasProperty(BaseMapId) ? m.GetTexture(BaseMapId) : m.HasProperty(MainTexId) ? m.GetTexture(MainTexId) : null;
+            Color own = baseColor ? m.GetColor(BaseColorId) : color ? m.GetColor(ColorId) : Color.clear;
+            sb.Append($"\n  material {i} '{m.name}' ({m.shader.name}): " +
+                      (baseColor ? "_BaseColor" : color ? "_Color" : "NO base color property, can't be painted") +
+                      $", own color {own}, texture {(tex != null ? $"'{tex.name}'" : "none")}");
+        }
+        Debug.Log(sb.ToString(), renderer);
+    }
+
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorId = Shader.PropertyToID("_Color");
+    private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
+    private static readonly int MainTexId = Shader.PropertyToID("_MainTex");
     private static MaterialPropertyBlock block;
 
     /// <summary>
     /// Paint one renderer (Material Index -1: all its materials) with a color id; 0 takes the paint off.
     /// Uses a property block, so materials aren't copied.
     /// </summary>
-    public static void Apply(Renderer renderer, int materialIndex, byte id)
+    public static void Apply(Renderer renderer, int materialIndex, byte id) => Apply(renderer, materialIndex, id, false);
+
+    /// <summary>
+    /// Cover Texture: painted, the material's texture is hidden too (solid paint over wood, a print...), so
+    /// the color shows as it is (white paint really is white). Normal maps and the like still show.
+    /// </summary>
+    /// <summary>Log every renderer painted on this machine (PaintBrush → Debug Logs turns it on).</summary>
+    public static bool DebugApply;
+
+    public static void Apply(Renderer renderer, int materialIndex, byte id, bool coverTexture)
     {
         if (renderer == null) return;
+        if (DebugApply) LogApply(renderer, materialIndex, id, coverTexture);
         int count = renderer.sharedMaterials.Length;
         block ??= new MaterialPropertyBlock();
         if (!TryGetColor(id, out Color c))
@@ -245,6 +280,11 @@ public class PaintPalette : MonoBehaviour
             renderer.GetPropertyBlock(block, i);
             block.SetColor(BaseColorId, c);
             block.SetColor(ColorId, c);
+            if (coverTexture)
+            {
+                block.SetTexture(BaseMapId, Texture2D.whiteTexture);
+                block.SetTexture(MainTexId, Texture2D.whiteTexture);
+            }
             renderer.SetPropertyBlock(block, i);
         }
     }
