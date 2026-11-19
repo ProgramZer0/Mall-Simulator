@@ -9,7 +9,8 @@ public class NetworkTestingButtons : MonoBehaviour
     private void Update()
     {
         var nm = NetworkManager.Singleton;
-        ImGuiHost.Set(this, nm != null && !nm.IsClient && !nm.IsServer ? drawButtons ??= DrawButtons : null);
+        // (Not with the main menu up: it has its own Host and Join.)
+        ImGuiHost.Set(this, nm != null && !nm.IsClient && !nm.IsServer && !MainMenu.IsShowing ? drawButtons ??= DrawButtons : null);
     }
 
     private void OnDisable() => ImGuiHost.Set(this, null);

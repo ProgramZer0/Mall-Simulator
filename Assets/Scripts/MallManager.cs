@@ -432,7 +432,31 @@ public class MallManager : NetworkBehaviour
             }
         }
 
-        Debug.LogWarning($"[MallManager] No free starter store for client {clientId}. " +
+        // No free starter store: they share one (the team with the fewest players; past Max Players Per
+        // Team if need be, better than no store at all).
+        ulong best = ulong.MaxValue;
+        int fewest = int.MaxValue;
+        var seen = new HashSet<ulong>();
+        foreach (var plot in plots.Values)
+        {
+            if (!plot.HasOwner || plot.OwnerTeamId == team || !seen.Add(plot.OwnerTeamId)) continue;
+            int count = GetTeamMembers(plot.OwnerTeamId).Count;
+            if (count >= fewest) continue;
+            fewest = count;
+            best = plot.OwnerTeamId;
+        }
+        if (best != ulong.MaxValue)
+        {
+            ServerSetTeam(clientId, best);
+            string store = "a store";
+            foreach (var plot in plots.Values) if (plot.HasOwner && plot.OwnerTeamId == best) { store = $"'{plot.DisplayName}'"; break; }
+            Debug.Log($"[MallManager] No free starter store for client {clientId}: sharing {store} (team {best}).", this);
+            if (NotificationManager.Instance != null)
+                NotificationManager.Instance.ServerNotifyClientText(clientId, "Sharing a store",
+                    $"Every starter store is taken, so you're running {store} together with its team.");
+            return;
+        }
+        Debug.LogWarning($"[MallManager] No free starter store for client {clientId}, and no team with room to share. " +
                          "Add more StorePlots marked Is Starter Plot.", this);
     }
 
