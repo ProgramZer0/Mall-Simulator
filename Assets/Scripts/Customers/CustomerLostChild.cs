@@ -14,9 +14,13 @@ using Random = UnityEngine.Random;
 public partial class CustomerManager
 {
     [Header("Lost Children")]
-    [Tooltip("Chance per minute, while a family walks the halls, that one of their children wanders off " +
-             "(at most once per visit). 0: never.")]
-    [SerializeField, Range(0f, 1f)] private float lostChildPerMinute = 0.03f;
+    [Tooltip("About how many minutes between lost children, across the whole mall (each wait is 50%-150% of " +
+             "this). 0: children never get lost.")]
+    [SerializeField, Min(0f)] private float lostChildEveryMinutes = 6f;
+    [Tooltip("The first one comes no sooner than this many minutes into the game.")]
+    [SerializeField, Min(0f)] private float firstLostChildAfterMinutes = 3f;
+    [Tooltip("At most this many children lost at the same time.")]
+    [SerializeField, Min(1)] private int maxLostAtOnce = 1;
     [Tooltip("How far a lost child wanders before stopping (meters).")]
     [SerializeField, Min(2f)] private float lostWanderDistance = 18f;
     [Tooltip("How far around where the child was lost the family searches (meters).")]
@@ -40,6 +44,8 @@ public partial class CustomerManager
     /// <summary>Who's lost, following a player, or searching (sent to everyone: the interact prompt).</summary>
     public enum LostMark : byte { None, LostChild, Following, Searching }
 
+    private float nextLostChildAt = -1f; // host: when the next child may get lost
+
     // Every machine: who's marked.
     private readonly System.Collections.Generic.Dictionary<ushort, byte> marks = new();
 
@@ -50,14 +56,16 @@ public partial class CustomerManager
     {
         var g = kid.group;
         var parent = kid.follow;
-        if (g == null || g.lostOnce || parent == null || lostChildPerMinute <= 0f || !byId.ContainsKey(parent.id)) return false;
+        if (g == null || g.lostOnce || parent == null || lostChildEveryMinutes <= 0f || !byId.ContainsKey(parent.id)) return false;
+        // Mall-wide: one every so often (the first child walking the halls once it's time), a few at most.
+        if (nextLostChildAt < 0f) nextLostChildAt = Time.time + firstLostChildAfterMinutes * 60f;
+        if (Time.time < nextLostChildAt || cases.Count >= maxLostAtOnce) return false;
         var root = Root(kid);
         if (root.store != null || root.mode != Mode.Wander || root.searchingFor != null) return false; // walking the halls
-        float perThink = lostChildPerMinute / 60f / Mathf.Max(0.1f, thinksPerSecond);
-        if (Random.value >= perThink) return false;
         if (!NearbyHallwaySpot(kid.pos, lostWanderDistance * 0.5f, lostWanderDistance, out var spot)) return false;
 
         g.lostOnce = true;
+        nextLostChildAt = Time.time + lostChildEveryMinutes * 60f * Random.Range(0.5f, 1.5f);
         kid.lostFrom = parent;
         kid.lostSince = Time.time;
         kid.lostAt = kid.pos;
@@ -109,12 +117,15 @@ public partial class CustomerManager
 
     private void ThinkLost(Customer kid)
     {
-        if (TryReunite(kid, helper: ulong.MaxValue)) return;
+        // On their own they only find their family once they've given up waiting and go looking (the
+        // family, searching, never stumbles on them: finding them is the players' job).
+        bool gaveUp = Time.time - kid.lostSince >= lostFindThemselvesMinutes * 60f;
+        if (gaveUp && TryReunite(kid, helper: ulong.MaxValue)) return;
         var parent = FamilyOf(kid);
         if (parent == null) { GoHomeAlone(kid); return; }
 
         // Nobody came: off to find them.
-        if (Time.time - kid.lostSince >= lostFindThemselvesMinutes * 60f)
+        if (gaveUp)
         {
             if (kid.arrived || FlatDistance(kid.destination, parent.pos) > 2f) PathTo(kid, parent.pos);
             return;
