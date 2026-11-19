@@ -60,6 +60,7 @@ public partial class CustomerManager
         g.lostOnce = true;
         kid.lostFrom = parent;
         kid.lostSince = Time.time;
+        kid.lostLetDown = false;
         kid.lostAt = kid.pos;
         kid.follow = null;
         kid.mode = Mode.Lost;
@@ -116,6 +117,7 @@ public partial class CustomerManager
         // Nobody came: off to find them.
         if (Time.time - kid.lostSince >= lostFindThemselvesMinutes * 60f)
         {
+            if (!kid.lostLetDown) LostChildLetDown(kid);
             if (kid.arrived || FlatDistance(kid.destination, parent.pos) > 2f) PathTo(kid, parent.pos);
             return;
         }
@@ -136,6 +138,7 @@ public partial class CustomerManager
     private void GoHomeAlone(Customer kid)
     {
         Log(kid, "lost, and their family's gone: leaving");
+        if (!kid.lostLetDown) LostChildLetDown(kid);
         SetMark(kid, LostMark.None);
         CaseRpc(kid.id, 0, false);
         Despawn(kid);

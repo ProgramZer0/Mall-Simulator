@@ -414,6 +414,7 @@ public partial class CustomerManager : NetworkBehaviour
         public Customer lostFrom;      // (a lost child) the parent they wandered off from
         public float lostSince;
         public Vector3 lostAt;         // where they wandered off (their family searches around there)
+        public bool lostLetDown;       // (a lost child) never found by a player: the mall's reputation took the hit
         public ulong helper = ulong.MaxValue; // (a lost child) the player they're following
         public float helperFarSince = -1f;
         public Customer searchingFor;  // (a family's party leader) the child they're looking for
@@ -639,11 +640,11 @@ public partial class CustomerManager : NetworkBehaviour
 
     private static float Factor(float percent) => Mathf.Max(0f, 1f + percent / 100f);
 
-    /// <summary>Most customers at once right now (events and seasons included).</summary>
-    public int MaxCustomersNow => Mathf.Max(0, Mathf.RoundToInt(maxCustomers * eventMax));
+    /// <summary>Most customers at once right now (events, seasons and the mall's reputation included).</summary>
+    public int MaxCustomersNow => Mathf.Max(0, Mathf.RoundToInt(maxCustomers * eventMax * Reputation));
 
-    /// <summary>New customers per minute right now (events and seasons included).</summary>
-    public float ArrivalsPerMinuteNow => arrivalsPerMinute * eventArrivals;
+    /// <summary>New customers per minute right now (events, seasons and the mall's reputation included).</summary>
+    public float ArrivalsPerMinuteNow => arrivalsPerMinute * eventArrivals * Reputation;
 
     // Who comes: each personality by its Spawn Weight, times what the running events do to it.
     // A shopper's personality (bystanders false), or a bystander's (true), by Spawn Weight.
@@ -1095,7 +1096,8 @@ public partial class CustomerManager : NetworkBehaviour
               (eventPersonality.Count > 0 ? $", {eventPersonality.Count} personality shift(s)" : "")
             : "";
         return $"Customers: {customers.Count} ({bystanders} bystanders; {walking} walking, {standing} standing; {inStores} in stores, {inLine} in line); " +
-               $"since start: {paths} paths, {pathFailures} failed, {stuckEvents} stuck{events}";
+               $"since start: {paths} paths, {pathFailures} failed, {stuckEvents} stuck{events}" +
+               (Reputation < 1f ? $"; reputation ×{Reputation:0.##} ({ReputationWhy()})" : "");
     }
 
     private void Arrive(Customer c)

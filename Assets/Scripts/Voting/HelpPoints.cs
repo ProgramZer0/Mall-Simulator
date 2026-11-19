@@ -24,6 +24,7 @@ public class HelpPoints : NetworkBehaviour
         FoundLostChild,       // customer AI
         StoppedThief,         // customer AI
         DeliveredForOthers,   // brought another team's delivery to their store
+        ReportedBroken,       // reported a broken light or screen (BreakManager)
     }
 
     [Serializable]
@@ -47,12 +48,15 @@ public class HelpPoints : NetworkBehaviour
         public override int GetHashCode() => clientId.GetHashCode() ^ points;
     }
 
-    [SerializeField] private List<Rule> rules = new()
+    [SerializeField] private List<Rule> rules = DefaultRules();
+
+    private static List<Rule> DefaultRules() => new()
     {
         new Rule { action = HelpAction.GaveUpUnusedLicense, points = 1, maxPerPeriod = 1, description = "gave up a license you didn't use" },
         new Rule { action = HelpAction.FoundLostChild, points = 1, maxPerPeriod = 3, description = "helped a lost child" },
         new Rule { action = HelpAction.StoppedThief, points = 1, maxPerPeriod = 3, description = "stopped a thief" },
         new Rule { action = HelpAction.DeliveredForOthers, points = 1, maxPerPeriod = 2, description = "delivered another store's order" },
+        new Rule { action = HelpAction.ReportedBroken, points = 1, maxPerPeriod = 3, description = "reported something broken" },
     };
 
     [Header("Votes")]
@@ -76,7 +80,16 @@ public class HelpPoints : NetworkBehaviour
             return;
         }
         Instance = this;
+        AddMissingRules();
         points = new NetworkList<PlayerPoints>(null, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    }
+
+    // A kind of help added after the scene was saved gets its default rule (a scene's list keeps what was
+    // saved in it, so new kinds would otherwise never count).
+    private void AddMissingRules()
+    {
+        foreach (var d in DefaultRules())
+            if (!rules.Exists(r => r.action == d.action)) rules.Add(d);
     }
 
     public override void OnNetworkSpawn()
