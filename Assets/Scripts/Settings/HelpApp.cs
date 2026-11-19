@@ -148,12 +148,12 @@ public class HelpApp : MonoBehaviour, IPhoneApp
         new() { id = "controls", title = "Controls", body =
             "<b>WASD</b> move   <b>Mouse</b> look\n<b>Shift</b> sprint   <b>Space</b> jump   <b>Ctrl</b> crouch\n" +
             "<b>F</b> use / pick up / put down   <b>Left click</b> place or click\n" +
-            "<b>Esc</b> phone   <b>Tab</b> notifications\n<b>1</b> price scanner   <b>2</b> paint brush\n" +
+            "<b>Esc</b> / <b>Tab</b> phone\n<b>1</b> price scanner   <b>2</b> paint brush\n" +
             "<b>0</b> edit your store   <b>I</b> store checker\n<b>L</b> lock or unlock a door\n\n" +
             "The prompt in the middle of the screen always says what <b>F</b> will do with what you're looking at." },
         new() { id = "phone", title = "Your phone", body =
-            "<b>Esc</b> brings the phone up on its home screen, <b>Tab</b> straight onto your notifications. " +
-            "Esc again goes back to the home screen, then puts it away.\n\n" +
+            "<b>Esc</b> or <b>Tab</b> brings the phone up where you left it, or on whatever's new: a lost child opens " +
+            "Lost & Found, a new notification opens Notifications. Press again to put it away; <b>Back</b> goes home.\n\n" +
             "<b>Notifications:</b> everything that's happened to you and your store.\n" +
             "<b>Help:</b> this. When something happens for the first time, a tip comes up in the corner: bring the " +
             "phone up while it's there and it opens here on that topic.\n" +

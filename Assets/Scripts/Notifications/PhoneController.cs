@@ -24,11 +24,14 @@ public interface IPhoneApp
 /// The player's phone, held up in front of the camera with its UI on the phone itself (like the shop
 /// on the monitor), so the screen always fits the phone. Purely local.
 ///
-/// Keys:
-/// - Esc: brings the phone up on its home screen; Esc again goes back to home, then puts it away.
-///   Esc that something else used first (closing the shop, cancelling a drag, the scanner...) doesn't
-///   bring it up (see UIState.TakeEscape).
-/// - Tab: brings it up straight on the Notifications app; Tab again puts it away.
+/// Keys (Esc and Tab both):
+/// - Bring the phone up where it was left (the app it was on, or home), unless something new came in
+///   while it was down. Then, first match: a first-time Help tip that's still up opens Help; a child
+///   lost since (and still lost) opens Lost & Found; a new notification opens Notifications.
+/// - Again: put it away (Esc first goes back to home if Esc Backs Out To Home is on). The phone's Back
+///   button goes home.
+/// Esc that something else used first (closing the shop, cancelling a drag, the scanner...) doesn't
+/// bring it up (see UIState.TakeEscape).
 /// While it's up the cursor is free and the player stands still, like other menus.
 ///
 /// Setup: put this on any always-on object (e.g. the HUD canvas), or on the player prefab: there, only
@@ -50,8 +53,12 @@ public class PhoneController : MonoBehaviour
 
     [SerializeField] private KeyCode homeKey = KeyCode.Escape;
     [SerializeField] private KeyCode notificationsKey = KeyCode.Tab;
-    [Tooltip("The app Tab opens (its App Name).")]
+    [Tooltip("The app opened when a new notification came in while the phone was down (its App Name).")]
     [SerializeField] private string notificationsApp = "Notifications";
+    [Tooltip("The app opened when a child got lost while the phone was down (its App Name).")]
+    [SerializeField] private string lostAndFoundApp = "Lost & Found";
+    [Tooltip("Off: Esc with the phone up puts it away, like Tab, so it comes back on the same app. On: Esc goes back to home first, then puts it away.")]
+    [SerializeField] private bool escBacksOutToHome;
 
     [Tooltip("Optional HUD text: {0} = unread count. Empty when nothing's unread.")]
     [SerializeField] private TMP_Text hintText;
@@ -62,6 +69,8 @@ public class PhoneController : MonoBehaviour
     private bool ownerChecked;
     private float raisedAt;
     private int closedFrame = -1; // the key that put it away mustn't bring it straight back up
+    private string lastApp; // where it was put away (null: home)
+    private bool newNote, newLost; // came in while it was down
 
     // Reset once per play (not per copy: another player's copy appearing mustn't mark ours shut).
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -85,6 +94,8 @@ public class PhoneController : MonoBehaviour
     private void OnEnable()
     {
         Notifications.Changed += RefreshHint;
+        Notifications.Posted += OnPosted;
+        CustomerManager.LostCaseOpened += OnLostCase;
         ownerChecked = false;
         // First-time tips need the Help topics before the phone's ever been brought up.
         if (HelpApp.Prefab == null && phonePrefab != null) HelpApp.Prefab = phonePrefab.GetComponentInChildren<HelpApp>(true);
@@ -94,6 +105,8 @@ public class PhoneController : MonoBehaviour
     private void OnDisable()
     {
         Notifications.Changed -= RefreshHint;
+        Notifications.Posted -= OnPosted;
+        CustomerManager.LostCaseOpened -= OnLostCase;
         if (IsOpen && phone != null) Close();
     }
 
@@ -106,7 +119,7 @@ public class PhoneController : MonoBehaviour
         if (Input.GetKeyDown(homeKey))
         {
             if (homeKey == KeyCode.Escape) UIState.MarkEscapeTaken();
-            if (phone != null && !phone.OnHome) phone.ShowHome();
+            if (escBacksOutToHome && phone != null && !phone.OnHome) phone.ShowHome();
             else Close();
         }
         if (phone != null) Raise();
@@ -115,8 +128,25 @@ public class PhoneController : MonoBehaviour
     private void LateUpdate()
     {
         if (!IsMine || IsOpen || closedFrame == Time.frameCount || UIState.IsMenuOpen || !InGame()) return;
-        if (Input.GetKeyDown(notificationsKey)) Open(notificationsApp);
-        else if (Input.GetKeyDown(homeKey) && !(homeKey == KeyCode.Escape && UIState.EscapeTakenThisFrame)) Open(null);
+        if (Input.GetKeyDown(notificationsKey) ||
+            (Input.GetKeyDown(homeKey) && !(homeKey == KeyCode.Escape && UIState.EscapeTakenThisFrame)))
+            Open(ResumeApp());
+    }
+
+    private void OnPosted(Note note) { if (!IsOpen) newNote = true; }
+    private void OnLostCase(CustomerManager.LostCase lost) { if (!IsOpen) newLost = true; }
+
+    // Where the keys bring it up: something new that came in while it was down, else where it was left.
+    // (A first-time Help tip is handled in Open.)
+    private string ResumeApp()
+    {
+        if (newLost)
+        {
+            var cm = CustomerManager.Instance;
+            if (cm != null && cm.LostCases.Count > 0) return lostAndFoundApp;
+        }
+        if (newNote) return notificationsApp;
+        return lastApp;
     }
 
     // Playing (not in store edit mode: its own camera is on and the player's, which holds the phone, is
@@ -142,6 +172,7 @@ public class PhoneController : MonoBehaviour
         raisedAt = Time.unscaledTime;
         Raise();
         UIState.OpenMenu(this);
+        newNote = newLost = false;
         if (app == null || !phone.ShowApp(app)) phone.ShowHome();
     }
 
@@ -152,6 +183,7 @@ public class PhoneController : MonoBehaviour
         closedFrame = Time.frameCount;
         if (phone != null)
         {
+            lastApp = phone.CurrentApp;
             phone.CloseApps();
             phone.gameObject.SetActive(false);
         }
