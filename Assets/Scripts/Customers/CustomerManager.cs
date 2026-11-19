@@ -122,7 +122,15 @@ public partial class CustomerManager : NetworkBehaviour
              "market price it is). E.g. 3: at double the market price, 4× as likely. A personality with Shoplift " +
              "Chance 0 never steals.")]
     [Min(0f)] [SerializeField] private float overpriceTemptation = 3f;
-    [Tooltip("The most a high price can multiply someone's Shoplift Chance by.")]
+    [Tooltip("Tempted by something valuable in a shabby store: Shoplift Chance also times (1 + this × how valuable it is × " +
+             "how far the store's Quality is under Low Appeal Quality). E.g. 4: a top-value item in a store with " +
+             "Quality 0 is 5× as likely to be stolen.")]
+    [Min(0f)] [SerializeField] private float lowAppealTemptation = 4f;
+    [Tooltip("Store Quality (0-1) under which valuable things start tempting thieves (the lower, the more).")]
+    [Range(0.05f, 1f)] [SerializeField] private float lowAppealQuality = 0.5f;
+    [Tooltip("What counts as valuable: a market price (per product, dollars) from x (not at all) to y (fully).")]
+    [SerializeField] private Vector2 valuableDollars = new(40f, 400f);
+    [Tooltip("The most a high price (and a valuable item in a shabby store) can multiply someone's Shoplift Chance by.")]
     [Min(1f)] [SerializeField] private float maxTemptation = 10f;
     [Tooltip("Chance a shoplifter's theft sets off the alarm as they leave the store (Theft Resistance perks add to it). " +
              "The store's team is told straight away and can still catch them before they leave the mall.")]
@@ -1691,13 +1699,23 @@ public partial class CustomerManager : NetworkBehaviour
         s.item != null && s.item.TryGetComponent<ItemPickupNet>(out var p) && p.IsStockCrate ? Mathf.Max(1, p.Units) : 1;
 
     // How much a price over the market one multiplies the chance of stealing it (1 = not over).
-    private float Temptation(StoreListing.Source s)
+    private float Temptation(StoreListing.Source s, StorePlot plot)
     {
         var catalog = ItemCatalog.Instance;
         if (catalog == null || !catalog.TryGet(s.itemId, out var def)) return 1f;
-        int market = MarketModifiers.MarketPriceCents(def) * UnitsOf(s);
-        if (market <= 0 || s.priceCents <= market) return 1f;
-        return Mathf.Min(maxTemptation, 1f + overpriceTemptation * (s.priceCents / (float)market - 1f));
+        int perUnit = MarketModifiers.MarketPriceCents(def);
+        int market = perUnit * UnitsOf(s);
+        float t = 1f;
+        // Priced over what it's worth.
+        if (market > 0 && s.priceCents > market) t *= 1f + overpriceTemptation * (s.priceCents / (float)market - 1f);
+        // Something valuable in a store that doesn't look the part (GDD: luxury goods in a low-prestige store).
+        if (plot != null && lowAppealTemptation > 0f)
+        {
+            float valuable = Mathf.InverseLerp(valuableDollars.x, valuableDollars.y, perUnit / 100f);
+            float shabby = Mathf.Clamp01((lowAppealQuality - plot.Appeal.Quality) / lowAppealQuality);
+            t *= 1f + lowAppealTemptation * valuable * shabby;
+        }
+        return Mathf.Min(maxTemptation, t);
     }
 
     // The cheapest price per product of each thing across the open stores, gathered every couple of seconds.
@@ -1763,9 +1781,10 @@ public partial class CustomerManager : NetworkBehaviour
             return;
         }
 
-        // A price well over the market one tempts them: their usual chance of stealing, multiplied.
+        // A price well over the market one, or something valuable in a shabby store, tempts them: their usual
+        // chance of stealing, multiplied.
         if (!c.thief && s.container != null && c.personality.shopliftChance > 0f &&
-            Random.value < c.personality.shopliftChance * eventShoplifting * Temptation(s))
+            Random.value < c.personality.shopliftChance * eventShoplifting * Temptation(s, plot))
         {
             c.thief = true;
             Log(c, $"tempted by {CheckoutCounter.NameOf(s.itemId)} at {CheckoutCounter.FormatAmount(s.priceCents)}: stealing it");

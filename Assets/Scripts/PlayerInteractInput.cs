@@ -116,6 +116,7 @@ public class PlayerInteractInput : NetworkBehaviour
             lookedAtCustomer = 0;
             lookedAtBroken = null;
             lookedAtCart = null;
+            lookedAtOtherCart = null;
             lookedAtDoor = null;
             lookedAtCounter = null;
             lookedAtCheckoutPart = null;
@@ -153,6 +154,7 @@ public class PlayerInteractInput : NetworkBehaviour
 
     private ForSaleSign lookedAtSign;
     private CartNet lookedAtCart; // a cart you could start pushing
+    private CartNet lookedAtOtherCart; // another store's cart (to report if it's left in the way)
     private DoorNet lookedAtDoor; // a door you can open/close with F (and maybe lock with L)
     private CheckoutCounter lookedAtCounter;        // your store's checkout counter
     private CheckoutClickable lookedAtCheckoutPart; // a part of it to click: something on the belt, a key, the drawer...
@@ -194,6 +196,7 @@ public class PlayerInteractInput : NetworkBehaviour
         lookedAtMonitor = null;
         lookedAtVote = null;
         lookedAtCart = null;
+        lookedAtOtherCart = null;
         lookedAtDoor = null;
         lookedAtCounter = null;
         lookedAtCheckoutPart = null;
@@ -211,6 +214,12 @@ public class PlayerInteractInput : NetworkBehaviour
                 !cart.IsPushed && hit.collider.GetComponentInParent<ItemPickupNet>() == null &&
                 cart.InGrabRange(transform.position)) // close enough to its handle
                 lookedAtCart = cart;
+            // Another store's cart (its body), close by: maybe left in the way.
+            else if (cart != null && pushedCart == null && !cart.CanUse(OwnerClientId) && !cart.IsPushed &&
+                     hit.collider.GetComponentInParent<ItemPickupNet>() == null &&
+                     Vector3.Distance(transform.position, cart.BodyCenter) <= 4f &&
+                     cart.ReportPrompt(OwnerClientId) != null)
+                lookedAtOtherCart = cart;
 
             if (inventory.HeldItemId.Value == 0)
             {
@@ -665,11 +674,12 @@ public class PlayerInteractInput : NetworkBehaviour
         if (!IsOwner || (lookedAtSign == null && lookedAtMonitor == null && stockTarget == null &&
                          lookedAtCart == null && pushedCart == null && lookedAtDoor == null &&
                          lookedAtCounter == null && lookedAtPickup == null && lookedAtBuy == null && lookedAtVote == null &&
-                         !lookedAtBuriedCartItem && lookedAtCustomer == 0 && lookedAtBroken == null) ||
+                         !lookedAtBuriedCartItem && lookedAtCustomer == 0 && lookedAtBroken == null && lookedAtOtherCart == null) ||
             (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return null;
 
         return pushedCart != null ? "F: Let go of cart"
                     : lookedAtCart != null ? "F: Push cart"
+                    : lookedAtOtherCart != null && lookedAtPickup == null ? lookedAtOtherCart.ReportPrompt(OwnerClientId)
                     : lookedAtDoor != null ? DoorPrompt()
                     : lookedAtCounter != null ? (lookedAtCheckoutPart != null
                         ? lookedAtCheckoutPart.Counter.PromptFor(lookedAtCheckoutPart, OwnerClientId) ?? lookedAtCounter.StatusFor(OwnerClientId)
@@ -986,6 +996,12 @@ public class PlayerInteractInput : NetworkBehaviour
         if (lookedAtCart != null)
         {
             lookedAtCart.RequestPushRpc();
+            return;
+        }
+        // Another store's cart left in the way: report it.
+        if (lookedAtOtherCart != null && lookedAtPickup == null && lookedAtOtherCart.CanReport(OwnerClientId, out _))
+        {
+            lookedAtOtherCart.RequestReportRpc();
             return;
         }
 
