@@ -21,10 +21,15 @@ public class EditAppealView : MonoBehaviour
     public const KeyCode ToggleKey = KeyCode.V;
 
     [Header("Colors")]
+    [Tooltip("Everything in the store is drawn in this while the view's on (a plain model look), so the " +
+             "highlights stand out.")]
+    [SerializeField] private Color greyColor = new(0.84f, 0.86f, 0.88f, 1f);
     [Tooltip("The floor where passers-by can see in from the hallway.")]
-    [SerializeField] private Color seenFloorColor = new(0.3f, 0.75f, 1f, 0.28f);
-    [Tooltip("Outline of things for sale passers-by can see.")]
-    [SerializeField] private Color seenColor = new(0.2f, 1f, 0.35f, 1f);
+    [SerializeField] private Color seenFloorColor = new(0.3f, 0.7f, 1f, 0.22f);
+    [Tooltip("Things for sale passers-by can see from the hallway.")]
+    [SerializeField] private Color seenColor = new(0.15f, 0.55f, 1f, 0.55f);
+    [Tooltip("Things for sale passers-by can't see.")]
+    [SerializeField] private Color hiddenColor = new(1f, 0.6f, 0.15f, 0.55f);
     [SerializeField] private Color goodColor = new(0.2f, 1f, 0.35f, 1f);
     [SerializeField] private Color badColor = new(1f, 0.25f, 0.2f, 1f);
     [Tooltip("How see-through the red/green shading of things near the selected item is.")]
@@ -73,6 +78,7 @@ public class EditAppealView : MonoBehaviour
         if (lines != null) Destroy(lines);
         if (fills != null) Destroy(fills);
         if (lineMaterial != null) Destroy(lineMaterial);
+        if (greyMaterial != null) Destroy(greyMaterial);
     }
 
     private void Update()
@@ -138,12 +144,14 @@ public class EditAppealView : MonoBehaviour
         shown = true;
         drawnRevision = -1;
         nextPanel = 0f;
+        GreyStore();
     }
 
     // Hide (the preview's kept for this edit, so the ▲/▼ still count from the first look), or end it.
     private void Close(bool end)
     {
         shown = false;
+        RestoreGrey();
         foreach (var t in tags) if (t != null) t.gameObject.SetActive(false);
         foreach (var t in nearTags) if (t != null) t.gameObject.SetActive(false);
         drawnSelection = null;
@@ -159,6 +167,84 @@ public class EditAppealView : MonoBehaviour
         tags.Clear();
         foreach (var t in nearTags) if (t != null) Destroy(t.gameObject);
         nearTags.Clear();
+    }
+
+    /* ========================= GREY ========================= */
+
+    // Everything in the store (walls, floor, furniture, the edit copies) in one plain grey while the view's
+    // on, put back as it was after. Each renderer's own materials and paint (property block) are kept.
+    private readonly Dictionary<Renderer, (Material[] materials, MaterialPropertyBlock block)> greyed = new();
+    private Material greyMaterial;
+    private readonly Dictionary<int, Material[]> greyArrays = new();
+
+    private void GreyStore()
+    {
+        var plot = editor.EditPlot;
+        if (plot == null) return;
+        if (greyMaterial == null)
+        {
+            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            if (shader == null) return;
+            greyMaterial = new Material(shader) { name = "Appeal View Grey", hideFlags = HideFlags.DontSave };
+            if (greyMaterial.HasProperty("_BaseColor")) greyMaterial.SetColor("_BaseColor", greyColor);
+            if (greyMaterial.HasProperty("_Color")) greyMaterial.SetColor("_Color", greyColor);
+            if (greyMaterial.HasProperty("_Smoothness")) greyMaterial.SetFloat("_Smoothness", 0.1f);
+        }
+        var bounds = plot.GetWorldBounds();
+        bounds.Expand(new Vector3(1.5f, 0.5f, 1.5f));
+        EditLocalItem.RealMaterials = RealMaterialsOf;
+        foreach (var r in FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+        {
+            if (r == null || !r.enabled || !r.gameObject.activeInHierarchy) continue;
+            if (greyed.ContainsKey(r))
+            {
+                // Put back to its own look meanwhile (an edit copy un-faded after a drag): grey again.
+                var now = r.sharedMaterials;
+                var copy = r.GetComponentInParent<EditLocalItem>();
+                if (now.Length > 0 && now[0] != greyMaterial && (copy == null || !copy.Faded))
+                    r.sharedMaterials = GreyArray(now.Length);
+                continue;
+            }
+            if (r is ParticleSystemRenderer || r is LineRenderer || r is TrailRenderer || r is SpriteRenderer) continue;
+            if (r.GetComponent<TMP_Text>() != null || r.GetComponentInParent<CharacterController>() != null) continue;
+            if (!bounds.Intersects(r.bounds)) continue;
+            var mats = r.sharedMaterials;
+            MaterialPropertyBlock block = null;
+            if (r.HasPropertyBlock())
+            {
+                block = new MaterialPropertyBlock();
+                r.GetPropertyBlock(block);
+            }
+            greyed[r] = (mats, block);
+            r.sharedMaterials = GreyArray(mats.Length);
+            r.SetPropertyBlock(null);
+        }
+    }
+
+    private Material[] GreyArray(int length)
+    {
+        if (!greyArrays.TryGetValue(length, out var grey))
+        {
+            grey = new Material[length];
+            for (int i = 0; i < grey.Length; i++) grey[i] = greyMaterial;
+            greyArrays[length] = grey;
+        }
+        return grey;
+    }
+
+    private Material[] RealMaterialsOf(Renderer r) => greyed.TryGetValue(r, out var v) ? v.materials : null;
+
+    private void RestoreGrey()
+    {
+        if (EditLocalItem.RealMaterials == (System.Func<Renderer, Material[]>)RealMaterialsOf) EditLocalItem.RealMaterials = null;
+        foreach (var kv in greyed)
+        {
+            var r = kv.Key;
+            if (r == null) continue;
+            r.sharedMaterials = kv.Value.materials;
+            r.SetPropertyBlock(kv.Value.block);
+        }
+        greyed.Clear();
     }
 
     /* ========================= PANEL ========================= */
@@ -192,7 +278,7 @@ public class EditAppealView : MonoBehaviour
             foreach (var h in hints) sb.Append("• ").Append(h).Append('\n');
             sb.Append("</size>");
         }
-        sb.Append("<size=70%><color=#6bf>Blue floor</color>: seen from the hallway   <color=#5f5>green outline</color>: products seen\n" +
+        sb.Append("<size=70%><color=#4af>Blue</color>: seen from the hallway (floor and things for sale)   <color=#fa4>orange</color>: for sale, not seen\n" +
                   "Select an item: what's near it, <color=#f55>red</color> (bad) to <color=#5f5>green</color> (good)</size>");
         panelText = sb.ToString();
 
@@ -239,10 +325,16 @@ public class EditAppealView : MonoBehaviour
 
         ShadeSeenFloor();
 
-        // Things for sale passers-by can see: outlined green.
+        // Things for sale: solid boxes, blue where passers-by can see them, orange where they can't.
         foreach (var o in offers)
-            if (o.seenFromOutside && TryOfferBox(o, out var c, out var rot, out var size))
-                WireBox(baseLines, baseLineColors, c, rot, size, seenColor);
+            if (TryOfferBox(o, out var c, out var rot, out var size))
+            {
+                var color = o.seenFromOutside ? seenColor : hiddenColor;
+                SolidBox(baseFills, baseFillColors, c, rot, size, color);
+                color.a = 1f;
+                WireBox(baseLines, baseLineColors, c, rot, size, color);
+            }
+        GreyStore(); // anything new (a window just put in) goes grey too
 
         BuildTags();
         BuildMeshes();
