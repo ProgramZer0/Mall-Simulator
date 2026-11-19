@@ -203,11 +203,52 @@ public class StoreEditController : NetworkBehaviour
     /// <summary>True while this player is in edit mode. PlayerController / PlayerInteractInput pause on it.</summary>
     public bool IsEditing => editPlot != null;
 
+    // Which copy stands in for which real item (by the real one's network id), and which copies were made.
+    private readonly Dictionary<ulong, int> editIndexOfLive = new();
+    private readonly HashSet<int> createdCopies = new();
+
+    /// <summary>The store being edited (null: not editing).</summary>
+    public StorePlot EditPlot => editPlot;
+    /// <summary>The copies of the store's items (by session index; null: taken out, or never made).</summary>
+    public IReadOnlyList<EditLocalItem> EditCopies => localItems;
+    /// <summary>Windows, doors and wall items put in this edit (no real object yet).</summary>
+    public IReadOnlyList<EditLocalItem> AddedEditCopies => addedItems;
+    /// <summary>Something's being dragged or placed right now.</summary>
+    public bool EditBusy => (selected != null && selected.IsDragging) || placing != null || kitBox != null;
+
+    /// <summary>
+    /// The edit copy of a real item (or of what's on it): true and the copy; true and null: taken out this
+    /// edit; false: not part of the edit.
+    /// </summary>
+    public bool TryGetEditCopy(Component real, out EditLocalItem copy)
+    {
+        copy = null;
+        if (real == null || !IsEditing) return false;
+        var no = real.GetComponentInParent<NetworkObject>();
+        if (no == null || !editIndexOfLive.TryGetValue(no.NetworkObjectId, out int index)) return false;
+        if (index < localItems.Count) copy = localItems[index];
+        return copy != null || createdCopies.Contains(index);
+    }
+
+    /// <summary>The real item a copy stands in for (null: bought this edit, or not found).</summary>
+    public NetworkObject RealOf(EditLocalItem copy) => copy != null ? RealAt(copy.Index) : null;
+
+    /// <summary>The real item at a session index (null: none, or not found).</summary>
+    public NetworkObject RealAt(int index)
+    {
+        if (index < 0 || NetworkManager == null) return null;
+        foreach (var kv in editIndexOfLive)
+            if (kv.Value == index)
+                return NetworkManager.SpawnManager.SpawnedObjects.TryGetValue(kv.Key, out var no) ? no : null;
+        return null;
+    }
+
     /* ========================= LIFECYCLE ========================= */
 
     private void Awake()
     {
         interact = GetComponent<PlayerInteractInput>();
+        if (GetComponent<EditAppealView>() == null) gameObject.AddComponent<EditAppealView>(); // the appeal view (V)
     }
 
     public override void OnNetworkSpawn()
@@ -459,6 +500,8 @@ public class StoreEditController : NetworkBehaviour
         foreach (var item in localItems)
             if (item != null) Destroy(item.gameObject);
         localItems.Clear();
+        editIndexOfLive.Clear();
+        createdCopies.Clear();
         foreach (var item in addedItems)
             if (item != null) Destroy(item.gameObject);
         addedItems.Clear();
@@ -2398,7 +2441,8 @@ public class StoreEditController : NetworkBehaviour
         hudStatus = $"Selected: {itemName}   Tool: {toolName}   Gravity: {gravity}";
         hudControls = $"{K("Drag")} item: slide   {K("X")}: move > rotate > hide   {K(rotateKey)}: rotate (on a wall: turn around)   {K("G")}: gravity\n" +
                       $"{K("Ctrl")}: no snap   {K("RMB")} drag: camera   {K("RMB")} click / {K("Esc")}: deselect\n" +
-                      $"{K("Click")} a box: put in its window, door or front wall   {K(wallToolKey)}: build walls   {K(toggleKey)}: save & exit";
+                      $"{K("Click")} a box: put in its window, door or front wall   {K(wallToolKey)}: build walls   {K(toggleKey)}: save & exit\n" +
+                      $"{K(EditAppealView.ToggleKey)}: appeal view";
         hudInfo = openingInfo;
     }
 
@@ -2606,6 +2650,7 @@ public class StoreEditController : NetworkBehaviour
             int index = start + k;
             while (localItems.Count <= index) localItems.Add(null);
             if (localItems[index] != null) continue; // duplicate message
+            if (netIds != null && k < netIds.Length && netIds[k] != ulong.MaxValue) editIndexOfLive[netIds[k]] = index;
 
             if (catalog == null || !catalog.TryGet(itemIds[k], out var def) || def.worldNetworkPrefab == null)
             {
@@ -2613,6 +2658,7 @@ public class StoreEditController : NetworkBehaviour
                 continue;
             }
             localItems[index] = EditLocalItem.Create(def, index, positions[k], rotations[k]);
+            createdCopies.Add(index);
             if (paints != null && k < paints.Length && paints[k] != 0) localItems[index].SetPaint(paints[k]); // shown as it is
             if (netIds != null && k < netIds.Length) HideLive(netIds[k]);
         }
