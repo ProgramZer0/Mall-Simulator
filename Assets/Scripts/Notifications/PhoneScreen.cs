@@ -33,6 +33,8 @@ public class PhoneScreen : MonoBehaviour
     private int current = -1; // -1 = home
 
     public bool OnHome => current < 0;
+    /// <summary>The open app's App Name, or null on the home screen.</summary>
+    public string CurrentApp => current >= 0 && current < apps.Count ? ((IPhoneApp)apps[current]).AppName : null;
 
     /// <summary>Called once by PhoneController after it makes the phone.</summary>
     public void Init(Camera cam)
