@@ -18,7 +18,7 @@ public class PlayerNameTag : NetworkBehaviour
     private readonly NetworkVariable<FixedString64Bytes> playerName =
         new(default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    private TextMeshPro tag;
+    private TextMeshPro label;
 
     /// <summary>This player's name (every machine).</summary>
     public string PlayerName => playerName.Value.ToString();
@@ -50,12 +50,12 @@ public class PlayerNameTag : NetworkBehaviour
     public override void OnNetworkDespawn()
     {
         playerName.OnValueChanged -= OnNameChanged;
-        if (tag != null) Destroy(tag.gameObject);
+        if (label != null) Destroy(label.gameObject);
     }
 
     private void OnNameChanged(FixedString64Bytes previous, FixedString64Bytes current)
     {
-        if (tag != null) tag.text = current.ToString();
+        if (label != null) label.text = current.ToString();
     }
 
     private void Build()
@@ -63,23 +63,23 @@ public class PlayerNameTag : NetworkBehaviour
         var go = new GameObject("Name Tag");
         go.transform.SetParent(transform, false);
         go.transform.localPosition = Vector3.up * height;
-        tag = go.AddComponent<TextMeshPro>();
-        tag.alignment = TextAlignmentOptions.Center;
-        tag.fontSize = fontSize;
-        tag.color = color;
-        tag.outlineWidth = 0.2f;
-        tag.rectTransform.sizeDelta = new Vector2(4f, 0.6f);
-        tag.text = PlayerName;
+        label = go.AddComponent<TextMeshPro>();
+        label.alignment = TextAlignmentOptions.Center;
+        label.fontSize = fontSize;
+        label.color = color;
+        label.outlineWidth = 0.2f;
+        label.rectTransform.sizeDelta = new Vector2(4f, 0.6f);
+        label.text = PlayerName;
     }
 
     private void LateUpdate()
     {
-        if (tag == null) return;
+        if (label == null) return;
         var cam = Camera.main;
         if (cam == null) return;
-        Vector3 d = tag.transform.position - cam.transform.position;
+        Vector3 d = label.transform.position - cam.transform.position;
         bool show = showWithin <= 0f || d.sqrMagnitude <= showWithin * showWithin;
-        if (tag.gameObject.activeSelf != show) tag.gameObject.SetActive(show);
-        if (show && d.sqrMagnitude > 1e-4f) tag.transform.rotation = Quaternion.LookRotation(d);
+        if (label.gameObject.activeSelf != show) label.gameObject.SetActive(show);
+        if (show && d.sqrMagnitude > 1e-4f) label.transform.rotation = Quaternion.LookRotation(d);
     }
 }

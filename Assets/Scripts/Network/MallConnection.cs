@@ -140,7 +140,7 @@ public class MallConnection : MonoBehaviour
         var t = Transport;
         if (nm == null || t == null) return "No NetworkManager with a Unity Transport.";
         if (nm.IsListening) return "Already in a mall.";
-        t.SetProtocol(UnityTransport.ProtocolType.UnityTransport); // (after trying online: back to direct)
+        // (SetConnectionData also switches the transport back from Relay to direct, after trying online.)
         t.SetConnectionData("127.0.0.1", port, "0.0.0.0");
         JoinCode = null;
         relayHost = false;
@@ -283,7 +283,6 @@ public class MallConnection : MonoBehaviour
             catch { ip = null; }
             if (ip == null) return "That isn't an IP address.";
         }
-        t.SetProtocol(UnityTransport.ProtocolType.UnityTransport);
         t.SetConnectionData(ip, port);
         JoinCode = null;
         return StartJoining();
