@@ -14,6 +14,8 @@ using UnityEngine.UI;
 /// - Apps: panels under the canvas with an IPhoneApp component (NotificationsApp, PhoneInfoApp...).
 ///   They're found by themselves; the home screen lists them in hierarchy order.
 /// - Optional: Title Text (the open app's name, or Home Title), Back Button (back to home).
+/// - In the office (the lobby, the main menu scene) only Office Apps are on it; Office Only Apps (Quit)
+///   are only there. (By App Name.)
 /// </summary>
 public class PhoneScreen : MonoBehaviour
 {
@@ -27,6 +29,10 @@ public class PhoneScreen : MonoBehaviour
     [SerializeField] private TMP_Text titleText;
     [SerializeField] private string homeTitle = "";
     [SerializeField] private Button backButton;
+    [Tooltip("The only apps on the phone in the office (the lobby). Empty: all of them.")]
+    [SerializeField] private string[] officeApps = { "Settings", "Help", "Quit" };
+    [Tooltip("Apps only on the phone in the office.")]
+    [SerializeField] private string[] officeOnlyApps = { "Quit" };
 
     private readonly List<MonoBehaviour> apps = new();
     private readonly List<PhoneAppButton> buttons = new();
@@ -52,6 +58,13 @@ public class PhoneScreen : MonoBehaviour
         foreach (var mb in GetComponentsInChildren<MonoBehaviour>(true))
             if (mb is IPhoneApp) apps.Add(mb);
         foreach (var app in apps) app.gameObject.SetActive(false);
+        bool office = MallConnection.Instance != null && MallConnection.Instance.InLobby;
+        apps.RemoveAll(a =>
+        {
+            string n = ((IPhoneApp)a).AppName;
+            return office ? officeApps != null && officeApps.Length > 0 && System.Array.IndexOf(officeApps, n) < 0
+                          : officeOnlyApps != null && System.Array.IndexOf(officeOnlyApps, n) >= 0;
+        });
 
         if (appGrid != null)
             foreach (var g in appGrid.GetComponents<LayoutGroup>()) g.enabled = false;

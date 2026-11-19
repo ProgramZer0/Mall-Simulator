@@ -23,7 +23,7 @@ public class MainMenu : MonoBehaviour
     /// <summary>In the menu scene (the old test buttons stay hidden).</summary>
     public static bool IsShowing { get; private set; }
     /// <summary>The terminal screen is up.</summary>
-    public static bool IsOpen => instance != null && instance.canvasRoot != null && instance.canvasRoot.activeSelf;
+    public static bool IsOpen => instance != null && instance.canvasRoot != null && instance.canvasRoot.activeSelf && !instance.zoomingBack;
     private static MainMenu instance;
 
     [SerializeField] private string title = "MALL SIM";
@@ -40,6 +40,11 @@ public class MainMenu : MonoBehaviour
     [SerializeField] private Color selectedButtonColor = new(0.2f, 0.7f, 0.35f, 1f);
     [SerializeField] private Color textColor = Color.white;
     [SerializeField] private TMP_FontAsset font;
+    [Header("On an office computer")]
+    [Tooltip("The screen's size on a computer, in UI pixels (width x height). It's scaled to the computer's Screen Width.")]
+    [SerializeField] private Vector2 referenceSize = new(1920f, 1080f);
+    [Tooltip("How long the camera takes to zoom in and back, in seconds.")]
+    [SerializeField, Min(0.01f)] private float zoomSeconds = 0.35f;
 
     private RectTransform panel;
     private GameObject canvasRoot;
@@ -70,7 +75,34 @@ public class MainMenu : MonoBehaviour
 
     private void Update()
     {
-        if (IsOpen && UIState.TakeEscape()) Close();
+        if (!IsOpen) return;
+        if (UIState.TakeEscape()) { Close(); return; }
+        // On a computer: F (when not typing) or right click steps back, like the shop monitor.
+        if (computer != null && Time.frameCount > openedFrame && !Typing() &&
+            (Input.GetKeyDown(KeyCode.F) || Input.GetMouseButtonDown(1)))
+            Close();
+    }
+
+    private static bool Typing()
+    {
+        var es = EventSystem.current;
+        var go = es != null ? es.currentSelectedGameObject : null;
+        return go != null && go.TryGetComponent<TMP_InputField>(out var field) && field.isFocused;
+    }
+
+    /// <summary>Bring the screen up on an office computer (the camera zooms in on it).</summary>
+    public static void OpenOn(OfficeComputer at)
+    {
+        if (instance == null)
+        {
+            Debug.LogWarning("[MainMenu] No MainMenu in this scene for the computer's screen.");
+            return;
+        }
+        var cam = Camera.main;
+        if (at == null || at.Screen == null || cam == null) { instance.Show(Page.Main); return; }
+        if (instance.canvasRoot == null) instance.BuildFrame();
+        instance.PutOnComputer(at, cam);
+        instance.Show(Page.Main);
     }
 
     /// <summary>Bring the terminal screen up on a page (from a LobbyAction).</summary>
@@ -88,6 +120,13 @@ public class MainMenu : MonoBehaviour
     {
         if (canvasRoot == null) BuildFrame();
         canvasRoot.SetActive(true);
+        openedFrame = Time.frameCount;
+        if (bgImage != null)
+        {
+            bool cover = coverScreen || computer != null;
+            bgImage.color = !cover ? dimColor : background != null ? Color.white : backgroundColor;
+            bgImage.sprite = cover ? background : null;
+        }
         UIState.OpenMenu(this);
         busy = false;
         switch (page)
@@ -104,8 +143,102 @@ public class MainMenu : MonoBehaviour
     /// <summary>Put the terminal screen away.</summary>
     public void Close()
     {
-        if (canvasRoot != null) canvasRoot.SetActive(false);
+        if (canvasRoot != null && computer == null) canvasRoot.SetActive(false);
+        if (computer != null) StartZoomBack(); // the screen goes off once the camera's back
         UIState.CloseMenu(this);
+    }
+
+    /* ========================= ON A COMPUTER ========================= */
+
+    private int openedFrame;
+    private Image bgImage;
+    private OfficeComputer computer;
+    private Camera viewCam;
+    private Transform camParent;
+    private Vector3 camLocalPos, zoomFromPos;
+    private Quaternion camLocalRot, zoomFromRot;
+    private float zoomT;
+    private bool zoomingBack;
+
+    private void PutOnComputer(OfficeComputer at, Camera viewer)
+    {
+        var canvas = canvasRoot.GetComponent<Canvas>();
+        var rect = (RectTransform)canvasRoot.transform;
+        canvasRoot.GetComponent<CanvasScaler>().enabled = false;
+        canvas.renderMode = RenderMode.WorldSpace;
+        canvas.worldCamera = viewer; // clicks are worked out from this camera
+        rect.SetParent(at.Screen, false);
+        rect.localPosition = Vector3.forward * 0.002f;
+        rect.localRotation = Quaternion.Euler(0f, 180f, 0f); // a world-space Canvas is seen from its -Z side
+        rect.sizeDelta = referenceSize;
+        float scale = at.ScreenWidth / Mathf.Max(1f, referenceSize.x);
+        rect.localScale = new Vector3(scale, scale, scale);
+
+        if (computer == null || viewCam != viewer)
+        {
+            camParent = viewer.transform.parent;
+            camLocalPos = viewer.transform.localPosition;
+            camLocalRot = viewer.transform.localRotation;
+        }
+        computer = at;
+        viewCam = viewer;
+        zoomFromPos = viewer.transform.position;
+        zoomFromRot = viewer.transform.rotation;
+        zoomT = 0f;
+        zoomingBack = false;
+    }
+
+    private void StartZoomBack()
+    {
+        if (zoomingBack) return;
+        if (viewCam == null) { TakeOffComputer(); return; }
+        zoomFromPos = viewCam.transform.position;
+        zoomFromRot = viewCam.transform.rotation;
+        zoomT = 0f;
+        zoomingBack = true;
+    }
+
+    private void TakeOffComputer()
+    {
+        if (canvasRoot != null)
+        {
+            canvasRoot.SetActive(false);
+            var canvas = canvasRoot.GetComponent<Canvas>();
+            var rect = (RectTransform)canvasRoot.transform;
+            rect.SetParent(transform, false);
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.worldCamera = null;
+            rect.localScale = Vector3.one;
+            rect.localRotation = Quaternion.identity;
+            canvasRoot.GetComponent<CanvasScaler>().enabled = true;
+        }
+        if (viewCam != null)
+        {
+            viewCam.transform.localPosition = camLocalPos;
+            viewCam.transform.localRotation = camLocalRot;
+        }
+        computer = null;
+        viewCam = null;
+        zoomingBack = false;
+    }
+
+    // After the player's own camera code (which stands still while a menu is open).
+    private void LateUpdate()
+    {
+        if (computer == null) return;
+        if (viewCam == null) { TakeOffComputer(); return; }
+        zoomT = Mathf.Min(1f, zoomT + Time.unscaledDeltaTime / zoomSeconds);
+        float t = zoomT * zoomT * (3f - 2f * zoomT);
+        if (!zoomingBack)
+        {
+            if (!computer.TryGetViewPose(viewCam, out Vector3 pos, out Quaternion rot)) { Close(); return; }
+            viewCam.transform.SetPositionAndRotation(Vector3.Lerp(zoomFromPos, pos, t), Quaternion.Slerp(zoomFromRot, rot, t));
+            return;
+        }
+        Vector3 homePos = camParent != null ? camParent.TransformPoint(camLocalPos) : camLocalPos;
+        Quaternion homeRot = camParent != null ? camParent.rotation * camLocalRot : camLocalRot;
+        viewCam.transform.SetPositionAndRotation(Vector3.Lerp(zoomFromPos, homePos, t), Quaternion.Slerp(zoomFromRot, homeRot, t));
+        if (zoomT >= 1f) TakeOffComputer();
     }
 
     private static bool Solo => Conn != null && Conn.CurrentMode == MallConnection.Mode.Solo;
@@ -120,13 +253,28 @@ public class MainMenu : MonoBehaviour
         Label(title, 64, FontStyles.Bold);
         NameInput();
         Gap();
-        if (Solo)
+        var mode = Conn != null ? Conn.CurrentMode : MallConnection.Mode.Off;
+        if (mode == MallConnection.Mode.Solo)
         {
-            UIButton("Host a mall", ShowHost);
-            UIButton("Join a mall", ShowJoin);
+            UIButton("Host a lobby", ShowHost);
+            UIButton("Join a friend", ShowJoin);
         }
-        UIButton("Close", Close);
-        UIButton("Quit", Quit);
+        else if (mode == MallConnection.Mode.Hosting)
+        {
+            var nm = Unity.Netcode.NetworkManager.Singleton;
+            Label(!string.IsNullOrEmpty(Conn.JoinCode) ? $"Join code: <b>{Conn.JoinCode}</b>"
+                  : $"Join at: <b>{MallConnection.LocalAddresses()} : {Conn.Port}</b>", 26);
+            if (nm != null) Label($"Players: {nm.ConnectedClientsIds.Count} / {Conn.MaxPlayers}", 22);
+            if (!string.IsNullOrEmpty(Conn.JoinCode)) UIButton("Copy the code", () => GUIUtility.systemCopyBuffer = Conn.JoinCode);
+            UIButton("Close the lobby (play alone)", () => { Close(); Conn.Leave(); });
+        }
+        else if (mode == MallConnection.Mode.Client)
+        {
+            Label("In a friend's lobby. The host opens the mall.", 22);
+            UIButton("Leave the lobby", () => { Close(); Conn.Leave(); });
+        }
+        UIButton(computer != null ? "Step back" : "Close", Close);
+        if (computer == null) UIButton("Quit", Quit);
     }
 
     private void ShowName()
@@ -223,7 +371,7 @@ public class MainMenu : MonoBehaviour
         await System.Threading.Tasks.Task.Yield();
         busy = false;
         if (error != null) SetStatus(error, true);
-        else if (this != null) Close(); // the lobby reloads open for friends
+        // (The lobby reloads open for friends; the screen goes with it.)
     }
 
     private async void JoinCode()
@@ -295,7 +443,7 @@ public class MainMenu : MonoBehaviour
 
         var bg = Rect("Background", canvasGo.transform);
         Stretch(bg);
-        var bgImage = bg.gameObject.AddComponent<Image>();
+        bgImage = bg.gameObject.AddComponent<Image>();
         bgImage.color = !coverScreen ? dimColor : background != null ? Color.white : backgroundColor;
         bgImage.sprite = coverScreen ? background : null;
         bgImage.preserveAspect = false;

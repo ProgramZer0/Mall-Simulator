@@ -12,13 +12,17 @@ using UnityEngine.Events;
 /// - Leave Lobby: the host closes the lobby (back to alone), a friend leaves it.
 /// - Change Name: the terminal screen with your name.
 /// - Quit: quits the game.
+/// - Plan New Mall (the drafting table): the host picks a new mall; it shows in the office window
+///   (OfficeMall).
+/// - Enter Mall (the door downstairs): the host opens the picked mall for everyone (alone: single
+///   player). Needs one picked first when the scene has an OfficeMall.
 ///
 /// Only When Usable: objects shown only while it does something for you (e.g. the start button only
 /// while hosting). On Used: hook for a sound or animation (door opening...).
 /// </summary>
 public class LobbyAction : MonoBehaviour, IPlayerUsable
 {
-    public enum Kind { NewMall, LoadSave, StartGame, Host, Join, LeaveLobby, ChangeName, Quit }
+    public enum Kind { NewMall, LoadSave, StartGame, Host, Join, LeaveLobby, ChangeName, Quit, PlanNewMall, EnterMall }
 
     [SerializeField] private Kind action;
     [Tooltip("Load Save: the save this opens.")]
@@ -66,6 +70,23 @@ public class LobbyAction : MonoBehaviour, IPlayerUsable
                      : mode == MallConnection.Mode.Client ? "F: Leave the lobby" : null;
             case Kind.ChangeName:
                 return "F: Change your name";
+            case Kind.PlanNewMall:
+            {
+                if (!c.InLobby) return null;
+                var office = OfficeMall.Instance;
+                if (office == null) return null;
+                if (!host) return "The host plans the mall";
+                return office.Choice == OfficeMall.NewMall ? "A new mall is planned" : "F: Plan a new mall";
+            }
+            case Kind.EnterMall:
+            {
+                if (!c.InLobby) return null;
+                if (mode == MallConnection.Mode.Client) return "Waiting for the host to open the mall";
+                if (!host) return null;
+                var office = OfficeMall.Instance;
+                if (office != null && !office.HasChoice) return "Plan a mall at the drafting table first";
+                return mode == MallConnection.Mode.Solo ? "F: Enter the mall" : $"F: Enter the mall with everyone ({PlayerCount()} players)";
+            }
             case Kind.Quit:
                 return "F: Quit the game";
         }
@@ -94,6 +115,8 @@ public class LobbyAction : MonoBehaviour, IPlayerUsable
             case Kind.ChangeName: MainMenu.Open(MainMenu.Page.Name); break;
             case Kind.LeaveLobby: c.Leave(); break;
             case Kind.Quit: MainMenu.Quit(); break;
+            case Kind.PlanNewMall: if (OfficeMall.Instance != null) OfficeMall.Instance.ChooseNew(); break;
+            case Kind.EnterMall: error = c.StartGame(OfficeMall.Instance != null ? OfficeMall.Instance.SaveToLoad : null); break;
         }
         if (error != null)
         {

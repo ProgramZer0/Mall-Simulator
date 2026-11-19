@@ -11,7 +11,8 @@ using UnityEngine;
 public class LobbySign : MonoBehaviour
 {
     [SerializeField] private TMP_Text text;
-    [SerializeField] private string soloText = "Playing alone\nUse the Host door to play with friends";
+    [Tooltip("Shown when not in a lobby (playing alone).")]
+    [SerializeField] private string soloText = "Join / Host";
     [Tooltip("Messages (why you came back here) stay up this long (seconds).")]
     [SerializeField, Min(0f)] private float messageSeconds = 20f;
     [Tooltip("List everyone's names.")]
