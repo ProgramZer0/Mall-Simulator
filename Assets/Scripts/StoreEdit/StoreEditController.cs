@@ -61,6 +61,8 @@ public class StoreEditController : NetworkBehaviour
     [Tooltip("Log each step of starting edit mode (key press, checks on this machine, the host's answer), and why " +
              "the key was ignored, to track down edit mode not starting.")]
     [SerializeField] private bool logEditStart = true;
+    [Tooltip("Log why a window or door dragged over the floor can't be put back in its box there.")]
+    [SerializeField] private bool logBoxDrop;
 
     private void LogStart(string text)
     {
@@ -1396,14 +1398,14 @@ public class StoreEditController : NetworkBehaviour
         if (!PickWallSpot(ray, item, out var wall, out float u, out float v))
         {
             // Over the store's floor: letting go there puts it back in its box.
-            if (TryBoxDropSpot(ray, item, out Vector3 floorPoint))
+            if (TryBoxDropSpot(ray, item, out Vector3 floorPoint, out string whyNot))
             {
                 ShowBoxDrop(item, floorPoint);
                 openingInfo = "Let go here: back in its box";
                 return false;
             }
             HideBoxDrop(item);
-            openingInfo = "Point at one of your store's walls";
+            openingInfo = whyNot ?? "Point at one of your store's walls";
             item.SetFaded(true);
             return false;
         }
@@ -1458,20 +1460,38 @@ public class StoreEditController : NetworkBehaviour
     private GameObject boxDropGhostSource;
 
     // The store's floor under the mouse (away from its walls), where a dragged piece would be boxed.
-    private bool TryBoxDropSpot(Ray ray, EditLocalItem item, out Vector3 point)
+    private bool TryBoxDropSpot(Ray ray, EditLocalItem item, out Vector3 point) => TryBoxDropSpot(ray, item, out point, out _);
+
+    // Why Not: why it can't be boxed there (null: it's not over the store's floor at all).
+    private bool TryBoxDropSpot(Ray ray, EditLocalItem item, out Vector3 point, out string whyNot)
     {
         point = default;
-        if (editPlot == null || PlacementCheck.CartBoxOf(item.Def) == null) return false;
+        whyNot = null;
+        if (editPlot == null) return false;
+        if (PlacementCheck.CartBoxOf(item.Def) == null)
+        {
+            whyNot = $"{item.Def.displayName} has no delivery box of its own (Shipment Prefab), so it can't be boxed";
+            return false;
+        }
         if (!new Plane(Vector3.up, new Vector3(0f, editPlot.FloorHeight, 0f)).Raycast(ray, out float enter)) return false;
         point = ray.GetPoint(enter);
         if (!editPlot.Contains(point + Vector3.up * 0.1f)) return false;
+        // On the floor's real surface (the store's area can start a little above or below it, which would sink
+        // the box into the floor or float it).
+        if (Physics.Raycast(new Vector3(point.x, editPlot.FloorHeight + 1f, point.z), Vector3.down, out var floorHit, 2f,
+                            Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore) &&
+            Mathf.Abs(floorHit.point.y - editPlot.FloorHeight) < 0.5f && !floorHit.collider.transform.IsChildOf(item.transform))
+            point.y = floorHit.point.y;
         // Room for the box there (the items being edited count too).
         var prefab = PlacementCheck.CartBoxOf(item.Def).gameObject;
         int ground = LayerMask.NameToLayer("Ground");
         int blocking = EditMask() & ~(ground >= 0 ? 1 << ground : 0);
         Quaternion rot = Quaternion.Euler(0f, editCam.transform.eulerAngles.y, 0f);
-        return PlacementCheck.FitsPrefab(prefab, point + Vector3.up * PlacementCheck.PivotHeightAboveBase(prefab), rot,
-                                         blocking, Physics.DefaultRaycastLayers);
+        if (PlacementCheck.FitsPrefab(prefab, point + Vector3.up * PlacementCheck.PivotHeightAboveBase(prefab), rot,
+                                      blocking, Physics.DefaultRaycastLayers, out string why)) return true;
+        whyNot = $"No room for its box here: {why}";
+        if (logBoxDrop) Debug.Log($"[StoreEdit] Box drop at {point}: {whyNot}", this);
+        return false;
     }
 
     // The piece hides (its hole closes) and a see-through box stands where it would go.
