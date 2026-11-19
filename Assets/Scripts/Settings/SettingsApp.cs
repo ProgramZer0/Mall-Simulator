@@ -30,6 +30,7 @@ public class SettingsApp : MonoBehaviour, IPhoneApp
     public void OnAppOpened()
     {
         tipsReset = false;
+        leaveArmed = false;
         if (content == null) content = PhoneUI.ScrollPage((RectTransform)transform);
         Build();
         GameSettings.Changed += Refresh;
@@ -42,6 +43,8 @@ public class SettingsApp : MonoBehaviour, IPhoneApp
         PhoneUI.Clear(content);
         live.Clear();
         y = style.padding;
+
+        MallSection();
 
         Header("Sound");
         SliderRow("Volume", () => $"{GameSettings.MasterVolume * 100f:0}%", 0f, 1f, GameSettings.MasterVolume, GameSettings.SetMasterVolume);
@@ -67,6 +70,39 @@ public class SettingsApp : MonoBehaviour, IPhoneApp
         PhoneUI.Button(content, "Reset to defaults", y, style.rowHeight, style, () => { GameSettings.ResetAll(); Build(); });
         y += style.rowHeight + style.padding;
         content.sizeDelta = new Vector2(content.sizeDelta.x, y);
+    }
+
+    private bool leaveArmed; // Leave was tapped once: tap again to really go
+
+    // How friends join (the host), and leaving.
+    private void MallSection()
+    {
+        var nm = Unity.Netcode.NetworkManager.Singleton;
+        var conn = MallConnection.Instance;
+        if (nm == null || !nm.IsListening) return;
+        Header("Mall");
+        if (nm.IsServer && conn != null)
+        {
+            if (!string.IsNullOrEmpty(conn.JoinCode))
+                ButtonRow("Join code", () => conn.JoinCode, () => GUIUtility.systemCopyBuffer = conn.JoinCode);
+            else if (conn.Port > 0)
+                ButtonRow("Join at", () => $"{MallConnection.LocalAddresses()} : {conn.Port}",
+                          () => GUIUtility.systemCopyBuffer = $"{MallConnection.LocalAddresses()}:{conn.Port}");
+            ButtonRow("Players", () => $"{nm.ConnectedClientsIds.Count} / {conn.MaxPlayers}", () => { });
+        }
+        string label = nm.IsServer ? "End mall for everyone" : "Leave mall";
+        var b = PhoneUI.Button(content, label, y, style.rowHeight, style, () =>
+        {
+            if (!leaveArmed) { leaveArmed = true; Build(); return; }
+            leaveArmed = false;
+            if (conn != null) conn.Leave(); else nm.Shutdown();
+        });
+        if (leaveArmed)
+        {
+            var t = b.GetComponentInChildren<TMPro.TMP_Text>();
+            if (t != null) t.text = nm.IsServer ? "Tap again: end it for everyone" : "Tap again to leave";
+        }
+        y += style.rowHeight + style.spacing;
     }
 
     private void Header(string text)
