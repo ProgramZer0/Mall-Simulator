@@ -44,11 +44,32 @@ public class PlayerNameTag : NetworkBehaviour
             playerName.Value = new FixedString64Bytes(n.Length > 30 ? n.Substring(0, 30) : n);
         }
         playerName.OnValueChanged += OnNameChanged;
+        if (IsOwner) Local = this;
         if (!IsOwner) Build();
+    }
+
+    /// <summary>The local player's tag (null when not spawned).</summary>
+    public static PlayerNameTag Local { get; private set; }
+
+    /// <summary>Change your name (your own tag): everyone sees it straight away.</summary>
+    public void Rename(string name)
+    {
+        if (IsSpawned && IsOwner) RenameRpc(name ?? "");
+    }
+
+    [Rpc(SendTo.Server)]
+    private void RenameRpc(string name, RpcParams rpcParams = default)
+    {
+        if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+        string n = MallConnection.CleanName(name);
+        if (n.Length == 0) return;
+        if (MallConnection.Instance != null) MallConnection.Instance.SetName(OwnerClientId, n);
+        playerName.Value = new FixedString64Bytes(n.Length > 30 ? n.Substring(0, 30) : n);
     }
 
     public override void OnNetworkDespawn()
     {
+        if (Local == this) Local = null;
         playerName.OnValueChanged -= OnNameChanged;
         if (label != null) Destroy(label.gameObject);
     }

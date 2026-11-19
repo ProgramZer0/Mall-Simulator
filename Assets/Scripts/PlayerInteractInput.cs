@@ -114,6 +114,7 @@ public class PlayerInteractInput : NetworkBehaviour
             lookedAtMonitor = null;
             lookedAtVote = null;
             lookedAtStoreButton = null;
+            lookedAtUsable = null;
             lookedAtCustomer = 0;
             lookedAtBroken = null;
             lookedAtCart = null;
@@ -165,6 +166,7 @@ public class PlayerInteractInput : NetworkBehaviour
     private int lookedAtBuyPrice;                   // cents
     private VoteButton lookedAtVote;                // a mall vote kiosk's button
     private StoreOpenButton lookedAtStoreButton;    // a store's open/closed button
+    private IPlayerUsable lookedAtUsable;           // anything else F uses (lobby doors, look buttons...)
     private ushort lookedAtCustomer;                // a customer close enough to stop (0 = none)
     private Breakable lookedAtBroken;               // a broken light or screen (to report), maybe far off
     private BreakManager.State lookedAtBrokenState;
@@ -198,6 +200,7 @@ public class PlayerInteractInput : NetworkBehaviour
         lookedAtMonitor = null;
         lookedAtVote = null;
         lookedAtStoreButton = null;
+        lookedAtUsable = null;
         lookedAtCart = null;
         lookedAtOtherCart = null;
         lookedAtDoor = null;
@@ -257,6 +260,10 @@ public class PlayerInteractInput : NetworkBehaviour
 
             var openButton = hit.collider.GetComponentInParent<StoreOpenButton>();
             if (openButton != null && openButton.Prompt(OwnerClientId) != null) lookedAtStoreButton = openButton;
+
+            var usable = hit.collider.GetComponentInParent<IPlayerUsable>();
+            if (usable != null && (!(usable is Behaviour ub) || ub.isActiveAndEnabled) && usable.Prompt(OwnerClientId) != null)
+                lookedAtUsable = usable;
         }
 
         // Something broken (a light, a screen), maybe up on the ceiling: report it (empty hands).
@@ -273,7 +280,7 @@ public class PlayerInteractInput : NetworkBehaviour
     private bool OnlyBrokenLooked => lookedAtBroken != null && lookedAtPickup == null && lookedAtCustomer == 0 &&
         pushedCart == null && lookedAtCart == null && lookedAtDoor == null && lookedAtCounter == null &&
         lookedAtMonitor == null && lookedAtSign == null && lookedAtVote == null && lookedAtBuy == null && stockTarget == null &&
-        lookedAtStoreButton == null;
+        lookedAtStoreButton == null && lookedAtUsable == null;
 
     private static readonly RaycastHit[] partHits = new RaycastHit[16];
     private static readonly RaycastHit[] lookHits = new RaycastHit[16];
@@ -680,7 +687,7 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         if (!IsOwner || (lookedAtSign == null && lookedAtMonitor == null && stockTarget == null &&
                          lookedAtCart == null && pushedCart == null && lookedAtDoor == null &&
-                         lookedAtCounter == null && lookedAtPickup == null && lookedAtBuy == null && lookedAtVote == null && lookedAtStoreButton == null &&
+                         lookedAtCounter == null && lookedAtPickup == null && lookedAtBuy == null && lookedAtVote == null && lookedAtStoreButton == null && lookedAtUsable == null &&
                          !lookedAtBuriedCartItem && lookedAtCustomer == 0 && lookedAtBroken == null && lookedAtOtherCart == null) ||
             (storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen) return null;
 
@@ -693,6 +700,7 @@ public class PlayerInteractInput : NetworkBehaviour
                         : CounterBodyPrompt(lookedAtCounter))
                     : lookedAtVote != null ? lookedAtVote.Prompt(OwnerClientId)
                     : lookedAtStoreButton != null ? lookedAtStoreButton.Prompt(OwnerClientId)
+                    : lookedAtUsable != null ? lookedAtUsable.Prompt(OwnerClientId)
                     : lookedAtMonitor != null ? "F: Shop monitor"
                     : lookedAtSign != null ? SignPrompt()
                     : lookedAtBuy != null ? BuyPrompt()
@@ -987,7 +995,7 @@ public class PlayerInteractInput : NetworkBehaviour
         // A customer and nothing else in front of you: stop them and check their bag (shoplifters).
         if (lookedAtCustomer != 0 && pushedCart == null && lookedAtCart == null && lookedAtDoor == null &&
             lookedAtCounter == null && lookedAtMonitor == null && lookedAtSign == null && lookedAtVote == null &&
-            lookedAtBuy == null && lookedAtPickup == null && stockTarget == null && lookedAtStoreButton == null &&
+            lookedAtBuy == null && lookedAtPickup == null && stockTarget == null && lookedAtStoreButton == null && lookedAtUsable == null &&
             CustomerManager.Instance != null)
         {
             // Parents looking for their lost child: F does nothing (no stopping them by mistake).
@@ -1033,6 +1041,11 @@ public class PlayerInteractInput : NetworkBehaviour
         }
 
         // A mall vote kiosk's button: vote for that option (again to change your vote).
+        if (lookedAtUsable != null)
+        {
+            lookedAtUsable.Use(OwnerClientId);
+            return;
+        }
         if (lookedAtStoreButton != null)
         {
             lookedAtStoreButton.Press(OwnerClientId);
