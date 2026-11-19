@@ -25,8 +25,11 @@ public class SettingsApp : MonoBehaviour, IPhoneApp
     private float y;
     private readonly List<(TMP_Text label, System.Func<string> text)> live = new();
 
+    private bool tipsReset; // (just this time the app's open)
+
     public void OnAppOpened()
     {
+        tipsReset = false;
         if (content == null) content = PhoneUI.ScrollPage((RectTransform)transform);
         Build();
         GameSettings.Changed += Refresh;
@@ -56,6 +59,9 @@ public class SettingsApp : MonoBehaviour, IPhoneApp
         ButtonRow("V-Sync", () => GameSettings.VSync ? "On" : "Off", () => GameSettings.SetVSync(!GameSettings.VSync));
         ButtonRow("Max FPS", () => GameSettings.MaxFps > 0 ? GameSettings.MaxFps.ToString() : "No limit", NextFps);
         ButtonRow("Fullscreen", () => GameSettings.Fullscreen ? "On" : "Off", () => GameSettings.SetFullscreen(!GameSettings.Fullscreen));
+
+        Header("Help");
+        ButtonRow("First-time tips", () => tipsReset ? "Will show again" : "Reset", () => { HelpTips.ResetSeen(); tipsReset = true; Refresh(); });
 
         y += style.spacing * 2f;
         PhoneUI.Button(content, "Reset to defaults", y, style.rowHeight, style, () => { GameSettings.ResetAll(); Build(); });
