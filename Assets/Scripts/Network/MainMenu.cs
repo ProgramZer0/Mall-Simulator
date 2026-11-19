@@ -4,9 +4,12 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>
-/// The main menu: your name, Host a mall, Join a mall, Quit. Put it on an empty object in the menu scene
-/// (with the NetworkManager prefab, which has MallConnection on it). It builds its own screen; style it
-/// with the colors below, or a Background image/sprite.
+/// The lobby terminal screen: the typing part of the main menu (your name, hosting for friends, joining
+/// one). The lobby itself is the main menu scene you walk around in (see MallConnection and LobbyAction):
+/// this screen comes up when a LobbyAction door or button opens it (Host, Join, Change Name), and Esc or
+/// Close puts it away. Put it on an empty object in the menu scene (with the NetworkManager prefab, which
+/// has MallConnection on it). It builds its own screen; style it with the colors below, or a Background
+/// image/sprite.
 ///
 /// Host: Online (join code, when Unity Relay is set up) or Direct IP (a port), and Max Players. Join: a
 /// join code, or the host's IP and port. Why you came back to the menu (refused, the host left...) shows
@@ -14,12 +17,23 @@ using UnityEngine.UI;
 /// </summary>
 public class MainMenu : MonoBehaviour
 {
-    /// <summary>The menu is up (the old test buttons stay hidden).</summary>
+    /// <summary>A screen of the terminal.</summary>
+    public enum Page { Main, Host, Join, Name }
+
+    /// <summary>In the menu scene (the old test buttons stay hidden).</summary>
     public static bool IsShowing { get; private set; }
+    /// <summary>The terminal screen is up.</summary>
+    public static bool IsOpen => instance != null && instance.canvasRoot != null && instance.canvasRoot.activeSelf;
+    private static MainMenu instance;
 
     [SerializeField] private string title = "MALL SIM";
     [SerializeField] private Sprite background;
     [SerializeField] private Color backgroundColor = new(0.08f, 0.09f, 0.12f, 1f);
+    [Tooltip("Off: the lobby shows through, dimmed (Dim Color). On: Background / Background Color cover the screen.")]
+    [SerializeField] private bool coverScreen;
+    [SerializeField] private Color dimColor = new(0f, 0f, 0f, 0.45f);
+    [Tooltip("Messages (why you came back to the menu) show when the screen opens, this long after (seconds).")]
+    [SerializeField, Min(0f)] private float messageSeconds = 30f;
     [SerializeField] private Color panelColor = new(0.14f, 0.16f, 0.21f, 0.95f);
     [SerializeField] private Color buttonColor = new(0.24f, 0.45f, 0.85f, 1f);
     [Tooltip("Color of the chosen option (Online or Direct IP) on the host screen.")]
@@ -28,24 +42,73 @@ public class MainMenu : MonoBehaviour
     [SerializeField] private TMP_FontAsset font;
 
     private RectTransform panel;
+    private GameObject canvasRoot;
     private TMP_Text status;
     private TMP_InputField nameField, portField, maxField, codeField, ipField, joinPortField;
     private bool online;
     private bool busy;
 
-    private void OnEnable() => IsShowing = true;
-    private void OnDisable() => IsShowing = false;
+    private void OnEnable()
+    {
+        IsShowing = true;
+        instance = this;
+    }
+
+    private void OnDisable()
+    {
+        IsShowing = false;
+        Close();
+        if (instance == this) instance = null;
+    }
 
     private void Start()
     {
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
         online = MallConnection.RelayAvailable;
-        BuildFrame();
-        ShowMain();
-        if (!string.IsNullOrEmpty(MallConnection.LastMessage)) SetStatus(MallConnection.LastMessage, true);
-        MallConnection.LastMessage = null;
+        if (canvasRoot == null) BuildFrame();
+        canvasRoot.SetActive(false);
     }
+
+    private void Update()
+    {
+        if (IsOpen && UIState.TakeEscape()) Close();
+    }
+
+    /// <summary>Bring the terminal screen up on a page (from a LobbyAction).</summary>
+    public static void Open(Page page)
+    {
+        if (instance == null)
+        {
+            Debug.LogWarning("[MainMenu] No MainMenu in this scene for the terminal screen.");
+            return;
+        }
+        instance.Show(page);
+    }
+
+    private void Show(Page page)
+    {
+        if (canvasRoot == null) BuildFrame();
+        canvasRoot.SetActive(true);
+        UIState.OpenMenu(this);
+        busy = false;
+        switch (page)
+        {
+            case Page.Host: ShowHost(); break;
+            case Page.Join: ShowJoin(); break;
+            case Page.Name: ShowName(); break;
+            default: ShowMain(); break;
+        }
+        if (!string.IsNullOrEmpty(MallConnection.LastMessage) && Time.unscaledTime - MallConnection.LastMessageAt < messageSeconds)
+            SetStatus(MallConnection.LastMessage, true);
+    }
+
+    /// <summary>Put the terminal screen away.</summary>
+    public void Close()
+    {
+        if (canvasRoot != null) canvasRoot.SetActive(false);
+        UIState.CloseMenu(this);
+    }
+
+    private static bool Solo => Conn != null && Conn.CurrentMode == MallConnection.Mode.Solo;
 
     private static MallConnection Conn => MallConnection.Instance;
 
@@ -55,18 +118,37 @@ public class MainMenu : MonoBehaviour
     {
         Clear();
         Label(title, 64, FontStyles.Bold);
+        NameInput();
+        Gap();
+        if (Solo)
+        {
+            UIButton("Host a mall", ShowHost);
+            UIButton("Join a mall", ShowJoin);
+        }
+        UIButton("Close", Close);
+        UIButton("Quit", Quit);
+    }
+
+    private void ShowName()
+    {
+        Clear();
+        NameInput();
+        Gap();
+        UIButton("Save", () => { if (SaveName()) Close(); });
+        UIButton("Close", Close);
+    }
+
+    private void NameInput()
+    {
         Label("Your name", 22);
         nameField = UIInput(MallConnection.PlayerName, "Type your name", MallConnection.MaxNameLength, TMP_InputField.ContentType.Standard);
-        nameField.onEndEdit.AddListener(v => MallConnection.PlayerName = v);
-        Gap();
-        UIButton("Host a mall", ShowHost);
-        UIButton("Join a mall", ShowJoin);
-        UIButton("Quit", Quit);
+        nameField.onEndEdit.AddListener(v => SaveName());
     }
 
     private void ShowHost()
     {
         if (!SaveName()) return;
+        if (!Solo) { ShowMain(); return; }
         Clear();
         Label("Host a mall", 44, FontStyles.Bold);
         if (MallConnection.RelayAvailable)
@@ -84,13 +166,14 @@ public class MainMenu : MonoBehaviour
         Label($"Max players (1-{MallConnection.MaxPlayersLimit})", 22);
         maxField = UIInput((Conn != null ? Conn.DefaultMaxPlayers : 8).ToString(), "8", 2, TMP_InputField.ContentType.IntegerNumber);
         Gap();
-        UIButton("Start", StartHost);
+        UIButton("Open the lobby", StartHost);
         UIButton("Back", ShowMain);
     }
 
     private void ShowJoin()
     {
         if (!SaveName()) return;
+        if (!Solo) { ShowMain(); return; }
         Clear();
         Label("Join a mall", 44, FontStyles.Bold);
         if (MallConnection.RelayAvailable)
@@ -113,7 +196,11 @@ public class MainMenu : MonoBehaviour
 
     private bool SaveName()
     {
-        if (nameField != null) MallConnection.PlayerName = nameField.text;
+        if (nameField != null && MallConnection.CleanName(nameField.text) != MallConnection.PlayerName)
+        {
+            MallConnection.PlayerName = nameField.text;
+            if (PlayerNameTag.Local != null && MallConnection.PlayerName.Length > 0) PlayerNameTag.Local.Rename(MallConnection.PlayerName);
+        }
         if (MallConnection.PlayerName.Length > 0) return true;
         SetStatus("Type your name first.", true);
         return false;
@@ -136,6 +223,7 @@ public class MainMenu : MonoBehaviour
         await System.Threading.Tasks.Task.Yield();
         busy = false;
         if (error != null) SetStatus(error, true);
+        else if (this != null) Close(); // the lobby reloads open for friends
     }
 
     private async void JoinCode()
@@ -153,7 +241,7 @@ public class MainMenu : MonoBehaviour
 #endif
     }
 
-    private void JoinIp()
+    private async void JoinIp()
     {
         if (busy || Conn == null) { if (Conn == null) SetStatus("No MallConnection on the NetworkManager.", true); return; }
         string ip = ipField != null ? ipField.text : "";
@@ -161,13 +249,17 @@ public class MainMenu : MonoBehaviour
         PlayerPrefs.SetString("MallSim.LastIp", ip);
         PlayerPrefs.SetString("MallSim.LastPort", port.ToString());
         PlayerPrefs.Save();
-        string error = Conn.JoinDirect(ip, (ushort)port);
-        SetStatus(error ?? $"Connecting to {ip}:{port}...", error != null);
+        busy = true;
+        SetStatus($"Connecting to {ip}:{port}...", false);
+        string error = await Conn.JoinDirect(ip, (ushort)port);
+        busy = false;
+        if (this == null) return;
+        if (error != null) SetStatus(error, true);
     }
 
     private static int ParseInt(TMP_InputField f, int fallback) => f != null && int.TryParse(f.text, out int v) ? v : fallback;
 
-    private static void Quit()
+    public static void Quit()
     {
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
@@ -192,8 +284,10 @@ public class MainMenu : MonoBehaviour
 
         var canvasGo = new GameObject("Main Menu", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         canvasGo.transform.SetParent(transform, false);
+        canvasRoot = canvasGo;
         var canvas = canvasGo.GetComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 100;
         var scaler = canvasGo.GetComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
@@ -202,8 +296,8 @@ public class MainMenu : MonoBehaviour
         var bg = Rect("Background", canvasGo.transform);
         Stretch(bg);
         var bgImage = bg.gameObject.AddComponent<Image>();
-        bgImage.color = background != null ? Color.white : backgroundColor;
-        bgImage.sprite = background;
+        bgImage.color = !coverScreen ? dimColor : background != null ? Color.white : backgroundColor;
+        bgImage.sprite = coverScreen ? background : null;
         bgImage.preserveAspect = false;
 
         status = Text(canvasGo.transform, "", 24, FontStyles.Normal);

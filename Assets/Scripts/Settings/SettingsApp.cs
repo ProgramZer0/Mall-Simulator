@@ -80,8 +80,10 @@ public class SettingsApp : MonoBehaviour, IPhoneApp
         var nm = Unity.Netcode.NetworkManager.Singleton;
         var conn = MallConnection.Instance;
         if (nm == null || !nm.IsListening) return;
+        var mode = conn != null ? conn.CurrentMode : MallConnection.Mode.Off;
+        if (mode == MallConnection.Mode.Solo && conn.InLobby) return; // nothing to leave
         Header("Mall");
-        if (nm.IsServer && conn != null)
+        if (mode == MallConnection.Mode.Hosting)
         {
             if (!string.IsNullOrEmpty(conn.JoinCode))
                 ButtonRow("Join code", () => conn.JoinCode, () => GUIUtility.systemCopyBuffer = conn.JoinCode);
@@ -90,7 +92,10 @@ public class SettingsApp : MonoBehaviour, IPhoneApp
                           () => GUIUtility.systemCopyBuffer = $"{MallConnection.LocalAddresses()}:{conn.Port}");
             ButtonRow("Players", () => $"{nm.ConnectedClientsIds.Count} / {conn.MaxPlayers}", () => { });
         }
-        string label = nm.IsServer ? "End mall for everyone" : "Leave mall";
+        bool lobby = conn != null && conn.InLobby;
+        string label = mode == MallConnection.Mode.Solo ? "Back to the main menu"
+                     : nm.IsServer ? (lobby ? "Close the lobby" : "End mall for everyone")
+                     : lobby ? "Leave the lobby" : "Leave mall";
         var b = PhoneUI.Button(content, label, y, style.rowHeight, style, () =>
         {
             if (!leaveArmed) { leaveArmed = true; Build(); return; }
@@ -100,7 +105,7 @@ public class SettingsApp : MonoBehaviour, IPhoneApp
         if (leaveArmed)
         {
             var t = b.GetComponentInChildren<TMPro.TMP_Text>();
-            if (t != null) t.text = nm.IsServer ? "Tap again: end it for everyone" : "Tap again to leave";
+            if (t != null) t.text = mode == MallConnection.Mode.Solo ? "Tap again to go" : nm.IsServer ? "Tap again: end it for everyone" : "Tap again to leave";
         }
         y += style.rowHeight + style.spacing;
     }
