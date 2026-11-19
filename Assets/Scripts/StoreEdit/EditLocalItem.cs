@@ -170,6 +170,9 @@ public class EditLocalItem : MonoBehaviour
         ApplyKinematic();
     }
 
+    /// <summary>Being dragged right now.</summary>
+    public bool IsDragging => dragging;
+
     /// <summary>Held still while being dragged, even if gravity is on.</summary>
     public void SetDragging(bool on)
     {

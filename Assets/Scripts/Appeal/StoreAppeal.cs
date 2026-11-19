@@ -29,6 +29,31 @@ using UnityEngine;
 ///   enter       = (Curiosity + (1 - Curiosity) × outside draw) × quality, 0 if the store is closed
 ///   interest    = inside draw × quality
 /// </summary>
+/// <summary>
+/// Where things stand while a store is being edited (see StoreAppeal.CreatePreview): the edit copies in
+/// place of the real items.
+/// </summary>
+public interface IAppealLayout
+{
+    /// <summary>
+    /// The edit copy standing in for this real thing (a shelf, a loose item, decor, a window): true and the
+    /// copy; true and null: it's been taken out; false: it isn't being edited (use it where it is).
+    /// </summary>
+    bool TryGetCopy(Component real, out Transform copy);
+
+    /// <summary>Goes up whenever something was moved, added or taken out (dropped, not while dragged).</summary>
+    int Version { get; }
+
+    /// <summary>The real things moved, added or taken out since the last call (and if windows/walls changed).</summary>
+    void TakeChanges(List<Component> moved, out bool openings);
+
+    /// <summary>Something's being dragged or placed: hold off working anything out until it's let go.</summary>
+    bool Busy { get; }
+
+    /// <summary>Decor only on copies (things bought this edit, which have no real object yet).</summary>
+    void GetExtraDecor(List<(string feature, float amount, Vector3 position)> into);
+}
+
 public class StoreAppeal : MonoBehaviour
 {
     /// <summary>One personality's view of this store.</summary>
@@ -63,6 +88,63 @@ public class StoreAppeal : MonoBehaviour
     }
 
     private static readonly List<StoreAppeal> AllAppeals = new();
+
+    // Edit preview (CreatePreview): the store as it's being edited, not as it is.
+    private IAppealLayout layout;
+    private int seenLayout = -1;
+    private readonly List<Component> movedBuffer = new();
+    private readonly List<(string feature, float amount, Vector3 position)> extraDecor = new();
+
+    /// <summary>A preview of the store while it's being edited (see CreatePreview).</summary>
+    public bool IsPreview => layout != null;
+
+    /// <summary>
+    /// A separate, local appeal for a store being edited, worked out from the edit copies (the layout) as
+    /// they're moved, so the editor sees what a change does before saving. Destroy its GameObject when done.
+    /// Customers never use it.
+    /// </summary>
+    public static StoreAppeal CreatePreview(StorePlot plot, IAppealLayout layout)
+    {
+        var go = new GameObject($"Appeal Preview ({(plot != null ? plot.DisplayName : "?")})") { hideFlags = HideFlags.HideAndDontSave };
+        var a = go.AddComponent<StoreAppeal>();
+        a.plot = plot;
+        a.listing = plot != null ? plot.GetComponent<StoreListing>() : null;
+        a.layout = layout;
+        if (a.listing != null) a.listing.SourceChanged += a.OnSourceChanged;
+        return a;
+    }
+
+    /// <summary>A shelf zone or loose item for sale, for drawing (see GetOffers).</summary>
+    public struct OfferView
+    {
+        public StoreListing.Key key;  // key.thing: the StockContainer (with key.zone) or the Sellable
+        public ItemDef def;
+        public Vector3 position;      // where it is (in a preview: where its copy is)
+        public bool seenFromOutside;
+    }
+
+    /// <summary>What's for sale and where, as worked out last.</summary>
+    public void GetOffers(List<OfferView> into)
+    {
+        Refresh();
+        into.Clear();
+        foreach (var kv in offers)
+            into.Add(new OfferView { key = kv.Key, def = kv.Value.def, position = kv.Value.position, seenFromOutside = kv.Value.seenFromOutside });
+    }
+
+    /// <summary>The decor counted, and where (windows included).</summary>
+    public void GetDecor(List<(string feature, float amount, Vector3 position)> into)
+    {
+        Refresh();
+        into.Clear();
+        foreach (var d in decor) into.Add((d.feature, d.amount, d.position));
+    }
+
+    /// <summary>Where passers-by look in from (in front of the store's windows and doors).</summary>
+    public IReadOnlyList<Vector3> Viewers { get { Refresh(); return viewers; } }
+
+    /// <summary>Goes up each time it's worked out again (overlays redraw then).</summary>
+    public int Revision { get; private set; }
 
     /// <summary>
     /// Something changed that affects every store's values (settings, events, a store opening or
@@ -149,7 +231,10 @@ public class StoreAppeal : MonoBehaviour
     /* ========================= PER PERSONALITY ========================= */
 
     /// <summary>How this kind of customer sees the store right now.</summary>
-    public Result For(CustomerPersonality p)
+    public Result For(CustomerPersonality p) => For(p, false);
+
+    /// <summary>Even If Closed: as if it were open (an edit preview: the store's shut while it's edited).</summary>
+    public Result For(CustomerPersonality p, bool evenIfClosed)
     {
         Refresh();
         var r = new Result();
@@ -178,10 +263,38 @@ public class StoreAppeal : MonoBehaviour
         float looks = Mathf.Max(0f, 1f + p.looksMatter * (q - 0.5f));
         float walkIns = 1f + ProgressionManager.StoreStat(plot, PerkStat.WalkIns);
         float interest = 1f + ProgressionManager.StoreStat(plot, PerkStat.Interest);
-        r.enterChance = plot != null && plot.IsOpen
+        r.enterChance = plot != null && (plot.IsOpen || evenIfClosed)
             ? Mathf.Clamp01((p.curiosity + (1f - p.curiosity) * r.outsideDraw) * looks * walkIns)
             : 0f;
         r.interest = Mathf.Clamp01(r.insideDraw * looks * interest);
+        return r;
+    }
+
+    /// <summary>
+    /// The everyday customer: every kind of shopper (not bystanders), averaged by how often they come (Spawn
+    /// Weight). Even If Closed: as if it were open.
+    /// </summary>
+    public Result ForAverage(bool evenIfClosed = false)
+    {
+        var settings = StoreAppealSettings.Instance;
+        var r = new Result();
+        if (settings == null) return r;
+        float weights = 0f;
+        foreach (var p in settings.personalities)
+        {
+            if (p == null || p.bystander || p.spawnWeight <= 0f) continue;
+            var one = For(p, evenIfClosed);
+            r.enterChance += one.enterChance * p.spawnWeight;
+            r.interest += one.interest * p.spawnWeight;
+            r.outsideDraw += one.outsideDraw * p.spawnWeight;
+            r.insideDraw += one.insideDraw * p.spawnWeight;
+            weights += p.spawnWeight;
+        }
+        if (weights <= 0f) return r;
+        r.enterChance /= weights;
+        r.interest /= weights;
+        r.outsideDraw /= weights;
+        r.insideDraw /= weights;
         return r;
     }
 
@@ -293,9 +406,22 @@ public class StoreAppeal : MonoBehaviour
             var st = StoreAppealSettings.Instance;
             if (st != null && st.categoryPairs.Count > 0) boxesDirty = true;
         }
-        if (!rebuildAll && !revalue && pending.Count == 0 && !boxesDirty) return;
+        bool decorMoved = false;
+        if (layout != null)
+        {
+            if (layout.Busy) return; // nothing's worked out while something's being dragged
+            if (seenLayout != layout.Version)
+            {
+                seenLayout = layout.Version;
+                layout.TakeChanges(movedBuffer, out bool openingsChanged);
+                if (openingsChanged) rebuildAll = true;
+                else if (movedBuffer.Count > 0) MarkMoved(movedBuffer, ref decorMoved);
+            }
+        }
+        if (!rebuildAll && !revalue && pending.Count == 0 && !boxesDirty && !decorMoved) return;
         if (Time.unscaledTime < nextAllowed) return;
-        nextAllowed = Time.unscaledTime + 1f;
+        nextAllowed = Time.unscaledTime + (layout != null ? 0.25f : 1f);
+        Revision++;
 
         bool layoutChanged = false; // offers added, removed or moved (decor-near-it needs redoing)
         bool settingsChanged = revalue || rebuildAll;
@@ -347,6 +473,7 @@ public class StoreAppeal : MonoBehaviour
             if (o.seenFromOutside) seenOutside += o.quantity;
         }
         sums.Clear();
+        if (decorMoved && !layoutChanged) { BuildFeatures(); layoutChanged = true; }
         if (layoutChanged) nearCache.Clear();
         if (boxesDirty)
         {
@@ -356,6 +483,53 @@ public class StoreAppeal : MonoBehaviour
         }
         if (layoutChanged || settingsChanged) { pairCache.Clear(); pairPartCache.Clear(); }
         BuildQuality();
+    }
+
+    // Preview: things that moved. Their offers are worked out again; decor among them redoes the decor.
+    private void MarkMoved(List<Component> moved, ref bool decorMoved)
+    {
+        foreach (var c in moved)
+        {
+            if (c == null) continue;
+            if (c.GetComponentInChildren<Decor>(true) != null) decorMoved = true;
+            if (c.TryGetComponent<WallOpening>(out _)) { rebuildAll = true; return; }
+        }
+        foreach (var s in listing.Sources)
+        {
+            Component thing = s.item != null ? s.item : s.container;
+            if (thing == null) continue;
+            foreach (var c in moved)
+                if (c != null && (c == thing || c.gameObject == thing.gameObject)) { pending.Add(s.Key); break; }
+        }
+    }
+
+    // Where a source is: in a preview, where its edit copy is (Skip: the copy, which doesn't block its own
+    // view). False: taken out in the edit.
+    private bool Locate(StoreListing.Source s, out Vector3 at, out Transform skip)
+    {
+        at = s.Position;
+        skip = null;
+        if (layout == null) return true;
+        Component thing = s.item != null ? s.item : s.container;
+        if (thing == null || !layout.TryGetCopy(thing, out var copy)) return true;
+        if (copy == null) return false;
+        at = copy.TransformPoint(thing.transform.InverseTransformPoint(at));
+        skip = copy;
+        return true;
+    }
+
+    /// <summary>In a preview, where a real thing's edit copy has this point (else the point itself).</summary>
+    public Vector3 MapPoint(Component real, Vector3 point)
+    {
+        if (layout == null || real == null || !layout.TryGetCopy(real, out var copy) || copy == null) return point;
+        return copy.TransformPoint(real.transform.InverseTransformPoint(point));
+    }
+
+    /// <summary>In a preview, a real thing's rotation as its edit copy has it.</summary>
+    public Quaternion MapRotation(Component real, Quaternion rotation)
+    {
+        if (layout == null || real == null || !layout.TryGetCopy(real, out var copy) || copy == null) return rotation;
+        return copy.rotation * Quaternion.Inverse(real.transform.rotation) * rotation;
     }
 
     private readonly List<Bounds> areaBuffer = new();
@@ -391,10 +565,10 @@ public class StoreAppeal : MonoBehaviour
             products = pickup.Units;
 
         // Seen from outside: only checked for something new or moved (not when a count or price changes).
-        Vector3 at = s.Position;
+        if (!Locate(s, out Vector3 at, out Transform skip)) return offers.Remove(key); // taken out (edit preview)
         if (!seenCache.TryGetValue(key, out var seen) || (seen.at - at).sqrMagnitude > 0.0025f)
         {
-            seen = (at, viewers.Count > 0 && IsSeen(s, viewers));
+            seen = (at, viewers.Count > 0 && IsSeen(s, at, skip, viewers));
             seenCache[key] = seen;
         }
 
@@ -424,7 +598,7 @@ public class StoreAppeal : MonoBehaviour
 
         foreach (var o in WallOpening.All)
         {
-            if (o == null || o.IsEditCopy) continue;
+            if (!Counts(o)) continue;
             var host = CuttableWall.HostOf(o);
             if (host == null || host.Plot != plot || !host.IsStorefront) continue;
 
@@ -441,9 +615,9 @@ public class StoreAppeal : MonoBehaviour
 
     // Can someone at one of the viewer spots see this? Glass (window items), the shelf holding it and the
     // product models don't block; walls, other shelves and other things do.
-    private bool IsSeen(StoreListing.Source s, List<Vector3> viewers)
+    private bool IsSeen(StoreListing.Source s, Vector3 at, Transform skip, List<Vector3> viewers)
     {
-        Vector3 from = s.Position + Vector3.up * 0.2f;
+        Vector3 from = at + Vector3.up * 0.2f;
         foreach (var eye in viewers)
         {
             Vector3 d = eye - from;
@@ -459,11 +633,31 @@ public class StoreAppeal : MonoBehaviour
                 if (s.container != null && c.GetComponentInParent<StockContainer>() == s.container) continue;
                 if (s.item != null && c.transform.IsChildOf(s.item.transform)) continue;
                 if (c.GetComponentInParent<CharacterController>() != null) continue;   // people
+                if (skip != null && c.transform.IsChildOf(skip)) continue;             // its own edit copy
                 blocked = true;
             }
             if (!blocked) return true;
         }
         return false;
+    }
+
+    // A window or door that counts: the real ones (edit copies don't); in a preview the copies instead of
+    // the real ones they stand in for.
+    private bool Counts(WallOpening o)
+    {
+        if (o == null) return false;
+        if (layout == null) return !o.IsEditCopy;
+        if (o.IsEditCopy) return true;
+        return !layout.TryGetCopy(o, out _);
+    }
+
+    // Has its own Decor (an edit copy's is on its prefab).
+    private static bool HasDecor(WallOpening o)
+    {
+        if (o.GetComponent<Decor>() != null) return true;
+        var copy = o.GetComponent<EditLocalItem>();
+        return copy != null && copy.Def != null && copy.Def.worldNetworkPrefab != null &&
+               copy.Def.worldNetworkPrefab.GetComponent<Decor>() != null;
     }
 
     private void BuildFeatures()
@@ -475,16 +669,29 @@ public class StoreAppeal : MonoBehaviour
 
         foreach (var d in Decor.All)
         {
-            if (d == null || !InThisStore(d.gameObject)) continue;
+            if (d == null) continue;
+            Vector3 at = d.transform.position;
+            if (layout != null && layout.TryGetCopy(d, out var copy))
+            {
+                if (copy == null) continue; // taken out
+                at = copy.TransformPoint(d.transform.InverseTransformPoint(at));
+                if (!plot.Contains(at + Vector3.up * 0.05f) && d.GetComponent<WallOpening>() == null) continue;
+            }
+            else if (!InThisStore(d.gameObject)) continue;
             foreach (var f in d.features)
                 if (f != null && !string.IsNullOrWhiteSpace(f.name))
-                    AddDecor(f.name.Trim(), f.amount, d.transform.position);
+                    AddDecor(f.name.Trim(), f.amount, at);
+        }
+        if (layout != null)
+        {
+            layout.GetExtraDecor(extraDecor);
+            foreach (var (feature, amount, position) in extraDecor) AddDecor(feature, amount, position);
         }
 
         // Windows in the store's walls (unless they say something else with their own Decor).
         foreach (var o in WallOpening.All)
         {
-            if (o == null || o.IsEditCopy || o.PieceKind != WallOpening.Kind.Window || o.GetComponent<Decor>() != null) continue;
+            if (!Counts(o) || o.PieceKind != WallOpening.Kind.Window || HasDecor(o)) continue;
             var host = CuttableWall.HostOf(o);
             if (host != null && host.Plot == plot) AddDecor(window, 1f, o.Current.center);
         }
