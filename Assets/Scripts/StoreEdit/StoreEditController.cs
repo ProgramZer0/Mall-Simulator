@@ -215,6 +215,8 @@ public class StoreEditController : NetworkBehaviour
     public IReadOnlyList<EditLocalItem> EditCopies => localItems;
     /// <summary>Windows, doors and wall items put in this edit (no real object yet).</summary>
     public IReadOnlyList<EditLocalItem> AddedEditCopies => addedItems;
+    /// <summary>The item selected in edit mode (null: none).</summary>
+    public EditLocalItem SelectedEditCopy => selected;
     /// <summary>Something's being dragged or placed right now.</summary>
     public bool EditBusy => (selected != null && selected.IsDragging) || placing != null || kitBox != null;
 

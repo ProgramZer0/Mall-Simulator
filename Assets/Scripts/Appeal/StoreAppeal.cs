@@ -615,9 +615,24 @@ public class StoreAppeal : MonoBehaviour
 
     // Can someone at one of the viewer spots see this? Glass (window items), the shelf holding it and the
     // product models don't block; walls, other shelves and other things do.
-    private bool IsSeen(StoreListing.Source s, Vector3 at, Transform skip, List<Vector3> viewers)
+    private bool IsSeen(StoreListing.Source s, Vector3 at, Transform skip, List<Vector3> viewers) =>
+        Visible(at + Vector3.up * 0.2f, s.container, s.item != null ? s.item.transform : null, skip, viewers);
+
+    /// <summary>
+    /// Could a passer-by see this point (from in front of any of the store's windows and doors)? For an
+    /// edit preview's "seen from the hallway" shading.
+    /// </summary>
+    public bool IsPointSeen(Vector3 point)
     {
-        Vector3 from = at + Vector3.up * 0.2f;
+        Refresh();
+        return viewers.Count > 0 && Visible(point, null, null, null, viewers);
+    }
+
+    // A clear line from the point to one of the viewer spots. Glass (window items), the shelf holding it,
+    // the thing itself and product models don't block; walls, other shelves and other things do. In an
+    // edit preview the renovation wall doesn't either (it's only up while editing).
+    private bool Visible(Vector3 from, StockContainer container, Transform self, Transform skip, List<Vector3> viewers)
+    {
         foreach (var eye in viewers)
         {
             Vector3 d = eye - from;
@@ -630,10 +645,11 @@ public class StoreAppeal : MonoBehaviour
                 var c = Hits[i].collider;
                 if (c.GetComponentInParent<WallOpening>() != null) continue;           // glass, door frames
                 if (c.GetComponentInParent<StockVisualFollower>() != null) continue;   // product models
-                if (s.container != null && c.GetComponentInParent<StockContainer>() == s.container) continue;
-                if (s.item != null && c.transform.IsChildOf(s.item.transform)) continue;
+                if (container != null && c.GetComponentInParent<StockContainer>() == container) continue;
+                if (self != null && c.transform.IsChildOf(self)) continue;
                 if (c.GetComponentInParent<CharacterController>() != null) continue;   // people
                 if (skip != null && c.transform.IsChildOf(skip)) continue;             // its own edit copy
+                if (layout != null && plot.IsStorefrontCover(c.transform)) continue;   // the renovation wall
                 blocked = true;
             }
             if (!blocked) return true;
