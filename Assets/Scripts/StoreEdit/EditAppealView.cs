@@ -293,7 +293,7 @@ public class EditAppealView : MonoBehaviour
         if (!hasBaseline) return "";
         float shown = percent ? d * 100f : d;
         if (Mathf.Abs(shown) < 0.5f) return "";
-        return shown > 0f ? $" <color=#5f5>▲{shown:0}</color>" : $" <color=#f66>▼{-shown:0}</color>";
+        return shown > 0f ? $" <color=#5f5>+{shown:0}</color>" : $" <color=#f66>-{-shown:0}</color>";
     }
 
     private void DrawImgui()
