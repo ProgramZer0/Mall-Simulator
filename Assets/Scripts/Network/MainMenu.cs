@@ -22,6 +22,8 @@ public class MainMenu : MonoBehaviour
     [SerializeField] private Color backgroundColor = new(0.08f, 0.09f, 0.12f, 1f);
     [SerializeField] private Color panelColor = new(0.14f, 0.16f, 0.21f, 0.95f);
     [SerializeField] private Color buttonColor = new(0.24f, 0.45f, 0.85f, 1f);
+    [Tooltip("Color of the chosen option (Online or Direct IP) on the host screen.")]
+    [SerializeField] private Color selectedButtonColor = new(0.2f, 0.7f, 0.35f, 1f);
     [SerializeField] private Color textColor = Color.white;
     [SerializeField] private TMP_FontAsset font;
 
@@ -69,8 +71,8 @@ public class MainMenu : MonoBehaviour
         Label("Host a mall", 44, FontStyles.Bold);
         if (MallConnection.RelayAvailable)
         {
-            UIButton(online ? "Online: friends join with a code ✓" : "Online: friends join with a code", () => { online = true; ShowHost(); });
-            UIButton(!online ? "Direct IP: friends type your address ✓" : "Direct IP: friends type your address", () => { online = false; ShowHost(); });
+            UIButton(online ? "> Online: friends join with a code <" : "Online: friends join with a code", () => { online = true; ShowHost(); }, online);
+            UIButton(!online ? "> Direct IP: friends type your address <" : "Direct IP: friends type your address", () => { online = false; ShowHost(); }, !online);
         }
         else online = false;
         if (!online)
@@ -266,12 +268,12 @@ public class MainMenu : MonoBehaviour
 
     private void Gap() => Rect("Gap", panel).gameObject.AddComponent<LayoutElement>().minHeight = 10f;
 
-    private void UIButton(string text, UnityEngine.Events.UnityAction onClick)
+    private void UIButton(string text, UnityEngine.Events.UnityAction onClick, bool selected = false)
     {
         var r = Rect("Button", panel);
         r.gameObject.AddComponent<LayoutElement>().minHeight = 58f;
         var img = r.gameObject.AddComponent<Image>();
-        img.color = buttonColor;
+        img.color = selected ? selectedButtonColor : buttonColor;
         var b = r.gameObject.AddComponent<Button>();
         b.targetGraphic = img;
         b.onClick.AddListener(onClick);
