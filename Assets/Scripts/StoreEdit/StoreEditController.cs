@@ -872,6 +872,7 @@ public class StoreEditController : NetworkBehaviour
             dragStartPos = selected.transform.position;
             dragStartRot = selected.transform.rotation;
             selected.SetDragging(true);
+            GatherRiders(selected);
         }
 
         if (UIState.TakeEscape())
@@ -1061,6 +1062,89 @@ public class StoreEditController : NetworkBehaviour
         if (handles != null) handles.HideAll();
     }
 
+    /* ========================= THINGS ON TOP ========================= */
+
+    // What's resting on the item being dragged (and on those, and so on), and where each sits on it: they
+    // move and turn with it, so a box on a box doesn't stay floating where it was.
+    private readonly List<(EditLocalItem item, Vector3 localPos, Quaternion localRot)> riders = new();
+    private EditLocalItem ridersOn;
+
+    private void GatherRiders(EditLocalItem carrier)
+    {
+        foreach (var (item, _, _) in riders) if (item != null) item.SetDragging(false);
+        riders.Clear();
+        ridersOn = carrier;
+        if (carrier == null || carrier.Opening != null) return;
+
+        var candidates = new List<EditLocalItem>();
+        foreach (var c in localItems) if (c != null && c != carrier && c.Opening == null) candidates.Add(c);
+        foreach (var c in addedItems) if (c != null && c != carrier && c.Opening == null) candidates.Add(c);
+
+        var under = new List<EditLocalItem> { carrier };
+        var taken = new HashSet<EditLocalItem> { carrier };
+        for (int k = 0; k < under.Count; k++)
+        {
+            var below = under[k];
+            foreach (var c in candidates)
+            {
+                if (taken.Contains(c) || !RestsOn(c, below)) continue;
+                taken.Add(c);
+                under.Add(c);
+                riders.Add((c, carrier.transform.InverseTransformPoint(c.transform.position),
+                            Quaternion.Inverse(carrier.transform.rotation) * c.transform.rotation));
+                c.SetDragging(true); // held still while carried, even with gravity on
+            }
+        }
+    }
+
+    // Is Top standing on Below: straight down from the bottom of its middle, the first thing is Below.
+    private static bool RestsOn(EditLocalItem top, EditLocalItem below)
+    {
+        if (!TryColliderBounds(top, out var b)) return false;
+        Vector3 from = new(b.center.x, b.min.y + 0.05f, b.center.z);
+        var hits = Physics.RaycastAll(from, Vector3.down, 0.35f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        float best = float.MaxValue;
+        Transform first = null;
+        foreach (var h in hits)
+        {
+            if (h.collider.transform.IsChildOf(top.transform) || h.distance >= best) continue;
+            best = h.distance;
+            first = h.collider.transform;
+        }
+        return first != null && first.IsChildOf(below.transform);
+    }
+
+    private static bool TryColliderBounds(EditLocalItem item, out Bounds b)
+    {
+        b = default;
+        bool any = false;
+        foreach (var c in item.GetComponentsInChildren<Collider>())
+        {
+            if (!c.enabled || c.isTrigger) continue;
+            if (!any) { b = c.bounds; any = true; } else b.Encapsulate(c.bounds);
+        }
+        return any;
+    }
+
+    // Each frame of a drag: the riders where they sit on it. Once it's let go they stay there (and fall
+    // again if their gravity's on).
+    private void CarryRiders()
+    {
+        if (riders.Count == 0) return;
+        if (ridersOn != null)
+        {
+            var t = ridersOn.transform;
+            foreach (var (item, localPos, localRot) in riders)
+                if (item != null) item.SetPose(t.TransformPoint(localPos), t.rotation * localRot);
+        }
+        if (ridersOn == null || ridersOn != selected || !ridersOn.IsDragging)
+        {
+            foreach (var (item, _, _) in riders) if (item != null) item.SetDragging(false);
+            riders.Clear();
+            ridersOn = null;
+        }
+    }
+
     /* ========================= DRAGGING ========================= */
 
     private void BeginDrag(int handle, Ray ray, Vector2 mouse)
@@ -1102,6 +1186,7 @@ public class StoreEditController : NetworkBehaviour
 
         dragHandle = handle;
         selected.SetDragging(true);
+        GatherRiders(selected);
     }
 
     private void ContinueDrag(Ray ray, Vector2 mouse)
@@ -2449,6 +2534,7 @@ public class StoreEditController : NetworkBehaviour
     private void LateUpdate()
     {
         if (!IsOwner) return;
+        CarryRiders();
         var hud = StoreEditHud.Instance;
         if (hud == null) return;
         bool show = IsEditing;
