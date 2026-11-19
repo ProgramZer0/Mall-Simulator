@@ -140,6 +140,9 @@ public class StoreAppeal : MonoBehaviour
         foreach (var d in decor) into.Add((d.feature, d.amount, d.position));
     }
 
+    /// <summary>Delivery boxes counted in the store (for the "Shipment" pair category), as worked out last.</summary>
+    public IReadOnlyList<Vector3> Boxes { get { Refresh(); return boxes; } }
+
     /// <summary>Where passers-by look in from (in front of the store's windows and doors).</summary>
     public IReadOnlyList<Vector3> Viewers { get { Refresh(); return viewers; } }
 

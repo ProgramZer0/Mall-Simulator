@@ -26,23 +26,16 @@ public class EditAppealView : MonoBehaviour
     [SerializeField] private Color greyColor = new(0.84f, 0.86f, 0.88f, 1f);
     [Tooltip("The floor where passers-by can see in from the hallway.")]
     [SerializeField] private Color seenFloorColor = new(0.3f, 0.7f, 1f, 0.22f);
-    [Tooltip("Things for sale passers-by can see from the hallway.")]
-    [SerializeField] private Color seenColor = new(0.15f, 0.55f, 1f, 0.55f);
-    [Tooltip("Things for sale passers-by can't see.")]
-    [SerializeField] private Color hiddenColor = new(1f, 0.6f, 0.15f, 0.55f);
-    [SerializeField] private Color goodColor = new(0.2f, 1f, 0.35f, 1f);
-    [SerializeField] private Color badColor = new(1f, 0.25f, 0.2f, 1f);
-    [Tooltip("How see-through the red/green shading of things near the selected item is.")]
-    [SerializeField, Range(0.05f, 1f)] private float nearAlpha = 0.35f;
-    [SerializeField] private Color decorTagColor = new(1f, 0.9f, 0.5f, 1f);
+    [Tooltip("Things that add to the appeal.")]
+    [SerializeField] private Color goodColor = new(0.2f, 0.85f, 0.3f, 1f);
+    [Tooltip("Things that take away from it.")]
+    [SerializeField] private Color badColor = new(0.95f, 0.25f, 0.2f, 1f);
 
     [Header("Overlay")]
     [Tooltip("Size of the floor squares checked for being seen from the hallway (meters). Smaller is finer and slower.")]
     [SerializeField, Range(0.25f, 2f)] private float floorCell = 0.5f;
     [Tooltip("How high above the floor a spot is checked from (about where products sit).")]
     [SerializeField, Min(0.1f)] private float floorCheckHeight = 1f;
-    [SerializeField, Min(0.1f)] private float decorTagSize = 2.2f;
-    [SerializeField] private float decorTagHeight = 2f;
 
     [Header("Customers (later)")]
     [Tooltip("Whose view the panel shows. Empty: the everyday customer (every kind, averaged by how often they come).")]
@@ -143,7 +136,9 @@ public class EditAppealView : MonoBehaviour
         }
         shown = true;
         drawnRevision = -1;
+        drawnSelection = null;
         nextPanel = 0f;
+        StockBatcher.HideEditView = true; // the shelves are colored, not their products
         GreyStore();
     }
 
@@ -151,6 +146,7 @@ public class EditAppealView : MonoBehaviour
     private void Close(bool end)
     {
         shown = false;
+        StockBatcher.HideEditView = false;
         RestoreGrey();
         foreach (var t in tags) if (t != null) t.gameObject.SetActive(false);
         foreach (var t in nearTags) if (t != null) t.gameObject.SetActive(false);
@@ -278,8 +274,9 @@ public class EditAppealView : MonoBehaviour
             foreach (var h in hints) sb.Append("• ").Append(h).Append('\n');
             sb.Append("</size>");
         }
-        sb.Append("<size=70%><color=#4af>Blue</color>: seen from the hallway (floor and things for sale)   <color=#fa4>orange</color>: for sale, not seen\n" +
-                  "Select an item: what's near it, <color=#f55>red</color> (bad) to <color=#5f5>green</color> (good)</size>");
+        sb.Append("<size=70%><color=#5f5>Green</color>: adds to the appeal   <color=#f55>red</color>: takes away   grey: neither\n" +
+                  "<color=#4af>Blue floor</color>: seen from the hallway   Click an item for its numbers</size>");
+        sb.Append(selectedText);
         panelText = sb.ToString();
 
         var panel = EditAppealPanel.Instance;
@@ -311,33 +308,258 @@ public class EditAppealView : MonoBehaviour
 
     private readonly List<StoreAppeal.OfferView> offers = new();
     private readonly List<(string feature, float amount, Vector3 position)> decor = new();
-    // The store-wide part (floor shading, seen outlines), and the selected item's part, built separately.
+    // The store-wide part (floor shading), and the selected item's part (lines to what it's linked with).
     private readonly List<Vector3> baseLines = new(), baseFills = new(), nearLines = new(), nearFills = new();
     private readonly List<Color> baseLineColors = new(), baseFillColors = new(), nearLineColors = new(), nearFillColors = new();
     private readonly List<TextMeshPro> nearTags = new();
     private readonly List<Bounds> areaBuffer = new();
+
+    // Something in the store that adds to or takes from its appeal: a shelf or thing for sale, a piece of
+    // decor, a window or door, a delivery box. Its score is the sum of its links (in appeal points).
+    private sealed class Thing
+    {
+        public Transform root;
+        public string name;
+        public Bounds bounds;
+        public float score;
+        public readonly List<(Thing other, float points, string why)> links = new();
+    }
+
+    private readonly Dictionary<Transform, Thing> things = new();
+    private readonly List<Thing> thingList = new();
 
     private void Rebuild()
     {
         preview.GetOffers(offers);
         preview.GetDecor(decor);
         baseLines.Clear(); baseLineColors.Clear(); baseFills.Clear(); baseFillColors.Clear();
-
-        ShadeSeenFloor();
-
-        // Things for sale: solid boxes, blue where passers-by can see them, orange where they can't.
-        foreach (var o in offers)
-            if (TryOfferBox(o, out var c, out var rot, out var size))
-            {
-                var color = o.seenFromOutside ? seenColor : hiddenColor;
-                SolidBox(baseFills, baseFillColors, c, rot, size, color);
-                color.a = 1f;
-                WireBox(baseLines, baseLineColors, c, rot, size, color);
-            }
         GreyStore(); // anything new (a window just put in) goes grey too
-
-        BuildTags();
+        ShadeSeenFloor();
+        Score();
+        ColorThings();
         BuildMeshes();
+    }
+
+    /* ---- working out what goes well together ---- */
+
+    // Points: how a link shows in the numbers (a full "need" met is worth Points Per Need, a pair's effect
+    // of 1 is Points Per Pair).
+    [Header("Points")]
+    [Tooltip("A piece of decor a category needs, in reach: up to this many points (times the need's importance).")]
+    [SerializeField, Min(0f)] private float pointsPerNeed = 10f;
+    [Tooltip("Two things that go together (a pair with effect 1) in reach: this many points (negative effects take away).")]
+    [SerializeField, Min(0f)] private float pointsPerPair = 10f;
+    [Tooltip("Something for sale passers-by can see from the hallway.")]
+    [SerializeField, Min(0f)] private float pointsSeen = 2f;
+    [Tooltip("Points at which an item is fully green (or fully red, below zero).")]
+    [SerializeField, Min(1f)] private float fullColorAt = 10f;
+
+    private void Score()
+    {
+        things.Clear();
+        thingList.Clear();
+        var settings = StoreAppealSettings.Instance;
+        if (settings == null) return;
+
+        // What's for sale, by the thing it's on (each shelf spot counts on its own).
+        var spotOf = new List<(Thing thing, StoreAppeal.OfferView offer)>();
+        foreach (var o in offers)
+        {
+            var t = ThingOf(o.key.thing as Component);
+            if (t != null) spotOf.Add((t, o));
+        }
+        // Decor (windows too), by the thing it's on.
+        var decorOf = new List<(Thing thing, string feature, float amount, Vector3 at)>();
+        foreach (var (feature, amount, position) in decor)
+        {
+            var t = ThingAt(position);
+            if (t != null) decorOf.Add((t, feature, amount, position));
+        }
+        // Delivery boxes.
+        var boxOf = new List<(Thing thing, Vector3 at)>();
+        foreach (var b in preview.Boxes)
+        {
+            var t = BoxAt(b);
+            if (t != null) boxOf.Add((t, b));
+        }
+
+        float decorReach2 = settings.decorReach * settings.decorReach, pairReach2 = settings.pairReach * settings.pairReach;
+        var anyPairs = settings.PairsFor(StoreAppealSettings.AnyCategory);
+        var pairs = new List<(string other, float effect, int wanted)>();
+
+        // A shelf's spots share its points (a shelf of 10 spots next to a mirror gets the mirror's points once,
+        // not ten times).
+        var spots = new Dictionary<Thing, int>();
+        foreach (var (t, _) in spotOf) { spots.TryGetValue(t, out int n); spots[t] = n + 1; }
+
+        foreach (var (thing, o) in spotOf)
+        {
+            float share = 1f / spots[thing];
+            if (o.seenFromOutside && pointsSeen > 0f) Link(thing, null, pointsSeen * share, "seen from the hallway");
+            foreach (var cat in o.def.Categories)
+            {
+                // Decor it needs: each piece in reach adds; none at all takes away.
+                var needs = settings.NeedsFor(cat);
+                if (needs != null)
+                    foreach (var need in needs.needs)
+                    {
+                        if (need == null || string.IsNullOrWhiteSpace(need.feature) || need.wanted <= 0f) continue;
+                        string f = need.feature.Trim();
+                        bool any = false;
+                        foreach (var (dt, feature, amount, at) in decorOf)
+                        {
+                            if (!string.Equals(feature, f, System.StringComparison.OrdinalIgnoreCase) || Flat2(at, o.position) > decorReach2) continue;
+                            any = true;
+                            Link(thing, dt, share * pointsPerNeed * need.importance * Mathf.Clamp01(amount / need.wanted), $"{cat} needs a {f}");
+                        }
+                        if (!any) Link(thing, null, -share * pointsPerNeed * need.importance * 0.5f, $"{cat} needs a {f} near it");
+                    }
+
+                // Things it goes with (or clashes with) in reach, and delivery boxes.
+                pairs.Clear();
+                var own = settings.PairsFor(cat);
+                if (own != null) pairs.AddRange(own);
+                if (anyPairs != null && !string.Equals(cat, StoreAppealSettings.AnyCategory, System.StringComparison.OrdinalIgnoreCase)) pairs.AddRange(anyPairs);
+                foreach (var (other, effect, _) in pairs)
+                {
+                    if (effect == 0f) continue;
+                    if (string.Equals(other, StoreAppealSettings.ShipmentCategory, System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        foreach (var (bt, at) in boxOf)
+                            if (Flat2(at, o.position) <= pairReach2 && Mathf.Abs(at.y - o.position.y) <= 3f)
+                                Link(thing, bt, share * pointsPerPair * effect, effect > 0f ? $"{cat} goes with delivery boxes" : $"{cat} next to delivery boxes");
+                        continue;
+                    }
+                    bool anyCat = string.Equals(other, StoreAppealSettings.AnyCategory, System.StringComparison.OrdinalIgnoreCase);
+                    foreach (var (nt, n) in spotOf)
+                    {
+                        if (nt == thing || (!anyCat && !n.def.HasCategory(other))) continue;
+                        if (Flat2(n.position, o.position) > pairReach2 || Mathf.Abs(n.position.y - o.position.y) > 3f) continue;
+                        Link(thing, nt, share * pointsPerPair * effect, effect > 0f ? $"{cat} goes with {(anyCat ? n.def.displayName : other)}"
+                                                                           : $"{cat} clashes with {(anyCat ? n.def.displayName : other)}");
+                    }
+                }
+            }
+        }
+
+        // Merge links to the same thing for the same reason, and add up the scores.
+        foreach (var t in thingList)
+        {
+            var merged = new Dictionary<(Thing, string), float>();
+            foreach (var (other, points, why) in t.links)
+            {
+                merged.TryGetValue((other, why), out float have);
+                merged[(other, why)] = have + points;
+            }
+            t.links.Clear();
+            t.score = 0f;
+            foreach (var kv in merged)
+            {
+                t.links.Add((kv.Key.Item1, kv.Value, kv.Key.Item2));
+                t.score += kv.Value;
+            }
+            t.links.Sort((a, b) => Mathf.Abs(b.points).CompareTo(Mathf.Abs(a.points)));
+        }
+    }
+
+    private static float Flat2(Vector3 a, Vector3 b)
+    {
+        float dx = a.x - b.x, dz = a.z - b.z;
+        return dx * dx + dz * dz;
+    }
+
+    // Both ways: the item gets it, and so does what it's linked with (the mirror helping the shirts is good
+    // for the mirror too). With no other thing: just the item.
+    private static void Link(Thing a, Thing b, float points, string why)
+    {
+        if (Mathf.Abs(points) < 0.01f) return;
+        a.links.Add((b, points, why));
+        if (b != null && b != a) b.links.Add((a, points, why));
+    }
+
+    // The edit copy (or real thing) a real component is drawn as.
+    private Thing ThingOf(Component real)
+    {
+        if (real == null) return null;
+        Transform root = real.transform;
+        string name = real.name;
+        if (editor.TryGetEditCopy(real, out var copy))
+        {
+            if (copy == null) return null;
+            root = copy.transform;
+            if (copy.Def != null) name = copy.Def.displayName;
+        }
+        else
+        {
+            var item = real.GetComponentInParent<ItemPickupNet>();
+            if (item != null) root = item.transform;
+            if (item != null && ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(item.ItemId, out var def)) name = def.displayName;
+        }
+        return ThingFor(root, name);
+    }
+
+    private Thing ThingFor(Transform root, string name)
+    {
+        if (root == null) return null;
+        if (things.TryGetValue(root, out var t)) return t;
+        t = new Thing { root = root, name = name };
+        TryRendererBounds(root, out t.bounds);
+        things[root] = t;
+        thingList.Add(t);
+        return t;
+    }
+
+    // The thing a piece of decor sits on: the smallest edit copy (or window, door) whose model is around
+    // the spot.
+    private Thing ThingAt(Vector3 at)
+    {
+        Transform best = null;
+        float bestSize = float.MaxValue;
+        string bestName = null;
+        void Try(Transform root, string name)
+        {
+            if (root == null || !TryRendererBounds(root, out var b)) return;
+            b.Expand(0.2f);
+            if (!b.Contains(at)) return;
+            float size = b.size.x * b.size.y * b.size.z;
+            if (size < bestSize) { bestSize = size; best = root; bestName = name; }
+        }
+        foreach (var c in editor.EditCopies) if (c != null) Try(c.transform, c.Def != null ? c.Def.displayName : c.name);
+        foreach (var c in editor.AddedEditCopies) if (c != null) Try(c.transform, c.Def != null ? c.Def.displayName : c.name);
+        if (best == null)
+            foreach (var o in WallOpening.All)
+                if (o != null && !editor.TryGetEditCopy(o, out _)) Try(o.transform, o.name);
+        return best != null ? ThingFor(best, bestName) : null;
+    }
+
+    private Thing BoxAt(Vector3 at)
+    {
+        foreach (var item in ItemPickupNet.All)
+            if (item != null && item.TryGetComponent<ShipmentPackage>(out _) && (item.transform.position - at).sqrMagnitude < 0.01f)
+                return ThingFor(item.transform, "Delivery box");
+        return null;
+    }
+
+    /* ---- showing it ---- */
+
+    private MaterialPropertyBlock tint;
+
+    // Every greyed renderer back to plain grey, then each thing tinted by its score: green good, red bad.
+    private void ColorThings()
+    {
+        foreach (var kv in greyed) if (kv.Key != null) kv.Key.SetPropertyBlock(null);
+        tint ??= new MaterialPropertyBlock();
+        foreach (var t in thingList)
+        {
+            if (Mathf.Abs(t.score) < 0.5f || t.root == null) continue;
+            float k = Mathf.Clamp01(Mathf.Abs(t.score) / fullColorAt);
+            var c = Color.Lerp(greyColor, t.score > 0f ? goodColor : badColor, Mathf.Lerp(0.35f, 1f, k));
+            tint.Clear();
+            tint.SetColor("_BaseColor", c);
+            tint.SetColor("_Color", c);
+            foreach (var r in t.root.GetComponentsInChildren<Renderer>())
+                if (greyed.ContainsKey(r)) r.SetPropertyBlock(tint);
+        }
     }
 
     // The floor where passers-by can see in: one square per cell whose middle (at product height) they can see.
@@ -348,7 +570,6 @@ public class EditAppealView : MonoBehaviour
         areaBuffer.Clear();
         plot.GetAreaBounds(areaBuffer);
         float floor = plot.FloorHeight, cell = floorCell;
-        // A big store: bigger squares, so it stays quick (at most about 4000 checks).
         float area = 0f;
         foreach (var b in areaBuffer) area += b.size.x * b.size.z;
         if (area / (cell * cell) > 4000f) cell = Mathf.Sqrt(area / 4000f);
@@ -368,234 +589,55 @@ public class EditAppealView : MonoBehaviour
                 }
     }
 
-    // The box round a shelf spot or loose thing for sale (where its edit copy is).
-    private bool TryOfferBox(StoreAppeal.OfferView o, out Vector3 center, out Quaternion rotation, out Vector3 size)
-    {
-        rotation = Quaternion.identity;
-        if (o.key.thing is StockContainer container && container.TryGetZoneBox(o.key.zone, out center, out var rot, out size))
-        {
-            center = preview.MapPoint(container, center);
-            rotation = preview.MapRotation(container, rot);
-            return true;
-        }
-        if (o.key.thing is Component item && TryCopyBounds(item, out var b))
-        {
-            center = b.center;
-            size = b.size;
-            return true;
-        }
-        center = o.position + Vector3.up * 0.15f;
-        size = Vector3.one * 0.3f;
-        return true;
-    }
-
-    private bool TryCopyBounds(Component real, out Bounds b)
-    {
-        b = default;
-        Transform t = real.transform;
-        if (editor.TryGetEditCopy(real, out var copy)) { if (copy == null) return false; t = copy.transform; }
-        return TryRendererBounds(t, out b);
-    }
-
     private static bool TryRendererBounds(Transform t, out Bounds b)
     {
         b = default;
         bool any = false;
         foreach (var r in t.GetComponentsInChildren<Renderer>(true))
         {
-            if (r is ParticleSystemRenderer) continue;
+            if (r is ParticleSystemRenderer || r is LineRenderer || r is TrailRenderer || r.GetComponent<TMP_Text>() != null) continue;
             if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds);
         }
         return any;
     }
 
-    /* ---- the selected item: what's near it, red to green ---- */
+    /* ---- the selected item: its numbers ---- */
 
-    private readonly HashSet<string> selCategories = new(System.StringComparer.OrdinalIgnoreCase);
-    private readonly List<string> selFeatures = new();
-    private readonly List<Vector3> selSpots = new();
+    private string selectedText = "";
 
+    // Lines from the selected item to what it's linked with (green good, red bad), and its numbers for the panel.
     private void BuildSelection(EditLocalItem sel)
     {
         nearLines.Clear(); nearLineColors.Clear(); nearFills.Clear(); nearFillColors.Clear();
-        int tagCount = 0;
-        var settings = StoreAppealSettings.Instance;
-        if (sel != null && sel.Opening == null && settings != null)
+        selectedText = "";
+        Thing t = null;
+        if (sel != null) things.TryGetValue(sel.transform, out t);
+        if (sel != null && t == null)
+            selectedText = $"\n<b>{(sel.Def != null ? sel.Def.displayName : sel.name)}</b>: doesn't add to or take from the appeal here.";
+        if (t != null)
         {
-            // What it sells (its shelf spots, or itself) and what decor it is.
-            var real = editor.RealOf(sel);
-            selCategories.Clear(); selFeatures.Clear(); selSpots.Clear();
-            var mine = new HashSet<int>();
-            for (int i = 0; i < offers.Count; i++)
+            var sb = new System.Text.StringBuilder();
+            sb.Append($"\n<b>{t.name}</b>: <b>{Signed(t.score)}</b>\n<size=85%>");
+            int shownLines = 0;
+            foreach (var (other, points, why) in t.links)
             {
-                if (real == null || !(offers[i].key.thing is Component t) || t == null) continue;
-                if (t.gameObject != real.gameObject && !t.transform.IsChildOf(real.transform)) continue;
-                mine.Add(i);
-                selSpots.Add(offers[i].position);
-                foreach (var c in offers[i].def.Categories) selCategories.Add(c);
-            }
-            if (selSpots.Count == 0) selSpots.Add(sel.transform.position);
-            Decor d = real != null ? real.GetComponentInChildren<Decor>(true) : null;
-            if (d == null && sel.Def != null && sel.Def.worldNetworkPrefab != null) d = sel.Def.worldNetworkPrefab.GetComponentInChildren<Decor>(true);
-            if (d != null) foreach (var f in d.features) if (f != null && !string.IsNullOrWhiteSpace(f.name)) selFeatures.Add(f.name.Trim());
-
-            var anyPairs = settings.PairsFor(StoreAppealSettings.AnyCategory);
-            // Things for sale nearby that go with it, or clash.
-            for (int j = 0; j < offers.Count; j++)
-            {
-                if (mine.Contains(j)) continue;
-                var n = offers[j];
-                float score = 0f;
-                string why = null;
-                if (selCategories.Count > 0 && Near(n.position, settings.pairReach, true))
+                if (shownLines++ >= 12) { sb.Append($"…and {t.links.Count - 12} more\n"); break; }
+                string col = points > 0f ? "#5f5" : "#f66";
+                sb.Append($"<color={col}>{Signed(points)}</color>  {why}{(other != null ? $" ({other.name})" : "")}\n");
+                if (other != null)
                 {
-                    foreach (var cat in selCategories)
-                    {
-                        score += PairEffect(settings, cat, n.def, anyPairs, ref why);
-                        foreach (var other in n.def.Categories) score += PairEffect(settings, other, cat, ref why);
-                    }
+                    var c = points > 0f ? goodColor : badColor;
+                    Line(nearLines, nearLineColors, t.bounds.center + Vector3.up * 0.3f, other.bounds.center + Vector3.up * 0.3f, c);
                 }
-                // It's decor this one needs.
-                if (selFeatures.Count > 0 && Near(n.position, settings.decorReach, false))
-                    foreach (var f in selFeatures)
-                        if (Needs(settings, n.def, f)) { score += 1f; why ??= $"needs {f}"; }
-                if (Mathf.Abs(score) < 0.01f || !TryOfferBox(n, out var c, out var rot, out var size)) continue;
-                Shade(c, rot, size, score);
-                NearTag(ref tagCount, c + Vector3.up * (size.y * 0.5f + 0.3f), $"{(score > 0f ? "✓" : "✗")} {n.def.displayName}", score);
             }
-            // Decor nearby it needs.
-            if (selCategories.Count > 0)
-                foreach (var (feature, _, position) in decor)
-                {
-                    if (!Near(position, settings.decorReach, false)) continue;
-                    bool needed = false;
-                    foreach (var cat in selCategories)
-                    {
-                        var needs = settings.NeedsFor(cat);
-                        if (needs == null) continue;
-                        foreach (var need in needs.needs)
-                            if (need != null && string.Equals(need.feature?.Trim(), feature, System.StringComparison.OrdinalIgnoreCase)) needed = true;
-                    }
-                    if (!needed) continue;
-                    Shade(position + Vector3.up * 0.5f, Quaternion.identity, new Vector3(0.6f, 1f, 0.6f), 1f);
-                    NearTag(ref tagCount, position + Vector3.up * 1.3f, $"✓ {feature}", 1f);
-                }
+            sb.Append("</size>");
+            selectedText = sb.ToString();
         }
-        for (int i = tagCount; i < nearTags.Count; i++) nearTags[i].gameObject.SetActive(false);
         BuildMeshes();
+        nextPanel = 0f;
     }
 
-    // Within reach (across the floor) of the selected item's spots; Same Floor: and not far above or below.
-    private bool Near(Vector3 p, float reach, bool sameFloor)
-    {
-        float r2 = reach * reach;
-        foreach (var s in selSpots)
-        {
-            float dx = p.x - s.x, dz = p.z - s.z;
-            if (dx * dx + dz * dz <= r2 && (!sameFloor || Mathf.Abs(p.y - s.y) <= 3f)) return true;
-        }
-        return false;
-    }
-
-    // How much a category likes having this item near it (its Category Pairs, "Any" ones too).
-    private static float PairEffect(StoreAppealSettings settings, string category, ItemDef near,
-                                    List<(string other, float effect, int wanted)> anyPairs, ref string why)
-    {
-        float sum = 0f;
-        var own = settings.PairsFor(category);
-        if (own != null)
-            foreach (var (other, effect, _) in own)
-                if (IsPairCategory(near, other)) { sum += effect; why ??= other; }
-        if (anyPairs != null && !string.Equals(category, StoreAppealSettings.AnyCategory, System.StringComparison.OrdinalIgnoreCase))
-            foreach (var (other, effect, _) in anyPairs)
-                if (IsPairCategory(near, other)) { sum += effect; why ??= other; }
-        return sum;
-    }
-
-    // How much Category likes being near Other (one way).
-    private static float PairEffect(StoreAppealSettings settings, string category, string other, ref string why)
-    {
-        float sum = 0f;
-        var own = settings.PairsFor(category);
-        if (own != null)
-            foreach (var (o, effect, _) in own)
-                if (string.Equals(o, other, System.StringComparison.OrdinalIgnoreCase)) { sum += effect; why ??= o; }
-        return sum;
-    }
-
-    private static bool IsPairCategory(ItemDef def, string category) =>
-        !string.Equals(category, StoreAppealSettings.ShipmentCategory, System.StringComparison.OrdinalIgnoreCase) &&
-        (string.Equals(category, StoreAppealSettings.AnyCategory, System.StringComparison.OrdinalIgnoreCase) || def.HasCategory(category));
-
-    private static bool Needs(StoreAppealSettings settings, ItemDef def, string feature)
-    {
-        foreach (var cat in def.Categories)
-        {
-            var needs = settings.NeedsFor(cat);
-            if (needs == null) continue;
-            foreach (var need in needs.needs)
-                if (need != null && string.Equals(need.feature?.Trim(), feature, System.StringComparison.OrdinalIgnoreCase)) return true;
-        }
-        return false;
-    }
-
-    // A see-through box from red (bad) to green (good), with an outline.
-    private void Shade(Vector3 center, Quaternion rotation, Vector3 size, float score)
-    {
-        float t = Mathf.Clamp01((Mathf.Clamp(score, -1f, 1f) + 1f) * 0.5f);
-        var color = Color.Lerp(badColor, goodColor, t);
-        WireBox(nearLines, nearLineColors, center, rotation, size, color);
-        color.a = nearAlpha;
-        SolidBox(nearFills, nearFillColors, center, rotation, size, color);
-    }
-
-    private void NearTag(ref int count, Vector3 at, string text, float score)
-    {
-        var tag = count < nearTags.Count ? nearTags[count] : NewTag(nearTags);
-        count++;
-        tag.gameObject.SetActive(true);
-        tag.text = text;
-        tag.color = score > 0f ? goodColor : badColor;
-        tag.transform.position = at;
-    }
-
-    private void BuildTags()
-    {
-        // One label per spot (several features on one thing go together).
-        var bySpot = new Dictionary<Vector3Int, (Vector3 at, string text)>();
-        foreach (var (feature, amount, position) in decor)
-        {
-            var key = Vector3Int.RoundToInt(position * 10f);
-            string part = amount == 1f ? feature : $"{feature} ×{amount:0.#}";
-            bySpot[key] = bySpot.TryGetValue(key, out var have) ? (have.at, have.text + "\n" + part) : (position, part);
-        }
-        int n = 0;
-        foreach (var kv in bySpot)
-        {
-            var tag = n < tags.Count ? tags[n] : NewTag(tags);
-            tag.gameObject.SetActive(true);
-            tag.text = kv.Value.text;
-            tag.color = decorTagColor;
-            tag.transform.position = kv.Value.at + Vector3.up * decorTagHeight;
-            n++;
-        }
-        for (int i = n; i < tags.Count; i++) tags[i].gameObject.SetActive(false);
-    }
-
-    private TextMeshPro NewTag(List<TextMeshPro> pool)
-    {
-        var go = new GameObject("Appeal Tag") { hideFlags = HideFlags.DontSave };
-        var t = go.AddComponent<TextMeshPro>();
-        t.alignment = TextAlignmentOptions.Center;
-        t.fontSize = decorTagSize;
-        t.color = decorTagColor;
-        t.outlineWidth = 0.25f;
-        t.fontStyle = FontStyles.Bold;
-        t.rectTransform.sizeDelta = new Vector2(4f, 1f);
-        t.isOverlay = true;
-        pool.Add(t);
-        return t;
-    }
+    private static string Signed(float v) => v >= 0f ? $"+{v:0.#}" : $"{v:0.#}";
 
     private void Draw()
     {
