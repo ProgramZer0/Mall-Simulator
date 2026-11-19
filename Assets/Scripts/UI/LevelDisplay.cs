@@ -17,6 +17,7 @@ public class LevelDisplay : MonoBehaviour
 
     private int shownLevel = -1, shownXp = -1;
     private bool visible = true;
+    private bool applied; // shown or hidden at least once (the Root may start switched off in the scene)
 
     private void Awake()
     {
@@ -44,9 +45,20 @@ public class LevelDisplay : MonoBehaviour
 
     private void SetVisible(bool on)
     {
-        if (on == visible) return;
+        if (on == visible && applied) return;
         visible = on;
-        if (root != null) root.SetActive(on);
+        applied = true;
+        if (root != null)
+        {
+            // A Root this sits on (or under) can't be switched off: this would stop too, and never show it
+            // again. Fade it out instead.
+            if (transform.IsChildOf(root.transform))
+            {
+                if (!root.TryGetComponent<CanvasGroup>(out var group)) group = root.AddComponent<CanvasGroup>();
+                group.alpha = on ? 1f : 0f;
+            }
+            else root.SetActive(on);
+        }
         else
         {
             if (text != null) text.enabled = on;
