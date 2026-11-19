@@ -73,7 +73,7 @@ public partial class CustomerManager
             !NearbyHallwaySpot(kid.pos, lostDistance.x * 0.5f, lostDistance.x, out spot)) return false;
 
         g.lostOnce = true;
-        nextLostChildAt = Time.time + lostChildEveryMinutes * 60f * Random.Range(0.5f, 1.5f);
+        nextLostChildAt = Time.time + lostChildEveryMinutes * 60f * Random.Range(1f, 4f);
         kid.lostFrom = parent;
         kid.lostSince = Time.time;
         kid.lostLetDown = false;
