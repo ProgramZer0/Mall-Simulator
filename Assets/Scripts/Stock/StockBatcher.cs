@@ -31,6 +31,9 @@ public sealed class StockBatcher : MonoBehaviour
     /// </summary>
     public static bool Paused;
 
+    /// <summary>Don't draw the edit-view copies either (the appeal view shows the shelves, not their stock).</summary>
+    public static bool HideEditView;
+
     /// <summary>
     /// Areas farther than this (metres) from a camera aren't drawn for it. Every copy that is drawn is
     /// sent to the GPU again each frame, so this is what keeps a full mall cheap.
@@ -99,6 +102,7 @@ public sealed class StockBatcher : MonoBehaviour
         Batches.Clear();
         All.Clear();
         Paused = false;
+        HideEditView = false;
     }
 
     /* ========================= SHAPES ========================= */
@@ -343,7 +347,7 @@ public sealed class StockBatcher : MonoBehaviour
             {
                 var batch = All[b];
                 int count = batch.matrices.Count;
-                if (count == 0 || (Paused && !batch.edit) || (mask & (1 << batch.shape.layer)) == 0) continue;
+                if (count == 0 || (Paused && !batch.edit) || (batch.edit && HideEditView) || (mask & (1 << batch.shape.layer)) == 0) continue;
                 var bounds = batch.rp.worldBounds;
                 // (Edit-view copies have no distance limit: the edit camera can zoom out over a big store.)
                 if ((!batch.edit && bounds.SqrDistance(eye) > maxSq) || !GeometryUtility.TestPlanesAABB(Planes, bounds)) continue;
