@@ -2255,6 +2255,7 @@ public partial class CustomerManager : NetworkBehaviour
         var player = NetworkManager.ConnectedClients.TryGetValue(sender, out var client) ? client.PlayerObject : null;
         if (player == null || (player.transform.position - c.pos).sqrMagnitude > (stopRange + 1f) * (stopRange + 1f)) return;
         if (HelpLostChild(c, sender)) return; // a lost child: they follow the player now
+        if (c.mark == (byte)LostMark.Searching) return; // looking for their child: not stopped
         if (Time.time - c.stoppedAt < 5f) return;
         c.stoppedAt = Time.time;
         var notes = NotificationManager.Instance;

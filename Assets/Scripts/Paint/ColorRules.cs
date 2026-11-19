@@ -31,6 +31,7 @@ public static class ColorRules
     {
         limits.Clear();
         tastes.Clear();
+        usableUntil = -1f;
     }
 
     /// <summary>
@@ -100,6 +101,38 @@ public static class ColorRules
             if (PaintPalette.TryGetId(n, out byte id) && id != 0 && !into.Contains(id)) into.Add(id);
         }
         return any;
+    }
+
+    private static readonly HashSet<byte> usableExclusive = new();
+    private static ulong usableTeam = ulong.MaxValue;
+    private static float usableUntil = -1f;
+
+    /// <summary>
+    /// An exclusive color: does any item this team can order right now (its level, licenses and franchises
+    /// allowing) come in it? Not: pickers don't show it. Other colors: always true. Worked out at most
+    /// every couple of seconds.
+    /// </summary>
+    public static bool ExclusiveInUse(byte id, ulong team)
+    {
+        if (!PaintPalette.IsExclusive(id)) return true;
+        if (team != usableTeam || Time.unscaledTime >= usableUntil)
+        {
+            usableTeam = team;
+            usableUntil = Time.unscaledTime + 2f;
+            usableExclusive.Clear();
+            var catalog = ItemCatalog.Instance;
+            if (catalog != null)
+                foreach (var def in catalog.Items)
+                {
+                    if (def == null || def.BaseDef != def) continue; // sizes share their item's colors
+                    if (!ProgressionManager.CanOrder(team, def) || !LicenseManager.CanOrder(team, def, out _) ||
+                        !FranchiseManager.CanOrder(team, def, out _)) continue;
+                    var limit = LimitOf(def);
+                    if (limit != null) { foreach (var c in limit) if (PaintPalette.IsExclusive(c)) usableExclusive.Add(c); }
+                    else foreach (var c in ExtraOf(def)) if (PaintPalette.IsExclusive(c)) usableExclusive.Add(c);
+                }
+        }
+        return usableExclusive.Contains(id);
     }
 
     /// <summary>Can this team's player use this color yet (its Unlock Level)?</summary>

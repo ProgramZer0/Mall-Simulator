@@ -692,7 +692,7 @@ public class PlayerInteractInput : NetworkBehaviour
         {
             CustomerManager.LostMark.LostChild => "F: Help them find their family",
             CustomerManager.LostMark.Following => "Following you: take them to their parents",
-            CustomerManager.LostMark.Searching => "They lost their child (F: stop them and check their bag)",
+            CustomerManager.LostMark.Searching => "They lost their child: find them (Lost & Found on your phone)",
             _ => "F: Stop them and check their bag",
         };
     }
@@ -971,7 +971,9 @@ public class PlayerInteractInput : NetworkBehaviour
             lookedAtCounter == null && lookedAtMonitor == null && lookedAtSign == null && lookedAtVote == null &&
             lookedAtBuy == null && lookedAtPickup == null && stockTarget == null && CustomerManager.Instance != null)
         {
-            CustomerManager.Instance.RequestStop(lookedAtCustomer);
+            // Parents looking for their lost child: F does nothing (no stopping them by mistake).
+            if (CustomerManager.Instance.MarkOf(lookedAtCustomer) != CustomerManager.LostMark.Searching)
+                CustomerManager.Instance.RequestStop(lookedAtCustomer);
             return;
         }
 

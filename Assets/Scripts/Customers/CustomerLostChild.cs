@@ -65,6 +65,9 @@ public partial class CustomerManager
         if (Time.time < nextLostChildAt || cases.Count >= maxLostAtOnce) return false;
         var root = Root(kid);
         if (root.store != null || root.mode != Mode.Wander || root.searchingFor != null) return false; // walking the halls
+        // Not a family with a shoplifter in it (searching parents can't be stopped and checked).
+        foreach (var m in g.members)
+            if (m != null && (m.thief || m.fleeing || m.stolen.Count > 0)) return false;
         // Far off (a shorter way if nothing's that far).
         if (!NearbyHallwaySpot(kid.pos, lostDistance.x, lostDistance.y, out var spot) &&
             !NearbyHallwaySpot(kid.pos, lostDistance.x * 0.5f, lostDistance.x, out spot)) return false;

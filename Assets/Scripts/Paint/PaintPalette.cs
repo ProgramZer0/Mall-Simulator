@@ -162,8 +162,15 @@ public class PaintPalette : MonoBehaviour
         return IsExclusive(id) ? $"{n} (exclusive)" : n;
     }
 
-    /// <summary>Locked for the local player's team: not shown in pickers.</summary>
-    public static bool IsLockedHere(byte id) => !ColorRules.IsUnlocked(id, LocalTeam);
+    /// <summary>
+    /// Not shown in the local player's pickers: locked for their team (Unlock Level), or an exclusive color
+    /// that nothing their team can order comes in (level, licenses, franchises).
+    /// </summary>
+    public static bool IsLockedHere(byte id)
+    {
+        ulong team = LocalTeam;
+        return !ColorRules.IsUnlocked(id, team) || !ColorRules.ExclusiveInUse(id, team);
+    }
 
     private static ulong LocalTeam =>
         Unity.Netcode.NetworkManager.Singleton != null ? MallManager.GetTeamOf(Unity.Netcode.NetworkManager.Singleton.LocalClientId) : 0;

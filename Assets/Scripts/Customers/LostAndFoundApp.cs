@@ -36,7 +36,8 @@ public class LostAndFoundApp : MonoBehaviour, IPhoneApp
     public Sprite Icon => icon;
     public int Badge => CustomerManager.Instance != null ? CustomerManager.Instance.LostCases.Count : 0;
 
-    private LostChildShot cam;
+    private LostChildShot cam;        // the child: a still picture, kept while it's the same child
+    private LostChildShot parentsCam; // the parents: live
     private bool open, showParents;
     private int index;
     private ushort shownKid; // stays on the same child when the list changes
@@ -61,9 +62,8 @@ public class LostAndFoundApp : MonoBehaviour, IPhoneApp
     public void OnAppOpened()
     {
         open = true;
-        still.Clear();
         cam ??= shot.Make("Lost & Found Camera");
-        if (picture != null) picture.texture = cam.Texture;
+        parentsCam ??= shot.Make("Lost & Found Parents Camera");
         CustomerManager.LostCasesChanged += Refresh;
         Refresh();
     }
@@ -74,6 +74,7 @@ public class LostAndFoundApp : MonoBehaviour, IPhoneApp
         open = false;
         CustomerManager.LostCasesChanged -= Refresh;
         if (cam != null) cam.On = false;
+        if (parentsCam != null) parentsCam.On = false;
     }
 
     private void OnDisable() => OnAppClosed();
@@ -82,6 +83,8 @@ public class LostAndFoundApp : MonoBehaviour, IPhoneApp
     {
         cam?.Dispose();
         cam = null;
+        parentsCam?.Dispose();
+        parentsCam = null;
     }
 
     private void Step(int by)
@@ -119,6 +122,7 @@ public class LostAndFoundApp : MonoBehaviour, IPhoneApp
         if (n == 0)
         {
             if (cam != null) cam.On = false;
+            if (parentsCam != null) parentsCam.On = false;
             if (infoText != null) infoText.text = "";
         }
         else UpdateInfo(list[index], n);
@@ -138,21 +142,30 @@ public class LostAndFoundApp : MonoBehaviour, IPhoneApp
 
     private float nextInfo;
     private readonly LostChildShotSettings.Still still = new();
-    private int stillOf = int.MinValue; // who the still is of (the kid's id; parents: below 0)
+    private int stillOf = -1; // the child the still is of
 
     private void LateUpdate()
     {
-        if (!open || cam == null) return;
+        if (!open || cam == null || parentsCam == null) return;
         var list = Cases();
-        if (list == null || list.Count == 0 || index >= list.Count) { cam.On = false; return; }
+        if (list == null || list.Count == 0 || index >= list.Count) { cam.On = false; parentsCam.On = false; return; }
         var lost = list[index];
-        // The child: a still picture (they're standing where they got lost). The parents: live (they're
-        // looking everywhere).
-        int target = showParents ? -lost.family - 1 : lost.kid;
-        if (target != stillOf) { still.Clear(); stillOf = target; }
+        // The child: a still picture (they're standing where they got lost), kept while it's the same child,
+        // so going to the parents and back shows the same one. The parents: live (they're looking everywhere).
+        if (lost.kid != stillOf) { still.Clear(); stillOf = lost.kid; }
         bool seen;
-        if (showParents) { seen = shot.Aim(cam, lost.family); cam.On = seen; }
-        else seen = shot.KeepStill(cam, lost.kid, still);
+        if (showParents)
+        {
+            cam.On = false;
+            seen = shot.Aim(parentsCam, lost.family);
+            parentsCam.On = seen;
+        }
+        else
+        {
+            parentsCam.On = false;
+            seen = shot.KeepStill(cam, lost.kid, still);
+        }
+        if (picture != null) picture.texture = showParents ? parentsCam.Texture : cam.Texture;
         if (picture != null) picture.color = seen ? Color.white : new Color(0.2f, 0.2f, 0.2f); // gone: a dark picture
         if (Time.unscaledTime >= nextInfo) { nextInfo = Time.unscaledTime + 1f; UpdateInfo(lost, list.Count); }
     }
