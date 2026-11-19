@@ -56,6 +56,79 @@ public static class StockBoxGenerator
         PrefabUtility.GetPrefabAssetType(prefab) == PrefabAssetType.Variant &&
         PrefabUtility.GetCorrespondingObjectFromSource(prefab) == template;
 
+    // Every crate made from the box (variants of it), anywhere under the box's folder.
+    private static List<(string path, GameObject go)> MadeCrates(GameObject template)
+    {
+        var found = new List<(string, GameObject)>();
+        if (template == null) return found;
+        string root = Path.GetDirectoryName(AssetDatabase.GetAssetPath(template)).Replace('\\', '/');
+        foreach (var guid in AssetDatabase.FindAssets("t:Prefab", new[] { root }))
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            var go = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (IsMadeCrate(go, template)) found.Add((path, go));
+        }
+        return found;
+    }
+
+    [MenuItem("Tools/Mall Sim/Items/Remove All Made Stock Crates", priority = 11)]
+    private static void RemoveAllMenu()
+    {
+        var s = Settings(create: false);
+        var template = s != null ? s.template : null;
+        var crates = MadeCrates(template);
+        if (crates.Count == 0)
+        {
+            EditorUtility.DisplayDialog("Remove stock crates", "There are no crates made from the stock box to remove.", "OK");
+            return;
+        }
+        int choice = EditorUtility.DisplayDialogComplex("Remove stock crates",
+            $"Delete all {crates.Count} stock crates made from '{template.name}' (their prefabs and icons), and take them off " +
+            "the item catalog and the network prefab list?\n\n" +
+            "Crates made by hand and the products themselves are kept. Any made crate placed in a scene goes missing. " +
+            "Remade crates get new ids.\n\n" +
+            "Remove and remake: make them all again straight away, from the current settings and folders.\n" +
+            "Remove only: they're made again on the next Update Item Catalog unless you untick Generate on StockBoxSettings.",
+            "Remove and remake", "Cancel", "Remove only");
+        if (choice == 1) return;
+        RemoveAll(template, crates);
+        if (choice == 0) ItemSetupTool.UpdateCatalog(quiet: false); // makes them again and lists them
+        else
+        {
+            bool was = s.generate;
+            s.generate = false; // just tidy the catalog this time
+            try { ItemSetupTool.UpdateCatalog(quiet: true); }
+            finally { s.generate = was; }
+        }
+    }
+
+    private static void RemoveAll(GameObject template, List<(string path, GameObject go)> crates)
+    {
+        // Off the network prefab lists first (while the prefabs are still there to match).
+        var gos = new HashSet<GameObject>(crates.Select(c => c.go));
+        foreach (var guid in AssetDatabase.FindAssets("t:NetworkPrefabsList"))
+        {
+            var list = AssetDatabase.LoadAssetAtPath<NetworkPrefabsList>(AssetDatabase.GUIDToAssetPath(guid));
+            if (list == null) continue;
+            var gone = list.PrefabList.Where(p => p != null && p.Prefab != null && gos.Contains(p.Prefab)).ToList();
+            foreach (var p in gone) list.Remove(p);
+            if (gone.Count > 0) EditorUtility.SetDirty(list);
+        }
+
+        var paths = new List<string>();
+        foreach (var (path, _) in crates)
+        {
+            paths.Add(path);
+            string icon = Path.ChangeExtension(path, null) + " Icon.png";
+            if (AssetDatabase.LoadMainAssetAtPath(icon) != null) paths.Add(icon);
+        }
+        var failed = new List<string>();
+        AssetDatabase.DeleteAssets(paths.ToArray(), failed);
+        AssetDatabase.SaveAssets();
+        Debug.Log($"[Items] Removed {crates.Count} made stock crate(s)" +
+                  (failed.Count > 0 ? $"; couldn't delete:\n{string.Join("\n", failed)}" : "."));
+    }
+
     [MenuItem("Tools/Mall Sim/Items/Recalculate Stock Crate Amounts", priority = 10)]
     private static void RecalculateMenu()
     {
