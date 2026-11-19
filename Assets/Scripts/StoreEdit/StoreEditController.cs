@@ -1620,7 +1620,14 @@ public class StoreEditController : NetworkBehaviour
         bool fromSession = !addedItems.Contains(item) && item.Index >= 0;
         if (addedItems.Remove(item))
         {
-            if (addedFrom.TryGetValue(item, out var box)) ShowBox(box);
+            // Put in this edit, from a box: the box goes where it was let go (the host moves it there).
+            if (addedFrom.TryGetValue(item, out var box) && box != null && box.IsSpawned)
+            {
+                hiddenBoxes.Remove(box); // (it's replaced by one at the drop spot)
+                heldStill.Remove(box);
+                RequestMovePieceBoxRpc(clientSessionId, box.NetworkObjectId, floorPoint);
+            }
+            else if (box != null) ShowBox(box);
             addedFrom.Remove(item);
         }
         else if (fromSession)
@@ -2858,6 +2865,25 @@ public class StoreEditController : NetworkBehaviour
         if (index < 0 || index >= session.Count || ItemCatalog.Instance == null ||
             !ItemCatalog.Instance.TryGet(session[index].itemId, out var def) || !WallOpening.IsOpening(def)) return;
         plot.ServerRemoveEditItem(index, MallManager.GetTeamOf(OwnerClientId), out _, at);
+    }
+
+    /// <summary>
+    /// Host: a window or door put in this edit from a box was dragged back onto the floor: its box goes there
+    /// (a new box at that spot, holding the same, still held for whoever it was held for).
+    /// </summary>
+    [Rpc(SendTo.Server)]
+    private void RequestMovePieceBoxRpc(int sessionId, ulong boxId, Vector3 at, RpcParams rpcParams = default)
+    {
+        if (!ServerTryGetSession(rpcParams, sessionId, out var plot)) return;
+        if (!NetworkManager.SpawnManager.SpawnedObjects.TryGetValue(boxId, out var no) ||
+            !no.TryGetComponent<ShipmentPackage>(out var box)) return;
+        if (!plot.IsInsideOrNear(no.transform.position, 1f) || !plot.IsInsideOrNear(at, 0.5f)) return;
+        int itemId = box.ContainedItemId;
+        uint paint = box.ContainedPaint;
+        bool held = box.TryGetReservation(out ulong team, out double left);
+        no.Despawn(true);
+        var moved = plot.ServerSpawnBoxNear(itemId, paint, at, exact: true);
+        if (held && moved != null && moved.TryGetComponent<ShipmentPackage>(out var again)) again.ServerReserve(team, (float)left);
     }
 
     /// <summary>Host: sell back windows, doors and wall items the editor took out (by their place in the session).</summary>
