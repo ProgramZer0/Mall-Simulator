@@ -299,13 +299,30 @@ public class ProgressionManager : NetworkBehaviour
         for (int lv = before + 1; lv <= t.level; lv++) AnnounceUnlocks(team, lv);
     }
 
-    // Leveled up: tell the team which categories they can order now.
+    // Leveled up: tell the team which categories they can order now, and which paint colors they can use.
     private void AnnounceUnlocks(ulong team, int level)
     {
+        if (NotificationManager.Instance == null) return;
         var unlocked = new List<string>(CategoriesUnlockedAt(level));
-        if (unlocked.Count == 0 || NotificationManager.Instance == null) return;
-        NotificationManager.Instance.ServerNotifyTeamText(team, $"Level {level}: new things to sell",
-            $"You can now order {string.Join(", ", unlocked)}.");
+        if (unlocked.Count > 0)
+            NotificationManager.Instance.ServerNotifyTeamText(team, $"Level {level}: new things to sell",
+                $"You can now order {string.Join(", ", unlocked)}.");
+
+        var colors = new List<string>();
+        var exclusive = new List<string>();
+        var palette = PaintPalette.Instance;
+        if (palette != null)
+            for (int i = 1; i <= palette.Count; i++)
+            {
+                byte id = (byte)i;
+                if (PaintPalette.UnlockLevelOf(id) != level) continue;
+                (PaintPalette.IsExclusive(id) ? exclusive : colors).Add(PaintPalette.NameOf(id));
+            }
+        if (colors.Count == 0 && exclusive.Count == 0) return;
+        string body = colors.Count > 0 ? $"You can now paint with {string.Join(", ", colors)}." : "";
+        if (exclusive.Count > 0)
+            body += (body.Length > 0 ? " " : "") + $"Exclusive (only on items that come in it): {string.Join(", ", exclusive)}.";
+        NotificationManager.Instance.ServerNotifyTeamText(team, $"Level {level}: new colors unlocked", body);
     }
 
     /// <summary>

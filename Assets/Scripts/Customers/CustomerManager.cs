@@ -227,6 +227,7 @@ public partial class CustomerManager : NetworkBehaviour
         LostChild,      // a parent: their child's gone
         LostMyFamily,   // the child: can't see their family
         Reunited,       // the family's together again
+        BrokenNearby,   // a broken light or screen near them in a store
     }
 
     [Serializable]
@@ -257,6 +258,7 @@ public partial class CustomerManager : NetworkBehaviour
         { Reaction.LostChild, ("Where's my kid?!", new Color(1f, 0.55f, 0.2f)) },
         { Reaction.LostMyFamily, ("Mom? Dad?", new Color(0.55f, 0.8f, 1f)) },
         { Reaction.Reunited, ("Thank you!", new Color(0.45f, 0.95f, 0.45f)) },
+        { Reaction.BrokenNearby, ("Ugh, that's broken", new Color(1f, 0.6f, 0.3f)) },
     };
 
     // Host: how often each reaction happened in each store (for tuning; see StoreReport).
@@ -387,6 +389,9 @@ public partial class CustomerManager : NetworkBehaviour
         public bool counted;       // counted in the store's head count
         public Entrance entrance;
         public float satisfaction;
+        public float moodCheckedAt;  // broken things nearby: last checked
+        public float brokenNear;     // ...how many (weighted)
+        public bool sawBroken;       // ...reacted to them in this store
         public int shelvesSeen;
         public readonly HashSet<StoreListing.Key> seen = new();
         public StoreListing.Key target;
@@ -1256,6 +1261,7 @@ public partial class CustomerManager : NetworkBehaviour
 
     private void Think(Customer c)
     {
+        BrokenNearbyMood(c);
         if (c.failures > 4)
         {
             if (Trapped(c)) return;
@@ -1510,7 +1516,7 @@ public partial class CustomerManager : NetworkBehaviour
     private bool Consider(Customer c, StorePlot plot, Entrance e)
     {
         c.passed.Add(plot);
-        float chance = AppealTo(c, plot).enterChance;
+        float chance = AppealTo(c, plot).enterChance * BrokenFactor(BrokenNear(e.outside), brokenNearbyEnterPenalty);
         bool full = InsideCount(plot) >= Capacity(plot);
         bool deal = plot == c.bargainStore;
         if (plot == c.mustEnter || deal || (!full && Random.value < chance))
@@ -1566,6 +1572,9 @@ public partial class CustomerManager : NetworkBehaviour
         c.store = plot;
         c.entrance = e;
         c.satisfaction = 0f;
+        c.moodCheckedAt = Time.time;
+        c.brokenNear = 0f;
+        c.sawBroken = false;
         c.shelvesSeen = 0;
         c.seen.Clear();
         c.basket.Clear();
@@ -1793,7 +1802,7 @@ public partial class CustomerManager : NetworkBehaviour
         float tolerance = 1f + ProgressionManager.StoreStat(plot, PerkStat.PriceTolerance);
         float worth = plot.Appeal.WorthTo(c.personality, s) * tolerance;
         if (c.group != null) worth = Mathf.Max(worth, KidsWorth(c, plot, s, tolerance)) * GroupItemBoost(c, s.itemId) * GroupEagerness(c);
-        if (!c.thief && Random.value >= Mathf.Clamp01(worth * buyEagerness))
+        if (!c.thief && Random.value >= Mathf.Clamp01(worth * buyEagerness * BrokenFactor(c.brokenNear, brokenNearbyBuyPenalty)))
         {
             Log(c, $"looked at {CheckoutCounter.NameOf(s.itemId)} for {CheckoutCounter.FormatAmount(s.priceCents)}, didn't take it");
             if (AboveMarket(s) && c.personality.priceSensitivity > 0.3f) React(c, Reaction.TooPricey);

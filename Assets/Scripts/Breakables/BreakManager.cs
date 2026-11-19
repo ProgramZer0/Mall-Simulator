@@ -126,6 +126,24 @@ public class BreakManager : NetworkBehaviour
         return State.Working;
     }
 
+    /// <summary>
+    /// Broken things within Range of a spot (each reported one counts Reported Share): for customers who
+    /// see them. 0 when there are none.
+    /// </summary>
+    public float BrokenNear(Vector3 pos, float range, float reportedShare)
+    {
+        if (broken == null || range <= 0f) return 0f;
+        float n = 0f, r2 = range * range;
+        foreach (var e in broken.Each())
+        {
+            if (e.state == State.Working || e.index >= ordered.Count) continue;
+            var b = ordered[e.index];
+            if (b == null || (b.transform.position - pos).sqrMagnitude > r2) continue;
+            n += e.state == State.Reported ? reportedShare : 1f;
+        }
+        return n;
+    }
+
     /* ========================= HOST: BREAKING AND FIXING ========================= */
 
     private void Update()

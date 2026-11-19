@@ -18,6 +18,10 @@ using UnityEngine;
 /// Storefront doors don't need this: give them just a DoorMotion and the store opens them while
 /// it's open and closes them while it's closed, for sale or being renovated.
 /// NPCs don't open doors, so doors on their routes should be Automatic (or storefront doors).
+///
+/// Staff Only: customers never use it or path through it (players still can). Its Staff Only Zone (a Box
+/// Collider, made from the door if not set) becomes a CustomerNoWalkZone, so customers keep off the
+/// doorway on both sides too.
 /// </summary>
 [RequireComponent(typeof(DoorMotion))]
 public class DoorNet : NetworkBehaviour
@@ -41,6 +45,13 @@ public class DoorNet : NetworkBehaviour
     [Tooltip("Doors that open, close, lock and unlock together with this one (e.g. the other half of a double " +
              "door). Link them both ways or just one way; opening any linked door opens the whole group.")]
     [SerializeField] private DoorNet[] linkedDoors;
+    [Tooltip("Customers never use this door or walk through its doorway (players still can).")]
+    [SerializeField] private bool staffOnly;
+    [Tooltip("Staff Only: the space customers keep out of (a Box Collider on its own object, e.g. a child). " +
+             "Empty: made from the shut door, Staff Only Depth deep.")]
+    [SerializeField] private BoxCollider staffOnlyZone;
+    [Tooltip("Staff Only, with no zone set: how deep the made one is (meters, through the doorway).")]
+    [SerializeField, Min(0.2f)] private float staffOnlyDepth = 1.5f;
     [Tooltip("Furthest a player can be to open or lock it with F / L, in meters.")]
     [SerializeField] private float useRange = 3.5f;
 
@@ -91,7 +102,7 @@ public class DoorNet : NetworkBehaviour
     {
         get
         {
-            if (IsShutByStore) return false;
+            if (IsShutByStore || staffOnly) return false;
             if (trigger == Trigger.Automatic) return IsOpen || !IsLocked;
             if (isPublic) return true;
             return IsStorefrontDoor && IsOpen;
@@ -109,6 +120,48 @@ public class DoorNet : NetworkBehaviour
     private bool StoreIsOwned => ownerStore != null && ownerStore.HasOwner;
 
     private void Awake() => motion = GetComponent<DoorMotion>();
+
+    /// <summary>Customers never use it (Staff Only).</summary>
+    public bool IsStaffOnly => staffOnly;
+
+    private void Start() => SetUpStaffOnlyZone();
+
+    // Staff Only: the zone becomes a customer No Walk zone (made from the shut door if not set).
+    private void SetUpStaffOnlyZone()
+    {
+        if (!staffOnly) return;
+        if (staffOnlyZone == null)
+        {
+            if (motion == null || !motion.TryGetClosedBounds(out var b))
+            {
+                Debug.LogWarning($"[DoorNet] {name}: Staff Only, but no Staff Only Zone and no door leaves to make one from.", this);
+                return;
+            }
+            Vector3 size = b.size;
+            if (size.x < size.z) size.x = Mathf.Max(size.x, staffOnlyDepth); else size.z = Mathf.Max(size.z, staffOnlyDepth);
+            size.y = Mathf.Max(size.y, 2f);
+            var go = new GameObject("Staff Only Zone");
+            go.transform.SetParent(transform, false);
+            go.transform.SetPositionAndRotation(b.center, Quaternion.identity); // the bounds are world-aligned
+            Vector3 ls = transform.lossyScale;
+            go.transform.localScale = new Vector3(1f / Mathf.Max(0.0001f, Mathf.Abs(ls.x)), 1f / Mathf.Max(0.0001f, Mathf.Abs(ls.y)),
+                                                  1f / Mathf.Max(0.0001f, Mathf.Abs(ls.z)));
+            go.SetActive(false); // the zone's set up before it registers
+            staffOnlyZone = go.AddComponent<BoxCollider>();
+            staffOnlyZone.size = size;
+            staffOnlyZone.center = Vector3.zero;
+            staffOnlyZone.isTrigger = true;
+            go.AddComponent<CustomerNoWalkZone>();
+            go.SetActive(true);
+            return;
+        }
+        if (staffOnlyZone.gameObject == gameObject)
+        {
+            Debug.LogWarning($"[DoorNet] {name}: put the Staff Only Zone's Box Collider on its own object (it's made a trigger).", this);
+            return;
+        }
+        if (!staffOnlyZone.TryGetComponent<CustomerNoWalkZone>(out _)) staffOnlyZone.gameObject.AddComponent<CustomerNoWalkZone>();
+    }
 
     public override void OnNetworkSpawn()
     {
@@ -293,7 +346,7 @@ public class DoorNet : NetworkBehaviour
         if (!IsSpawned || !IsServer || Time.time < nextSense) return;
         if (trigger != Trigger.Automatic)
         {
-            if (isPublic) UpdatePublicManual(); // (storefront doors: customers only use them while they're open)
+            if (isPublic && !staffOnly) UpdatePublicManual(); // (storefront doors: customers only use them while they're open)
             return;
         }
         nextSense = Time.time + 0.2f;
@@ -313,7 +366,7 @@ public class DoorNet : NetworkBehaviour
         }
 
         // Customers aren't physics objects: ask the customer manager (they only get through unlocked doors).
-        if (who == null && !IsLocked && CustomerManager.AnyNear(transform.position, sensorRange)) who = transform.position;
+        if (who == null && !IsLocked && !staffOnly && CustomerManager.AnyNear(transform.position, sensorRange)) who = transform.position;
 
         if (who.HasValue)
         {
