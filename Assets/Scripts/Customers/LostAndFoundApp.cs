@@ -61,6 +61,7 @@ public class LostAndFoundApp : MonoBehaviour, IPhoneApp
     public void OnAppOpened()
     {
         open = true;
+        still.Clear();
         cam ??= shot.Make("Lost & Found Camera");
         if (picture != null) picture.texture = cam.Texture;
         CustomerManager.LostCasesChanged += Refresh;
@@ -136,6 +137,8 @@ public class LostAndFoundApp : MonoBehaviour, IPhoneApp
     }
 
     private float nextInfo;
+    private readonly LostChildShotSettings.Still still = new();
+    private int stillOf = int.MinValue; // who the still is of (the kid's id; parents: below 0)
 
     private void LateUpdate()
     {
@@ -143,8 +146,13 @@ public class LostAndFoundApp : MonoBehaviour, IPhoneApp
         var list = Cases();
         if (list == null || list.Count == 0 || index >= list.Count) { cam.On = false; return; }
         var lost = list[index];
-        bool seen = shot.Aim(cam, showParents ? lost.family : lost.kid);
-        cam.On = seen;
+        // The child: a still picture (they're standing where they got lost). The parents: live (they're
+        // looking everywhere).
+        int target = showParents ? -lost.family - 1 : lost.kid;
+        if (target != stillOf) { still.Clear(); stillOf = target; }
+        bool seen;
+        if (showParents) { seen = shot.Aim(cam, lost.family); cam.On = seen; }
+        else seen = shot.KeepStill(cam, lost.kid, still);
         if (picture != null) picture.color = seen ? Color.white : new Color(0.2f, 0.2f, 0.2f); // gone: a dark picture
         if (Time.unscaledTime >= nextInfo) { nextInfo = Time.unscaledTime + 1f; UpdateInfo(lost, list.Count); }
     }

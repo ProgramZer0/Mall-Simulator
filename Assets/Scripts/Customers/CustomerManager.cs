@@ -412,6 +412,7 @@ public partial class CustomerManager : NetworkBehaviour
 
         // Lost children (see CustomerLostChild.cs)
         public Customer lostFrom;      // (a lost child) the parent they wandered off from
+        public bool lostAnnounced;     // (a lost child) stopped walking off, and everyone's been told
         public float lostSince;
         public Vector3 lostAt;         // where they wandered off (their family searches around there)
         public bool lostLetDown;       // (a lost child) never found by a player: the mall's reputation took the hit
