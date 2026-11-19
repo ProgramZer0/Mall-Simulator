@@ -49,6 +49,16 @@ public class CuttableWall : MonoBehaviour
     /// <summary>Its paint color (PaintPalette id, 0 = its own material's color). Set by its store.</summary>
     public byte Paint { get; private set; }
 
+    /// <summary>
+    /// Paint put on this wall's own renderer (a front wall type's PaintParts) also goes on the cut copy
+    /// drawn in its place, which is what's actually seen once windows or doors have cut holes in it.
+    /// </summary>
+    public void MirrorPaint(Renderer from, int materialIndex, byte id, bool coverTexture)
+    {
+        if (from == null || from != originalRenderer || cut == null || !cut.TryGetComponent<MeshRenderer>(out var mr)) return;
+        PaintPalette.Apply(mr, materialIndex, id, coverTexture);
+    }
+
     /// <summary>Paint this wall (shown on this machine; stores sync the color themselves).</summary>
     public void SetPaint(byte id)
     {
@@ -535,6 +545,16 @@ public class CuttableWall : MonoBehaviour
                 mr.sharedMaterials = originalRenderer.sharedMaterials;
                 mr.shadowCastingMode = originalRenderer.shadowCastingMode;
                 mr.receiveShadows = originalRenderer.receiveShadows;
+            }
+            // Paint already on the wall's own renderer (its PaintParts) carries over to the copy.
+            if (originalRenderer != null)
+            {
+                var copied = new MaterialPropertyBlock();
+                for (int i = 0; i < originalRenderer.sharedMaterials.Length; i++)
+                {
+                    originalRenderer.GetPropertyBlock(copied, i);
+                    mr.SetPropertyBlock(copied, i);
+                }
             }
             if (Paint != 0) PaintPalette.Apply(mr, -1, Paint);
         }

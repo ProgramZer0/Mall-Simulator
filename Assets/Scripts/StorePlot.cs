@@ -2169,12 +2169,12 @@ public class StorePlot : NetworkBehaviour
     /// Server: put a window or door back in its shipment box, on this store's floor near a point (a spot
     /// that's clear, a little into the store). Without a clear spot it's set down there and settles.
     /// </summary>
-    public void ServerSpawnBoxNear(int itemId, uint paint, Vector3 near, bool exact = false)
+    public NetworkObject ServerSpawnBoxNear(int itemId, uint paint, Vector3 near, bool exact = false)
     {
-        if (!IsServer || ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemId, out var def)) return;
+        if (!IsServer || ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemId, out var def)) return null;
         var prefab = PlacementCheck.CartBoxOf(def);
         if (prefab == null) prefab = def.GetShipmentPrefab();
-        if (prefab == null) return;
+        if (prefab == null) return null;
 
         float floor = FloorHeight;
         Bounds space = GetWorldBounds();
@@ -2212,6 +2212,7 @@ public class StorePlot : NetworkBehaviour
             box.ServerSetPaint(paint);
         }
         spawned.Spawn(true);
+        return spawned;
     }
 
     /// <summary>What removing a wall item in edit mode gives back.</summary>
