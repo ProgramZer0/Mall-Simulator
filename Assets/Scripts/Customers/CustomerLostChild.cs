@@ -21,8 +21,11 @@ public partial class CustomerManager
     [SerializeField, Min(0f)] private float firstLostChildAfterMinutes = 3f;
     [Tooltip("At most this many children lost at the same time.")]
     [SerializeField, Min(1)] private int maxLostAtOnce = 1;
-    [Tooltip("How far a lost child wanders before stopping (meters).")]
-    [SerializeField, Min(2f)] private float lostWanderDistance = 18f;
+    [Tooltip("How far from their family a lost child wanders off to before stopping (meters, straight line; " +
+             "the walk can be longer). Once there they stand still, and everyone is told.")]
+    [SerializeField] private Vector2 lostDistance = new(30f, 55f);
+    [Tooltip("Still walking off after this long (seconds): everyone's told anyway, and they stop where they are.")]
+    [SerializeField, Min(5f)] private float lostWalkSeconds = 90f;
     [Tooltip("How far around where the child was lost the family searches (meters).")]
     [SerializeField, Min(2f)] private float searchRadius = 10f;
     [Tooltip("A child this close to someone of their family is back with them (meters).")]
@@ -62,38 +65,57 @@ public partial class CustomerManager
         if (Time.time < nextLostChildAt || cases.Count >= maxLostAtOnce) return false;
         var root = Root(kid);
         if (root.store != null || root.mode != Mode.Wander || root.searchingFor != null) return false; // walking the halls
-        if (!NearbyHallwaySpot(kid.pos, lostWanderDistance * 0.5f, lostWanderDistance, out var spot)) return false;
+        // Far off (a shorter way if nothing's that far).
+        if (!NearbyHallwaySpot(kid.pos, lostDistance.x, lostDistance.y, out var spot) &&
+            !NearbyHallwaySpot(kid.pos, lostDistance.x * 0.5f, lostDistance.x, out spot)) return false;
 
         g.lostOnce = true;
         nextLostChildAt = Time.time + lostChildEveryMinutes * 60f * Random.Range(0.5f, 1.5f);
         kid.lostFrom = parent;
         kid.lostSince = Time.time;
         kid.lostLetDown = false;
+        kid.lostAnnounced = false;
         kid.lostAt = kid.pos;
         kid.follow = null;
         kid.mode = Mode.Lost;
         kid.helper = ulong.MaxValue;
         if (!PathTo(kid, spot)) kid.arrived = true;
-        SetMark(kid, LostMark.LostChild);
-        React(kid, Reaction.LostMyFamily);
 
-        // Their family stops what they're doing and looks for them.
+        // Their family stops what they're doing and looks around where they lost them (the child is
+        // walking off meanwhile; everyone's told once the child has stopped, see Announce).
         root.searchingFor = kid;
         root.mode = Mode.Searching;
         root.goalStore = null;
         root.arrived = true;
         root.nextThink = Time.time;
+        Log(kid, $"wandered off (from {parent.id}) toward a spot {FlatDistance(kid.pos, spot):0} m away; family {root.id} searching");
+        return true;
+    }
+
+    // The child has stopped, far from their family: now everyone knows (and the time they've been lost
+    // starts from here).
+    private void Announce(Customer kid)
+    {
+        kid.lostAnnounced = true;
+        kid.lostSince = Time.time;
+        kid.corners.Clear();
+        kid.corner = 0;
+        kid.arrived = true;
+        if (kid.mode == Mode.Lost) SetMark(kid, LostMark.LostChild);
+        React(kid, Reaction.LostMyFamily);
+        var family = FamilyOf(kid);
+        var root = family != null ? Root(family) : null;
+        if (root == null) return;
         React(root, Reaction.LostChild);
         MarkParty(root, LostMark.Searching);
         CaseRpc(kid.id, root.id, true);
-        Log(kid, $"got lost (from {parent.id}); family {root.id} searching");
+        Log(kid, $"lost, {FlatDistance(kid.pos, root.pos):0} m from their family: everyone's told");
 
         var notes = NotificationManager.Instance;
         if (notes != null)
             foreach (var client in NetworkManager.ConnectedClientsList)
                 notes.ServerNotifyClientText(client.ClientId, "Lost child!",
                     "A family has lost their child. Open Lost & Found on your phone to see where the child and their parents are.");
-        return true;
     }
 
     // Somewhere in the halls (not in a store) between min and max meters away, that can be walked to.
@@ -101,7 +123,7 @@ public partial class CustomerManager
     {
         spot = default;
         var mall = MallManager.Instance;
-        for (int tries = 0; tries < 10; tries++)
+        for (int tries = 0; tries < 24; tries++)
         {
             Vector2 d = Random.insideUnitCircle.normalized * Random.Range(min, max);
             var p = from + new Vector3(d.x, 0f, d.y);
@@ -118,6 +140,13 @@ public partial class CustomerManager
 
     private void ThinkLost(Customer kid)
     {
+        // Still walking off: told once they've stopped (or taken too long about it).
+        if (!kid.lostAnnounced)
+        {
+            if (FamilyOf(kid) == null) { GoHomeAlone(kid); return; }
+            if (kid.arrived || Time.time - kid.lostSince >= lostWalkSeconds) Announce(kid);
+            return;
+        }
         // On their own they only find their family once they've given up waiting and go looking (the
         // family, searching, never stumbles on them: finding them is the players' job).
         bool gaveUp = Time.time - kid.lostSince >= lostFindThemselvesMinutes * 60f;

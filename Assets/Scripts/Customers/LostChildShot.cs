@@ -86,6 +86,40 @@ public class LostChildShotSettings
     [Min(0.2f)] public float childHeight = 1.1f;
     [Min(0.2f)] public float adultHeight = 1.75f;
 
+    /// <summary>Where a still picture was taken (one per shot that shows a child).</summary>
+    public class Still
+    {
+        public bool taken;
+        public Vector3 at, last;
+        public float stillSince;
+        public void Clear() => taken = false;
+    }
+
+    /// <summary>
+    /// A still picture of a customer (the lost child, standing where they are): taken once, and again when
+    /// they've moved somewhere else and stopped. Call every LateUpdate while it's shown; the camera only
+    /// renders the one frame. False: they aren't shown here.
+    /// </summary>
+    public bool KeepStill(LostChildShot shot, ushort customer, Still still)
+    {
+        if (shot == null) return false;
+        shot.On = false; // (rendered last frame, if it was taken then)
+        var cm = CustomerManager.Instance;
+        if (cm == null || !cm.TryGetShown(customer, out var feet, out bool child)) return still.taken;
+        float now = Time.unscaledTime;
+        if ((feet - still.last).sqrMagnitude > 0.0025f) { still.last = feet; still.stillSince = now; }
+        bool standing = now - still.stillSince >= 0.5f;
+        bool moved = (feet - still.at).sqrMagnitude > 2.25f;
+        if (!still.taken || (moved && standing))
+        {
+            shot.Aim(feet, child ? childHeight : adultHeight, distance, above, blockers);
+            shot.On = true; // just this frame
+            still.at = feet;
+            still.taken = true;
+        }
+        return true;
+    }
+
     public LostChildShot Make(string name) => new(name, size.x, size.y, cullingMask, fieldOfView);
 
     /// <summary>Aim the shot at a customer (false: they aren't shown here, e.g. they left).</summary>

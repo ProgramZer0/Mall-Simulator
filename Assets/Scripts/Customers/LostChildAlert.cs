@@ -41,6 +41,7 @@ public class LostChildAlert : MonoBehaviour
     private CustomerManager.LostCase shown;
     private float shownAt = -1f;
     private CanvasGroup fade;
+    private readonly LostChildShotSettings.Still childStill = new();
     private RectTransform rect;
     private Vector3 smallScale;
 
@@ -77,6 +78,7 @@ public class LostChildAlert : MonoBehaviour
         if (parentsPicture != null) parentsPicture.texture = parentsShot.Texture;
         if (titleText != null) titleText.text = title;
         shown = lost;
+        childStill.Clear();
         shownAt = Time.unscaledTime;
         root.SetActive(true);
         Place(0f);
@@ -105,7 +107,7 @@ public class LostChildAlert : MonoBehaviour
         float alpha = Mathf.Lerp(1f, smallAlpha, shrink);
         if (fadeSeconds > 0f) alpha *= Mathf.Clamp01(Mathf.Min(t, showSeconds - t) / fadeSeconds);
         fade.alpha = alpha;
-        childShot.On = shot.Aim(childShot, shown.kid);
+        shot.KeepStill(childShot, shown.kid, childStill); // a still picture of the child; the parents live
         parentsShot.On = shot.Aim(parentsShot, shown.family);
     }
 
