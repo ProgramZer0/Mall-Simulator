@@ -30,6 +30,9 @@ public class PaintBrush : NetworkBehaviour
     [SerializeField] private Vector3 handRotation = new(0f, -90f, 0f);
     [Tooltip("How far you can paint, in meters.")]
     [SerializeField] private float range = 4f;
+    [Tooltip("Log every paint click, what the host does with it (and why not), and what gets painted on each " +
+             "machine: each renderer, its materials, and whether they have a base color and a texture.")]
+    [SerializeField] private bool debugLogs;
     [Tooltip("Items this far outside your store's space still count as yours (windows and doors in the front " +
              "wall stick out a little), in meters.")]
     [SerializeField] private float storeBuffer = 0.75f;
@@ -75,7 +78,16 @@ public class PaintBrush : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         if (IsOwner) cam = GetComponentInChildren<Camera>(true);
+        if (IsOwner && debugLogs) PaintPalette.DebugApply = true;
     }
+
+    private void DLog(string message)
+    {
+        if (debugLogs) Debug.Log($"[Paint] {message}", this);
+    }
+
+    private string Describe(ItemPickupNet item) =>
+        item == null ? "nothing" : $"'{item.name}' (item {item.ItemId}, net id {item.NetworkObjectId}, paint {item.Paint:X8})";
 
     public override void OnNetworkDespawn()
     {
@@ -406,7 +418,10 @@ public class PaintBrush : NetworkBehaviour
 
     private void Paint()
     {
-        if (targetPlot == null) return;
+        DLog($"Click: {targetKind} {(targetKind == Kind.Item ? Describe(targetItem) : targetObject != null ? $"'{targetObject.name}'" : "")} " +
+             $"zone {targetZone}{(targetKind == Kind.Front ? $" (front type {targetModule})" : "")} → {PaintPalette.NameOf(color)} (id {color}), " +
+             $"store '{(targetPlot != null ? targetPlot.DisplayName : "none")}'.");
+        if (targetPlot == null) { DLog("  no store: nothing sent."); return; }
         switch (targetKind)
         {
             case Kind.Item:
@@ -425,42 +440,55 @@ public class PaintBrush : NetworkBehaviour
     [Rpc(SendTo.Server)]
     private void RequestPaintItemRpc(NetworkObjectReference itemRef, int zone, byte paint, RpcParams rpcParams = default)
     {
-        if (!itemRef.TryGet(out NetworkObject no) || !no.TryGetComponent<ItemPickupNet>(out var item)) return;
-        if (zone < 0 || zone >= PaintParts.ZonesOf(item.gameObject).Count || PaintSet.Get(item.Paint, zone) == paint) return;
+        if (!itemRef.TryGet(out NetworkObject no) || !no.TryGetComponent<ItemPickupNet>(out var item)) { DLog("Host: item not found."); return; }
+        int zones = PaintParts.ZonesOf(item.gameObject).Count;
+        if (zone < 0 || zone >= zones) { DLog($"Host: {Describe(item)} has {zones} zone(s), not zone {zone}."); return; }
+        if (PaintSet.Get(item.Paint, zone) == paint) { DLog($"Host: {Describe(item)} zone {zone} is already {PaintPalette.NameOf(paint)}."); return; }
         var plot = PlotOf(item);
         if (!ServerCanPaint(rpcParams, plot, paint, item.transform.position, out var palette, storeBuffer)) return;
         var def = ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(item.ItemId, out var d) ? d : null;
-        if (!ColorRules.Allows(def, paint, Team, out _)) return;
-        if (ServerPay(palette.ItemFee)) item.ServerSetZonePaint(zone, paint);
+        if (!ColorRules.Allows(def, paint, Team, out string why)) { DLog($"Host: not allowed: {why}."); return; }
+        if (!ServerPay(palette.ItemFee)) { DLog($"Host: can't pay ${palette.ItemFee}."); return; }
+        item.ServerSetZonePaint(zone, paint);
+        DLog($"Host: painted {Describe(item)} zone {zone} {PaintPalette.NameOf(paint)}.");
     }
 
     [Rpc(SendTo.Server)]
     private void RequestPaintWallRpc(int plotId, int wallId, byte paint, RpcParams rpcParams = default)
     {
         if (MallManager.Instance == null || !MallManager.Instance.TryGetPlot(plotId, out var plot)) return;
-        if (!plot.TryGetBuiltWallById(wallId, out var wall) || wall.paint == paint) return;
+        if (!plot.TryGetBuiltWallById(wallId, out var wall)) { DLog($"Host: wall {wallId} not found."); return; }
+        if (wall.paint == paint) { DLog($"Host: wall {wallId} is already {PaintPalette.NameOf(paint)}."); return; }
         if (!ServerCanPaint(rpcParams, plot, paint, (wall.a + wall.b) * 0.5f, out var palette, wall.Length * 0.5f)) return;
-        if (!ColorRules.AllowsPlain(paint, Team, out _)) return;
-        if (ServerPay(palette.WallFee(wall.Length))) plot.ServerPaintWall(wallId, paint);
+        if (!ColorRules.AllowsPlain(paint, Team, out string why)) { DLog($"Host: not allowed: {why}."); return; }
+        if (!ServerPay(palette.WallFee(wall.Length))) { DLog("Host: can't pay."); return; }
+        plot.ServerPaintWall(wallId, paint);
+        DLog($"Host: painted wall {wallId} {PaintPalette.NameOf(paint)}.");
     }
 
     [Rpc(SendTo.Server)]
     private void RequestPaintFrontRpc(int plotId, int moduleId, int zone, byte paint, RpcParams rpcParams = default)
     {
-        if (MallManager.Instance == null || !MallManager.Instance.TryGetPlot(plotId, out var plot) ||
-            plot.GetFrontPaint(moduleId, zone) == paint) return;
+        if (MallManager.Instance == null || !MallManager.Instance.TryGetPlot(plotId, out var plot)) { DLog($"Host: store {plotId} not found."); return; }
+        if (plot.GetFrontPaint(moduleId, zone) == paint) { DLog($"Host: storefront type {moduleId} part {zone} is already {PaintPalette.NameOf(paint)}."); return; }
         if (!ServerCanPaint(rpcParams, plot, paint, transform.position, out var palette)) return;
-        if (!ColorRules.AllowsPlain(paint, Team, out _)) return;
-        if (ServerPay(palette.FrontFee)) plot.ServerPaintFront(moduleId, zone, paint);
+        if (!ColorRules.AllowsPlain(paint, Team, out string why)) { DLog($"Host: not allowed: {why}."); return; }
+        if (!ServerPay(palette.FrontFee)) { DLog("Host: can't pay."); return; }
+        plot.ServerPaintFront(moduleId, zone, paint);
+        DLog($"Host: painted storefront type {moduleId} part {zone} {PaintPalette.NameOf(paint)}.");
     }
 
     [Rpc(SendTo.Server)]
     private void RequestPaintFloorRpc(int plotId, byte paint, RpcParams rpcParams = default)
     {
-        if (MallManager.Instance == null || !MallManager.Instance.TryGetPlot(plotId, out var plot) || plot.FloorPaint == paint) return;
-        if (!plot.HasPaintableFloor || !ServerCanPaint(rpcParams, plot, paint, transform.position, out var palette)) return;
-        if (!ColorRules.AllowsPlain(paint, Team, out _)) return;
-        if (ServerPay(palette.FloorFee)) plot.ServerPaintFloor(paint);
+        if (MallManager.Instance == null || !MallManager.Instance.TryGetPlot(plotId, out var plot)) { DLog($"Host: store {plotId} not found."); return; }
+        if (plot.FloorPaint == paint) { DLog($"Host: the floor is already {PaintPalette.NameOf(paint)}."); return; }
+        if (!plot.HasPaintableFloor) { DLog("Host: this store has no paintable floor."); return; }
+        if (!ServerCanPaint(rpcParams, plot, paint, transform.position, out var palette)) return;
+        if (!ColorRules.AllowsPlain(paint, Team, out string why)) { DLog($"Host: not allowed: {why}."); return; }
+        if (!ServerPay(palette.FloorFee)) { DLog("Host: can't pay."); return; }
+        plot.ServerPaintFloor(paint);
+        DLog($"Host: painted the floor {PaintPalette.NameOf(paint)}.");
     }
 
     // The sender is this player, the store is theirs (and not being edited), the color is real, and
@@ -469,9 +497,15 @@ public class PaintBrush : NetworkBehaviour
                                 float extraReach = 0f)
     {
         palette = PaintPalette.Instance;
-        if (rpcParams.Receive.SenderClientId != OwnerClientId || palette == null || plot == null) return false;
-        if (!PaintPalette.IsValid(paint) || !plot.IsAuthorized(OwnerClientId) || plot.IsRenovating) return false;
-        return Vector3.Distance(transform.position, at) <= range + 3f + extraReach;
+        if (rpcParams.Receive.SenderClientId != OwnerClientId) { DLog("Host: sent by someone else."); return false; }
+        if (palette == null) { DLog("Host: no PaintPalette."); return false; }
+        if (plot == null) { DLog("Host: not in a store."); return false; }
+        if (!PaintPalette.IsValid(paint)) { DLog($"Host: color {paint} isn't in the palette."); return false; }
+        if (!plot.IsAuthorized(OwnerClientId)) { DLog($"Host: '{plot.DisplayName}' isn't theirs."); return false; }
+        if (plot.IsRenovating) { DLog($"Host: '{plot.DisplayName}' is being renovated."); return false; }
+        float d = Vector3.Distance(transform.position, at);
+        if (d > range + 3f + extraReach) { DLog($"Host: too far ({d:0.0} m)."); return false; }
+        return true;
     }
 
     private ulong Team => MallManager.GetTeamOf(OwnerClientId);
