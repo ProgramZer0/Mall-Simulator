@@ -25,6 +25,7 @@ public class HelpPoints : NetworkBehaviour
         StoppedThief,         // customer AI
         DeliveredForOthers,   // brought another team's delivery to their store
         ReportedBroken,       // reported a broken light or screen (BreakManager)
+        ReportedCart,         // reported another store's cart left in the way, and it was towed (CartNet)
     }
 
     [Serializable]
@@ -57,6 +58,7 @@ public class HelpPoints : NetworkBehaviour
         new Rule { action = HelpAction.StoppedThief, points = 1, maxPerPeriod = 3, description = "stopped a thief" },
         new Rule { action = HelpAction.DeliveredForOthers, points = 1, maxPerPeriod = 2, description = "delivered another store's order" },
         new Rule { action = HelpAction.ReportedBroken, points = 1, maxPerPeriod = 3, description = "reported something broken" },
+        new Rule { action = HelpAction.ReportedCart, points = 1, maxPerPeriod = 2, description = "reported a cart left in the way" },
     };
 
     [Header("Votes")]

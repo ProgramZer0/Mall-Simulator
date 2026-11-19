@@ -62,6 +62,17 @@ public class CartNet : NetworkBehaviour
     [Tooltip("Furthest a player can be from the Handle (or the cart's middle, without one) to start pushing, in meters.")]
     [SerializeField] private float grabRange = 1.5f;
 
+    [Header("Left in the way")]
+    [Tooltip("Another team's player can report this cart when it's left outside its store (and away from its Home Spot). " +
+             "Still there this many seconds later (not moved), it's towed home and its store's team is fined.")]
+    [SerializeField, Min(5f)] private float towAfterSeconds = 180f;
+    [Tooltip("The fine for a towed cart (dollars; never takes a team below zero).")]
+    [SerializeField, Min(0)] private int towFine = 100;
+    [Tooltip("Moved this far (meters) since it was reported: it's no longer in the way (the report's dropped).")]
+    [SerializeField, Min(0.2f)] private float movedEnough = 1.5f;
+    [Tooltip("This close to its Home Spot (meters) it's where it belongs: can't be reported.")]
+    [SerializeField, Min(0f)] private float homeRadius = 3f;
+
     // For carts made at runtime (StoreUpgrades' bigger carts): the store, synced so everyone knows.
     private readonly NetworkVariable<int> homePlotId =
         new(-1, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
@@ -90,6 +101,108 @@ public class CartNet : NetworkBehaviour
     private readonly HashSet<Collider> ignoredWithPusher = new();
     private int ignoredChildCount = -1;
     private int loadIgnoreCount = -1;
+
+    /* ---- reported for being left in the way ---- */
+
+    // Host time (NetworkManager.ServerTime) it's towed at; 0: not reported.
+    private readonly NetworkVariable<double> towAt =
+        new(0d, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private Vector3 reportedAt;
+    private ulong reportedBy;
+    private float nextReportCheck;
+
+    /// <summary>Reported as in the way, and towed unless it's moved.</summary>
+    public bool IsReported => towAt.Value > 0d;
+
+    /// <summary>Seconds until it's towed (0: not reported).</summary>
+    public float TowSecondsLeft => IsReported && NetworkManager != null
+        ? Mathf.Max(0f, (float)(towAt.Value - NetworkManager.ServerTime.Time)) : 0f;
+
+    // Where it belongs: in its store, or by its home spot.
+    private bool WhereItBelongs()
+    {
+        var home = HomeStore;
+        if (home != null && home.Contains(BodyCenter + Vector3.up * 0.05f)) return true;
+        Vector3 d = BodyCenter - HomePose.position;
+        d.y = 0f;
+        return d.magnitude <= homeRadius;
+    }
+
+    /// <summary>Can this player report it as left in the way? Why not: for the prompt (null: say nothing).</summary>
+    public bool CanReport(ulong clientId, out string why)
+    {
+        why = null;
+        if (CanUse(clientId) || HomeStore == null) return false; // their own (or nobody's): nothing to say
+        if (IsPushed) return false;
+        if (IsReported) { why = $"Reported: towed in {Clock(TowSecondsLeft)} unless it's moved"; return false; }
+        if (WhereItBelongs()) { why = $"{HomeStore.DisplayName}'s cart"; return false; }
+        return true;
+    }
+
+    private static string Clock(float seconds)
+    {
+        int s = Mathf.CeilToInt(seconds);
+        return $"{s / 60}:{s % 60:00}";
+    }
+
+    /// <summary>The F prompt for someone else's cart.</summary>
+    public string ReportPrompt(ulong clientId) =>
+        CanReport(clientId, out string why) ? "F: Report this cart (left in the way)" : why;
+
+    [Rpc(SendTo.Server)]
+    public void RequestReportRpc(RpcParams rpcParams = default)
+    {
+        ulong sender = rpcParams.Receive.SenderClientId;
+        if (!CanReport(sender, out _)) return;
+        var player = NetworkManager.ConnectedClients.TryGetValue(sender, out var client) ? client.PlayerObject : null;
+        if (player == null || Vector3.Distance(player.transform.position, BodyCenter) > 6f) return;
+        reportedAt = BodyCenter;
+        reportedBy = sender;
+        towAt.Value = NetworkManager.ServerTime.Time + towAfterSeconds;
+        var notes = NotificationManager.Instance;
+        if (notes == null) return;
+        var home = HomeStore;
+        notes.ServerNotifyClientText(sender, "Cart reported",
+            $"If {home.DisplayName}'s cart is still there in {Clock(towAfterSeconds)}, it's towed and they're fined.");
+        if (home.HasOwner)
+            notes.ServerNotifyTeamText(home.OwnerTeamId, "Your cart is in the way!",
+                $"Someone reported {home.DisplayName}'s cart. Move it within {Clock(towAfterSeconds)} or it's towed home and you're fined ${towFine}.",
+                alarm: true);
+    }
+
+    // Host: moved (or back where it belongs): the report's dropped. Time's up: towed, and a fine.
+    private void ServerCheckReport()
+    {
+        if (Time.time < nextReportCheck) return;
+        nextReportCheck = Time.time + 0.5f;
+        var home = HomeStore;
+        Vector3 moved = BodyCenter - reportedAt;
+        moved.y = 0f;
+        if (moved.magnitude >= movedEnough || WhereItBelongs() || home == null)
+        {
+            towAt.Value = 0d;
+            return;
+        }
+        if (NetworkManager.ServerTime.Time < towAt.Value) return;
+
+        towAt.Value = 0d;
+        ServerRecall();
+        var notes = NotificationManager.Instance;
+        var eco = EconomyManager.Instance;
+        if (home.HasOwner)
+        {
+            if (towFine > 0 && eco != null && eco.IsSpawned) eco.ServerTakeCents(home.OwnerTeamId, towFine * 100);
+            if (notes != null)
+                notes.ServerNotifyTeamText(home.OwnerTeamId, "Cart towed",
+                    $"{home.DisplayName}'s cart was left in the way: it's been towed home{(towFine > 0 ? $" and you were fined ${towFine}" : "")}.",
+                    alarm: true);
+        }
+        if (NetworkManager.ConnectedClients.ContainsKey(reportedBy))
+        {
+            if (HelpPoints.Instance != null) HelpPoints.Instance.ServerAward(reportedBy, HelpPoints.HelpAction.ReportedCart);
+            if (notes != null) notes.ServerNotifyClientText(reportedBy, "Cart towed", $"The cart you reported has been towed.");
+        }
+    }
 
     public StorePlot HomeStore
     {
@@ -356,6 +469,7 @@ public class CartNet : NetworkBehaviour
 
     private void Update()
     {
+        if (IsServer && towAt.Value > 0d) ServerCheckReport();
         if (!IsSpawned) return;
 
         // Physics runs only on the pusher's machine, and only while they own it.
