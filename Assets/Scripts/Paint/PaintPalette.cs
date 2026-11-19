@@ -219,13 +219,21 @@ public class PaintPalette : MonoBehaviour
 
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorId = Shader.PropertyToID("_Color");
+    private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
+    private static readonly int MainTexId = Shader.PropertyToID("_MainTex");
     private static MaterialPropertyBlock block;
 
     /// <summary>
     /// Paint one renderer (Material Index -1: all its materials) with a color id; 0 takes the paint off.
     /// Uses a property block, so materials aren't copied.
     /// </summary>
-    public static void Apply(Renderer renderer, int materialIndex, byte id)
+    public static void Apply(Renderer renderer, int materialIndex, byte id) => Apply(renderer, materialIndex, id, false);
+
+    /// <summary>
+    /// Cover Texture: painted, the material's texture is hidden too (solid paint over wood, a print...), so
+    /// the color shows as it is (white paint really is white). Normal maps and the like still show.
+    /// </summary>
+    public static void Apply(Renderer renderer, int materialIndex, byte id, bool coverTexture)
     {
         if (renderer == null) return;
         int count = renderer.sharedMaterials.Length;
@@ -245,6 +253,11 @@ public class PaintPalette : MonoBehaviour
             renderer.GetPropertyBlock(block, i);
             block.SetColor(BaseColorId, c);
             block.SetColor(ColorId, c);
+            if (coverTexture)
+            {
+                block.SetTexture(BaseMapId, Texture2D.whiteTexture);
+                block.SetTexture(MainTexId, Texture2D.whiteTexture);
+            }
             renderer.SetPropertyBlock(block, i);
         }
     }

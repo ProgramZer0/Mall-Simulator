@@ -38,6 +38,9 @@ public class PaintParts : MonoBehaviour
     [Tooltip("Shown in the brush prompt (\"Paint Glass Door (Doors)\"). Empty: nothing for the root's zone, the " +
              "object's name for a child's.")]
     [SerializeField] private string zoneName;
+    [Tooltip("Painted, hide the model's texture too, so the paint is a solid color (white paint really looks white). " +
+             "Off: the paint tints the texture, so a dark texture stays dark and white changes nothing.")]
+    [SerializeField] private bool coverTexture;
 
     public byte Current { get; private set; }
 
@@ -74,7 +77,7 @@ public class PaintParts : MonoBehaviour
     public void Apply(byte id)
     {
         Current = id;
-        foreach (var (r, index) in Targets(this, transform)) PaintPalette.Apply(r, index, id);
+        foreach (var (r, index) in Targets(this, transform)) PaintPalette.Apply(r, index, id, coverTexture);
     }
 
     // What a zone paints, on the object it's on (Self) or the same spot in a copy (Root of the copy).
@@ -152,7 +155,7 @@ public class PaintParts : MonoBehaviour
             Transform at = path.Length == 0 ? copy.transform : copy.transform.Find(path);
             if (at == null) continue;
             byte id = PaintSet.Get(set, i);
-            foreach (var (r, index) in Targets(zones[i], at)) PaintPalette.Apply(r, index, id);
+            foreach (var (r, index) in Targets(zones[i], at)) PaintPalette.Apply(r, index, id, zones[i].coverTexture);
         }
     }
 
