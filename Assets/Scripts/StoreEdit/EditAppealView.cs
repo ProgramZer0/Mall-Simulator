@@ -32,6 +32,9 @@ public class EditAppealView : MonoBehaviour
     [Tooltip("Things that take away from it.")]
     [SerializeField] private Color badColor = new(0.95f, 0.25f, 0.2f, 1f);
 
+    [Tooltip("Hide the products on shelves and rails while the view's on (only the shelves are colored either way).")]
+    [SerializeField] private bool hideProducts;
+
     [Header("Overlay")]
     [Tooltip("Size of the floor squares checked for being seen from the hallway (meters). Smaller is finer and slower.")]
     [SerializeField, Range(0.25f, 2f)] private float floorCell = 0.5f;
@@ -139,7 +142,7 @@ public class EditAppealView : MonoBehaviour
         drawnRevision = -1;
         drawnSelection = null;
         nextPanel = 0f;
-        StockBatcher.HideEditView = true; // the shelves are colored, not their products
+        StockBatcher.HideEditView = hideProducts; // (shown by default: the shelves are colored, their products as they are)
         GreyStore();
     }
 

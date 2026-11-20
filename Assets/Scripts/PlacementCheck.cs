@@ -28,16 +28,67 @@ public static class PlacementCheck
         if (!GetTestBox(def, position, rotation, out Vector3 center, out Vector3 halfExtents))
             return true; // nothing measurable; don't block
 
-        // 1) Nothing in the way, and not in a No Place Area.
+        // 1) Nothing in the way, not in a No Place Area, and not in stock on a shelf (products have no
+        //    colliders, so a thing set on a stocked shelf would sit inside them).
         int count = Physics.OverlapBoxNonAlloc(center, halfExtents, Hits, rotation,
                                                blockingMask, QueryTriggerInteraction.Ignore);
         if (count > 0 || NoPlaceArea.Find(center, halfExtents, rotation) != null) return false;
+        if (OverlapsStock(center, halfExtents, rotation)) return false;
 
         // 2) Something underneath to sit on (stops placing items in mid-air).
         if (!HasSupport(center, halfExtents, rotation, supportMask)) return false;
 
         // 3) Not shutting the store's last clear doorway.
         return !BlocksLastDoorway(center, halfExtents, rotation, null);
+    }
+
+    /* ========================= STOCK ON SHELVES ========================= */
+
+    /// <summary>
+    /// Would a box here be inside a shelf spot or rail that has products in it? Shelf products have no
+    /// colliders, so the physics check alone lets things be set right through them.
+    /// </summary>
+    public static bool OverlapsStock(Vector3 center, Vector3 half, Quaternion rotation)
+    {
+        // A hair smaller, so resting right on top of (or beside) stocked products still counts as clear.
+        Vector3 h = half - Vector3.one * 0.01f;
+        if (h.x <= 0f || h.y <= 0f || h.z <= 0f) return false;
+        foreach (var sc in StockContainer.All)
+        {
+            if (sc == null || !sc.IsSpawned) continue;
+            for (int z = 0; z < sc.ZoneCount; z++)
+            {
+                if (sc.GetZone(z).count <= 0) continue;
+                if (!sc.TryGetZoneBox(z, out Vector3 zc, out Quaternion zr, out Vector3 size)) continue;
+                if (BoxesOverlap(center, h, rotation, zc, size * 0.5f, zr)) return true;
+            }
+        }
+        return false;
+    }
+
+    private static readonly Vector3[] SatAxes = new Vector3[15];
+
+    // Two turned boxes overlap (separating axis test).
+    private static bool BoxesOverlap(Vector3 ca, Vector3 ha, Quaternion ra, Vector3 cb, Vector3 hb, Quaternion rb)
+    {
+        Vector3 a0 = ra * Vector3.right, a1 = ra * Vector3.up, a2 = ra * Vector3.forward;
+        Vector3 b0 = rb * Vector3.right, b1 = rb * Vector3.up, b2 = rb * Vector3.forward;
+        if ((ca - cb).sqrMagnitude > (ha.magnitude + hb.magnitude) * (ha.magnitude + hb.magnitude)) return false;
+        int n = 0;
+        SatAxes[n++] = a0; SatAxes[n++] = a1; SatAxes[n++] = a2;
+        SatAxes[n++] = b0; SatAxes[n++] = b1; SatAxes[n++] = b2;
+        Vector3[] aa = { a0, a1, a2 }, bb = { b0, b1, b2 };
+        foreach (var x in aa) foreach (var y in bb) SatAxes[n++] = Vector3.Cross(x, y);
+        Vector3 d = cb - ca;
+        for (int i = 0; i < n; i++)
+        {
+            Vector3 axis = SatAxes[i];
+            if (axis.sqrMagnitude < 1e-8f) continue;
+            float ra2 = Mathf.Abs(Vector3.Dot(a0, axis)) * ha.x + Mathf.Abs(Vector3.Dot(a1, axis)) * ha.y + Mathf.Abs(Vector3.Dot(a2, axis)) * ha.z;
+            float rb2 = Mathf.Abs(Vector3.Dot(b0, axis)) * hb.x + Mathf.Abs(Vector3.Dot(b1, axis)) * hb.y + Mathf.Abs(Vector3.Dot(b2, axis)) * hb.z;
+            if (Mathf.Abs(Vector3.Dot(d, axis)) > ra2 + rb2) return false;
+        }
+        return true;
     }
 
     /* ========================= DOORWAYS ========================= */

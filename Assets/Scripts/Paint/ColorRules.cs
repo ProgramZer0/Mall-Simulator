@@ -10,7 +10,8 @@ using UnityEngine;
 ///   2. its categories' (PaintPalette → Limits; an item in several gets all of theirs),
 ///   3. none: any color that isn't Exclusive.
 /// Plus, always, its franchise's Colors (FranchiseDef → Colors): the brand's colors are extra colors for
-/// every item the franchise covers. Original (the model's own colors) is always allowed. Exclusive colors
+/// every item the franchise covers. And a team that holds a franchise may use its colors (exclusive ones
+/// too) on any of its items with no limit of its own (3. above): an item or category list still decides. Original (the model's own colors) is always allowed. Exclusive colors
 /// only where a list names them. And a color can only be used once the team reaches its Unlock Level
 /// (PaintPalette); until then pickers don't show it.
 /// Walls, floors and storefronts: any unlocked color that isn't Exclusive.
@@ -132,7 +133,7 @@ public static class ColorRules
                     else foreach (var c in ExtraOf(def)) if (PaintPalette.IsExclusive(c)) usableExclusive.Add(c);
                 }
         }
-        return usableExclusive.Contains(id);
+        return usableExclusive.Contains(id) || FranchiseManager.TeamHasFranchiseColor(team, id);
     }
 
     /// <summary>Can this team's player use this color yet (its Unlock Level)?</summary>
@@ -162,7 +163,7 @@ public static class ColorRules
                 return false;
             }
         }
-        else if (PaintPalette.IsExclusive(id) && !Contains(ExtraOf(def), id))
+        else if (PaintPalette.IsExclusive(id) && !Contains(ExtraOf(def), id) && !FranchiseManager.TeamHasFranchiseColor(team, id))
         {
             why = $"{color} is an exclusive color: {what} doesn't come in it";
             return false;

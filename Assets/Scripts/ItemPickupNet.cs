@@ -350,9 +350,12 @@ public class ItemPickupNet : NetworkBehaviour
     /// floating. On a cart: things on the same cart. Elsewhere: any placed item (not ones hung on a wall).
     /// Works with turned models (a Blender model's -90 on X): "on top" is always world up.
     /// </summary>
-    public bool HasItemOnTop()
+    public bool HasItemOnTop() => ItemOnTop() != null;
+
+    /// <summary>The (first) item resting on top of this one, or null (see HasItemOnTop).</summary>
+    public ItemPickupNet ItemOnTop()
     {
-        if (!TryGetLocalShape(out Bounds local)) return false;
+        if (!TryGetLocalShape(out Bounds local)) return null;
         bool onCart = IsOnCart;
 
         // The item's box, measured along world up and its own facing (flat), wherever its axes point.
@@ -380,11 +383,11 @@ public class ItemPickupNet : NetworkBehaviour
             // Sitting on it: its bottom is at (or above) this one's top. A taller neighbour standing beside it
             // reaches into the slab too, but starts down by the floor (or the cart's bed).
             if (TopHits[i].bounds.min.y < top.y - 0.08f) continue;
-            if (onCart) { if (other.transform.parent == transform.parent) return true; continue; }
+            if (onCart) { if (other.transform.parent == transform.parent) return other; continue; }
             if (other.IsOnCart || other.OnWall) continue;
-            return true;
+            return other;
         }
-        return false;
+        return null;
     }
 
     /// <summary>Hung on a wall (never falls).</summary>

@@ -6,7 +6,10 @@ using UnityEngine;
 /// come in and the ones inside head out (StorePlot.IsOpen); the store's Doors close too.
 ///
 /// Setup: a scene object with a collider (on a layer the player's interact ray hits) inside or by the
-/// store. Store: which one (empty: the store it's in, or whose child it is). Lamp: the renderer that glows
+/// store. Store: which one (empty: the store it's in, or whose child it is).
+/// To move it around in edit mode, make it an item: a prefab with NetworkObject + ItemPickupNet (Edit Mode
+/// Only) + this, in the catalog. Leave Store empty: it goes by the store it's in, wherever it's moved.
+/// Lamp: the renderer that glows
 /// (empty: the first renderer on it). Optional Lights tinted the same. No NetworkObject needed: the
 /// store's open state is already synced.
 /// </summary>
@@ -28,13 +31,21 @@ public class StoreOpenButton : MonoBehaviour
     private MaterialPropertyBlock block;
     private int shown = -1; // 0 off, 1 open, 2 closed
 
+    private StorePlot found;      // (Store empty) the store it was found in...
+    private Vector3 foundAt;      // ...from here (moved: looked up again)
+    private bool foundOnce;
+
     public StorePlot Store
     {
         get
         {
-            if (store == null) store = GetComponentInParent<StorePlot>();
-            if (store == null && MallManager.Instance != null) store = MallManager.Instance.GetPlotAt(transform.position);
-            return store;
+            if (store != null) return store;
+            if ((foundOnce && found != null && (transform.position - foundAt).sqrMagnitude < 0.04f)) return found;
+            foundOnce = true;
+            foundAt = transform.position;
+            found = GetComponentInParent<StorePlot>();
+            if (found == null && MallManager.Instance != null) found = MallManager.Instance.GetPlotAt(transform.position);
+            return found;
         }
     }
 

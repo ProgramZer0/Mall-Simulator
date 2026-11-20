@@ -18,7 +18,9 @@ using UnityEngine;
 ///   too much is lost.
 /// The money goes to the store's team. Everyone sees the same screen, belt, cash and change.
 ///
-/// Things too big for the belt go on as a price tag; things that fit but have no room yet wait.
+/// What goes on the belt: a product off a shelf as its Shelf Prefab, or in a bag when it has none
+/// (clothes off a rail); a whole item as itself; a whole stock crate, or anything too big for the belt,
+/// as a price tag. Things that fit but have no room yet wait.
 ///
 /// Prefab setup (a catalog item, placed and moved in edit mode like shelves):
 /// - NetworkObject + ItemPickupNet (Edit Mode Only, Physics Mode Frozen) + this, with colliders.
@@ -54,7 +56,7 @@ public class CheckoutCounter : NetworkBehaviour
         public int units;
         public int customer;  // LeftBehind (-1): a customer walked off without it; take it, don't scan it
         public byte whole;  // 1: a whole item (sold loose); 0: one product off a shelf
-        public byte tag;    // 1: too big for the belt, shown as a price tag
+        public byte tag;    // 0: its model; 1: a price tag (too big for the belt, a whole crate); 2: in a bag
         public uint paint;  // its color (PaintSet; for one product off a shelf, the products' color)
 
         public bool Equals(BeltItem o) => key == o.key && itemId == o.itemId && priceCents == o.priceCents &&
@@ -124,6 +126,10 @@ public class CheckoutCounter : NetworkBehaviour
     [Tooltip("What a too-big item shows as. Empty: a plain card.")]
     [SerializeField] private GameObject tagPrefab;
     [SerializeField] private float tagLength = 0.12f;
+    [Tooltip("What a product with no Shelf Prefab (clothes off a rail) shows as on the belt. Empty: a plain paper bag.")]
+    [SerializeField] private GameObject bagPrefab;
+    [Tooltip("The plain bag's size (across, up, along the belt), and the space a bag takes on the belt.")]
+    [SerializeField] private Vector3 bagSize = new(0.22f, 0.26f, 0.12f);
 
     [Header("Screen (world-space Canvas texts)")]
     [SerializeField] private TMP_Text screenItems;
@@ -313,8 +319,20 @@ public class CheckoutCounter : NetworkBehaviour
         return shape.extents.x > width || shape.extents.z > length || shape.extents.y > maxItemHeight;
     }
 
+    // How it goes on the belt: 0 its model, 1 a tag, 2 a bag.
+    private byte BeltLook(int itemId, bool whole)
+    {
+        var crate = ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(itemId, out var def) && def.worldNetworkPrefab != null
+            ? def.worldNetworkPrefab.GetComponent<ItemPickupNet>() : null;
+        bool isCrate = crate != null && crate.IsStockCrate;
+        if (whole) return (byte)(isCrate || IsTooBig(itemId, true) ? 1 : 0);
+        if (isCrate && crate.ShelfPrefab == null) return 2; // clothes off a rail (no shelf model): bagged
+        return (byte)(IsTooBig(itemId, false) ? 1 : 0);
+    }
+
     private float LengthOf(BeltItem item)
     {
+        if (item.tag == 2) return bagSize.z;
         if (item.tag != 0) return tagLength;
         return TryGetShape(item.itemId, item.whole != 0, out var shape) ? shape.extents.z : tagLength;
     }
@@ -370,7 +388,7 @@ public class CheckoutCounter : NetworkBehaviour
                 units = Mathf.Max(1, p.units),
                 customer = customer,
                 whole = (byte)(p.whole ? 1 : 0),
-                tag = (byte)(IsTooBig(p.itemId, p.whole) ? 1 : 0),
+                tag = BeltLook(p.itemId, p.whole),
                 paint = p.paint,
             });
         ServerFill();
@@ -452,7 +470,7 @@ public class CheckoutCounter : NetworkBehaviour
                     if (it.key == part.value)
                         return it.customer == LeftBehind ? $"Left behind: {NameOf(it.itemId)}   Click: take it"
                              : it.customer == s.customer && !paying
-                            ? $"Click: scan {NameOf(it.itemId)}{(it.tag != 0 ? " (tag)" : "")} {FormatAmount(it.priceCents)}"
+                            ? $"Click: scan {NameOf(it.itemId)}{(it.tag == 1 ? " (tag)" : it.tag == 2 ? " (bag)" : "")} {FormatAmount(it.priceCents)}"
                             : "Next customer's";
                 return null;
             case CheckoutClickable.Action.CustomerMoney:
@@ -863,6 +881,11 @@ public class CheckoutCounter : NetworkBehaviour
     {
         if (s.go == null) return;
         Vector3 middle = front - forward * (s.offset + len * 0.5f);
+        if (it.tag == 2)
+        {
+            s.go.transform.SetPositionAndRotation(middle + up * 0.002f, beltRot); // a bag stands on its bottom
+            return;
+        }
         if (it.tag != 0 || !TryGetShape(it.itemId, it.whole != 0, out var shape))
         {
             s.go.transform.SetPositionAndRotation(middle + up * 0.005f, beltRot);
@@ -882,6 +905,8 @@ public class CheckoutCounter : NetworkBehaviour
             bool crate = it.whole != 0 && StockContainer.IsStockCrate(it.itemId);
             go = StockContainer.MakeVisual(shape.model, transform.position, transform.rotation, null, paint: crate ? 0u : it.paint);
         }
+        else if (it.tag == 2)
+            go = bagPrefab != null ? StockContainer.MakeVisual(bagPrefab, transform.position, transform.rotation, null) : MakeBag();
         else if (tagPrefab != null)
             go = StockContainer.MakeVisual(tagPrefab, transform.position, transform.rotation, null);
         else
@@ -894,6 +919,19 @@ public class CheckoutCounter : NetworkBehaviour
         click.Counter = this;
         if (go.GetComponentInChildren<Collider>() == null) go.AddComponent<BoxCollider>();
         return go;
+    }
+
+    // A plain paper bag (its bottom at its pivot).
+    private GameObject MakeBag()
+    {
+        var root = new GameObject("[Bag]");
+        var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        body.transform.SetParent(root.transform, false);
+        body.transform.localScale = bagSize;
+        body.transform.localPosition = Vector3.up * (bagSize.y * 0.5f);
+        var r = body.GetComponent<Renderer>();
+        if (r != null) r.material.color = new Color(0.72f, 0.56f, 0.38f, 1f); // (as the tags do)
+        return root;
     }
 
     private void ClearModels()
