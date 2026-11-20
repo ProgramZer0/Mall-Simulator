@@ -213,11 +213,14 @@ public class CartNet : NetworkBehaviour
     public Pose HomePose => homeSpot != null ? new Pose(homeSpot.position, homeSpot.rotation)
         : hasHomePose ? new Pose(homePos, homeRot) : new Pose(startPos, startRot);
 
+    private int pendingHomePlotId = int.MinValue; // ServerSetHome before the cart was spawned
+
     /// <summary>Host, before spawning a cart made at runtime: its store and where Recall sends it.</summary>
     public void ServerSetHome(StorePlot plot, Pose home)
     {
         homeStore = plot;
-        homePlotId.Value = plot != null ? plot.PlotId : -1;
+        pendingHomePlotId = plot != null ? plot.PlotId : -1;
+        if (IsSpawned) homePlotId.Value = pendingHomePlotId; // (before spawning: set in OnNetworkSpawn)
         hasHomePose = true;
         homePos = home.position;
         homeRot = home.rotation;
@@ -307,6 +310,7 @@ public class CartNet : NetworkBehaviour
         if (IsServer)
         {
             NetworkObject.DontDestroyWithOwner = true; // the pusher leaving mustn't delete the cart
+            if (pendingHomePlotId != int.MinValue) homePlotId.Value = pendingHomePlotId;
             NetworkManager.OnClientDisconnectCallback += OnClientDisconnected;
         }
         pusher.OnValueChanged += OnPusherChanged;
