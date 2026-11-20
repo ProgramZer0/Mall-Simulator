@@ -39,8 +39,19 @@ public static class UIState
 
     public static void CloseMenu(object menu)
     {
-        if (menu != null && openMenus.Remove(menu)) Changed?.Invoke();
+        if (menu == null || !openMenus.Remove(menu)) return;
+        MenuClosedFrame = Time.frameCount;
+        Changed?.Invoke();
     }
+
+    /// <summary>The frame a menu was last closed.</summary>
+    public static int MenuClosedFrame { get; private set; } = -1;
+
+    /// <summary>
+    /// A menu closed this frame: the key that closed it (F on a monitor) mustn't also do something in the
+    /// world (like using the monitor again).
+    /// </summary>
+    public static bool MenuClosedThisFrame => MenuClosedFrame == Time.frameCount;
 
     /// <summary>The frame something last used Esc (see TakeEscape).</summary>
     public static int EscapeTakenFrame { get; private set; } = -1;
