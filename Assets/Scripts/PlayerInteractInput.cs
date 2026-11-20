@@ -107,8 +107,8 @@ public class PlayerInteractInput : NetworkBehaviour
 
         // Store edit mode, an open menu, or a hand tool out (the paint brush or price scanner has the
         // clicks and keys to itself): drop any placement preview and stand by.
-        if ((storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen || PaintBrush.LocalActive ||
-            PriceScanner.LocalActive)
+        if ((storeEdit != null && storeEdit.IsEditing) || UIState.IsMenuOpen || UIState.MenuClosedThisFrame ||
+            PaintBrush.LocalActive || PriceScanner.LocalActive)
         {
             lookedAtSign = null;
             lookedAtMonitor = null;
