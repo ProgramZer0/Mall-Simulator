@@ -33,6 +33,9 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
     [SerializeField] private TMP_Text tooltipNameText;
     [SerializeField] private TMP_Text tooltipDescriptionText;
     [SerializeField] private Vector2 tooltipOffset = new(8f, 0f);
+    [Tooltip("The pop-up never covers this (unless the card's in it). Empty: your licenses' list (Owned Card Parent's " +
+             "Scroll View).")]
+    [SerializeField] private RectTransform tooltipKeepClear;
 
     [SerializeField] private TMP_Text summaryText;
     [SerializeField] private TMP_Text statusText;
@@ -340,12 +343,24 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
         }
         tooltipRoot.SetActive(true);
         tooltipRoot.transform.SetAsLastSibling();
-        UILayout.PlaceBeside(tooltipRoot.transform as RectTransform, (RectTransform)card.transform, tooltipOffset);
+        UILayout.PlaceBeside(tooltipRoot.transform as RectTransform, (RectTransform)card.transform, tooltipOffset, KeepClear);
     }
 
     private void OnResult(string result) => Status(string.IsNullOrEmpty(result) ? "Done." : result);
 
     /* ========================= TOOLTIP ========================= */
+
+    // The owned list's whole scroll view (not just its Content, which can be shorter than what's shown).
+    private RectTransform KeepClear
+    {
+        get
+        {
+            if (tooltipKeepClear != null) return tooltipKeepClear;
+            if (ownedCardParent == null) return null;
+            var scroll = ownedCardParent.GetComponentInParent<UnityEngine.UI.ScrollRect>();
+            return scroll != null ? (RectTransform)scroll.transform : ownedCardParent;
+        }
+    }
 
     private void OnHovered(LicenseCard card, bool over)
     {
@@ -378,7 +393,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
         }
         tooltipRoot.SetActive(true);
         tooltipRoot.transform.SetAsLastSibling();
-        UILayout.PlaceBeside(tooltipRoot.transform as RectTransform, (RectTransform)card.transform, tooltipOffset);
+        UILayout.PlaceBeside(tooltipRoot.transform as RectTransform, (RectTransform)card.transform, tooltipOffset, KeepClear);
     }
 
     private void HideTooltip()
