@@ -187,7 +187,14 @@ public class StoreUpgrades : NetworkBehaviour
             made.ServerSetHome(plot, cart.HomePose);
             made.NetworkObject.Spawn(true);
             cart.ServerMoveLoadTo(made);
-            cart.NetworkObject.Despawn(true);
+            // A cart placed in the scene is only despawned and hidden (destroying in-scene network objects
+            // upsets Netcode); one made at runtime (an earlier upgrade) goes completely.
+            if (cart.NetworkObject.IsSceneObject == true)
+            {
+                cart.NetworkObject.Despawn(false);
+                cart.gameObject.SetActive(false);
+            }
+            else cart.NetworkObject.Despawn(true);
         }
     }
 
