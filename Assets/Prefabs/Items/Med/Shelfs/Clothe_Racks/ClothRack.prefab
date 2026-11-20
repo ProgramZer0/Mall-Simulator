@@ -141,7 +141,7 @@ MonoBehaviour:
     displayName: ClothRack
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
-    sizeClass: 3
+    sizeClass: 2
     showInShop: 1
     icon: {fileID: 0}
     categories:
@@ -159,6 +159,8 @@ MonoBehaviour:
     specialMarketWeight: 1
     rarity: 0
     marketPrice: 5
+    colors: []
+    colorTastes: []
     deliverySeconds: 60
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
@@ -187,6 +189,7 @@ MonoBehaviour:
   randomVariants: 0
   shelfPose: 0
   unitsPerCrate: 1
+  keepUnits: 0
   physicsMode: 1
   stillSeconds: 4
   maxFallSeconds: 20
@@ -224,9 +227,11 @@ MonoBehaviour:
   - {fileID: 1732227408930462871}
   spacing: 0.01
   hangSpacing: 0
+  clothesFitRailBox: 0
   maxPerZone: 100
   fillFromRight: 1
   fillFromFront: 1
+  splitLongSideLean: 0.25
   blockWhenCovered: 1
   coverMargin: 0.02
 --- !u!64 &4988795791844834532
@@ -282,6 +287,7 @@ MonoBehaviour:
   - renderer: {fileID: 2728240385698982057}
     materialIndex: -1
   zoneName: 
+  coverTexture: 0
 --- !u!1 &7364303095756083360
 GameObject:
   m_ObjectHideFlags: 0

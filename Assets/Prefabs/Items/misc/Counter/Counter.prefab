@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 6000821264814907169}
   - component: {fileID: 208974517279622743}
   - component: {fileID: 1987289042229309684}
-  - component: {fileID: 2330195750070798665}
+  - component: {fileID: 6439585589269011898}
   m_Layer: 0
   m_Name: Card
   m_TagString: Untagged
@@ -107,8 +107,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CheckoutClickable
   action: 7
   value: 0
---- !u!64 &2330195750070798665
-MeshCollider:
+--- !u!65 &6439585589269011898
+BoxCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -125,10 +125,9 @@ MeshCollider:
   m_IsTrigger: 0
   m_ProvidesContacts: 0
   m_Enabled: 1
-  serializedVersion: 5
-  m_Convex: 0
-  m_CookingOptions: 30
-  m_Mesh: {fileID: 3660652376195365350, guid: afa2f8b1e560e5542b23dbd6ec1653bb, type: 3}
+  serializedVersion: 3
+  m_Size: {x: 0.1790438, y: 0.17141381, z: 0.34537655}
+  m_Center: {x: 0.13471381, y: -0.34736952, z: 0.43362376}
 --- !u!1 &441444963418467465
 GameObject:
   m_ObjectHideFlags: 0
@@ -1509,6 +1508,7 @@ MonoBehaviour:
   - renderer: {fileID: 3875878646569873461}
     materialIndex: 0
   zoneName: 
+  coverTexture: 0
 --- !u!1 &2547731934076279361
 GameObject:
   m_ObjectHideFlags: 0
@@ -1820,7 +1820,7 @@ Transform:
   m_GameObject: {fileID: 3410839575403247969}
   serializedVersion: 2
   m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
-  m_LocalPosition: {x: -1.938, y: 1.514, z: -1.387}
+  m_LocalPosition: {x: -1.705, y: 1.263, z: -1.126}
   m_LocalScale: {x: 1.174462, y: 1.4082922, z: 1.0342393}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -2749,6 +2749,7 @@ MonoBehaviour:
   - renderer: {fileID: 4038284966916463308}
     materialIndex: 0
   zoneName: 
+  coverTexture: 0
 --- !u!1 &4151952298632567928
 GameObject:
   m_ObjectHideFlags: 0
@@ -3615,6 +3616,7 @@ MonoBehaviour:
   - renderer: {fileID: 4906871721582999905}
     materialIndex: 0
   zoneName: 
+  coverTexture: 0
 --- !u!64 &437214769244484145
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -3789,7 +3791,7 @@ Transform:
   m_GameObject: {fileID: 5357881275588986504}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: -2.44, y: 1.161, z: -0.986}
+  m_LocalPosition: {x: -2.164, y: 1.161, z: -0.986}
   m_LocalScale: {x: 1.174462, y: 1.4082922, z: 1.0342393}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -3904,6 +3906,8 @@ MonoBehaviour:
     specialMarketWeight: 0.2
     rarity: 0
     marketPrice: 5
+    colors: []
+    colorTastes: []
     deliverySeconds: 60
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
@@ -3966,6 +3970,7 @@ MonoBehaviour:
   randomVariants: 0
   shelfPose: 0
   unitsPerCrate: 1
+  keepUnits: 0
   physicsMode: 1
   stillSeconds: 1
   maxFallSeconds: 20
@@ -4135,6 +4140,7 @@ MonoBehaviour:
   - renderer: {fileID: 4134112850981634925}
     materialIndex: 0
   zoneName: 
+  coverTexture: 0
 --- !u!1 &7659183410459673741
 GameObject:
   m_ObjectHideFlags: 0

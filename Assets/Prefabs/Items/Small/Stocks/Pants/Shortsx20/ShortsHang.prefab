@@ -111,6 +111,7 @@ MonoBehaviour:
   - renderer: {fileID: 0}
     materialIndex: 0
   zoneName: 
+  coverTexture: 0
 --- !u!114 &7232575708890977454
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -163,7 +164,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 1709420854
+  GlobalObjectIdHash: 2567758668
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
