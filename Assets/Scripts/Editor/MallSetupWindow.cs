@@ -9,7 +9,8 @@ using UnityEngine;
 /// Fit: drop a small BoxCollider anywhere inside a room and Fit grows it out to the room's walls, floor
 /// and ceiling (things for sale, other stores' areas, docks, for-sale and renovation walls don't stop it).
 /// Put down a store's segment walls (its False Walls) first and each area stops at them, so the base area
-/// and every expansion fill their own part. "Fit Store" refits every area box of the selected stores.
+/// and every expansion fill their own part. Areas go to the middle of a segment wall (not its face), so once
+/// the wall's gone with the expansion bought there's no strip of floor between them that isn't the store's. "Fit Store" refits every area box of the selected stores.
 /// Find fills in a store's Storefront Walls (CuttableWalls along its edge) and Floor Renderers.
 ///
 /// Check: looks over the whole open scene for setup mistakes (stores with no door, overlapping stores,
@@ -157,10 +158,27 @@ public class MallSetupWindow : EditorWindow
         return set;
     }
 
+    // Segment walls (every store's False Walls): areas go to their middle.
+    private HashSet<Collider> segmentWalls = new();
+
+    private static HashSet<Collider> SegmentWalls()
+    {
+        var set = new HashSet<Collider>();
+        foreach (var plot in Object.FindObjectsByType<StorePlot>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            var segs = new SerializedObject(plot).FindProperty("segments");
+            for (int i = 0; segs != null && i < segs.arraySize; i++)
+                foreach (var g in Objects<GameObject>(segs.GetArrayElementAtIndex(i).FindPropertyRelative("falseWalls")))
+                    foreach (var c in g.GetComponentsInChildren<Collider>(true)) set.Add(c);
+        }
+        return set;
+    }
+
     private void Fit(List<BoxCollider> boxes)
     {
         Physics.SyncTransforms();
         var ignored = Ignored();
+        segmentWalls = SegmentWalls();
         int fitted = 0;
         foreach (var box in boxes.Distinct())
         {
@@ -173,13 +191,26 @@ public class MallSetupWindow : EditorWindow
     }
 
     // The first thing (not ignored, not the box itself) along a ray, or Max.
-    private float Cast(Vector3 from, Vector3 dir, float max, BoxCollider self, HashSet<Collider> ignored)
+    private float Cast(Vector3 from, Vector3 dir, float max, BoxCollider self, HashSet<Collider> ignored) =>
+        Cast(from, dir, max, self, ignored, out _);
+
+    private float Cast(Vector3 from, Vector3 dir, float max, BoxCollider self, HashSet<Collider> ignored, out Collider hit)
     {
         var hits = Physics.RaycastAll(from, dir, max, wallMask, QueryTriggerInteraction.Ignore);
         float best = max;
+        hit = null;
         foreach (var h in hits)
-            if (h.collider != self && !ignored.Contains(h.collider) && h.distance < best) best = h.distance;
+            if (h.collider != self && !ignored.Contains(h.collider) && h.distance < best) { best = h.distance; hit = h.collider; }
         return best;
+    }
+
+    // How thick a wall is along a ray that hit it Distance along (from its far side back), 0 if unknown.
+    private static float Thickness(Collider wall, Vector3 from, Vector3 dir, float distance)
+    {
+        const float beyond = 3f;
+        Vector3 far = from + dir * (distance + beyond);
+        if (!wall.Raycast(new Ray(far, -dir), out RaycastHit back, beyond + 0.01f)) return 0f;
+        return Mathf.Clamp(beyond - back.distance, 0f, 2f);
     }
 
     private bool FitBox(BoxCollider box, HashSet<Collider> ignored, out string why)
@@ -207,12 +238,13 @@ public class MallSetupWindow : EditorWindow
         float[] heights = { Mathf.Min(0.3f, h * 0.2f), h * 0.45f, Mathf.Max(h - 0.3f, h * 0.8f) };
         float pr = Cast(low, right, maxReach, box, ignored), nr = Cast(low, -right, maxReach, box, ignored);
         float pf = Cast(low, forward, maxReach, box, ignored), nf = Cast(low, -forward, maxReach, box, ignored);
+        var walls = new SideWall[4];
         for (int pass = 0; pass < 3; pass++)
         {
-            pr = Side(seed, floor, heights, right, forward, nf, pf, pr, box, ignored);
-            nr = Side(seed, floor, heights, -right, forward, nf, pf, nr, box, ignored);
-            pf = Side(seed, floor, heights, forward, right, nr, pr, pf, box, ignored);
-            nf = Side(seed, floor, heights, -forward, right, nr, pr, nf, box, ignored);
+            pr = Side(seed, floor, heights, right, forward, nf, pf, pr, box, ignored, out walls[0]);
+            nr = Side(seed, floor, heights, -right, forward, nf, pf, nr, box, ignored, out walls[1]);
+            pf = Side(seed, floor, heights, forward, right, nr, pr, pf, box, ignored, out walls[2]);
+            nf = Side(seed, floor, heights, -forward, right, nr, pr, nf, box, ignored, out walls[3]);
         }
         if (pr >= maxReach || nr >= maxReach || pf >= maxReach || nf >= maxReach)
         {
@@ -220,7 +252,9 @@ public class MallSetupWindow : EditorWindow
             return false;
         }
 
-        pr -= inset; nr -= inset; pf -= inset; nf -= inset;
+        // A segment wall: to its middle (the next area comes to it from the other side), not inset.
+        pr = Edge(pr, walls[0], right); nr = Edge(nr, walls[1], -right);
+        pf = Edge(pf, walls[2], forward); nf = Edge(nf, walls[3], -forward);
         Vector3 centerWorld = seed + right * (pr - nr) * 0.5f + forward * (pf - nf) * 0.5f;
         centerWorld.y = (floor + ceiling) * 0.5f;
         Vector3 scale = t.lossyScale;
@@ -230,14 +264,29 @@ public class MallSetupWindow : EditorWindow
         return true;
     }
 
+    // The wall a side stopped at, and the ray that found it.
+    private struct SideWall
+    {
+        public Collider wall;
+        public Vector3 from;
+    }
+
+    // A side's distance, to the middle of a segment wall or Inset short of anything else.
+    private float Edge(float distance, SideWall w, Vector3 outward)
+    {
+        if (w.wall == null || !segmentWalls.Contains(w.wall)) return distance - inset;
+        return distance + Thickness(w.wall, w.from, outward, distance) * 0.5f;
+    }
+
     // How far a side can go: rays along Out from points spread across the side (Across from -AcrossNeg to
     // +AcrossPos, inset a little) at each height; the nearest wall wins.
     private float Side(Vector3 seed, float floor, float[] heights, Vector3 outward, Vector3 across, float acrossNeg,
-                       float acrossPos, float current, BoxCollider box, HashSet<Collider> ignored)
+                       float acrossPos, float current, BoxCollider box, HashSet<Collider> ignored, out SideWall wall)
     {
         float width = acrossNeg + acrossPos;
         int steps = Mathf.Clamp(Mathf.CeilToInt(width / 0.5f), 2, 80);
         float best = maxReach;
+        wall = default;
         for (int i = 0; i <= steps; i++)
         {
             float a = Mathf.Lerp(-acrossNeg + 0.1f, acrossPos - 0.1f, i / (float)steps);
@@ -245,7 +294,8 @@ public class MallSetupWindow : EditorWindow
             {
                 Vector3 from = seed + across * a;
                 from.y = floor + y;
-                best = Mathf.Min(best, Cast(from, outward, maxReach, box, ignored));
+                float d = Cast(from, outward, maxReach, box, ignored, out Collider hit);
+                if (d < best) { best = d; wall = new SideWall { wall = hit, from = from }; }
             }
         }
         return best;

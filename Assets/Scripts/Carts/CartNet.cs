@@ -64,12 +64,10 @@ public class CartNet : NetworkBehaviour
 
     [Header("Left in the way")]
     [Tooltip("Another team's player can report this cart when it's left outside its store (and away from its Home Spot). " +
-             "Still there this many seconds later (not moved), it's towed home and its store's team is fined.")]
+             "Not back in its store or at its Home Spot this many seconds later, it's towed home and its store's team is fined.")]
     [SerializeField, Min(5f)] private float towAfterSeconds = 180f;
     [Tooltip("The fine for a towed cart (dollars; never takes a team below zero).")]
     [SerializeField, Min(0)] private int towFine = 100;
-    [Tooltip("Moved this far (meters) since it was reported: it's no longer in the way (the report's dropped).")]
-    [SerializeField, Min(0.2f)] private float movedEnough = 1.5f;
     [Tooltip("This close to its Home Spot (meters) it's where it belongs: can't be reported.")]
     [SerializeField, Min(0f)] private float homeRadius = 3f;
 
@@ -107,11 +105,10 @@ public class CartNet : NetworkBehaviour
     // Host time (NetworkManager.ServerTime) it's towed at; 0: not reported.
     private readonly NetworkVariable<double> towAt =
         new(0d, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
-    private Vector3 reportedAt;
     private ulong reportedBy;
     private float nextReportCheck;
 
-    /// <summary>Reported as in the way, and towed unless it's moved.</summary>
+    /// <summary>Reported as in the way, and towed unless it's put back in its store or at its home spot.</summary>
     public bool IsReported => towAt.Value > 0d;
 
     /// <summary>Seconds until it's towed (0: not reported).</summary>
@@ -134,7 +131,7 @@ public class CartNet : NetworkBehaviour
         why = null;
         if (CanUse(clientId) || HomeStore == null) return false; // their own (or nobody's): nothing to say
         if (IsPushed) return false;
-        if (IsReported) { why = $"Reported: towed in {Clock(TowSecondsLeft)} unless it's moved"; return false; }
+        if (IsReported) { why = $"Reported: towed in {Clock(TowSecondsLeft)} unless it's put back"; return false; }
         if (WhereItBelongs()) { why = $"{HomeStore.DisplayName}'s cart"; return false; }
         return true;
     }
@@ -156,7 +153,6 @@ public class CartNet : NetworkBehaviour
         if (!CanReport(sender, out _)) return;
         var player = NetworkManager.ConnectedClients.TryGetValue(sender, out var client) ? client.PlayerObject : null;
         if (player == null || Vector3.Distance(player.transform.position, BodyCenter) > 6f) return;
-        reportedAt = BodyCenter;
         reportedBy = sender;
         towAt.Value = NetworkManager.ServerTime.Time + towAfterSeconds;
         var notes = NotificationManager.Instance;
@@ -166,19 +162,18 @@ public class CartNet : NetworkBehaviour
             $"If {home.DisplayName}'s cart is still there in {Clock(towAfterSeconds)}, it's towed and they're fined.");
         if (home.HasOwner)
             notes.ServerNotifyTeamText(home.OwnerTeamId, "Your cart is in the way!",
-                $"Someone reported {home.DisplayName}'s cart. Move it within {Clock(towAfterSeconds)} or it's towed home and you're fined ${towFine}.",
+                $"Someone reported {home.DisplayName}'s cart. Put it back in your store or at its spot within {Clock(towAfterSeconds)} or it's towed home and you're fined ${towFine}.",
                 alarm: true);
     }
 
-    // Host: moved (or back where it belongs): the report's dropped. Time's up: towed, and a fine.
+    // Host: back where it belongs (its store or its home spot): the report's dropped. Moving it somewhere else
+    // in the hallway doesn't count. Time's up: towed, and a fine.
     private void ServerCheckReport()
     {
         if (Time.time < nextReportCheck) return;
         nextReportCheck = Time.time + 0.5f;
         var home = HomeStore;
-        Vector3 moved = BodyCenter - reportedAt;
-        moved.y = 0f;
-        if (moved.magnitude >= movedEnough || WhereItBelongs() || home == null)
+        if (WhereItBelongs() || home == null)
         {
             towAt.Value = 0d;
             return;

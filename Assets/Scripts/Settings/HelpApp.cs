@@ -190,7 +190,8 @@ public class HelpApp : MonoBehaviour, IPhoneApp
             "Look at your store's cart with empty hands and press <b>F</b> to push it, <b>F</b> again to let go. " +
             "Anything you put in its bed rides along, so it's the quick way to bring several crates from the dock.\n\n" +
             "Carts stop against walls and shelves. Pull too far from a stuck cart and you let go. Only your team " +
-            "can use your carts." },
+            "can use your carts.\n\nLeft out in the hallway, another store can report your cart: put it back in your store or at its " +
+            "spot within 3 minutes or it's towed home and you're fined. Moving it somewhere else in the hallway doesn't count." },
         new() { id = "prices", title = "Prices", body =
             "Press <b>1</b> for the price scanner and click something for sale. Type a price and press " +
             "<b>Enter</b> for that one, <b>Shift+Enter</b> for every one of that product in the store. A price of " +
