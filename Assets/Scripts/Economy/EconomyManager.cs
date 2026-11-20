@@ -48,6 +48,9 @@ public class EconomyManager : NetworkBehaviour
     [SerializeField] private float reservationSeconds = 600f;
     [Tooltip("A delivery's boxes come down one at a time, this many seconds apart (0: all at once).")]
     [SerializeField, Min(0f)] private float boxSpawnInterval = 0.3f;
+    [Tooltip("One delivery at a time per store: another order waits in line, and its clock only starts once the one " +
+             "ahead of it has been delivered. Off: every order counts down at once.")]
+    [SerializeField] private bool oneDeliveryAtATime = true;
     [Tooltip("Most items (boxes) one purchase may contain.")]
     [SerializeField] private int maxItemsPerOrder = 100;
     [Tooltip("What a delivery box may not overlap when it's set down (items, boxes, walls, players...). " +
@@ -95,6 +98,7 @@ public class EconomyManager : NetworkBehaviour
         public float remaining;  // seconds left as of stampTime
         public double stampTime; // server time when remaining was recorded
         public bool blocked;     // due, but no room in the shipment zones yet: waiting
+        public bool inLine;      // behind another delivery to the same store: its clock hasn't started
 
         public void NetworkSerialize<T>(BufferSerializer<T> s) where T : IReaderWriter
         {
@@ -105,15 +109,16 @@ public class EconomyManager : NetworkBehaviour
             s.SerializeValue(ref remaining);
             s.SerializeValue(ref stampTime);
             s.SerializeValue(ref blocked);
+            s.SerializeValue(ref inLine);
         }
 
         public bool Equals(OrderInfo o) =>
             orderId == o.orderId && teamId == o.teamId && plotId == o.plotId && boxCount == o.boxCount &&
-            remaining.Equals(o.remaining) && stampTime.Equals(o.stampTime) && blocked == o.blocked;
+            remaining.Equals(o.remaining) && stampTime.Equals(o.stampTime) && blocked == o.blocked && inLine == o.inLine;
 
-        /// <summary>Seconds left at a given server time (doesn't go down while blocked).</summary>
+        /// <summary>Seconds left at a given server time (doesn't go down while blocked or in line).</summary>
         public float RemainingAt(double now) =>
-            blocked ? remaining : Mathf.Max(0f, remaining - (float)(now - stampTime));
+            blocked || inLine ? remaining : Mathf.Max(0f, remaining - (float)(now - stampTime));
     }
 
     /// <summary>One kind of item in a delivery.</summary>
@@ -248,6 +253,9 @@ public class EconomyManager : NetworkBehaviour
 
     /// <summary>True while a delivery is due but waiting for room in the store's shipment zones.</summary>
     public bool IsBlocked(OrderInfo order) => order.blocked;
+
+    /// <summary>True while a delivery waits behind another one to the same store (its clock hasn't started).</summary>
+    public bool IsInLine(OrderInfo order) => order.inLine;
 
     /* ========================= MONEY (SERVER) ========================= */
 
@@ -457,6 +465,7 @@ public class EconomyManager : NetworkBehaviour
             remaining = Mathf.Max(0f, (deliverySeconds < 0f ? slowest : deliverySeconds) * sooner),
             stampTime = NetworkManager.ServerTime.Time,
             blocked = false,
+            inLine = oneDeliveryAtATime && HasOrderFor(plotId),
         });
         for (int i = 0; i < itemIds.Length; i++)
         {
@@ -489,10 +498,39 @@ public class EconomyManager : NetworkBehaviour
     /// it waits at the dock (re-checking every Fit Check Interval) until there is. Nothing checks for
     /// room before then.
     /// </summary>
+    private bool HasOrderFor(int plotId)
+    {
+        foreach (var o in orders.Each()) if (o.plotId == plotId) return true;
+        return false;
+    }
+
+    // One delivery at a time per store: when none is on its way, the next in line (the oldest) starts.
+    // (Off: everything in line starts now.)
+    private void ServerStartNextInLine(double now)
+    {
+        for (int i = 0; i < orders.Count; i++)
+        {
+            var o = orders[i];
+            if (!o.inLine) continue;
+            bool ahead = false;
+            if (oneDeliveryAtATime)
+                for (int j = 0; j < orders.Count && !ahead; j++)
+                {
+                    var other = orders[j];
+                    if (j != i && other.plotId == o.plotId && (!other.inLine || other.orderId < o.orderId)) ahead = true;
+                }
+            if (ahead) continue;
+            o.inLine = false;
+            o.stampTime = now;
+            orders[i] = o;
+        }
+    }
+
     private void ServerUpdateOrders()
     {
         var mall = MallManager.Instance;
         double now = NetworkManager.ServerTime.Time;
+        ServerStartNextInLine(now);
 
         for (int i = orders.Count - 1; i >= 0; i--)
         {
@@ -504,6 +542,7 @@ public class EconomyManager : NetworkBehaviour
                 continue;
             }
 
+            if (o.inLine) continue;
             float left = o.RemainingAt(now);
 
             // A minute to go (only for deliveries that had longer than that).
@@ -727,7 +766,7 @@ public class EconomyManager : NetworkBehaviour
             }
             hudSb.Clear().Append("  ");
             for (int p = 0; p < hudParts.Count; p++) hudSb.Append(p == 0 ? "" : ", ").Append(hudParts[p]);
-            hudSb.Append(": ").Append(o.blocked ? "here, waiting for room at the dock" : $"{SecondsUntil(o):0}s");
+            hudSb.Append(": ").Append(o.blocked ? "here, waiting for room at the dock" : o.inLine ? $"in line ({SecondsUntil(o):0}s once it starts)" : $"{SecondsUntil(o):0}s");
             hudLines.Add(hudSb.ToString());
         }
 

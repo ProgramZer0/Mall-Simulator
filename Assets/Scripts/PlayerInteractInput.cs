@@ -171,6 +171,7 @@ public class PlayerInteractInput : NetworkBehaviour
     private Breakable lookedAtBroken;               // a broken light or screen (to report), maybe far off
     private BreakManager.State lookedAtBrokenState;
     private bool lookedAtBuriedCartItem; // something with other things stacked on it (on a cart or not)
+    private string buriedPrompt;         // ...its name, and what's on it
     [Tooltip("Lock / unlock a door your store owns.")]
     [SerializeField] private KeyCode doorLockKey = KeyCode.L;
     private CartNet pushedCart;   // the cart you're pushing
@@ -231,9 +232,12 @@ public class PlayerInteractInput : NetworkBehaviour
             {
                 // Something you could pick up, but with things on it: they come off first.
                 var under = hit.collider.GetComponentInParent<ItemPickupNet>();
-                lookedAtBuriedCartItem = under != null && under.IsSpawned && !under.EditModeOnly &&
-                    MallManager.CanPickupOrPlace(OwnerClientId, transform.position, under.transform.position, hallwayPickup: under.IsStockCrate) &&
-                    under.HasItemOnTop();
+                var onTop = under != null && under.IsSpawned && !under.EditModeOnly &&
+                    MallManager.CanPickupOrPlace(OwnerClientId, transform.position, under.transform.position, hallwayPickup: under.IsStockCrate)
+                    ? under.ItemOnTop() : null;
+                lookedAtBuriedCartItem = onTop != null;
+                if (onTop != null)
+                    buriedPrompt = $"{CheckoutCounter.NameOf(under.ItemId)}: pick up the {CheckoutCounter.NameOf(onTop.ItemId)} on top first";
             }
 
             var door = hit.collider.GetComponentInParent<DoorNet>();
@@ -696,7 +700,7 @@ public class PlayerInteractInput : NetworkBehaviour
                     : lookedAtOtherCart != null && lookedAtPickup == null ? lookedAtOtherCart.ReportPrompt(OwnerClientId)
                     : lookedAtDoor != null ? DoorPrompt()
                     : lookedAtCounter != null ? (lookedAtCheckoutPart != null
-                        ? lookedAtCheckoutPart.Counter.PromptFor(lookedAtCheckoutPart, OwnerClientId) ?? lookedAtCounter.StatusFor(OwnerClientId)
+                        ? lookedAtCheckoutPart.Counter.PromptFor(lookedAtCheckoutPart, OwnerClientId) ?? CounterBodyPrompt(lookedAtCounter)
                         : CounterBodyPrompt(lookedAtCounter))
                     : lookedAtVote != null ? lookedAtVote.Prompt(OwnerClientId)
                     : lookedAtStoreButton != null ? lookedAtStoreButton.Prompt(OwnerClientId)
@@ -706,7 +710,7 @@ public class PlayerInteractInput : NetworkBehaviour
                     : lookedAtBuy != null ? BuyPrompt()
                     : stockTarget != null ? StockPrompt()
                     : OnlyBrokenLooked ? BrokenPrompt()
-                    : lookedAtBuriedCartItem ? "Take the things on top off first"
+                    : lookedAtBuriedCartItem ? buriedPrompt ?? "Take the things on top off first"
                     : lookedAtCustomer != 0 && lookedAtPickup == null ? CustomerPrompt()
                     : PickupPrompt();
     }
@@ -885,10 +889,11 @@ public class PlayerInteractInput : NetworkBehaviour
         // The next way round that fits: R tries each further quarter turn, T lays it down (or stands it
         // up) and then tries its turns. A way it doesn't fit is skipped; if none fits, nothing changes.
         int next = -1;
+        int step = stockTarget.IsHangRail(zone) ? 2 : 1; // clothes on a rail: only turned round, never along it
         for (int i = 1; i <= 4 && next < 0; i++)
         {
             int candidate = turn
-                ? StockContainer.Orientation.Make(StockContainer.Orientation.Turns(current) + i, StockContainer.Orientation.Lying(current))
+                ? StockContainer.Orientation.Make(StockContainer.Orientation.Turns(current) + i * step, StockContainer.Orientation.Lying(current))
                 : StockContainer.Orientation.Make(StockContainer.Orientation.Turns(current) + i - 1, !StockContainer.Orientation.Lying(current));
             if (candidate == current) continue;
             if (Fits(candidate)) next = candidate;
@@ -967,8 +972,10 @@ public class PlayerInteractInput : NetworkBehaviour
         }
 
         // Checkout: click (or F) the part you're looking at, with empty hands.
+        // (F on a part with nothing to do right now, like the keypad with no customer: picks the counter up instead.)
         if (lookedAtCheckoutPart != null && (inventory.HeldItemId.Value == 0 || CanTopUpFrom(lookedAtCheckoutPart)) &&
-            (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.F)))
+            (Input.GetMouseButtonDown(0) ||
+             (Input.GetKeyDown(KeyCode.F) && lookedAtCheckoutPart.Counter.PromptFor(lookedAtCheckoutPart, OwnerClientId) != null)))
         {
             lookedAtCheckoutPart.Counter.Click(lookedAtCheckoutPart);
             return;

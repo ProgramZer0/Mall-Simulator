@@ -14,8 +14,9 @@ using UnityEngine;
 /// Hang Rails (clothes rails): the rail runs along the TOP of the box, down its longer side (red X
 /// or blue Z, whichever is longer). Products use the crate's Hang Prefab and hang with the top of
 /// their model (or a child named "HangPoint") on the rail, one after another along it. By default a
-/// product's front (blue arrow) points along the rail, like clothes on a real rack; R turns it, T tips
-/// it 90 degrees (for a model built lying flat). Only the rail's length matters; clothes can hang
+/// product's front (blue arrow) points along the rail, like clothes on a real rack; R turns it round
+/// (half turns only: clothes always hang across the rail, never along it), T tips it 90 degrees (for a
+/// model built lying flat). Only the rail's length matters; clothes can hang
 /// below the box. Set Hang Spacing to squeeze hangers closer than their model's thickness.
 ///
 /// Each zone holds one kind of product, in one orientation (which way it faces, and on shelves
@@ -1008,7 +1009,8 @@ public class StockContainer : NetworkBehaviour
             Quaternion tip = Orientation.Lying(orient) ? Quaternion.Euler(-90f, 0f, 0f) : Quaternion.identity;
             Vector3 tipped = RotatedExtents(tip, model.half);
             float autoYaw = tipped.x < tipped.z - 1e-4f ? 90f : 0f;
-            o = Quaternion.Euler(0f, Orientation.Turns(orient) * 90f + autoYaw, 0f) * tip;
+            // Half turns only: hung across the rail like clothes on a hanger, whatever was picked.
+            o = Quaternion.Euler(0f, (Orientation.Turns(orient) & 2) * 90f + autoYaw, 0f) * tip;
             Vector3 h = RotatedExtents(o, model.half);
             bool alongZ = railAlongZ;
             float length = alongZ ? size.z : size.x;

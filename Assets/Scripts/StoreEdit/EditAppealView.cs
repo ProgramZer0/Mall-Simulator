@@ -32,6 +32,9 @@ public class EditAppealView : MonoBehaviour
     [Tooltip("Things that take away from it.")]
     [SerializeField] private Color badColor = new(0.95f, 0.25f, 0.2f, 1f);
 
+    [Tooltip("Hide the products on shelves and rails while the view's on (only the shelves are colored either way).")]
+    [SerializeField] private bool hideProducts;
+
     [Header("Overlay")]
     [Tooltip("Size of the floor squares checked for being seen from the hallway (meters). Smaller is finer and slower.")]
     [SerializeField, Range(0.25f, 2f)] private float floorCell = 0.5f;
@@ -139,7 +142,7 @@ public class EditAppealView : MonoBehaviour
         drawnRevision = -1;
         drawnSelection = null;
         nextPanel = 0f;
-        StockBatcher.HideEditView = true; // the shelves are colored, not their products
+        StockBatcher.HideEditView = hideProducts; // (shown by default: the shelves are colored, their products as they are)
         GreyStore();
     }
 
@@ -373,11 +376,14 @@ public class EditAppealView : MonoBehaviour
 
         // What's for sale, by the thing it's on (each shelf spot counts on its own).
         var spotOf = new List<(Thing thing, StoreAppeal.OfferView offer)>();
+        var priced = new HashSet<(Object, int)>();
         foreach (var o in offers)
         {
+            priced.Add((o.key.thing, o.key.zone));
             var t = ThingOf(o.key.thing as Component);
             if (t != null) spotOf.Add((t, o));
         }
+        AddUnpriced(spotOf, priced);
         // Decor (windows too), by the thing it's on.
         var decorOf = new List<(Thing thing, string feature, float amount, Vector3 at)>();
         foreach (var (feature, amount, position) in decor)
@@ -470,6 +476,54 @@ public class EditAppealView : MonoBehaviour
             }
             t.links.Sort((a, b) => Mathf.Abs(b.points).CompareTo(Mathf.Abs(a.points)));
         }
+    }
+
+    // On display but not priced (so not for sale, and not in the store's appeal yet): shown and scored here
+    // anyway, as they'd count once priced, and marked "not priced".
+    private readonly HashSet<Thing> unpriced = new();
+
+    private void AddUnpriced(List<(Thing thing, StoreAppeal.OfferView offer)> into, HashSet<(Object, int)> priced)
+    {
+        unpriced.Clear();
+        var plot = editor.EditPlot;
+        var catalog = ItemCatalog.Instance;
+        if (plot == null || catalog == null) return;
+
+        foreach (var sc in StockContainer.All)
+        {
+            if (sc == null || !sc.IsSpawned) continue;
+            for (int z = 0; z < sc.ZoneCount; z++)
+            {
+                var zone = sc.GetZone(z);
+                if (zone.count <= 0 || priced.Contains((sc, z)) || !catalog.TryGet(zone.itemId, out var def)) continue;
+                if (!sc.TryGetZoneBox(z, out Vector3 center, out _, out _)) continue;
+                AddDisplay(into, sc, z, def, preview.MapPoint(sc, center), plot);
+            }
+        }
+        foreach (var s in Sellable.All)
+        {
+            if (s == null || !s.IsSpawned || !s.SellWhenLoose || priced.Contains((s, -1))) continue;
+            if (s.Price > 0 || (s.TryGetComponent<StockContainer>(out var shelf) && shelf.HasStock)) continue;
+            if (!catalog.TryGet(s.ItemId, out var def)) continue;
+            AddDisplay(into, s, -1, def, preview.MapPoint(s, s.transform.position), plot);
+        }
+    }
+
+    private void AddDisplay(List<(Thing thing, StoreAppeal.OfferView offer)> into, Component real, int zone, ItemDef def,
+                            Vector3 at, StorePlot plot)
+    {
+        if (editor.TryGetEditCopy(real, out var copy) && copy == null) return; // taken out this edit
+        if (!plot.Contains(at + Vector3.up * 0.05f) && !plot.Contains(real.transform.position + Vector3.up * 0.05f)) return;
+        var t = ThingOf(real);
+        if (t == null) return;
+        unpriced.Add(t);
+        into.Add((t, new StoreAppeal.OfferView
+        {
+            key = new StoreListing.Key(real, zone),
+            def = def,
+            position = at,
+            seenFromOutside = preview.IsPointSeen(at + Vector3.up * 0.2f),
+        }));
     }
 
     private static float Flat2(Vector3 a, Vector3 b)
@@ -582,6 +636,7 @@ public class EditAppealView : MonoBehaviour
                 if (Mathf.Abs(t.score) < 0.5f || t.root == null) continue;
                 var tag = PointsTag(used++);
                 tag.text = t.score > 0f ? $"+{t.score:0}" : $"-{-t.score:0}";
+                if (unpriced.Contains(t)) tag.text += "\n<size=55%>no price</size>";
                 tag.color = t.score > 0f ? goodColor : badColor;
                 tag.transform.position = new Vector3(t.bounds.center.x, t.bounds.max.y + pointsHeight, t.bounds.center.z);
                 tag.gameObject.SetActive(true);
@@ -667,7 +722,9 @@ public class EditAppealView : MonoBehaviour
         if (t != null)
         {
             var sb = new System.Text.StringBuilder();
-            sb.Append($"\n<b>{t.name}</b>: <b>{Signed(t.score)}</b>\n<size=85%>");
+            sb.Append($"\n<b>{t.name}</b>: <b>{Signed(t.score)}</b>");
+            if (unpriced.Contains(t)) sb.Append("  <color=#fc6>(not priced: counts once it has a price)</color>");
+            sb.Append("\n<size=85%>");
             int shownLines = 0;
             foreach (var (other, points, why) in t.links)
             {

@@ -137,8 +137,21 @@ public partial class CustomerManager : NetworkBehaviour
     [Range(0f, 1f)] [SerializeField] private float alarmChance = 0.15f;
     [Tooltip("A shoplifter won't try it with a player this close who can see them (meters); they pay instead.")]
     [SerializeField] private float watchedRange = 6f;
-    [Tooltip("How much faster a shoplifter walks once they've taken off with something.")]
+    [Tooltip("How much faster a shoplifter goes once they break into a run (see Flee Run Distance), or once caught.")]
     [SerializeField] private float fleeSpeed = 1.6f;
+    [Tooltip("A shoplifter walks out of the store like anyone else (harder to spot); this far from its door (meters) " +
+             "they break into a run for the exit.")]
+    [SerializeField, Min(0f)] private float fleeRunDistance = 8f;
+    [Tooltip("When a store closes, the customers in it head out this much faster than they walk.")]
+    [SerializeField, Min(1f)] private float closedStoreHurry = 1.8f;
+
+    [Header("Getting unstuck")]
+    [Tooltip("Around each store's door (meters): customers go straight through, without steering round each other or " +
+             "keeping to lanes. 0: off.")]
+    [SerializeField, Min(0f)] private float storeDoorwayRadius = 1.6f;
+    [Tooltip("Stuck twice in a row (no closer for 2 s each time): they squeeze through for this long (seconds), " +
+             "ignoring the people around them.")]
+    [SerializeField, Min(0f)] private float squeezeSeconds = 1.5f;
     [Tooltip("How long a caught shoplifter stands still (after dropping what they took) before running for the exit.")]
     [SerializeField] private float caughtStopSeconds = 1.2f;
     [Tooltip("A customer who can't find a way out of a store (something's in the way) says so, gets less happy " +
@@ -402,6 +415,9 @@ public partial class CustomerManager : NetworkBehaviour
         // Theft
         public bool thief;          // a shoplifter (decided when they arrive)
         public bool fleeing;        // walking off with things they haven't paid for
+        public bool running;        // ...and now running for the exit (Flee Speed)
+        public bool hurry;          // the store they're in closed: heading out quickly
+        public float squeezeUntil;  // stuck: going straight for the next corner, ignoring people, until then
         public bool alarmed;        // set off the alarm (the store's team knows)
         public StorePlot robbed;    // the store they stole from
         public readonly List<Taken> stolen = new();
@@ -979,8 +995,8 @@ public partial class CustomerManager : NetworkBehaviour
         float toEnd = FlatDistance(c.pos, c.destination);
         float avoidWeight = Mathf.Clamp01(toEnd - 0.3f);
         if (c.mode == Mode.Exiting && toEnd < exitReach) { Arrive(c); return; } // out the door
-        if (InDoorway(c.pos)) avoidWeight = 0f; // coming and going: straight through
-        float speed = GroupSpeed(c);
+        if (InDoorway(c.pos) || Time.time < c.squeezeUntil) avoidWeight = 0f; // coming and going (or stuck): straight through
+        float speed = GroupSpeed(c) * (c.hurry ? closedStoreHurry : 1f);
         Vector3 vel = dir * speed + Avoidance(c, dir) * (speed * avoidWeight);
         vel = Vector3.ClampMagnitude(vel, speed * 1.15f);
         if (vel.magnitude * dt > left && Vector3.Dot(vel, dir) > 0.5f * vel.magnitude)
@@ -1015,6 +1031,17 @@ public partial class CustomerManager : NetworkBehaviour
             c.stuckRepaths++;
             if (logDecisions) Log(c, $"stuck at {c.pos:F1} heading for {c.destination:F1} (try {c.stuckRepaths})");
             int tries = c.stuckRepaths;
+            if (tries >= 2)
+            {
+                c.squeezeUntil = Time.time + squeezeSeconds;
+                // Stuck by a door: the walkable area may be out of date (a door opened since): build it again.
+                if (InDoorway(c.pos) && Time.time >= nextDoorRebuild && CustomerNavMesh.Instance != null)
+                {
+                    nextDoorRebuild = Time.time + 10f;
+                    CustomerNavMesh.Instance.MarkDirty();
+                    if (logDecisions) Log(c, "stuck by a door: rebuilding the walkable area");
+                }
+            }
             // A few new paths; still nowhere: give up on this spot (they decide again from where they are).
             if (tries > 3 || !PathTo(c, c.destination))
             {
@@ -1056,6 +1083,7 @@ public partial class CustomerManager : NetworkBehaviour
             Vector3 mid = seg + after;
             if (mid.sqrMagnitude > 1e-4f) { mid.Normalize(); side = new Vector3(mid.z, 0f, -mid.x); }
         }
+        if (InDoorway(corner) || Time.time < c.squeezeUntil) return corner; // straight through a door (or squeezing)
         Vector3 offset = corner + wide + side * c.lane;
         if ((offset - corner).sqrMagnitude < 0.0025f) return corner;
         c.laneTarget = NavMesh.Raycast(corner, offset, out var hit, CustomerNavMesh.PreferMask)
@@ -1091,6 +1119,7 @@ public partial class CustomerManager : NetworkBehaviour
 
     // Debug counts (since play started).
     private int paths, pathFailures, stuckEvents;
+    private float nextDoorRebuild;
 
     /// <summary>Every machine: how many customers are shown here.</summary>
     public int CustomersShown => views.Count;
@@ -1180,7 +1209,9 @@ public partial class CustomerManager : NetworkBehaviour
         }
     }
 
-    // The entrances' doorways (see CustomerSpawnPoint.doorwayRadius), gathered once a frame.
+    // The doorways: the mall entrances' (see CustomerSpawnPoint.doorwayRadius) and every store's door
+    // (Store Doorway Radius), gathered once a frame. In one, customers go straight through: no steering
+    // round each other, no lanes (which wedged them against the wall beside a narrow door).
     private readonly List<(Vector3 at, float r2)> doorways = new();
 
     private bool InDoorway(Vector3 p)
@@ -1198,6 +1229,10 @@ public partial class CustomerManager : NetworkBehaviour
         doorways.Clear();
         foreach (var sp in CustomerSpawnPoint.All)
             if (sp != null && sp.doorwayRadius > 0f) doorways.Add((sp.transform.position, sp.doorwayRadius * sp.doorwayRadius));
+        if (storeDoorwayRadius > 0f)
+            foreach (var ways in entrances.Values)
+                foreach (var e in ways)
+                    doorways.Add(((e.outside + e.inside) * 0.5f, storeDoorwayRadius * storeDoorwayRadius));
         players.Clear();
         foreach (var client in NetworkManager.ConnectedClientsList)
             if (client.PlayerObject != null) players.Add(client.PlayerObject.transform.position);
@@ -1262,6 +1297,12 @@ public partial class CustomerManager : NetworkBehaviour
     private void Think(Customer c)
     {
         BrokenNearbyMood(c);
+        // A shoplifter far enough from the store they robbed: off at a run.
+        if (c.fleeing && !c.running && c.store == null && FlatDistance(c.pos, c.entrance.outside) >= fleeRunDistance)
+        {
+            Log(c, "far enough from the store: running for the exit");
+            StartRunning(c);
+        }
         if (c.failures > 4)
         {
             if (Trapped(c)) return;
@@ -1275,6 +1316,7 @@ public partial class CustomerManager : NetworkBehaviour
         if (c.store != null && c.mode != Mode.Leaving && !c.store.IsOpen)
         {
             Log(c, $"'{c.store.DisplayName}' closed: leaving");
+            c.hurry = true;
             React(c, Reaction.StoreClosed);
             LeaveStore(c, -0.2f);
             return;
@@ -2106,8 +2148,16 @@ public partial class CustomerManager : NetworkBehaviour
         if (plot == null || !PathTo(c, c.entrance.outside)) FinishStore(c);
     }
 
+    private void StartRunning(Customer c)
+    {
+        if (c.running) return;
+        c.running = true;
+        c.speed *= fleeSpeed;
+    }
+
     private void FinishStore(Customer c)
     {
+        c.hurry = false;
         var plot = c.store;
         if (plot != null && c.fleeing)
         {
@@ -2172,8 +2222,7 @@ public partial class CustomerManager : NetworkBehaviour
             Log(c, $"a shoplifter, but put off by the store's security ({resistance:0.00}): paying instead");
             return false;
         }
-        c.fleeing = true;
-        c.speed *= fleeSpeed;
+        c.fleeing = true; // (they walk out normally: they run once they're Flee Run Distance from the door)
         Log(c, $"SHOPLIFTING {c.basket.Count} thing(s) from '{plot.DisplayName}'");
         c.mode = Mode.Leaving;
         if (!PathTo(c, c.entrance.outside)) FinishStore(c);
@@ -2418,6 +2467,7 @@ public partial class CustomerManager : NetworkBehaviour
     // ...then off to the mall exit (still at a shoplifter's run).
     private void RunForExit(Customer c)
     {
+        StartRunning(c);
         c.mode = Mode.Exiting;
         var exit = PickSpawnPoint(sp => sp.isExit);
         if (exit == null || !PathTo(c, exit.transform.position)) Despawn(c);

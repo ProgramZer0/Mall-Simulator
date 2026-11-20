@@ -149,6 +149,20 @@ public class FranchiseManager : NetworkBehaviour
         return false;
     }
 
+    /// <summary>Is this color one of the colors of a franchise the team holds (any item may come in it then)?</summary>
+    public static bool TeamHasFranchiseColor(ulong team, byte colorId)
+    {
+        var fm = Instance;
+        if (fm == null || !fm.IsSpawned || colorId == 0) return false;
+        foreach (var f in fm.franchises)
+        {
+            if (f == null || f.colors == null || !fm.TryGetState(f.id, out var s) || s.holder != team) continue;
+            foreach (var n in f.colors)
+                if (!string.IsNullOrWhiteSpace(n) && PaintPalette.TryGetId(n, out byte id) && id == colorId) return true;
+        }
+        return false;
+    }
+
     /// <summary>Can this team order this item, franchise-wise?</summary>
     public static bool CanOrder(ulong team, ItemDef item, out FranchiseDef missing)
     {
