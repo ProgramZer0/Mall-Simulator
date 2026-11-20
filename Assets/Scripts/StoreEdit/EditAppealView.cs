@@ -7,11 +7,12 @@ using UnityEngine;
 ///
 /// - A panel (EditAppealPanel on the HUD, else a plain box): Quality, what's for sale and how much of it
 ///   is seen from the hallway, how the everyday customer sees the store (walks in, wants what's inside),
-///   and tips. ▲/▼: the change since the view was first opened this edit.
+///   and tips. +/-: the change since the view was first opened this edit.
 /// - The floor is shaded where passers-by can see in from the hallway (through the windows and doors);
 ///   things for sale they can see get a green outline. Decor is labelled with what it counts as.
 /// - Select an item: what's near it lights up from red (bad next to it) to green (good next to it): things
 ///   that go with it or clash with it (Category Pairs), and decor it needs (or that needs it).
+/// - Everything that adds or takes away shows its points above it (+12, -4).
 ///
 /// Worked out from the edit copies (StoreAppeal.CreatePreview), only for what moved, and never while
 /// something's being dragged. Local to the editor. Added to the player by StoreEditController.
@@ -337,6 +338,7 @@ public class EditAppealView : MonoBehaviour
         ShadeSeenFloor();
         Score();
         ColorThings();
+        PlacePoints();
         BuildMeshes();
     }
 
@@ -353,6 +355,14 @@ public class EditAppealView : MonoBehaviour
     [SerializeField, Min(0f)] private float pointsSeen = 2f;
     [Tooltip("Points at which an item is fully green (or fully red, below zero).")]
     [SerializeField, Min(1f)] private float fullColorAt = 10f;
+
+    [Header("Points above items")]
+    [Tooltip("Show each item's points above it (+12, -4).")]
+    [SerializeField] private bool showPoints = true;
+    [Tooltip("Size of the numbers (they grow with distance so they stay readable).")]
+    [SerializeField, Min(0.1f)] private float pointsSize = 1f;
+    [Tooltip("Height above the top of the item, in meters.")]
+    [SerializeField, Min(0f)] private float pointsHeight = 0.25f;
 
     private void Score()
     {
@@ -398,7 +408,7 @@ public class EditAppealView : MonoBehaviour
             if (o.seenFromOutside && pointsSeen > 0f) Link(thing, null, pointsSeen * share, "seen from the hallway");
             foreach (var cat in o.def.Categories)
             {
-                // Decor it needs: each piece in reach adds; none at all takes away.
+                // Decor it needs: each piece in reach adds; none at all takes away only with Missing Decor Hurts.
                 var needs = settings.NeedsFor(cat);
                 if (needs != null)
                     foreach (var need in needs.needs)
@@ -412,7 +422,7 @@ public class EditAppealView : MonoBehaviour
                             any = true;
                             Link(thing, dt, share * pointsPerNeed * need.importance * Mathf.Clamp01(amount / need.wanted), $"{cat} needs a {f}");
                         }
-                        if (!any) Link(thing, null, -share * pointsPerNeed * need.importance * 0.5f, $"{cat} needs a {f} near it");
+                        if (!any && settings.missingDecorHurts) Link(thing, null, -share * pointsPerNeed * need.importance * 0.5f, $"{cat} needs a {f} near it");
                     }
 
                 // Things it goes with (or clashes with) in reach, and delivery boxes.
@@ -562,6 +572,46 @@ public class EditAppealView : MonoBehaviour
         }
     }
 
+    // Each thing's points above it (the tags pool).
+    private void PlacePoints()
+    {
+        int used = 0;
+        if (showPoints)
+            foreach (var t in thingList)
+            {
+                if (Mathf.Abs(t.score) < 0.5f || t.root == null) continue;
+                var tag = PointsTag(used++);
+                tag.text = t.score > 0f ? $"+{t.score:0}" : $"-{-t.score:0}";
+                tag.color = t.score > 0f ? goodColor : badColor;
+                tag.transform.position = new Vector3(t.bounds.center.x, t.bounds.max.y + pointsHeight, t.bounds.center.z);
+                tag.gameObject.SetActive(true);
+            }
+        for (int i = used; i < tags.Count; i++) if (tags[i] != null) tags[i].gameObject.SetActive(false);
+    }
+
+    private TextMeshPro PointsTag(int i)
+    {
+        while (tags.Count <= i)
+        {
+            var go = new GameObject("Appeal Points");
+            var t = go.AddComponent<TextMeshPro>();
+            t.alignment = TextAlignmentOptions.Center;
+            t.fontSize = 4f;
+            t.fontStyle = FontStyles.Bold;
+            t.textWrappingMode = TextWrappingModes.NoWrap;
+            t.outlineWidth = 0.2f;
+            t.outlineColor = new Color32(0, 0, 0, 255);
+            t.rectTransform.sizeDelta = new Vector2(4f, 1f);
+            tags.Add(t);
+        }
+        if (tags[i] == null)
+        {
+            tags.RemoveAt(i);
+            return PointsTag(i);
+        }
+        return tags[i];
+    }
+
     // The floor where passers-by can see in: one square per cell whose middle (at product height) they can see.
     private void ShadeSeenFloor()
     {
@@ -656,7 +706,14 @@ public class EditAppealView : MonoBehaviour
         foreach (var pool in new[] { tags, nearTags })
             foreach (var t in pool)
                 if (t != null && t.gameObject.activeSelf)
+                {
                     t.transform.rotation = Quaternion.LookRotation(t.transform.position - cam.transform.position);
+                    if (pool == tags)
+                    {
+                        float d = Vector3.Distance(cam.transform.position, t.transform.position);
+                        t.transform.localScale = Vector3.one * (pointsSize * Mathf.Clamp(d / 10f, 0.4f, 3f));
+                    }
+                }
     }
 
     private readonly List<Vector3> meshVerts = new();

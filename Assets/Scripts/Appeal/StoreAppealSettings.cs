@@ -83,6 +83,10 @@ public class StoreAppealSettings : MonoBehaviour
     [Min(0.5f)] public float decorReach = 8f;
     [Tooltip("Quality of a store whose categories have no needs listed (0-1). 0.5 = neither helps nor hurts.")]
     [Range(0f, 1f)] public float neutralQuality = 0.5f;
+    [Tooltip("Off: decor a category needs only adds when it's there (none at all is Neutral Quality, not worse). " +
+             "On: a category with none of the decor it needs pulls quality below neutral. Things that clash " +
+             "(negative Category Pairs) take away either way.")]
+    public bool missingDecorHurts;
 
     [Serializable]
     public class CategoryPair

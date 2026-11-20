@@ -870,7 +870,9 @@ public class StoreAppeal : MonoBehaviour
                 }
             }
             if (importance <= 0f) continue;
-            sum += share * covered / importance;
+            float met = covered / importance;
+            // Missing decor only holds it back from adding (unless Missing Decor Hurts): none at all is neutral.
+            sum += share * (settings.missingDecorHurts ? met : neutral + (1f - neutral) * met);
             weights += share;
         }
 
