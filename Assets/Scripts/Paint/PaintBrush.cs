@@ -422,6 +422,8 @@ public class PaintBrush : NetworkBehaviour
              $"zone {targetZone}{(targetKind == Kind.Front ? $" (front type {targetModule})" : "")} → {PaintPalette.NameOf(color)} (id {color}), " +
              $"store '{(targetPlot != null ? targetPlot.DisplayName : "none")}'.");
         if (targetPlot == null) { DLog("  no store: nothing sent."); return; }
+        Vector3 at = targetItem != null ? targetItem.transform.position : targetObject != null ? targetObject.transform.position : transform.position;
+        Sfx.ForAll(Cue.Paint, at, AnimCue.Paint, OwnerClientId);
         switch (targetKind)
         {
             case Kind.Item:

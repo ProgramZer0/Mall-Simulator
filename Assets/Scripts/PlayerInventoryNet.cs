@@ -296,7 +296,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         int left = Mathf.Max(1, HeldUnits.Value) - 1;
         HeldUnits.Value = left;
         if (left == 0) { HeldItemId.Value = 0; HeldPaint.Value = 0; }
-        PlayItemSoundClientRpc(id, at, true);
+        PlayStockClientRpc(id, at, true);
     }
 
     /* ========================= BUYING FROM OTHER PLAYERS ========================= */
@@ -444,7 +444,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         }
         else HeldUnits.Value++;
 
-        PlayItemSoundClientRpc(id, at, false);
+        PlayStockClientRpc(id, at, false);
     }
 
     /// <summary>Change which way a zone's products face / whether they lie down (if they all still fit).</summary>
@@ -651,8 +651,43 @@ public class PlayerInventoryNet : NetworkBehaviour
     [ClientRpc]
     private void PlayItemSoundClientRpc(int itemId, Vector3 position, bool placed)
     {
+        AnimCues.Fire(gameObject, placed ? AnimCue.PutDown : AnimCue.PickUp);
         if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemId, out var def)) return;
-        WorldAudio.PlayOneShot(placed ? def.PlaceClip : def.PickupClip, position);
+        var clip = placed ? def.PlaceClip : def.PickupClip;
+        if (clip != null) WorldAudio.PlayOneShot(clip, position);
+        else Sfx.Play(placed ? Cue.PutDown : Cue.PickUp, position); // the item has none of its own
+    }
+
+    /// <summary>Stocked a shelf (or took one off it): the Stock / Take Stock sound and animation, plus the item's own sound.</summary>
+    [ClientRpc]
+    private void PlayStockClientRpc(int itemId, Vector3 position, bool stocked)
+    {
+        AnimCues.Fire(gameObject, stocked ? AnimCue.Stock : AnimCue.TakeStock);
+        Sfx.Play(stocked ? Cue.Stock : Cue.TakeStock, position);
+        if (ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(itemId, out var def))
+        {
+            var clip = stocked ? def.PlaceClip : def.PickupClip;
+            if (clip != null) WorldAudio.PlayOneShot(clip, position);
+        }
+    }
+
+    /* ========================= SOUND AND ANIMATION FOR EVERYONE (see Sfx.ForAll) ========================= */
+
+    /// <summary>The owner did something: tell everyone else (they already heard and saw it).</summary>
+    [ServerRpc]
+    public void FxServerRpc(Cue cue, Vector3 at, AnimCue anim, bool animOn, ServerRpcParams rpcParams = default)
+    {
+        if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+        FxClientRpc(cue, at, anim, animOn, OwnerClientId);
+    }
+
+    /// <summary>A sound at a spot and this player's animation, on every machine but Skip's.</summary>
+    [ClientRpc]
+    public void FxClientRpc(Cue cue, Vector3 at, AnimCue anim, bool animOn, ulong skip)
+    {
+        if (NetworkManager.LocalClientId == skip) return;
+        Sfx.Play(cue, at);
+        if (anim != AnimCue.None) AnimCues.Fire(gameObject, anim, animOn);
     }
 
     [ServerRpc]

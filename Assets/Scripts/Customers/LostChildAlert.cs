@@ -72,6 +72,7 @@ public class LostChildAlert : MonoBehaviour
 
     private void Show(CustomerManager.LostCase lost)
     {
+        Sfx.Play(Cue.LostChildAlert);
         childShot ??= shot.Make("Lost Child Alert Camera");
         parentsShot ??= shot.Make("Lost Child Alert Parents Camera");
         if (childPicture != null) childPicture.texture = childShot.Texture;

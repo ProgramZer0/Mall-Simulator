@@ -223,7 +223,11 @@ public class BreakManager : NetworkBehaviour
     /// <summary>Report a broken thing (the local player).</summary>
     public void Report(Breakable b)
     {
-        if (b != null && indexOf.TryGetValue(b, out ushort i)) ReportRpc(i);
+        if (b != null && indexOf.TryGetValue(b, out ushort i))
+        {
+            Sfx.Play(Cue.Reported, b.transform.position);
+            ReportRpc(i);
+        }
     }
 
     [Rpc(SendTo.Server)]

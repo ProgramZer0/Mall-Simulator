@@ -14,6 +14,8 @@ public class LevelDisplay : MonoBehaviour
     [SerializeField] private Image progress;
     [SerializeField] private GameObject root;
     [SerializeField] private string format = "Lv {0}";
+    [Tooltip("Play Level Up (SoundCues) when the level goes up. Only on one level display, or they double up.")]
+    [SerializeField] private bool playSounds = true;
 
     private int shownLevel = -1, shownXp = -1;
     private bool visible = true;
@@ -34,6 +36,7 @@ public class LevelDisplay : MonoBehaviour
         ulong team = pm.LocalTeam;
         int level = pm.GetLevel(team), xp = pm.GetXp(team);
         if (level == shownLevel && xp == shownXp) return;
+        if (playSounds && shownLevel > 0 && level > shownLevel) Sfx.Play(Cue.LevelUp);
         shownLevel = level;
         shownXp = xp;
 

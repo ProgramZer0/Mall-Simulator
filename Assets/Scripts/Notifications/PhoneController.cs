@@ -174,6 +174,8 @@ public class PhoneController : MonoBehaviour
         UIState.OpenMenu(this);
         newNote = newLost = false;
         if (app == null || !phone.ShowApp(app)) phone.ShowHome();
+        Sfx.Play(Cue.PhoneUp);
+        Sfx.ForAll(Cue.None, transform.position, AnimCue.UsingPhone, Sfx.Me, true);
     }
 
     public void Close()
@@ -188,6 +190,8 @@ public class PhoneController : MonoBehaviour
             phone.gameObject.SetActive(false);
         }
         UIState.CloseMenu(this);
+        Sfx.Play(Cue.PhoneDown);
+        Sfx.ForAll(Cue.None, transform.position, AnimCue.UsingPhone, Sfx.Me, false);
     }
 
     private bool EnsurePhone()

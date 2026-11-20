@@ -674,6 +674,7 @@ public class EconomyManager : NetworkBehaviour
     private void SpawnBox(NetworkObject prefab, int itemId, byte paint, Pose pose, ulong teamId)
     {
         var spawned = Instantiate(prefab, pose.position, pose.rotation);
+        Sfx.ForAll(Cue.DeliveryArrived, pose.position); // each box as it comes down (Min Gap keeps a big order tidy)
         ItemDebug.Log($"Delivering {ItemDebug.Describe(itemId)} as '{prefab.name}' at {pose.position}.");
         if (spawned.TryGetComponent<ShipmentPackage>(out var box))
         {

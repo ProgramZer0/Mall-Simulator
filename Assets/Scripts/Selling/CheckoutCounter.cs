@@ -524,33 +524,47 @@ public class CheckoutCounter : NetworkBehaviour
         var s = state.Value;
         bool paying = s.phase == Phase.AwaitingPayment;
         bool cash = paying && s.method == PayMethod.Cash;
+        clicker = rpcParams.Receive.SenderClientId;
 
         switch (action)
         {
             case CheckoutClickable.Action.ScanItem:
                 if (IsLeftBehind(value)) ServerTakeLeftBehind(value, rpcParams.Receive.SenderClientId);
-                else if (!paying) ServerScan(value);
+                else if (!paying)
+                {
+                    int before = lines.Count;
+                    ServerScan(value);
+                    if (lines.Count > before) Fx(Cue.ScanBeep, AnimCue.Scan);
+                }
                 return;
             case CheckoutClickable.Action.CustomerMoney:
                 if (paying && s.moneyTaken == 0)
                 {
                     s.moneyTaken = 1;
+                    Fx(cash ? Cue.TakeCash : Cue.TakeCard, AnimCue.PickUp);
+                    if (cash && s.drawerOpen == 0) Fx(Cue.DrawerOpen);
                     if (cash) s.drawerOpen = 1; // the till pops open for the cash
                     state.Value = s;
                 }
                 return;
             case CheckoutClickable.Action.DrawerToggle:
                 s.drawerOpen = (byte)(s.drawerOpen != 0 ? 0 : 1);
+                Fx(s.drawerOpen != 0 ? Cue.DrawerOpen : Cue.DrawerClose);
                 state.Value = s;
                 return;
             case CheckoutClickable.Action.CardReader:
-                if (paying && !cash && s.moneyTaken != 0) Complete(s.totalCents, "Card approved");
+                if (paying && !cash && s.moneyTaken != 0)
+                {
+                    Fx(Cue.CardApproved, AnimCue.Scan);
+                    Complete(s.totalCents, "Card approved");
+                }
                 return;
             case CheckoutClickable.Action.Drawer:
                 if (cash && s.drawerOpen != 0 && value > 0 && s.changeCents < 1000000 && change.Count < 60)
                 {
                     change.Add(value);
                     s.changeCents += value;
+                    Fx(Cue.CountChange);
                     state.Value = s;
                 }
                 return;
@@ -569,6 +583,7 @@ public class CheckoutCounter : NetworkBehaviour
                     {
                         change.RemoveAt(i);
                         s.changeCents -= value;
+                        Fx(Cue.CountChange);
                         state.Value = s;
                         break;
                     }
@@ -587,15 +602,18 @@ public class CheckoutCounter : NetworkBehaviour
                 if (!paying || s.keypadCents > 9999999) return;
                 if (s.keypadEntered != 0) { s.keypadCents = 0; s.keypadEntered = 0; } // typing again starts over
                 s.keypadCents = action == CheckoutClickable.Action.KeypadDoubleZero ? s.keypadCents * 100 : s.keypadCents * 10 + Mathf.Clamp(value, 0, 9);
+                Fx(Cue.KeypadBeep);
                 state.Value = s;
                 return;
             case CheckoutClickable.Action.KeypadClear:
-                if (paying) { s.keypadCents = 0; s.keypadEntered = 0; state.Value = s; }
+                if (paying) { s.keypadCents = 0; s.keypadEntered = 0; Fx(Cue.KeypadBeep); state.Value = s; }
                 return;
             case CheckoutClickable.Action.KeypadEnter:
                 if (paying)
                 {
                     s.keypadEntered = 1;
+                    Fx(Cue.KeypadBeep);
+                    if (cash && s.drawerOpen == 0) Fx(Cue.DrawerOpen);
                     if (cash) s.drawerOpen = 1; // like a real till
                     state.Value = s;
                 }
@@ -672,9 +690,15 @@ public class CheckoutCounter : NetworkBehaviour
         return options[UnityEngine.Random.Range(0, options.Count)];
     }
 
+    // The player who clicked last (for their animation), and a counter sound for everyone.
+    private ulong clicker = ulong.MaxValue;
+    private void Fx(Cue cue, AnimCue anim = AnimCue.None) => Sfx.ForAll(cue, transform.position, anim, clicker);
+
     private void Complete(int receivedCents, string text)
     {
         int paidBy = state.Value.customer;
+        Fx(Cue.SaleDone);
+        if (state.Value.drawerOpen != 0) Fx(Cue.DrawerClose);
         var plot = Plot;
         var econ = EconomyManager.Instance;
         if (plot != null && plot.HasOwner && econ != null)
