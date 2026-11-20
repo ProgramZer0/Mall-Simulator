@@ -477,7 +477,7 @@ public class StoreAppeal : MonoBehaviour
         }
         sums.Clear();
         if (decorMoved && !layoutChanged) { BuildFeatures(); layoutChanged = true; }
-        if (layoutChanged) nearCache.Clear();
+        if (layoutChanged || settingsChanged) { nearCache.Clear(); wallCache.Clear(); }
         if (boxesDirty)
         {
             boxesDirty = false;
@@ -736,7 +736,7 @@ public class StoreAppeal : MonoBehaviour
             {
                 if (!o.def.HasCategory(category)) continue;
                 float dx = d.position.x - o.position.x, dz = d.position.z - o.position.z;
-                if (dx * dx + dz * dz > reach2) continue;
+                if (dx * dx + dz * dz > reach2 || WallBetween(d.position, o.position)) continue;
                 have += d.amount;
                 break;
             }
@@ -773,7 +773,7 @@ public class StoreAppeal : MonoBehaviour
                 foreach (var b in boxes)
                 {
                     float dx = b.x - o.position.x, dz = b.z - o.position.z;
-                    if (dx * dx + dz * dz > reach2 || Mathf.Abs(b.y - o.position.y) > 3f) continue;
+                    if (dx * dx + dz * dz > reach2 || Mathf.Abs(b.y - o.position.y) > 3f || WallBetween(b, o.position)) continue;
                     if (++near >= wanted) break;
                 }
             }
@@ -784,7 +784,7 @@ public class StoreAppeal : MonoBehaviour
                     var n = kv2.Value;
                     if (!IsIn(n.def, other)) continue;
                     float dx = n.position.x - o.position.x, dz = n.position.z - o.position.z;
-                    if (dx * dx + dz * dz > reach2 || Mathf.Abs(n.position.y - o.position.y) > 3f) continue;
+                    if (dx * dx + dz * dz > reach2 || Mathf.Abs(n.position.y - o.position.y) > 3f || WallBetween(n.position, o.position)) continue;
                     if (++near >= wanted) break;
                 }
             total += Mathf.Clamp01(near / (float)wanted);
@@ -793,6 +793,43 @@ public class StoreAppeal : MonoBehaviour
         float part = weight > 0f ? total / weight : 0f;
         pairPartCache[(category, other, wanted)] = part;
         return part;
+    }
+
+    /* ========================= WALLS BETWEEN THINGS ========================= */
+
+    private readonly Dictionary<(Vector3Int, Vector3Int), bool> wallCache = new();
+    private static readonly RaycastHit[] WallHits = new RaycastHit[16];
+
+    /// <summary>
+    /// Is a wall between two spots (so they don't go together: things on the far side of a wall don't help
+    /// or hurt each other)? Checked at eye height (Floor + 1.6 m): store walls and walls built inside the
+    /// store count; low walls customers see over, windows and doorways don't. Cached until things move.
+    /// </summary>
+    public bool WallBetween(Vector3 a, Vector3 b)
+    {
+        var ka = Vector3Int.RoundToInt(a * 10f);
+        var kb = Vector3Int.RoundToInt(b * 10f);
+        var key = ka.x < kb.x || (ka.x == kb.x && ka.z <= kb.z) ? (ka, kb) : (kb, ka);
+        if (wallCache.TryGetValue(key, out bool blocked)) return blocked;
+
+        float eye = (plot != null ? plot.FloorHeight : Mathf.Min(a.y, b.y)) + 1.6f;
+        Vector3 from = new(a.x, eye, a.z), to = new(b.x, eye, b.z);
+        Vector3 d = to - from;
+        float length = d.magnitude;
+        blocked = false;
+        if (length > 0.05f)
+        {
+            int n = Physics.RaycastNonAlloc(from, d / length, WallHits, length, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < n && !blocked; i++)
+            {
+                var c = WallHits[i].collider;
+                if (c.GetComponentInParent<WallOpening>() != null) continue;              // windows, door frames
+                if (layout != null && plot != null && plot.IsStorefrontCover(c.transform)) continue; // the renovation wall
+                if (c.GetComponentInParent<CuttableWall>() != null || c.GetComponentInParent<BuiltWallPiece>() != null) blocked = true;
+            }
+        }
+        wallCache[key] = blocked;
+        return blocked;
     }
 
     // In a pair category: "Any" is every item for sale.
