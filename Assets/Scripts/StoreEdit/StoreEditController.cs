@@ -16,7 +16,8 @@ using UnityEngine.Rendering.Universal;
 /// R          straight to Rotate (rings) for the selected item; again to hide them
 /// Drag       an arrow to slide along that axis (stops on contact), a ring to rotate
 ///            (snaps to 15 degrees; hold Ctrl to turn freely)
-/// G          toggle gravity for the selected item (everything hangs in place otherwise)
+///            Let go of something with nothing under it and it drops onto whatever's below (together with
+///            anything on top of it); things on a wall stay there (Settle On Release)
 /// Click      a delivery box holding a window or door (bought in the shop, set down in the store):
 ///            the piece comes out and follows the mouse along your walls; click to put it in. More boxes
 ///            of the same piece follow on until there are none left (RMB / Esc stops). Drag pieces
@@ -44,7 +45,11 @@ public class StoreEditController : NetworkBehaviour
     [Header("Keys")]
     [SerializeField] private KeyCode toggleKey = KeyCode.Alpha0;
     [SerializeField] private KeyCode toolKey = KeyCode.X;
-    [SerializeField] private KeyCode gravityKey = KeyCode.G;
+    [Tooltip("Let go of something (after dragging, sliding or turning it) with nothing under it and it drops onto " +
+             "whatever's below, with anything on top of it. Things on a wall stay there. Off: things hang where they're put.")]
+    [SerializeField] private bool settleOnRelease = true;
+    [Tooltip("How long the drop takes, in seconds.")]
+    [SerializeField, Min(0.01f)] private float settleSeconds = 0.25f;
     [Tooltip("Wall tool: build walls between two clicked points (needs BuiltWallSettings in the scene).")]
     [SerializeField] private KeyCode wallToolKey = KeyCode.B;
     [Tooltip("Wall tool: switch between full-height and half-height walls.")]
@@ -353,6 +358,7 @@ public class StoreEditController : NetworkBehaviour
             ShowEditMessage("Your storefront needs at least one door (N to buy one).");
             return;
         }
+        FinishSettling(); // anything still dropping lands before it's sent
         finishing = true;
         finishStartedAt = Time.time;
         StopApplyingKit();
@@ -699,9 +705,6 @@ public class StoreEditController : NetworkBehaviour
                 tool = tool == Tool.None ? Tool.Move : tool == Tool.Move ? Tool.Rotate : Tool.None; // None -> Move -> Rotate -> None
             if (Input.GetKeyDown(rotateKey) && !FlipOnWall()) // on a wall: turn it round; otherwise the rings
                 tool = tool == Tool.Rotate ? Tool.None : Tool.Rotate;
-
-            if (Input.GetKeyDown(gravityKey))
-                selected.SetGravity(!selected.Gravity);
 
             if (UIState.TakeEscape() || rmbClicked)
                 Deselect();
@@ -1236,7 +1239,93 @@ public class StoreEditController : NetworkBehaviour
     private void EndDrag()
     {
         dragHandle = StoreEditHandles.None;
-        if (selected != null) selected.SetDragging(false);
+        if (selected == null) return;
+        selected.SetDragging(false);
+        Settle(selected);
+    }
+
+    /* ========================= SETTLING (nothing floats) ========================= */
+
+    private readonly List<(EditLocalItem item, Vector3 from, Vector3 to)> settling = new();
+    private float settleStart;
+
+    // Let go: with nothing under it, it drops onto what's below (with everything stacked on it).
+    // Windows, doors and things on a wall stay where they are.
+    private void Settle(EditLocalItem item)
+    {
+        if (!settleOnRelease || item == null || item.Opening != null || editPlot == null) return;
+        var mounting = PlacementCheck.GetMounting(item.Def);
+        if (mounting == ItemPickupNet.Mounting.Wall) return;
+        if (mounting == ItemPickupNet.Mounting.FloorOrWall &&
+            PlacementCheck.HasWallBehind(item.Def, item.transform.position, item.transform.rotation, WallMask())) return;
+
+        var stack = StackOn(item);
+        float drop = DropDistance(item, stack);
+        if (drop < 0.01f) return;
+        FinishSettling(); // one drop at a time
+        foreach (var s in stack)
+            if (s != null) settling.Add((s, s.transform.position, s.transform.position + Vector3.down * drop));
+        settleStart = Time.time;
+    }
+
+    // It and everything resting on it (and on those).
+    private List<EditLocalItem> StackOn(EditLocalItem item)
+    {
+        var stack = new List<EditLocalItem> { item };
+        var candidates = new List<EditLocalItem>();
+        foreach (var c in localItems) if (c != null && c != item && c.Opening == null) candidates.Add(c);
+        foreach (var c in addedItems) if (c != null && c != item && c.Opening == null) candidates.Add(c);
+        for (int k = 0; k < stack.Count; k++)
+            foreach (var c in candidates)
+                if (!stack.Contains(c) && RestsOn(c, stack[k])) stack.Add(c);
+        return stack;
+    }
+
+    private static readonly RaycastHit[] DropHits = new RaycastHit[64];
+
+    // How far it falls before landing on something (not in its stack): down to the store's floor at most.
+    private float DropDistance(EditLocalItem item, List<EditLocalItem> stack)
+    {
+        if (!TryColliderBounds(item, out var b)) return 0f;
+        const float lift = 0.01f; // the cast starts a hair up, so the floor it's standing on still counts
+        Vector3 half = new(b.extents.x * 0.95f, Mathf.Max(0.005f, b.extents.y - lift), b.extents.z * 0.95f);
+        Vector3 center = b.center + Vector3.up * lift;
+        float toFloor = Mathf.Max(0f, b.min.y - editPlot.FloorHeight);
+        int n = Physics.BoxCastNonAlloc(center, half, Vector3.down, DropHits, Quaternion.identity, toFloor + 0.5f,
+                                        EditMask(), QueryTriggerInteraction.Ignore);
+        float best = toFloor + lift;
+        for (int i = 0; i < n; i++)
+        {
+            var h = DropHits[i];
+            if (h.distance <= 0f) continue; // already overlapping it (beside it): not what it lands on
+            bool own = false;
+            foreach (var s in stack) if (s != null && h.collider.transform.IsChildOf(s.transform)) { own = true; break; }
+            if (!own && h.distance < best) best = h.distance;
+        }
+        return Mathf.Max(0f, best - lift);
+    }
+
+    // Each frame: the drop, speeding up like a fall.
+    private void UpdateSettling()
+    {
+        if (settling.Count == 0) return;
+        float t = Mathf.Clamp01((Time.time - settleStart) / settleSeconds);
+        float e = t * t;
+        for (int i = settling.Count - 1; i >= 0; i--)
+        {
+            var (item, from, to) = settling[i];
+            if (item == null || item.IsDragging) { settling.RemoveAt(i); continue; }
+            item.SetPose(Vector3.Lerp(from, to, e), item.transform.rotation);
+        }
+        if (t >= 1f) settling.Clear();
+    }
+
+    // Put anything still dropping where it lands, straight away.
+    private void FinishSettling()
+    {
+        foreach (var (item, _, to) in settling)
+            if (item != null && !item.IsDragging) item.SetPose(to, item.transform.rotation);
+        settling.Clear();
     }
 
     private void CancelDrag()
@@ -2551,9 +2640,8 @@ public class StoreEditController : NetworkBehaviour
         }
 
         string toolName = selected == null ? "-" : tool == Tool.None ? "none" : tool.ToString();
-        string gravity = selected == null ? "-" : selected.Gravity ? "on" : "off";
-        hudStatus = $"Selected: {itemName}   Tool: {toolName}   Gravity: {gravity}";
-        hudControls = $"{K("Drag")} item: slide   {K("X")}: move > rotate > hide   {K(rotateKey)}: rotate (on a wall: turn around)   {K("G")}: gravity\n" +
+        hudStatus = $"Selected: {itemName}   Tool: {toolName}";
+        hudControls = $"{K("Drag")} item: slide   {K("X")}: move > rotate > hide   {K(rotateKey)}: rotate (on a wall: turn around)\n" +
                       $"{K("Ctrl")}: no snap   {K("RMB")} drag: camera   {K("RMB")} click / {K("Esc")}: deselect\n" +
                       $"{K("Click")} a box: put in its window, door or front wall   {K(wallToolKey)}: build walls   {K(toggleKey)}: save & exit\n" +
                       $"{K(EditAppealView.ToggleKey)}: appeal view";
@@ -2564,6 +2652,7 @@ public class StoreEditController : NetworkBehaviour
     {
         if (!IsOwner) return;
         CarryRiders();
+        if (finishing) FinishSettling(); else UpdateSettling();
         var hud = StoreEditHud.Instance;
         if (hud == null) return;
         bool show = IsEditing;
