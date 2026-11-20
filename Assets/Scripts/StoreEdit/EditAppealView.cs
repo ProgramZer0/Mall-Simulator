@@ -424,7 +424,8 @@ public class EditAppealView : MonoBehaviour
                         bool any = false;
                         foreach (var (dt, feature, amount, at) in decorOf)
                         {
-                            if (!string.Equals(feature, f, System.StringComparison.OrdinalIgnoreCase) || Flat2(at, o.position) > decorReach2) continue;
+                            if (!string.Equals(feature, f, System.StringComparison.OrdinalIgnoreCase) || Flat2(at, o.position) > decorReach2 ||
+                                preview.WallBetween(at, o.position)) continue;
                             any = true;
                             Link(thing, dt, share * pointsPerNeed * need.importance * Mathf.Clamp01(amount / need.wanted), $"{cat} needs a {f}");
                         }
@@ -442,7 +443,7 @@ public class EditAppealView : MonoBehaviour
                     if (string.Equals(other, StoreAppealSettings.ShipmentCategory, System.StringComparison.OrdinalIgnoreCase))
                     {
                         foreach (var (bt, at) in boxOf)
-                            if (Flat2(at, o.position) <= pairReach2 && Mathf.Abs(at.y - o.position.y) <= 3f)
+                            if (Flat2(at, o.position) <= pairReach2 && Mathf.Abs(at.y - o.position.y) <= 3f && !preview.WallBetween(at, o.position))
                                 Link(thing, bt, share * pointsPerPair * effect, effect > 0f ? $"{cat} goes with delivery boxes" : $"{cat} next to delivery boxes");
                         continue;
                     }
@@ -450,7 +451,8 @@ public class EditAppealView : MonoBehaviour
                     foreach (var (nt, n) in spotOf)
                     {
                         if (nt == thing || (!anyCat && !n.def.HasCategory(other))) continue;
-                        if (Flat2(n.position, o.position) > pairReach2 || Mathf.Abs(n.position.y - o.position.y) > 3f) continue;
+                        if (Flat2(n.position, o.position) > pairReach2 || Mathf.Abs(n.position.y - o.position.y) > 3f ||
+                            preview.WallBetween(n.position, o.position)) continue;
                         Link(thing, nt, share * pointsPerPair * effect, effect > 0f ? $"{cat} goes with {(anyCat ? n.def.displayName : other)}"
                                                                            : $"{cat} clashes with {(anyCat ? n.def.displayName : other)}");
                     }
