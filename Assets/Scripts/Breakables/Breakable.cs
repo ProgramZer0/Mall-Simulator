@@ -80,6 +80,7 @@ public class Breakable : MonoBehaviour
     {
         if (broken == on || intensity == null) return;
         broken = on;
+        if (on && Time.timeSinceLevelLoad > 3f) Sfx.Play(Cue.Broke, transform.position); // (not for ones already broken when you join)
         for (int i = 0; i < lights.Length; i++)
             if (lights[i] != null) lights[i].intensity = on && lightLook == LightLook.Off ? 0f : intensity[i];
         SwapLook(on);
@@ -121,6 +122,7 @@ public class Breakable : MonoBehaviour
         bool lit = Random.value < 0.3f;
         nextFlicker = Time.time + (lit ? Random.Range(0.03f, 0.15f) : Random.Range(0.1f, 0.8f));
         float level = lit ? Random.Range(0.5f, 1f) : Random.Range(0f, 0.08f);
+        if (lit) Sfx.Play(Cue.BrokenFlicker, transform.position); // the buzz as it comes on (Min Gap keeps it sparse)
         for (int i = 0; i < lights.Length; i++)
             if (lights[i] != null) lights[i].intensity = intensity[i] * level;
         SwapLook(!lit); // the bulb's on look while it's lit, Broken Material (its off look) while it isn't

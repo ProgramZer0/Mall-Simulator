@@ -1025,6 +1025,7 @@ public class PlayerInteractInput : NetworkBehaviour
         // Another store's cart left in the way: report it.
         if (lookedAtOtherCart != null && lookedAtPickup == null && lookedAtOtherCart.CanReport(OwnerClientId, out _))
         {
+            Sfx.Play(Cue.Reported, lookedAtOtherCart.transform.position);
             lookedAtOtherCart.RequestReportRpc();
             return;
         }

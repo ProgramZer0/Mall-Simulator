@@ -71,6 +71,7 @@ public class HelpTipPopup : MonoBehaviour
     {
         string title = HelpApp.TitleOf(id) ?? id;
         HelpTips.SetPending(id, showSeconds + graceSeconds);
+        Sfx.Play(Cue.HelpTip);
         if (root == null || text == null)
         {
             Notifications.Post($"Learn more about {title}", "Bring up the phone (Esc) to read about it in Help.");

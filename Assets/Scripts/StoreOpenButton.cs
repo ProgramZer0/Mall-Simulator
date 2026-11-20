@@ -60,6 +60,8 @@ public class StoreOpenButton : MonoBehaviour
         var s = Store;
         int now = s == null || !s.HasOwner || s.IsRenovating ? 0 : s.IsOpen ? 1 : 2;
         if (now == shown) return;
+        // Opened or closed (not the first look, nor renovating): its sound, at the button.
+        if ((shown == 1 && now == 2) || (shown == 2 && now == 1)) Sfx.Play(now == 1 ? Cue.StoreOpened : Cue.StoreClosed, transform.position);
         shown = now;
         var c = now == 1 ? openColor : now == 2 ? closedColor : offColor;
         if (lamp == null) lamp = GetComponentInChildren<Renderer>();

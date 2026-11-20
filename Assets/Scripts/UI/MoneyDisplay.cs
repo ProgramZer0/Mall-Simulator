@@ -16,6 +16,8 @@ public class MoneyDisplay : MonoBehaviour
     [SerializeField] private TMP_Text text;
     [SerializeField] private GameObject root;
     [SerializeField] private string format = "${0:N0}";
+    [Tooltip("Play Money In / Money Out (SoundCues) when it changes. Only on one money display, or they double up.")]
+    [SerializeField] private bool playSounds = true;
 
     private int shown = int.MinValue;
     private bool visible = true;
@@ -37,6 +39,7 @@ public class MoneyDisplay : MonoBehaviour
         // also catches joining another team, which doesn't raise MoneyChanged.
         int money = econ.LocalMoney;
         if (money == shown || text == null) return;
+        if (playSounds && shown != int.MinValue) Sfx.Play(money > shown ? Cue.MoneyIn : Cue.MoneyOut);
         shown = money;
         text.text = string.Format(format, money);
     }

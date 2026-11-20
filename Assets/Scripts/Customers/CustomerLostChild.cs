@@ -81,6 +81,7 @@ public partial class CustomerManager
         kid.lostAt = kid.pos;
         kid.follow = null;
         kid.mode = Mode.Lost;
+        Act(kid, AnimCue.Lost);
         kid.helper = ulong.MaxValue;
         if (!PathTo(kid, spot)) kid.arrived = true;
 
@@ -241,6 +242,7 @@ public partial class CustomerManager
     {
         ulong player = kid.helper;
         kid.mode = Mode.Lost;
+        Act(kid, AnimCue.Lost);
         kid.helper = ulong.MaxValue;
         kid.helperFarSince = -1f;
         kid.corners.Clear();
@@ -281,6 +283,7 @@ public partial class CustomerManager
         kid.lostFrom = null;
         kid.helper = ulong.MaxValue;
         kid.mode = Mode.Follow;
+        Act(kid, AnimCue.Lost, false);
         kid.arrived = true;
         kid.nextThink = Time.time;
         SetMark(kid, LostMark.None);

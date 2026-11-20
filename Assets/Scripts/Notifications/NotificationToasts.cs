@@ -41,6 +41,7 @@ public class NotificationToasts : MonoBehaviour
 
     private void OnPosted(Note note)
     {
+        Sfx.Play(Cue.Notification); // (even with the phone up)
         if (toastPrefab == null || PhoneController.IsOpen) return;
         while (shown.Count >= maxShown) Hide(0);
 
