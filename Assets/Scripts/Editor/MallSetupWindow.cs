@@ -37,14 +37,16 @@ public class MallSetupWindow : EditorWindow
     private LayerMask wallMask = ~0;
     private float defaultHeight = 3f;
     private float maxReach = 60f;
-    private float inset = 0.02f;
+    private float wallBuffer = 0.1f;
+    private float ceilingBuffer = 0.25f;
 
     private void OnEnable()
     {
         wallMask = EditorPrefs.GetInt("MallSetup.WallMask", ~0);
         defaultHeight = EditorPrefs.GetFloat("MallSetup.DefaultHeight", 3f);
         maxReach = EditorPrefs.GetFloat("MallSetup.MaxReach", 60f);
-        inset = EditorPrefs.GetFloat("MallSetup.Inset", 0.02f);
+        wallBuffer = EditorPrefs.GetFloat("MallSetup.WallBuffer", 0.1f);
+        ceilingBuffer = EditorPrefs.GetFloat("MallSetup.CeilingBuffer", 0.25f);
     }
 
     private void OnGUI()
@@ -68,13 +70,18 @@ public class MallSetupWindow : EditorWindow
         wallMask = LayerMaskField("Wall layers", wallMask);
         defaultHeight = EditorGUILayout.FloatField(new GUIContent("Height if no ceiling", "Meters above the floor."), defaultHeight);
         maxReach = EditorGUILayout.FloatField(new GUIContent("Max reach", "Furthest a side grows (meters)."), maxReach);
-        inset = EditorGUILayout.FloatField(new GUIContent("Inset", "Gap left between the box and the walls (meters)."), inset);
+        wallBuffer = EditorGUILayout.FloatField(new GUIContent("Wall buffer",
+            "How far the box goes past the walls (meters), so things right against a wall are inside. " +
+            "Negative: a gap. (Segment walls: always to their middle.)"), wallBuffer);
+        ceilingBuffer = EditorGUILayout.FloatField(new GUIContent("Ceiling buffer",
+            "How far the box goes past the ceiling (meters), so ceiling lights and signs are inside."), ceilingBuffer);
         if (EditorGUI.EndChangeCheck())
         {
             EditorPrefs.SetInt("MallSetup.WallMask", wallMask);
             EditorPrefs.SetFloat("MallSetup.DefaultHeight", defaultHeight);
             EditorPrefs.SetFloat("MallSetup.MaxReach", maxReach);
-            EditorPrefs.SetFloat("MallSetup.Inset", inset);
+            EditorPrefs.SetFloat("MallSetup.WallBuffer", wallBuffer);
+            EditorPrefs.SetFloat("MallSetup.CeilingBuffer", ceilingBuffer);
         }
         EditorGUILayout.Space();
 
@@ -252,9 +259,10 @@ public class MallSetupWindow : EditorWindow
             return false;
         }
 
-        // A segment wall: to its middle (the next area comes to it from the other side), not inset.
+        // Walls: Wall Buffer past them. A segment wall: to its middle (the next area comes to it from the other side).
         pr = Edge(pr, walls[0], right); nr = Edge(nr, walls[1], -right);
         pf = Edge(pf, walls[2], forward); nf = Edge(nf, walls[3], -forward);
+        ceiling += ceilingBuffer;
         Vector3 centerWorld = seed + right * (pr - nr) * 0.5f + forward * (pf - nf) * 0.5f;
         centerWorld.y = (floor + ceiling) * 0.5f;
         Vector3 scale = t.lossyScale;
@@ -271,10 +279,10 @@ public class MallSetupWindow : EditorWindow
         public Vector3 from;
     }
 
-    // A side's distance, to the middle of a segment wall or Inset short of anything else.
+    // A side's distance, to the middle of a segment wall or Wall Buffer past anything else.
     private float Edge(float distance, SideWall w, Vector3 outward)
     {
-        if (w.wall == null || !segmentWalls.Contains(w.wall)) return distance - inset;
+        if (w.wall == null || !segmentWalls.Contains(w.wall)) return distance + wallBuffer;
         return distance + Thickness(w.wall, w.from, outward, distance) * 0.5f;
     }
 
