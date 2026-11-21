@@ -561,6 +561,66 @@ public class StorePlot : NetworkBehaviour
     /// <summary>Height of a full wall: from the floor to the top of the store's space.</summary>
     public float FullWallHeight => Mathf.Max(0.5f, GetEditCutHeight() - FloorHeight);
 
+    /// <summary>
+    /// Height from the floor to the store's actual ceiling (meters): rays straight up from a few points
+    /// across each of its areas, skipping things in the store (items, stock, players, built walls). The
+    /// highest first hit wins, so a ceiling light over one point doesn't pull it down. Nothing above:
+    /// the store's top (Full Wall Height). Worked out again when a segment is bought.
+    /// </summary>
+    public float CeilingHeight
+    {
+        get
+        {
+            int key = 1;
+            for (int i = 0; i < SegmentCount; i++) if (IsSegmentPurchased(i)) key = key * 31 + i + 1;
+            if (ceilingKey == key && ceilingCached > 0f) return ceilingCached;
+            ceilingKey = key;
+            ceilingCached = FindCeilingHeight();
+            return ceilingCached;
+        }
+    }
+
+    private int ceilingKey = int.MinValue;
+    private float ceilingCached = -1f;
+    private static readonly RaycastHit[] CeilingHits = new RaycastHit[16];
+    private static readonly List<Bounds> CeilingAreas = new();
+
+    private float FindCeilingHeight()
+    {
+        float floor = FloorHeight, top = GetEditCutHeight();
+        int skip = 0;
+        foreach (var n in new[] { "Ignore Raycast", "Pickup", "Interactable", "Player", "storeplots", ShelfStockLayer.Name })
+        {
+            int l = LayerMask.NameToLayer(n);
+            if (l >= 0) skip |= 1 << l;
+        }
+        int mask = Physics.DefaultRaycastLayers & ~skip;
+        float best = -1f;
+        CeilingAreas.Clear();
+        GetAreaBounds(CeilingAreas);
+        foreach (var b in CeilingAreas)
+            for (int ix = 0; ix < 3; ix++)
+                for (int iz = 0; iz < 3; iz++)
+                {
+                    var from = new Vector3(Mathf.Lerp(b.min.x, b.max.x, 0.2f + 0.3f * ix), floor + 0.3f,
+                                           Mathf.Lerp(b.min.z, b.max.z, 0.2f + 0.3f * iz));
+                    int n = Physics.RaycastNonAlloc(from, Vector3.up, CeilingHits, top - from.y + 2f, mask,
+                                                    QueryTriggerInteraction.Ignore);
+                    float first = float.MaxValue;
+                    for (int i = 0; i < n; i++)
+                    {
+                        var c = CeilingHits[i].collider;
+                        if (c.GetComponentInParent<BuiltWallPiece>() != null) continue; // our own walls
+                        if (c.GetComponentInParent<ItemPickupNet>() != null || c.GetComponentInParent<StockContainer>() != null)
+                            continue; // things placed in the store
+                        first = Mathf.Min(first, CeilingHits[i].point.y);
+                    }
+                    if (first < float.MaxValue) best = Mathf.Max(best, first);
+                }
+        if (best < 0f) return FullWallHeight;
+        return Mathf.Clamp(best - floor, 0.5f, FullWallHeight);
+    }
+
     /// <summary>Height of a full built wall here (BuiltWallSettings' Full Height, no taller than the store).</summary>
     public float BuiltWallFullHeight =>
         BuiltWallSettings.Instance != null ? BuiltWallSettings.Instance.FullHeightFor(this) : FullWallHeight;
