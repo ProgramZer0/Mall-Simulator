@@ -1014,7 +1014,13 @@ public partial class CustomerManager : NetworkBehaviour
             Vector3 alt = hit.position + slide * 0.9f;
             alt.y = next.y;
             next = NavMesh.Raycast(hit.position, alt, out var hit2, NavMesh.AllAreas) ? hit2.position : alt;
+            // Pinned in a corner (the slide goes nowhere): try turning a little either way instead.
+            Vector3 got = next - c.pos;
+            got.y = 0f;
+            if (got.sqrMagnitude < step.sqrMagnitude * 0.04f) next = Sidestep(c, step, next);
         }
+        // Keep them on the walkable surface (two floors over each other: the right one).
+        if (NavMesh.SamplePosition(next, out var onMesh, 0.6f, NavMesh.AllAreas)) next.y = onMesh.position.y;
 
         Vector3 moved = next - c.pos;
         moved.y = 0f;
@@ -1031,6 +1037,7 @@ public partial class CustomerManager : NetworkBehaviour
             c.stuckRepaths++;
             if (logDecisions) Log(c, $"stuck at {c.pos:F1} heading for {c.destination:F1} (try {c.stuckRepaths})");
             int tries = c.stuckRepaths;
+            if (tries >= 3) Nudge(c); // still wedged: a small hop toward where they're going, off whatever holds them
             if (tries >= 2)
             {
                 c.squeezeUntil = Time.time + squeezeSeconds;
@@ -1051,6 +1058,34 @@ public partial class CustomerManager : NetworkBehaviour
             }
             else c.stuckRepaths = tries; // (PathTo resets the timer, not the count)
         }
+    }
+
+    // Pinned: the first of a few turned steps (45°, then 90°, either side) that isn't blocked.
+    private static readonly float[] SideAngles = { 45f, -45f, 90f, -90f };
+    private Vector3 Sidestep(Customer c, Vector3 step, Vector3 fallback)
+    {
+        foreach (float a in SideAngles)
+        {
+            Vector3 turned = Quaternion.Euler(0f, a, 0f) * step;
+            Vector3 to = c.pos + turned;
+            if (!NavMesh.Raycast(c.pos, to, out _, NavMesh.AllAreas)) return to;
+        }
+        return fallback;
+    }
+
+    // Stuck again and again: move them a little way along toward their next corner, onto open floor.
+    private void Nudge(Customer c)
+    {
+        if (c.corner >= c.corners.Count) return;
+        Vector3 d = c.corners[c.corner] - c.pos;
+        d.y = 0f;
+        if (d.sqrMagnitude < 1e-4f) return;
+        Vector3 want = c.pos + d.normalized * Mathf.Min(0.6f, d.magnitude);
+        if (!NavMesh.SamplePosition(want, out var hit, 0.8f, NavMesh.AllAreas)) return;
+        if (Mathf.Abs(hit.position.y - c.pos.y) > 1f) return; // not onto another floor
+        if (logDecisions) Log(c, $"nudged from {c.pos:F1} to {hit.position:F1}");
+        c.pos = hit.position;
+        c.dirty = true;
     }
 
     // The current corner, moved sideways into this customer's lane (not past an edge). The last corner
