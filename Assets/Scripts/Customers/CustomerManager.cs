@@ -75,6 +75,9 @@ public partial class CustomerManager : NetworkBehaviour
     [Tooltip("Leaving the mall and stuck (in the crowd at the doors) within this many meters of the exit: they count as " +
              "gone, rather than piling up at the door.")]
     [SerializeField, Min(0f)] private float exitStuckRange = 8f;
+    [Tooltip("Someone following (a child with a parent) stays where they are while whoever they follow stands still " +
+             "this close (meters), instead of stepping round to stay beside them.")]
+    [SerializeField, Min(0.5f)] private float followSettleDistance = 2.2f;
     [Tooltip("Customers keep to their own lane, up to this far either side of the shortest path (meters), " +
              "so a hallway fills out instead of everyone walking one line.")]
     [SerializeField] private float laneSpread = 0.7f;
@@ -470,6 +473,7 @@ public partial class CustomerManager : NetworkBehaviour
         // Lost children (see CustomerLostChild.cs)
         public Customer lostFrom;      // (a lost child) the parent they wandered off from
         public bool lostAnnounced;     // (a lost child) stopped walking off, and everyone's been told
+        public bool lostSettled;       // (a lost child) already moved on once from a bad spot (the stairs)
         public float lostSince;
         public Vector3 lostAt;         // where they wandered off (their family searches around there)
         public bool lostLetDown;       // (a lost child) never found by a player: the mall's reputation took the hit

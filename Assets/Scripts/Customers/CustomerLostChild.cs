@@ -14,10 +14,14 @@ using Random = UnityEngine.Random;
 public partial class CustomerManager
 {
     [Header("Lost Children")]
-    [Tooltip("About how many minutes between lost children, across the whole mall (each wait is 50%-150% of " +
-             "this). 0: children never get lost.")]
-    [SerializeField, Min(0f)] private float lostChildEveryMinutes = 6f;
-    [Tooltip("The first one comes no sooner than this many minutes into the game.")]
+    [Tooltip("Minutes after a lost child (across the whole mall) before the next one can happen. From then on " +
+             "there's a chance every minute (Lost Child Chance), growing until 4 times this, then staying there. " +
+             "Never guaranteed. 0: children never get lost.")]
+    [SerializeField, Min(0f)] private float lostChildEveryMinutes = 10f;
+    [Tooltip("Chance a minute of a child getting lost: x right at Lost Child Every Minutes, growing to y at 4 times " +
+             "it (and staying y after). E.g. 0.01 = 1% a minute.")]
+    [SerializeField] private Vector2 lostChildChance = new(0.01f, 0.06f);
+    [Tooltip("Into the game, the chance starts after this many minutes instead (then grows the same way).")]
     [SerializeField, Min(0f)] private float firstLostChildAfterMinutes = 3f;
     [Tooltip("At most this many children lost at the same time.")]
     [SerializeField, Min(1)] private int maxLostAtOnce = 1;
@@ -47,7 +51,27 @@ public partial class CustomerManager
     /// <summary>Who's lost, following a player, or searching (sent to everyone: the interact prompt).</summary>
     public enum LostMark : byte { None, LostChild, Following, Searching }
 
-    private float nextLostChildAt = -1f; // host: when the next child may get lost
+    // Host: the clock the chance grows on (game start, then the last lost child), when it last rolled, and a
+    // roll that came up (the next child walking the halls gets lost).
+    private float lostClockFrom = -1f, lostRolledAt = -1f;
+    private bool lostChildDue, lostFirstDone;
+
+    // Rolls the chance for the time since the last roll (mall-wide, however many children are about).
+    private void RollLostChild()
+    {
+        if (lostClockFrom < 0f) lostClockFrom = lostRolledAt = Time.time;
+        float dt = Time.time - lostRolledAt;
+        if (lostChildDue || dt < 1f) return;
+        lostRolledAt = Time.time;
+        float every = lostChildEveryMinutes * 60f;
+        float start = lostFirstDone ? every : firstLostChildAfterMinutes * 60f;
+        float since = Time.time - lostClockFrom;
+        if (since < start) return;
+        float t = Mathf.Clamp01((since - start) / (every * 3f));
+        float perMinute = Mathf.Clamp01(Mathf.Lerp(lostChildChance.x, lostChildChance.y, t));
+        // The chance over dt seconds of a per-minute chance.
+        if (Random.value < 1f - Mathf.Pow(1f - perMinute, dt / 60f)) lostChildDue = true;
+    }
 
     // Every machine: who's marked.
     private readonly System.Collections.Generic.Dictionary<ushort, byte> marks = new();
@@ -60,9 +84,9 @@ public partial class CustomerManager
         var g = kid.group;
         var parent = kid.follow;
         if (g == null || g.lostOnce || parent == null || lostChildEveryMinutes <= 0f || !byId.ContainsKey(parent.id)) return false;
-        // Mall-wide: one every so often (the first child walking the halls once it's time), a few at most.
-        if (nextLostChildAt < 0f) nextLostChildAt = Time.time + firstLostChildAfterMinutes * 60f;
-        if (Time.time < nextLostChildAt || cases.Count >= maxLostAtOnce) return false;
+        // Mall-wide: a chance that grows over time (the first child walking the halls once it comes up), a few at most.
+        RollLostChild();
+        if (!lostChildDue || cases.Count >= maxLostAtOnce) return false;
         var root = Root(kid);
         if (root.store != null || root.mode != Mode.Wander || root.searchingFor != null) return false; // walking the halls
         // Not a family with a shoplifter in it (searching parents can't be stopped and checked).
@@ -73,11 +97,14 @@ public partial class CustomerManager
             !NearbyHallwaySpot(kid.pos, lostDistance.x * 0.5f, lostDistance.x, out spot)) return false;
 
         g.lostOnce = true;
-        nextLostChildAt = Time.time + lostChildEveryMinutes * 60f * Random.Range(1f, 4f);
+        lostChildDue = false;
+        lostFirstDone = true;
+        lostClockFrom = lostRolledAt = Time.time;
         kid.lostFrom = parent;
         kid.lostSince = Time.time;
         kid.lostLetDown = false;
         kid.lostAnnounced = false;
+        kid.lostSettled = false;
         kid.lostAt = kid.pos;
         kid.follow = null;
         kid.mode = Mode.Lost;
@@ -100,6 +127,12 @@ public partial class CustomerManager
     // starts from here).
     private void Announce(Customer kid)
     {
+        // On the stairs, in a doorway...: walk on to somewhere better first (once), then they're told.
+        if (!kid.lostSettled)
+        {
+            kid.lostSettled = true;
+            if (MoveOffBadSpot(kid)) { kid.lostSince = Time.time - lostWalkSeconds + 20f; return; }
+        }
         kid.lostAnnounced = true;
         kid.lostSince = Time.time;
         kid.corners.Clear();
@@ -123,7 +156,7 @@ public partial class CustomerManager
     }
 
     // Somewhere in the halls (not in a store) between min and max meters away, that can be walked to.
-    private static bool NearbyHallwaySpot(Vector3 from, float min, float max, out Vector3 spot)
+    private bool NearbyHallwaySpot(Vector3 from, float min, float max, out Vector3 spot)
     {
         spot = default;
         var mall = MallManager.Instance;
@@ -134,10 +167,54 @@ public partial class CustomerManager
             if (!NavMesh.SamplePosition(p, out var hit, 3f, CustomerNavMesh.PreferMask)) continue;
             if (Mathf.Abs(hit.position.y - from.y) > 2f) continue; // same floor
             if (mall != null && mall.GetPlotAt(hit.position + Vector3.up * 0.1f) != null) continue; // not in a store
+            if (!GoodLostSpot(hit.position)) continue;
             spot = hit.position;
             return true;
         }
         return false;
+    }
+
+    // Somewhere a lost child can stand: flat floor (not stairs or a ramp), not a doorway, not in a store,
+    // not in a No Lost Child Zone.
+    private bool GoodLostSpot(Vector3 p)
+    {
+        if (!NavMesh.SamplePosition(p, out var hit, 0.6f, NavMesh.AllAreas)) return false;
+        p = hit.position;
+        for (int i = 0; i < 4; i++)
+        {
+            Vector3 d = Quaternion.Euler(0f, i * 90f, 0f) * Vector3.forward * 0.7f;
+            if (NavMesh.SamplePosition(p + d, out var h, 0.5f, NavMesh.AllAreas) && Mathf.Abs(h.position.y - p.y) > 0.12f)
+                return false; // sloping or stepped: stairs, a ramp
+        }
+        if (InDoorway(p) || NoLostChildZone.Contains(p)) return false;
+        var mall = MallManager.Instance;
+        if (mall != null && mall.GetPlotAt(p + Vector3.up * 0.1f) != null) return false;
+        return true;
+    }
+
+    // The nearest good spot to stand within Radius (rings a meter apart), on the same floor.
+    private bool NearestGoodLostSpot(Vector3 from, float radius, out Vector3 spot)
+    {
+        spot = from;
+        for (float r = 1f; r <= radius; r += 1f)
+            for (int i = 0; i < 12; i++)
+            {
+                Vector3 p = from + Quaternion.Euler(0f, i * 30f, 0f) * Vector3.forward * r;
+                if (!NavMesh.SamplePosition(p, out var hit, 1f, NavMesh.AllAreas) || Mathf.Abs(hit.position.y - from.y) > 1.5f) continue;
+                if (!GoodLostSpot(hit.position)) continue;
+                spot = hit.position;
+                return true;
+            }
+        return false;
+    }
+
+    // Stopped somewhere a child shouldn't wait (the stairs): walk on to the nearest good spot first.
+    private bool MoveOffBadSpot(Customer kid)
+    {
+        if (GoodLostSpot(kid.pos) || !NearestGoodLostSpot(kid.pos, 15f, out var spot)) return false;
+        if (!PathTo(kid, spot)) return false;
+        Log(kid, $"stopped somewhere a child shouldn't wait ({kid.pos:F1}): moving on to {spot:F1}");
+        return true;
     }
 
     /* ========================= LOST ========================= */
@@ -251,6 +328,7 @@ public partial class CustomerManager
         SetMark(kid, LostMark.LostChild);
         React(kid, Reaction.LostMyFamily);
         Log(kid, "lost again (fell behind the player)");
+        MoveOffBadSpot(kid); // not on the stairs: on to the nearest good spot
         if (notify && NotificationManager.Instance != null)
             NotificationManager.Instance.ServerNotifyClientText(player, "You lost them!",
                 "The child couldn't keep up and is waiting where they stopped. Go back for them.");
