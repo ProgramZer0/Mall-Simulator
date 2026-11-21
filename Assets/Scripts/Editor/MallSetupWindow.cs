@@ -14,6 +14,7 @@ using UnityEngine;
 /// "Fit Store" refits every area box of the selected stores.
 ///
 /// Find fills in a store's Storefront Walls (CuttableWalls along its edge) and Floor Renderers.
+/// Raise stretches a store's segment walls (False Walls) and Storefront Walls up to the ceiling.
 ///
 /// Prices: sets each store's and segment's price from its floor space, and starter stores' Starting
 /// Money from what's left of the starting cash (Keep Price on a store or segment leaves it alone).
@@ -235,6 +236,10 @@ public class MallSetupWindow : EditorWindow
             if (GUILayout.Button($"Fit every area of the selected store{(plots.Count == 1 ? "" : "s")} ({plots.Count})"))
                 Fit(plots.SelectMany(AreasOf).ToList());
             if (GUILayout.Button("Add Area Box (in front of the Scene view camera)")) AddAreaBox(plots[0]);
+            if (GUILayout.Button(new GUIContent("Raise segment and storefront walls to the ceiling",
+                    "Stretches each False Wall and Storefront Wall of the selected stores up to the ceiling above it " +
+                    "(or Height if no ceiling), keeping its bottom where it is.")))
+                RaiseWalls(plots);
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Find Storefront Walls")) foreach (var p in plots) FindStorefrontWalls(p);
             if (GUILayout.Button("Find Floor Renderers")) foreach (var p in plots) FindFloorRenderers(p);
@@ -242,6 +247,102 @@ public class MallSetupWindow : EditorWindow
         }
         if (plots.Count == 0)
             EditorGUILayout.HelpBox("Select a store (or something in it) for the store buttons.", MessageType.None);
+    }
+
+    /* ========================= WALLS TO THE CEILING ========================= */
+
+    private void RaiseWalls(List<StorePlot> plots)
+    {
+        Physics.SyncTransforms();
+        var ignored = Ignored();
+        var walls = new List<GameObject>();
+        foreach (var plot in plots)
+        {
+            var so = new SerializedObject(plot);
+            foreach (var w in Objects<CuttableWall>(so.FindProperty("storefrontWalls"))) if (!walls.Contains(w.gameObject)) walls.Add(w.gameObject);
+            var segs = so.FindProperty("segments");
+            for (int i = 0; segs != null && i < segs.arraySize; i++)
+                foreach (var g in Objects<GameObject>(segs.GetArrayElementAtIndex(i).FindPropertyRelative("falseWalls")))
+                    if (!walls.Contains(g)) walls.Add(g);
+        }
+        int raised = 0;
+        foreach (var w in walls)
+        {
+            string why = RaiseWall(w, ignored);
+            if (why == null) raised++;
+            else if (why.Length > 0) Debug.LogWarning($"[Mall Setup] Wall '{w.name}' not raised: {why}", w);
+        }
+        Debug.Log($"[Mall Setup] Raised {raised} of {walls.Count} wall(s) to the ceiling.");
+    }
+
+    // Null: raised. "": already there. Otherwise why not.
+    private string RaiseWall(GameObject wall, HashSet<Collider> ignored)
+    {
+        if (Vector3.Angle(wall.transform.up, Vector3.up) > 1f) return "it's tilted (only upright walls are stretched)";
+
+        // Doors, windows and other items set into it come off while it's stretched, so they keep their shape
+        // (and don't count in its height).
+        var t = wall.transform;
+        var keep = new List<Transform>();
+        foreach (var c in t.GetComponentsInChildren<Transform>(true))
+            if (c != t && (c.GetComponent<WallOpening>() != null || c.GetComponent<Unity.Netcode.NetworkObject>() != null) &&
+                !keep.Exists(k => c.IsChildOf(k)))
+                keep.Add(c);
+        var parents = new List<Transform>();
+        foreach (var k in keep) { parents.Add(k.parent); Undo.SetTransformParent(k, null, "Raise wall to ceiling"); }
+        try { return Stretch(wall, ignored); }
+        finally
+        {
+            for (int i = 0; i < keep.Count; i++) Undo.SetTransformParent(keep[i], parents[i], "Raise wall to ceiling");
+        }
+    }
+
+    private string Stretch(GameObject wall, HashSet<Collider> ignored)
+    {
+        Physics.SyncTransforms();
+        if (!TryWallBounds(wall, out Bounds b)) return "no renderer or collider to measure";
+        var own = new HashSet<Collider>(wall.GetComponentsInChildren<Collider>(true));
+        own.UnionWith(ignored);
+
+        // The ceiling: rays up from along the top of the wall; the lowest hit wins.
+        bool alongX = b.size.x >= b.size.z;
+        float half = (alongX ? b.extents.x : b.extents.z) * 0.8f;
+        float ceiling = float.MaxValue;
+        for (int i = -1; i <= 1; i++)
+        {
+            Vector3 from = new(b.center.x + (alongX ? half * i : 0f), b.max.y - 0.05f, b.center.z + (alongX ? 0f : half * i));
+            foreach (var h in Physics.RaycastAll(from, Vector3.up, 30f, wallMask, QueryTriggerInteraction.Ignore))
+                if (!own.Contains(h.collider)) ceiling = Mathf.Min(ceiling, h.point.y);
+        }
+        if (ceiling == float.MaxValue) ceiling = b.min.y + defaultHeight;
+        float height = b.size.y, want = ceiling - b.min.y;
+        if (height <= 0.01f || want <= 0.05f) return "can't measure its height";
+        if (Mathf.Abs(want - height) < 0.005f) return "";
+
+        var t = wall.transform;
+        Undo.RecordObject(t, "Raise wall to ceiling");
+        Vector3 ls = t.localScale;
+        t.localScale = new Vector3(ls.x, ls.y * want / height, ls.z);
+        Physics.SyncTransforms();
+        if (TryWallBounds(wall, out Bounds after)) t.position += Vector3.up * (b.min.y - after.min.y); // bottom stays put
+        return null;
+    }
+
+    private static bool TryWallBounds(GameObject wall, out Bounds b)
+    {
+        b = default;
+        bool any = false;
+        foreach (var r in wall.GetComponentsInChildren<Renderer>())
+        {
+            if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds);
+        }
+        if (any) return true;
+        foreach (var c in wall.GetComponentsInChildren<Collider>())
+        {
+            if (c.isTrigger) continue;
+            if (!any) { b = c.bounds; any = true; } else b.Encapsulate(c.bounds);
+        }
+        return any;
     }
 
     private static LayerMask LayerMaskField(string label, LayerMask mask)
