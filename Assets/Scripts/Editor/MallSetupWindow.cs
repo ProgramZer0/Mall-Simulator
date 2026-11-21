@@ -87,7 +87,7 @@ public class MallSetupWindow : EditorWindow
     private void PricesGUI()
     {
         EditorGUILayout.HelpBox(
-            "Prices from floor space (the store's area boxes, seen from above; overlaps count once):\n" +
+            "Prices from floor space (the store's area boxes, seen from above; overlaps count once, and floor that's also another store's doesn't count):\n" +
             "- A store's Price: its base area x the price per square foot.\n" +
             "- Each segment: its area x the price, less the segment discount.\n" +
             "- A starter store's Starting Money: the starting cash less its Price (never below the minimum), so " +
@@ -126,11 +126,14 @@ public class MallSetupWindow : EditorWindow
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Preview (now → new)", EditorStyles.boldLabel);
         priceScroll = EditorGUILayout.BeginScrollView(priceScroll);
+        var areasOf = all.ToDictionary(p => p, p => AreasOf(p).Where(b => b != null).ToList());
         foreach (var plot in all)
         {
             var so = new SerializedObject(plot);
             bool starter = so.FindProperty("isStarterPlot").boolValue, keep = so.FindProperty("keepPrice").boolValue;
-            float ft = SqFt(Objects<BoxCollider>(so.FindProperty("baseAreas")));
+            var others = all.Where(p => p != plot).SelectMany(p => areasOf[p]).ToList();
+            var baseBoxes = Objects<BoxCollider>(so.FindProperty("baseAreas")).ToList();
+            float ft = SqFt(baseBoxes, others);
             int newPrice = Round(ft * pricePerSqFt);
             string line = $"{so.FindProperty("displayName").stringValue} ({plot.name}): {ft:N0} sq ft, price " +
                           (keep ? $"{so.FindProperty("price").intValue:N0} (kept)" : $"{so.FindProperty("price").intValue:N0} → {newPrice:N0}");
@@ -141,7 +144,7 @@ public class MallSetupWindow : EditorWindow
             for (int i = 0; segs != null && i < segs.arraySize; i++)
             {
                 var seg = segs.GetArrayElementAtIndex(i);
-                float sft = SegmentSqFt(seg);
+                float sft = SegmentSqFt(seg, others.Concat(baseBoxes));
                 bool skeep = seg.FindPropertyRelative("keepPrice").boolValue;
                 int now = seg.FindPropertyRelative("price").intValue;
                 line += $"\n    {seg.FindPropertyRelative("name").stringValue}: {sft:N0} sq ft, " +
@@ -156,51 +159,69 @@ public class MallSetupWindow : EditorWindow
     private int SegmentPrice(float sqFt) => Round(sqFt * pricePerSqFt * (1f - segmentDiscount));
     private int StartMoney(int storePrice) => Mathf.Max(minStartMoney, Round(startCash - storePrice));
 
-    // Floor space of some boxes, seen from above (their own X by Z, scaled), in square feet. Where two
-    // boxes turned the same way overlap (an L filled with two), the overlap counts once.
-    private static float SqFt(IEnumerable<BoxCollider> boxes)
+    // Floor space of some boxes, seen from above, in square feet: the floor they cover together, sampled on
+    // a 10 cm grid, so where boxes overlap (an L filled with two, boxes crossing) it counts once. Floor that's
+    // also in Exclude (other stores' areas; for a segment, the store's base) doesn't count. Cached until a box
+    // moves or changes size.
+    private const float AreaStep = 0.1f;
+    private static readonly Dictionary<int, float> areaCache = new();
+
+    private static float SqFt(IEnumerable<BoxCollider> boxes, IEnumerable<BoxCollider> exclude = null)
     {
-        var list = boxes.Where(b => b != null).ToList();
-        float m2 = 0f;
-        foreach (var b in list)
+        var list = boxes.Where(b => b != null).Distinct().ToList();
+        if (list.Count == 0) return 0f;
+        var ex = exclude?.Where(b => b != null && !list.Contains(b)).Distinct().ToList() ?? new List<BoxCollider>();
+
+        int key = 17;
+        foreach (var b in list.Concat(ex))
         {
-            Vector3 s = b.transform.lossyScale;
-            m2 += Mathf.Abs(b.size.x * s.x) * Mathf.Abs(b.size.z * s.z);
+            key = key * 31 + b.GetInstanceID();
+            key = key * 31 + b.transform.localToWorldMatrix.GetHashCode();
+            key = key * 31 + b.center.GetHashCode();
+            key = key * 31 + b.size.GetHashCode();
         }
-        for (int i = 0; i < list.Count; i++)
-            for (int j = i + 1; j < list.Count; j++)
-                m2 -= Overlap(list[i], list[j]);
-        return Mathf.Max(0f, m2) * SqFtPerSqM;
+        key = key * 31 + list.Count;
+        if (areaCache.TryGetValue(key, out float cached)) return cached;
+
+        var bounds = WorldBounds(list[0]);
+        foreach (var b in list) bounds.Encapsulate(WorldBounds(b));
+        ex = ex.Where(b => WorldBounds(b).Intersects(bounds)).ToList();
+        int cells = 0;
+        for (float x = bounds.min.x + AreaStep * 0.5f; x < bounds.max.x; x += AreaStep)
+            for (float z = bounds.min.z + AreaStep * 0.5f; z < bounds.max.z; z += AreaStep)
+            {
+                bool inside = false;
+                foreach (var b in list) if (InsideFromAbove(b, x, z)) { inside = true; break; }
+                if (!inside) continue;
+                foreach (var b in ex) if (InsideFromAbove(b, x, z)) { inside = false; break; }
+                if (inside) cells++;
+            }
+        float ft = cells * AreaStep * AreaStep * SqFtPerSqM;
+        if (areaCache.Count > 500) areaCache.Clear();
+        areaCache[key] = ft;
+        return ft;
     }
 
-    // Seen from above, how much two boxes turned the same way (or a quarter turn apart) overlap, in m2.
-    private static float Overlap(BoxCollider a, BoxCollider b)
+    // A spot (seen from above) inside a box's footprint.
+    private static bool InsideFromAbove(BoxCollider b, float x, float z)
     {
-        float yawA = a.transform.eulerAngles.y;
-        float diff = Mathf.Abs(Mathf.DeltaAngle(yawA, b.transform.eulerAngles.y)) % 90f;
-        if (diff > 1f && diff < 89f) return 0f; // at an angle: not worked out (rare)
-        var q = Quaternion.Euler(0f, yawA, 0f);
-        Rect Footprint(BoxCollider box)
-        {
-            Vector3 s = box.transform.lossyScale;
-            Vector3 c = Quaternion.Inverse(q) * box.transform.TransformPoint(box.center);
-            Vector3 size = new(Mathf.Abs(box.size.x * s.x), 0f, Mathf.Abs(box.size.z * s.z));
-            // A quarter turn apart: its X and Z swap in A's frame.
-            if (Mathf.Abs(Mathf.DeltaAngle(yawA, box.transform.eulerAngles.y)) % 180f > 45f) size = new Vector3(size.z, 0f, size.x);
-            return new Rect(c.x - size.x * 0.5f, c.z - size.z * 0.5f, size.x, size.z);
-        }
-        Rect ra = Footprint(a), rb = Footprint(b);
-        float w = Mathf.Min(ra.xMax, rb.xMax) - Mathf.Max(ra.xMin, rb.xMin);
-        float h = Mathf.Min(ra.yMax, rb.yMax) - Mathf.Max(ra.yMin, rb.yMin);
-        return w > 0f && h > 0f ? w * h : 0f;
+        var t = b.transform;
+        Vector3 c = t.TransformPoint(b.center);
+        Vector3 local = t.InverseTransformPoint(new Vector3(x, c.y, z)) - b.center;
+        return Mathf.Abs(local.x) <= b.size.x * 0.5f && Mathf.Abs(local.z) <= b.size.z * 0.5f;
     }
 
-    private static float SegmentSqFt(SerializedProperty seg)
+    // Every other store's areas (what a store's floor space mustn't include).
+    private static List<BoxCollider> OtherStoresAreas(StorePlot plot) =>
+        Object.FindObjectsByType<StorePlot>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+            .Where(p => p != plot).SelectMany(AreasOf).Where(b => b != null).ToList();
+
+    private static float SegmentSqFt(SerializedProperty seg, IEnumerable<BoxCollider> exclude)
     {
         var boxes = new List<BoxCollider>(Objects<BoxCollider>(seg.FindPropertyRelative("areas")));
         var old = seg.FindPropertyRelative("area").objectReferenceValue as BoxCollider;
         if (old != null && !boxes.Contains(old)) boxes.Add(old);
-        return SqFt(boxes);
+        return SqFt(boxes, exclude);
     }
 
     private void SetPrices(List<StorePlot> plots)
@@ -209,9 +230,11 @@ public class MallSetupWindow : EditorWindow
         foreach (var plot in plots)
         {
             var so = new SerializedObject(plot);
+            var others = OtherStoresAreas(plot);
+            var baseBoxes = Objects<BoxCollider>(so.FindProperty("baseAreas")).ToList();
             if (!so.FindProperty("keepPrice").boolValue)
             {
-                int p = Round(SqFt(Objects<BoxCollider>(so.FindProperty("baseAreas"))) * pricePerSqFt);
+                int p = Round(SqFt(baseBoxes, others) * pricePerSqFt);
                 so.FindProperty("price").intValue = p;
                 if (so.FindProperty("isStarterPlot").boolValue) so.FindProperty("startingMoney").intValue = StartMoney(p);
             }
@@ -220,7 +243,7 @@ public class MallSetupWindow : EditorWindow
             {
                 var seg = segs.GetArrayElementAtIndex(i);
                 if (!seg.FindPropertyRelative("keepPrice").boolValue)
-                    seg.FindPropertyRelative("price").intValue = SegmentPrice(SegmentSqFt(seg));
+                    seg.FindPropertyRelative("price").intValue = SegmentPrice(SegmentSqFt(seg, others.Concat(baseBoxes)));
             }
             if (so.ApplyModifiedProperties()) changed++; // (recorded for Undo)
         }
