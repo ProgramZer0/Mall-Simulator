@@ -228,6 +228,18 @@ public partial class CustomerManager
             return;
         }
 
+        // Whoever they follow is standing still (browsing, looking at a shelf, waiting): within Follow Settle
+        // Distance they stay where they are, rather than chasing a spot beside them that swings round every
+        // time they turn (which had children stepping in and out over and over).
+        bool still = target.arrived || target.mode == Mode.Looking;
+        if (still && FlatDistance(c.pos, target.pos) <= followSettleDistance && Mathf.Abs(c.pos.y - target.pos.y) < 1.5f)
+        {
+            if (!c.arrived) { c.arrived = true; c.corners.Clear(); c.corner = 0; }
+            if (c.child && target.mode == Mode.Looking) Face(c, target.targetPoint); // looking at it too
+            else Face(c, target.pos);
+            return;
+        }
+
         Vector3 spot = GroupSlot(c);
         if (NavMesh.SamplePosition(spot, out var hit, 1f, CustomerNavMesh.PreferMask)) spot = hit.position;
         if (target.arrived && FlatDistance(c.pos, spot) < 0.5f)
