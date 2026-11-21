@@ -47,6 +47,7 @@ public class MallSetupWindow : EditorWindow
     private float wallBuffer = 0.1f;
     private float ceilingBuffer = 0.25f;
     private bool fillShape = true;
+    private float minFill = 0.5f;
 
     // Price settings (kept between sessions).
     private float pricePerSqFt = 10f;
@@ -69,6 +70,7 @@ public class MallSetupWindow : EditorWindow
         wallBuffer = EditorPrefs.GetFloat("MallSetup.WallBuffer", 0.1f);
         ceilingBuffer = EditorPrefs.GetFloat("MallSetup.CeilingBuffer", 0.25f);
         fillShape = EditorPrefs.GetBool("MallSetup.FillShape", true);
+        minFill = EditorPrefs.GetFloat("MallSetup.MinFill", 0.5f);
     }
 
     private void OnGUI()
@@ -248,8 +250,12 @@ public class MallSetupWindow : EditorWindow
         fillShape = EditorGUILayout.Toggle(new GUIContent("Fill L shapes",
             "After fitting, find any part of the room the box doesn't reach (an L, a side room) and add more boxes " +
             "until it's covered."), fillShape);
+        if (fillShape)
+            minFill = Mathf.Max(0.1f, EditorGUILayout.FloatField(new GUIContent("  Smallest gap to fill (m²)",
+                "Uncovered floor smaller than this is left (and shown in red in the Scene view for 20 s)."), minFill));
         if (EditorGUI.EndChangeCheck())
         {
+            EditorPrefs.SetFloat("MallSetup.MinFill", minFill);
             EditorPrefs.SetBool("MallSetup.FillShape", fillShape);
             EditorPrefs.SetInt("MallSetup.WallMask", wallMask);
             EditorPrefs.SetFloat("MallSetup.DefaultHeight", defaultHeight);
@@ -512,7 +518,11 @@ public class MallSetupWindow : EditorWindow
     /// </summary>
     private int FillRoom(BoxCollider seedBox, HashSet<Collider> ignored)
     {
-        if (!TryFindList(seedBox, out var plot, out string path)) return 0;
+        if (!TryFindList(seedBox, out var plot, out string path))
+        {
+            Debug.LogWarning($"[Mall Setup] '{seedBox.name}' isn't in a store's Base Areas or a Segment's Areas, so its room isn't filled.", seedBox);
+            return 0;
+        }
         var t = seedBox.transform;
         Vector3 seed = t.TransformPoint(seedBox.center);
         Vector3 right = t.right, forward = t.forward;
@@ -528,6 +538,7 @@ public class MallSetupWindow : EditorWindow
         var room = FloodRoom(origin, right, forward, floor, seedBox, ignored, out bool leaked);
         if (leaked)
         {
+            ShowCells(room, origin, right, forward);
             Debug.LogWarning($"[Mall Setup] '{seedBox.name}': the room seems open (a doorway with no door, a gap in a wall?), " +
                              "so no extra boxes were added. Close it off or add boxes by hand.", seedBox);
             return 0;
@@ -539,6 +550,8 @@ public class MallSetupWindow : EditorWindow
             var so = new SerializedObject(plot);
             var list = so.FindProperty(path);
             var boxes = Objects<BoxCollider>(list).Where(b => b != null).ToList();
+            // The store's other areas (the base, other segments) count as covered: they're not this list's to fill.
+            var others = AreasOf(plot).Where(b => b != null && !boxes.Contains(b)).ToList();
             Physics.SyncTransforms();
 
             // Uncovered cells, ignoring slivers along walls: a cell counts only if its whole neighborhood is room.
@@ -547,13 +560,23 @@ public class MallSetupWindow : EditorWindow
             {
                 if (!Inner(room, c)) continue;
                 Vector3 at = Cell2World(origin, right, forward, c) + Vector3.up * 0.5f;
-                if (!boxes.Any(b => Inside(b, at))) open.Add(c);
+                if (!boxes.Any(b => Inside(b, at)) && !others.Any(b => Inside(b, at))) open.Add(c);
             }
-            if (open.Count == 0) break;
+            if (open.Count == 0)
+            {
+                Debug.Log($"[Mall Setup] '{seedBox.name}': its room ({room.Count * Cell * Cell:0.#} m²) is covered.", seedBox);
+                break;
+            }
 
-            // The biggest uncovered part; too small (under a square meter): done.
+            // The biggest uncovered part; too small: done (what's left shows in red).
             var part = Biggest(open);
-            if (part.Count * Cell * Cell < 1f) break;
+            if (part.Count * Cell * Cell < minFill)
+            {
+                ShowCells(open, origin, right, forward);
+                Debug.Log($"[Mall Setup] '{seedBox.name}': {open.Count * Cell * Cell:0.##} m² of its room isn't covered, in bits " +
+                          $"smaller than {minFill} m² (shown in red in the Scene view). Lower Smallest Gap To Fill to fill them.", seedBox);
+                break;
+            }
 
             // A new box in its middle (the cell furthest from its edges), fitted like the first.
             var middle = Deepest(part);
@@ -578,9 +601,30 @@ public class MallSetupWindow : EditorWindow
             }
             added++;
             Physics.SyncTransforms();
-            if (!Inside(box, Cell2World(origin, right, forward, middle) + Vector3.up * 0.5f)) break; // didn't take: stop rather than loop
+            if (!Inside(box, Cell2World(origin, right, forward, middle) + Vector3.up * 0.5f))
+            {
+                ShowCells(new HashSet<Vector2Int>(part), origin, right, forward);
+                Debug.LogWarning($"[Mall Setup] '{go.name}' was added for an uncovered part of the room but fitted away from it " +
+                                 "(shown in red in the Scene view). Move it there and Fit it, or add one by hand.", go);
+                break;
+            }
         }
         return added;
+    }
+
+    // Red crosses on floor cells in the Scene view for a while (what's not covered, or where a room leaked).
+    private static void ShowCells(IEnumerable<Vector2Int> cells, Vector3 origin, Vector3 right, Vector3 forward)
+    {
+        int n = 0;
+        foreach (var c in cells)
+        {
+            if (++n > 20000) break;
+            Vector3 p = Cell2World(origin, right, forward, c) + Vector3.up * 0.05f;
+            Vector3 a = (right + forward) * (Cell * 0.4f), b = (right - forward) * (Cell * 0.4f);
+            Debug.DrawLine(p - a, p + a, Color.red, 20f);
+            Debug.DrawLine(p - b, p + b, Color.red, 20f);
+        }
+        SceneView.RepaintAll();
     }
 
     private static Vector3 Cell2World(Vector3 origin, Vector3 right, Vector3 forward, Vector2Int c) =>
@@ -614,7 +658,7 @@ public class MallSetupWindow : EditorWindow
                 if (blocked) continue;
                 // Floor under it, at this floor's height (not a hole, stairs or a drop).
                 float d = Cast(b + Vector3.up * 0.5f, Vector3.down, 1.2f, self, ignored);
-                if (d >= 1.2f || Mathf.Abs(b.y + 0.5f - d - floor) > 0.15f) continue;
+                if (d >= 1.2f || Mathf.Abs(b.y + 0.5f - d - floor) > 0.3f) continue;
                 room.Add(n);
                 todo.Enqueue(n);
             }
@@ -622,12 +666,11 @@ public class MallSetupWindow : EditorWindow
         return room;
     }
 
-    // All 8 neighbors are room too (so strips a cell wide along a slanted wall don't count).
+    // Not on the room's edge (its 4 neighbors are room too), so the cell-wide strip along a slanted wall
+    // doesn't count.
     private static bool Inner(HashSet<Vector2Int> room, Vector2Int c)
     {
-        for (int dx = -1; dx <= 1; dx++)
-            for (int dy = -1; dy <= 1; dy++)
-                if (!room.Contains(new Vector2Int(c.x + dx, c.y + dy))) return false;
+        foreach (var s in Steps) if (!room.Contains(c + s)) return false;
         return true;
     }
 
