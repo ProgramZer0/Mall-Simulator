@@ -10,8 +10,13 @@ using UnityEngine;
 /// and ceiling (things for sale, other stores' areas, docks, for-sale and renovation walls don't stop it).
 /// Put down a store's segment walls (its False Walls) first and each area stops at them, so the base area
 /// and every expansion fill their own part. Areas go to the middle of a segment wall (not its face), so once
-/// the wall's gone with the expansion bought there's no strip of floor between them that isn't the store's. "Fit Store" refits every area box of the selected stores.
+/// the wall's gone with the expansion bought there's no strip of floor between them that isn't the store's.
+/// "Fit Store" refits every area box of the selected stores.
+///
 /// Find fills in a store's Storefront Walls (CuttableWalls along its edge) and Floor Renderers.
+///
+/// Prices: sets each store's and segment's price from its floor space, and starter stores' Starting
+/// Money from what's left of the starting cash (Keep Price on a store or segment leaves it alone).
 ///
 /// Check: looks over the whole open scene for setup mistakes (stores with no door, overlapping stores,
 /// shipment areas outside any dock, docks no store uses, missing managers...) and lists them; click one
@@ -26,7 +31,7 @@ public class MallSetupWindow : EditorWindow
     private static void OpenAndCheck()
     {
         var w = GetWindow<MallSetupWindow>("Mall Setup");
-        w.tab = 1;
+        w.tab = 2;
         w.RunCheck();
     }
 
@@ -40,8 +45,21 @@ public class MallSetupWindow : EditorWindow
     private float wallBuffer = 0.1f;
     private float ceilingBuffer = 0.25f;
 
+    // Price settings (kept between sessions).
+    private float pricePerSqFt = 10f;
+    private float segmentDiscount = 0.25f;
+    private int roundTo = 100;
+    private int startCash = 50000;
+    private int minStartMoney = 1000;
+    private Vector2 priceScroll;
+
     private void OnEnable()
     {
+        pricePerSqFt = EditorPrefs.GetFloat("MallSetup.PricePerSqFt", 10f);
+        segmentDiscount = EditorPrefs.GetFloat("MallSetup.SegmentDiscount", 0.25f);
+        roundTo = EditorPrefs.GetInt("MallSetup.RoundTo", 100);
+        startCash = EditorPrefs.GetInt("MallSetup.StartCash", 50000);
+        minStartMoney = EditorPrefs.GetInt("MallSetup.MinStartMoney", 1000);
         wallMask = EditorPrefs.GetInt("MallSetup.WallMask", ~0);
         defaultHeight = EditorPrefs.GetFloat("MallSetup.DefaultHeight", 3f);
         maxReach = EditorPrefs.GetFloat("MallSetup.MaxReach", 60f);
@@ -51,9 +69,130 @@ public class MallSetupWindow : EditorWindow
 
     private void OnGUI()
     {
-        tab = GUILayout.Toolbar(tab, new[] { "Fit Stores", "Check Mall" });
+        tab = GUILayout.Toolbar(tab, new[] { "Fit Stores", "Prices", "Check Mall" });
         EditorGUILayout.Space();
-        if (tab == 0) FitGUI(); else CheckGUI();
+        if (tab == 0) FitGUI(); else if (tab == 1) PricesGUI(); else CheckGUI();
+    }
+
+    /* ========================= PRICES ========================= */
+
+    private const float SqFtPerSqM = 10.7639f;
+
+    private void PricesGUI()
+    {
+        EditorGUILayout.HelpBox(
+            "Prices from floor space (the store's area boxes, seen from above; overlaps count twice):\n" +
+            "- A store's Price: its base area x the price per square foot.\n" +
+            "- Each segment: its area x the price, less the segment discount.\n" +
+            "- A starter store's Starting Money: the starting cash less its Price (never below the minimum), so " +
+            "a bigger starter store means less cash.\n" +
+            "Everything's rounded. Tick Keep Price on a store or segment to leave a price you've set by hand.", MessageType.Info);
+
+        EditorGUI.BeginChangeCheck();
+        pricePerSqFt = Mathf.Max(0f, EditorGUILayout.FloatField(new GUIContent("Price per sq ft ($)"), pricePerSqFt));
+        segmentDiscount = EditorGUILayout.Slider(new GUIContent("Segment discount", "Off segments' price (0.25 = 25% off)."), segmentDiscount, 0f, 0.95f);
+        roundTo = Mathf.Max(1, EditorGUILayout.IntField(new GUIContent("Round to ($)", "Prices are rounded to the nearest of this."), roundTo));
+        startCash = Mathf.Max(0, EditorGUILayout.IntField(new GUIContent("Starting cash ($)",
+            "What each team would have before paying for its starter store."), startCash));
+        minStartMoney = Mathf.Max(0, EditorGUILayout.IntField(new GUIContent("Min starting money ($)",
+            "A starter store never leaves its team with less than this."), minStartMoney));
+        if (EditorGUI.EndChangeCheck())
+        {
+            EditorPrefs.SetFloat("MallSetup.PricePerSqFt", pricePerSqFt);
+            EditorPrefs.SetFloat("MallSetup.SegmentDiscount", segmentDiscount);
+            EditorPrefs.SetInt("MallSetup.RoundTo", roundTo);
+            EditorPrefs.SetInt("MallSetup.StartCash", startCash);
+            EditorPrefs.SetInt("MallSetup.MinStartMoney", minStartMoney);
+        }
+        EditorGUILayout.Space();
+
+        var all = Object.FindObjectsByType<StorePlot>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+            .OrderBy(p => p.name).ToList();
+        var selected = Selection.gameObjects.Select(g => g.GetComponentInParent<StorePlot>()).Where(p => p != null).Distinct().ToList();
+        EditorGUILayout.BeginHorizontal();
+        using (new EditorGUI.DisabledScope(all.Count == 0))
+            if (GUILayout.Button($"Set prices: every store ({all.Count})", GUILayout.Height(26))) SetPrices(all);
+        using (new EditorGUI.DisabledScope(selected.Count == 0))
+            if (GUILayout.Button($"Selected stores ({selected.Count})", GUILayout.Height(26))) SetPrices(selected);
+        EditorGUILayout.EndHorizontal();
+
+        // What it would set (and what's there now).
+        EditorGUILayout.Space();
+        EditorGUILayout.LabelField("Preview (now → new)", EditorStyles.boldLabel);
+        priceScroll = EditorGUILayout.BeginScrollView(priceScroll);
+        foreach (var plot in all)
+        {
+            var so = new SerializedObject(plot);
+            bool starter = so.FindProperty("isStarterPlot").boolValue, keep = so.FindProperty("keepPrice").boolValue;
+            float ft = SqFt(Objects<BoxCollider>(so.FindProperty("baseAreas")));
+            int newPrice = Round(ft * pricePerSqFt);
+            string line = $"{so.FindProperty("displayName").stringValue} ({plot.name}): {ft:N0} sq ft, price " +
+                          (keep ? $"{so.FindProperty("price").intValue:N0} (kept)" : $"{so.FindProperty("price").intValue:N0} → {newPrice:N0}");
+            if (starter)
+                line += keep ? $", start money {so.FindProperty("startingMoney").intValue:N0} (kept)"
+                             : $", start money {so.FindProperty("startingMoney").intValue:N0} → {StartMoney(newPrice):N0}";
+            var segs = so.FindProperty("segments");
+            for (int i = 0; segs != null && i < segs.arraySize; i++)
+            {
+                var seg = segs.GetArrayElementAtIndex(i);
+                float sft = SegmentSqFt(seg);
+                bool skeep = seg.FindPropertyRelative("keepPrice").boolValue;
+                int now = seg.FindPropertyRelative("price").intValue;
+                line += $"\n    {seg.FindPropertyRelative("name").stringValue}: {sft:N0} sq ft, " +
+                        (skeep ? $"{now:N0} (kept)" : $"{now:N0} → {SegmentPrice(sft):N0}");
+            }
+            if (GUILayout.Button(line, EditorStyles.helpBox)) { Selection.activeObject = plot; EditorGUIUtility.PingObject(plot); }
+        }
+        EditorGUILayout.EndScrollView();
+    }
+
+    private int Round(float dollars) => Mathf.Max(0, Mathf.RoundToInt(dollars / roundTo) * roundTo);
+    private int SegmentPrice(float sqFt) => Round(sqFt * pricePerSqFt * (1f - segmentDiscount));
+    private int StartMoney(int storePrice) => Mathf.Max(minStartMoney, Round(startCash - storePrice));
+
+    // Floor space of some boxes, seen from above (their own X by Z, scaled), in square feet.
+    private static float SqFt(IEnumerable<BoxCollider> boxes)
+    {
+        float m2 = 0f;
+        foreach (var b in boxes)
+        {
+            if (b == null) continue;
+            Vector3 s = b.transform.lossyScale;
+            m2 += Mathf.Abs(b.size.x * s.x) * Mathf.Abs(b.size.z * s.z);
+        }
+        return m2 * SqFtPerSqM;
+    }
+
+    private static float SegmentSqFt(SerializedProperty seg)
+    {
+        var boxes = new List<BoxCollider>(Objects<BoxCollider>(seg.FindPropertyRelative("areas")));
+        var old = seg.FindPropertyRelative("area").objectReferenceValue as BoxCollider;
+        if (old != null && !boxes.Contains(old)) boxes.Add(old);
+        return SqFt(boxes);
+    }
+
+    private void SetPrices(List<StorePlot> plots)
+    {
+        int changed = 0;
+        foreach (var plot in plots)
+        {
+            var so = new SerializedObject(plot);
+            if (!so.FindProperty("keepPrice").boolValue)
+            {
+                int p = Round(SqFt(Objects<BoxCollider>(so.FindProperty("baseAreas"))) * pricePerSqFt);
+                so.FindProperty("price").intValue = p;
+                if (so.FindProperty("isStarterPlot").boolValue) so.FindProperty("startingMoney").intValue = StartMoney(p);
+            }
+            var segs = so.FindProperty("segments");
+            for (int i = 0; segs != null && i < segs.arraySize; i++)
+            {
+                var seg = segs.GetArrayElementAtIndex(i);
+                if (!seg.FindPropertyRelative("keepPrice").boolValue)
+                    seg.FindPropertyRelative("price").intValue = SegmentPrice(SegmentSqFt(seg));
+            }
+            if (so.ApplyModifiedProperties()) changed++; // (recorded for Undo)
+        }
+        Debug.Log($"[Mall Setup] Prices set on {changed} of {plots.Count} store(s).");
     }
 
     /* ========================= FIT ========================= */
