@@ -529,7 +529,8 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   toggleKey: 48
   toolKey: 120
-  gravityKey: 103
+  settleOnRelease: 1
+  settleSeconds: 0.25
   wallToolKey: 98
   wallHeightKey: 104
   controlsKey: 104
@@ -557,7 +558,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 0
   hideOutsideStore: 1
-  outsideMargin: 0.6
+  outsideMargin: 0.2
   editRendererIndex: 1
   solidBackground: 1
   backgroundColor: {r: 0, g: 0, b: 0, a: 1}
@@ -638,6 +639,8 @@ MonoBehaviour:
   homeKey: 27
   notificationsKey: 9
   notificationsApp: Notifications
+  lostAndFoundApp: Lost & Found
+  escBacksOutToHome: 0
   hintText: {fileID: 0}
   hintFormat: 'Tab: Phone ({0})'
 --- !u!114 &5139187396665977111
