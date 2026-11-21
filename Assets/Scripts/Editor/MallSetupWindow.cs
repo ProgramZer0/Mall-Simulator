@@ -1121,6 +1121,83 @@ public class MallSetupWindow : EditorWindow
         Repaint();
     }
 
+    // The store object's own fields: things left empty or at their defaults, empty list slots, wrong parts.
+    private void CheckPlotFields(StorePlot plot, SerializedObject so, string n, StorePlot[] plots)
+    {
+        // Name.
+        string display = so.FindProperty("displayName").stringValue;
+        if (string.IsNullOrWhiteSpace(display)) Add(Level.Warning, $"{n} has no Display Name: players see a blank name.", plot);
+        else if (display.Trim() == "Store") Add(Level.Note, $"{n}'s Display Name is still \"Store\".", plot);
+        else if (plots.Count(p => p != plot && string.Equals(new SerializedObject(p).FindProperty("displayName").stringValue?.Trim(),
+                                                               display.Trim(), System.StringComparison.OrdinalIgnoreCase)) > 0)
+            Add(Level.Note, $"{n}'s Display Name \"{display}\" is used by another store too.", plot);
+
+        // Networking: a StorePlot needs a NetworkObject (on it or above it).
+        if (plot.GetComponentInParent<Unity.Netcode.NetworkObject>(true) == null)
+            Add(Level.Error, $"{n} has no NetworkObject: the store won't spawn (add one to its object).", plot);
+
+        // Empty slots in its lists.
+        foreach (var (field, label) in new[]
+                 {
+                     ("storefrontWalls", "Storefront Walls"), ("shipmentZones", "Shipment Zones"), ("floorRenderers", "Floor Renderers"),
+                     ("renovationWalls", "Renovation Walls"), ("forSaleWalls", "For Sale Walls"), ("ownerOnlyVisuals", "Owner Only Visuals"),
+                     ("frontWalls", "Front Walls"),
+                 })
+        {
+            var prop = so.FindProperty(field);
+            for (int i = 0; prop != null && i < prop.arraySize; i++)
+                if (prop.GetArrayElementAtIndex(i).objectReferenceValue == null) { Add(Level.Warning, $"{n}: {label} has an empty slot.", plot); break; }
+        }
+
+        // Segments: at most 32, named, priced, no empty slots.
+        var segs = so.FindProperty("segments");
+        int count = segs != null ? segs.arraySize : 0;
+        if (count > 32) Add(Level.Error, $"{n} has {count} segments: 32 at most (only the first 32 can be bought).", plot);
+        var names = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < count; i++)
+        {
+            var seg = segs.GetArrayElementAtIndex(i);
+            string sname = seg.FindPropertyRelative("name").stringValue;
+            string sn = $"{n} segment {i} ('{sname}')";
+            if (string.IsNullOrWhiteSpace(sname)) Add(Level.Warning, $"{n} segment {i} has no name: players see a blank expansion.", plot);
+            else if (!names.Add(sname.Trim())) Add(Level.Note, $"{sn}: another segment of this store has the same name.", plot);
+            if (seg.FindPropertyRelative("price").intValue <= 0) Add(Level.Warning, $"{sn} costs nothing (Price 0). Prices tab?", plot);
+            foreach (var arr in new[] { "areas", "falseWalls" })
+            {
+                var a = seg.FindPropertyRelative(arr);
+                for (int k = 0; a != null && k < a.arraySize; k++)
+                    if (a.GetArrayElementAtIndex(k).objectReferenceValue == null) { Add(Level.Warning, $"{sn}: {(arr == "areas" ? "Areas" : "False Walls")} has an empty slot.", plot); break; }
+            }
+        }
+
+        // Doors set to this store: their segment must exist, and they should be near it.
+        foreach (var d in All<DoorNet>())
+        {
+            var ds = new SerializedObject(d);
+            if (ds.FindProperty("ownerStore").objectReferenceValue != plot) continue;
+            int seg = ds.FindProperty("ownerSegment").intValue;
+            if (seg >= count) Add(Level.Error, $"Door '{d.name}' is set to {n} segment {seg}, but the store has only {count} segment(s).", d);
+            var b = StoreBounds(plot);
+            b.Expand(8f);
+            if (!b.Contains(d.transform.position)) Add(Level.Warning, $"Door '{d.name}' is set to {n} but is far from it.", d);
+        }
+        // Doors in its Doors list should be doors.
+        foreach (var g in Objects<GameObject>(so.FindProperty("doors")))
+            if (g.GetComponentInChildren<DoorMotion>(true) == null && g.GetComponentInChildren<DoorNet>(true) == null)
+                Add(Level.Note, $"{n}: '{g.name}' in Doors has no DoorMotion or DoorNet (it won't open or shut).", g);
+
+        // Renovation and for-sale walls need something to show.
+        foreach (var g in Objects<GameObject>(so.FindProperty("renovationWalls")))
+            if (g.GetComponentInChildren<Renderer>(true) == null) Add(Level.Note, $"{n}: renovation wall '{g.name}' has nothing to show (no renderer).", g);
+        foreach (var g in Objects<GameObject>(so.FindProperty("forSaleWalls")))
+            if (g.GetComponentInChildren<Renderer>(true) == null) Add(Level.Note, $"{n}: for-sale wall '{g.name}' has nothing to show (no renderer).", g);
+
+        // Floor renderers should have a collider to paint them by.
+        foreach (var r in Objects<Renderer>(so.FindProperty("floorRenderers")))
+            if (r.GetComponentInParent<Collider>() == null && r.GetComponentInChildren<Collider>() == null)
+                Add(Level.Note, $"{n}: floor renderer '{r.name}' has no collider: the paint brush can't hit it.", r);
+    }
+
     private void CheckPlot(StorePlot plot, StorePlot[] plots, Dictionary<StorePlot, List<Bounds>> areaBounds,
                            LoadingDockZone[] docks, List<(StorePlot, BoxCollider)> allShipment)
     {
@@ -1238,6 +1315,8 @@ public class MallSetupWindow : EditorWindow
         var doorsProp = so.FindProperty("doors");
         for (int i = 0; doorsProp != null && i < doorsProp.arraySize; i++)
             if (doorsProp.GetArrayElementAtIndex(i).objectReferenceValue == null) Add(Level.Warning, $"{n}: Doors has an empty slot.", plot);
+
+        CheckPlotFields(plot, so, n, plots);
 
         // Things a starter store needs inside.
         if (plot.IsStarterPlot)
