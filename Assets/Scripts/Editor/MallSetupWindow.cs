@@ -18,7 +18,7 @@ using UnityEngine;
 /// Prices: sets each store's and segment's price from its floor space, and starter stores' Starting
 /// Money from what's left of the starting cash (Keep Price on a store or segment leaves it alone).
 ///
-/// Check: looks over the whole open scene for setup mistakes (stores with no door, overlapping stores,
+/// Check: looks over the whole open scene for setup mistakes (stores with no door or open/closed button, overlapping stores,
 /// shipment areas outside any dock, docks no store uses, missing managers...) and lists them; click one
 /// to select what it's about.
 /// </summary>
@@ -648,6 +648,16 @@ public class MallSetupWindow : EditorWindow
 
         foreach (var plot in plots) CheckPlot(plot, plots, areaBounds, docks, allShipment);
 
+        // Open/closed buttons that belong to no store.
+        foreach (var b in All<StoreOpenButton>())
+        {
+            var bs = new SerializedObject(b).FindProperty("store").objectReferenceValue as StorePlot;
+            if (bs != null || b.GetComponentInParent<StorePlot>() != null) continue;
+            var at = new Bounds(b.transform.position, Vector3.one * 0.1f);
+            if (!plots.Any(p => NearAreas(p, at, 0.3f)))
+                Add(Level.Warning, $"Open/closed button '{b.name}' isn't in any store (set its Store, or move it inside one).", b);
+        }
+
         // Docks.
         foreach (var dock in docks)
         {
@@ -736,6 +746,19 @@ public class MallSetupWindow : EditorWindow
         }
         foreach (var m in Objects<WallModule>(so.FindProperty("frontWalls"))) if (m.IsEntrance) door = true;
         if (!door) Add(Level.Error, $"{n} has no door in its storefront: customers (and players) can't get in.", plot);
+
+        // Open/closed button: set to this store, under it, or in its space.
+        bool button = false;
+        foreach (var b in All<StoreOpenButton>())
+        {
+            var bs = new SerializedObject(b).FindProperty("store").objectReferenceValue as StorePlot;
+            if (bs == plot || (bs == null && (b.GetComponentInParent<StorePlot>() == plot ||
+                                              NearAreas(plot, new Bounds(b.transform.position, Vector3.one * 0.1f), 0.3f))))
+            { button = true; break; }
+        }
+        if (!button)
+            Add(Level.Warning, $"{n} has no open/closed button (StoreOpenButton): its team can't open or close it " +
+                               "(fine if players place one as an item).", plot);
 
         // Deliveries.
         var zones = Objects<BoxCollider>(so.FindProperty("shipmentZones")).ToList();
