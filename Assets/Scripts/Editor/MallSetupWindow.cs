@@ -55,6 +55,7 @@ public class MallSetupWindow : EditorWindow
     private int roundTo = 100;
     private int startCash = 50000;
     private int minStartMoney = 1000;
+    private int dockDoorBonus = 500;
     private Vector2 priceScroll;
 
     private void OnEnable()
@@ -64,6 +65,7 @@ public class MallSetupWindow : EditorWindow
         roundTo = EditorPrefs.GetInt("MallSetup.RoundTo", 100);
         startCash = EditorPrefs.GetInt("MallSetup.StartCash", 50000);
         minStartMoney = EditorPrefs.GetInt("MallSetup.MinStartMoney", 1000);
+        dockDoorBonus = EditorPrefs.GetInt("MallSetup.DockDoorBonus", 500);
         wallMask = EditorPrefs.GetInt("MallSetup.WallMask", ~0);
         defaultHeight = EditorPrefs.GetFloat("MallSetup.DefaultHeight", 3f);
         maxReach = EditorPrefs.GetFloat("MallSetup.MaxReach", 60f);
@@ -89,7 +91,7 @@ public class MallSetupWindow : EditorWindow
         EditorGUILayout.HelpBox(
             "Prices from floor space (the store's area boxes, seen from above; overlaps count once, and floor that's also another store's doesn't count):\n" +
             "- A store's Price: its base area x the price per square foot.\n" +
-            "- Each segment: its area x the price, less the segment discount.\n" +
+            "- Each segment: its area x the price, less the segment discount, plus the dock door bonus if it has a dock door.\n" +
             "- A starter store's Starting Money: the starting cash less its Price (never below the minimum), so " +
             "a bigger starter store means less cash.\n" +
             "Everything's rounded. Tick Keep Price on a store or segment to leave a price you've set by hand.", MessageType.Info);
@@ -102,8 +104,12 @@ public class MallSetupWindow : EditorWindow
             "What each team would have before paying for its starter store."), startCash));
         minStartMoney = Mathf.Max(0, EditorGUILayout.IntField(new GUIContent("Min starting money ($)",
             "A starter store never leaves its team with less than this."), minStartMoney));
+        dockDoorBonus = Mathf.Max(0, EditorGUILayout.IntField(new GUIContent("Dock door bonus ($)",
+            "Added to a segment's price when it has a dock door: a DoorNet whose Owner Store is the store and whose " +
+            "Owner Segment is that segment."), dockDoorBonus));
         if (EditorGUI.EndChangeCheck())
         {
+            EditorPrefs.SetInt("MallSetup.DockDoorBonus", dockDoorBonus);
             EditorPrefs.SetFloat("MallSetup.PricePerSqFt", pricePerSqFt);
             EditorPrefs.SetFloat("MallSetup.SegmentDiscount", segmentDiscount);
             EditorPrefs.SetInt("MallSetup.RoundTo", roundTo);
@@ -127,6 +133,7 @@ public class MallSetupWindow : EditorWindow
         EditorGUILayout.LabelField("Preview (now → new)", EditorStyles.boldLabel);
         priceScroll = EditorGUILayout.BeginScrollView(priceScroll);
         var areasOf = all.ToDictionary(p => p, p => AreasOf(p).Where(b => b != null).ToList());
+        FindDockDoors();
         foreach (var plot in all)
         {
             var so = new SerializedObject(plot);
@@ -147,8 +154,9 @@ public class MallSetupWindow : EditorWindow
                 float sft = SegmentSqFt(seg, others.Concat(baseBoxes));
                 bool skeep = seg.FindPropertyRelative("keepPrice").boolValue;
                 int now = seg.FindPropertyRelative("price").intValue;
-                line += $"\n    {seg.FindPropertyRelative("name").stringValue}: {sft:N0} sq ft, " +
-                        (skeep ? $"{now:N0} (kept)" : $"{now:N0} → {SegmentPrice(sft):N0}");
+                bool dock = HasDockDoor(plot, i);
+                line += $"\n    {seg.FindPropertyRelative("name").stringValue}: {sft:N0} sq ft{(dock ? " + dock door" : "")}, " +
+                        (skeep ? $"{now:N0} (kept)" : $"{now:N0} → {SegmentPrice(sft, dock):N0}");
             }
             if (GUILayout.Button(line, EditorStyles.helpBox)) { Selection.activeObject = plot; EditorGUIUtility.PingObject(plot); }
         }
@@ -156,7 +164,24 @@ public class MallSetupWindow : EditorWindow
     }
 
     private int Round(float dollars) => Mathf.Max(0, Mathf.RoundToInt(dollars / roundTo) * roundTo);
-    private int SegmentPrice(float sqFt) => Round(sqFt * pricePerSqFt * (1f - segmentDiscount));
+    private int SegmentPrice(float sqFt, bool dockDoor) =>
+        Round(sqFt * pricePerSqFt * (1f - segmentDiscount)) + (dockDoor ? dockDoorBonus : 0);
+
+    // Segments with a door behind them (a DoorNet set to the store and that segment), gathered once per use.
+    private static HashSet<(StorePlot, int)> dockDoors = new();
+
+    private static void FindDockDoors()
+    {
+        dockDoors = new HashSet<(StorePlot, int)>();
+        foreach (var d in Object.FindObjectsByType<DoorNet>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            var so = new SerializedObject(d);
+            if (so.FindProperty("ownerStore").objectReferenceValue is StorePlot p && so.FindProperty("ownerSegment").intValue >= 0)
+                dockDoors.Add((p, so.FindProperty("ownerSegment").intValue));
+        }
+    }
+
+    private static bool HasDockDoor(StorePlot plot, int segment) => dockDoors.Contains((plot, segment));
     private int StartMoney(int storePrice) => Mathf.Max(minStartMoney, Round(startCash - storePrice));
 
     // Floor space of some boxes, seen from above, in square feet: the floor they cover together, sampled on
@@ -227,6 +252,7 @@ public class MallSetupWindow : EditorWindow
     private void SetPrices(List<StorePlot> plots)
     {
         int changed = 0;
+        FindDockDoors();
         foreach (var plot in plots)
         {
             var so = new SerializedObject(plot);
@@ -243,7 +269,7 @@ public class MallSetupWindow : EditorWindow
             {
                 var seg = segs.GetArrayElementAtIndex(i);
                 if (!seg.FindPropertyRelative("keepPrice").boolValue)
-                    seg.FindPropertyRelative("price").intValue = SegmentPrice(SegmentSqFt(seg, others.Concat(baseBoxes)));
+                    seg.FindPropertyRelative("price").intValue = SegmentPrice(SegmentSqFt(seg, others.Concat(baseBoxes)), HasDockDoor(plot, i));
             }
             if (so.ApplyModifiedProperties()) changed++; // (recorded for Undo)
         }
