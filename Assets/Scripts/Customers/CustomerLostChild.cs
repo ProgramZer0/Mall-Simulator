@@ -14,10 +14,14 @@ using Random = UnityEngine.Random;
 public partial class CustomerManager
 {
     [Header("Lost Children")]
-    [Tooltip("Minutes between lost children, across the whole mall: each wait is 1 to 4 times this (so on average " +
-             "2.5 times). 0: children never get lost.")]
+    [Tooltip("Minutes after a lost child (across the whole mall) before the next one can happen. From then on " +
+             "there's a chance every minute (Lost Child Chance), growing until 4 times this, then staying there. " +
+             "Never guaranteed. 0: children never get lost.")]
     [SerializeField, Min(0f)] private float lostChildEveryMinutes = 10f;
-    [Tooltip("The first one comes no sooner than this many minutes into the game.")]
+    [Tooltip("Chance a minute of a child getting lost: x right at Lost Child Every Minutes, growing to y at 4 times " +
+             "it (and staying y after). E.g. 0.01 = 1% a minute.")]
+    [SerializeField] private Vector2 lostChildChance = new(0.01f, 0.06f);
+    [Tooltip("Into the game, the chance starts after this many minutes instead (then grows the same way).")]
     [SerializeField, Min(0f)] private float firstLostChildAfterMinutes = 3f;
     [Tooltip("At most this many children lost at the same time.")]
     [SerializeField, Min(1)] private int maxLostAtOnce = 1;
@@ -47,7 +51,27 @@ public partial class CustomerManager
     /// <summary>Who's lost, following a player, or searching (sent to everyone: the interact prompt).</summary>
     public enum LostMark : byte { None, LostChild, Following, Searching }
 
-    private float nextLostChildAt = -1f; // host: when the next child may get lost
+    // Host: the clock the chance grows on (game start, then the last lost child), when it last rolled, and a
+    // roll that came up (the next child walking the halls gets lost).
+    private float lostClockFrom = -1f, lostRolledAt = -1f;
+    private bool lostChildDue, lostFirstDone;
+
+    // Rolls the chance for the time since the last roll (mall-wide, however many children are about).
+    private void RollLostChild()
+    {
+        if (lostClockFrom < 0f) lostClockFrom = lostRolledAt = Time.time;
+        float dt = Time.time - lostRolledAt;
+        if (lostChildDue || dt < 1f) return;
+        lostRolledAt = Time.time;
+        float every = lostChildEveryMinutes * 60f;
+        float start = lostFirstDone ? every : firstLostChildAfterMinutes * 60f;
+        float since = Time.time - lostClockFrom;
+        if (since < start) return;
+        float t = Mathf.Clamp01((since - start) / (every * 3f));
+        float perMinute = Mathf.Clamp01(Mathf.Lerp(lostChildChance.x, lostChildChance.y, t));
+        // The chance over dt seconds of a per-minute chance.
+        if (Random.value < 1f - Mathf.Pow(1f - perMinute, dt / 60f)) lostChildDue = true;
+    }
 
     // Every machine: who's marked.
     private readonly System.Collections.Generic.Dictionary<ushort, byte> marks = new();
@@ -60,9 +84,9 @@ public partial class CustomerManager
         var g = kid.group;
         var parent = kid.follow;
         if (g == null || g.lostOnce || parent == null || lostChildEveryMinutes <= 0f || !byId.ContainsKey(parent.id)) return false;
-        // Mall-wide: one every so often (the first child walking the halls once it's time), a few at most.
-        if (nextLostChildAt < 0f) nextLostChildAt = Time.time + firstLostChildAfterMinutes * 60f;
-        if (Time.time < nextLostChildAt || cases.Count >= maxLostAtOnce) return false;
+        // Mall-wide: a chance that grows over time (the first child walking the halls once it comes up), a few at most.
+        RollLostChild();
+        if (!lostChildDue || cases.Count >= maxLostAtOnce) return false;
         var root = Root(kid);
         if (root.store != null || root.mode != Mode.Wander || root.searchingFor != null) return false; // walking the halls
         // Not a family with a shoplifter in it (searching parents can't be stopped and checked).
@@ -73,7 +97,9 @@ public partial class CustomerManager
             !NearbyHallwaySpot(kid.pos, lostDistance.x * 0.5f, lostDistance.x, out spot)) return false;
 
         g.lostOnce = true;
-        nextLostChildAt = Time.time + lostChildEveryMinutes * 60f * Random.Range(1f, 4f);
+        lostChildDue = false;
+        lostFirstDone = true;
+        lostClockFrom = lostRolledAt = Time.time;
         kid.lostFrom = parent;
         kid.lostSince = Time.time;
         kid.lostLetDown = false;
