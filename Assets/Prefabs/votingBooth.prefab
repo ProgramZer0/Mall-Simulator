@@ -2850,6 +2850,73 @@ MonoBehaviour:
   m_hasFontAssetChanged: 0
   m_renderer: {fileID: 662107182703696051}
   m_maskType: 0
+--- !u!1 &5387404318896440356
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2717217782354547315}
+  - component: {fileID: 1017348103612571457}
+  - component: {fileID: 8230324314115474942}
+  m_Layer: 0
+  m_Name: customeravoid
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2717217782354547315
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5387404318896440356}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2236765263239208487}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &1017348103612571457
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5387404318896440356}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 7.002296, y: 3.799255, z: 6.7102356}
+  m_Center: {x: 0.31386542, y: 0.30037284, z: 0.18283081}
+--- !u!114 &8230324314115474942
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5387404318896440356}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a63bc163bee148cba58a6b646404f461, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CustomerNoWalkZone
+  kind: 1
 --- !u!1 &5415288741728213791
 GameObject:
   m_ObjectHideFlags: 0
@@ -3834,6 +3901,73 @@ MonoBehaviour:
   lamp: {fileID: 8650250071179894126}
   yourVoteColor: {r: 0.3, g: 1, b: 0.4, a: 1}
   otherColor: {r: 0.35, g: 0.35, b: 0.35, a: 1}
+--- !u!1 &7718592420673105903
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6965795203877953184}
+  - component: {fileID: 7335786392549980378}
+  - component: {fileID: 5137282631477636034}
+  m_Layer: 0
+  m_Name: customerNowalk
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6965795203877953184
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7718592420673105903}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2236765263239208487}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &7335786392549980378
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7718592420673105903}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.0852757, y: 3.799255, z: 3.9744492}
+  m_Center: {x: 0.008412361, y: 0.30037284, z: -0.06873703}
+--- !u!114 &5137282631477636034
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7718592420673105903}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a63bc163bee148cba58a6b646404f461, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CustomerNoWalkZone
+  kind: 0
 --- !u!1 &7905158398703964907
 GameObject:
   m_ObjectHideFlags: 0
@@ -4330,6 +4464,12 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: 40871881bdc30a644bb670a5d50e1c7d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2717217782354547315}
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: 40871881bdc30a644bb670a5d50e1c7d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6965795203877953184}
     - targetCorrespondingSourceObject: {fileID: 8959514681433570130, guid: 40871881bdc30a644bb670a5d50e1c7d, type: 3}
       insertIndex: -1
       addedObject: {fileID: 8771121758648496549}
@@ -4461,6 +4601,11 @@ MonoBehaviour:
   - {fileID: 122934175967428900}
   sign: {fileID: 9184663052286822946}
   hideUnusedButtons: 1
+--- !u!4 &2236765263239208487 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 40871881bdc30a644bb670a5d50e1c7d, type: 3}
+  m_PrefabInstance: {fileID: 1765463119937878476}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &3797989132477772916 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 3185458516619070904, guid: 40871881bdc30a644bb670a5d50e1c7d, type: 3}
