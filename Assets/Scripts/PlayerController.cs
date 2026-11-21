@@ -61,6 +61,13 @@ public class PlayerController3D : NetworkBehaviour
     [Tooltip("Log to the Console when you drop more than 0.3 m below where you last stood without jumping " +
              "(what you were touching, and what's under you), to track down falling through the floor.")]
     [SerializeField] private bool debugFalls;
+    [Tooltip("Floors you can never sink into: if your feet end up inside one (pushed in by a shelf product, a " +
+             "step off a ledge...), you're lifted back on top instead of falling through. Empty: the Ground and " +
+             "secondFloor layers.")]
+    [SerializeField] private LayerMask floorLayers;
+    [Tooltip("Lift you back up if your feet are at most this far inside a floor (meters). Deeper than this " +
+             "you're past it, and keep falling (the fall rescue puts you back).")]
+    [SerializeField, Min(0.05f)] private float maxSinkRescue = 1.2f;
 
     [Header("References")]
     [SerializeField] private Transform cameraRoot;
@@ -459,11 +466,38 @@ public class PlayerController3D : NetworkBehaviour
         Vector3 finalVel = new Vector3(horizontalVel.x, velocity.y, horizontalVel.z);
 
         lastFlags = controller.Move(finalVel * Time.deltaTime);
+        if (!controller.isGrounded && !jumped) LiftOutOfFloor();
 
         velocity.x = horizontalVel.x;
         velocity.z = horizontalVel.z;
 
         if (debugFalls && !jumped && transform.position.y < lastGroundY - 0.3f) LogDip();
+    }
+
+    // A CharacterController ignores anything it's already inside, so feet pushed into a thin floor keep
+    // going down through it. Look down from the middle of the body for a floor top above the feet, and
+    // put the feet back on it.
+    private void LiftOutOfFloor()
+    {
+        int mask = floorLayers.value != 0 ? floorLayers.value : LayerMask.GetMask("Ground", "secondFloor");
+        if (mask == 0) return;
+        float half = controller.height * 0.5f;
+        Vector3 middle = transform.position + controller.center;
+        float feetY = middle.y - half;
+        float from = Mathf.Min(half, maxSinkRescue); // above the feet: the middle, or less for a short drop
+        if (!Physics.Raycast(new Vector3(middle.x, feetY + from, middle.z), Vector3.down, out var hit, from + 0.01f,
+                             mask, QueryTriggerInteraction.Ignore)) return;
+        if (hit.normal.y < 0.5f || hit.collider.transform.IsChildOf(transform)) return; // not a floor top
+        float sunk = hit.point.y - feetY;
+        if (sunk < 0.02f) return; // on it, not in it
+        if (debugFalls)
+            Debug.Log($"[PlayerController] Feet {sunk:0.00} m inside '{hit.collider.name}': lifted back on top.", this);
+        bool was = controller.enabled;
+        controller.enabled = false; // it ignores moves into what it's inside, so set the position
+        transform.position += Vector3.up * (sunk + controller.skinWidth);
+        controller.enabled = was;
+        if (velocity.y < 0f) velocity.y = -2f;
+        lastGroundedAt = Time.time;
     }
 
     private float nextDipLog;

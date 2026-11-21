@@ -1358,7 +1358,9 @@ public class StockContainer : NetworkBehaviour
         {
             GetSlotPose(box, IsHangRail(zone), state, layout, list.Count, out Vector3 pos, out Quaternion rot);
             var model = GetVariantPrefab(state.itemId, IsHangRail(zone), state.seed, list.Count) ?? prefab;
-            list.Add(MakeVisual(model, pos, rot, root, batched: true, paint: state.paint));
+            var product = MakeVisual(model, pos, rot, root, batched: true, paint: state.paint);
+            ShelfStockLayer.Apply(product); // players walk through it (the shelf is what blocks them)
+            list.Add(product);
         }
     }
 

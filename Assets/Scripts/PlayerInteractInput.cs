@@ -84,6 +84,11 @@ public class PlayerInteractInput : NetworkBehaviour
     {
         inventory = GetComponent<PlayerInventoryNet>();
         storeEdit = GetComponent<StoreEditController>();
+        // Shelf products are on their own layer (ShelfStockLayer): look for them wherever loose items are.
+        interactMask = ShelfStockLayer.With(interactMask);
+        pickupMask = ShelfStockLayer.With(pickupMask);
+        placementMask = ShelfStockLayer.With(placementMask);
+        placementBlockingMask = ShelfStockLayer.With(placementBlockingMask);
     }
 
     public override void OnNetworkSpawn()
