@@ -34,6 +34,8 @@ public class StorePlot : NetworkBehaviour
         [Tooltip("Walls removed when this segment is bought.")]
         public GameObject[] falseWalls;
         public int price = 1000;
+        [Tooltip("Mall Setup → Prices leaves this segment's price as it is (one you've set by hand).")]
+        public bool keepPrice;
 
         /// <summary>Every box of this segment (including an old single Area not moved over yet).</summary>
         public IEnumerable<BoxCollider> Areas
@@ -63,6 +65,8 @@ public class StorePlot : NetworkBehaviour
     [SerializeField] private int plotId;
     [SerializeField] private string displayName = "Store";
     [SerializeField] private int price = 0;
+    [Tooltip("Mall Setup → Prices leaves this store's Price and Starting Money as they are (set by hand).")]
+    [SerializeField] private bool keepPrice;
     [Tooltip("Handed out automatically to players who join without a store.")]
     [SerializeField] private bool isStarterPlot = true;
     [Tooltip("Money a team starts the game with when this is the starter store it's given. " +
