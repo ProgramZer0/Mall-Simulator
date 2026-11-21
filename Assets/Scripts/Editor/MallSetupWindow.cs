@@ -11,7 +11,8 @@ using UnityEngine;
 /// Put down a store's segment walls (its False Walls) first and each area stops at them, so the base area
 /// and every expansion fill their own part. Areas go to the middle of a segment wall (not its face), so once
 /// the wall's gone with the expansion bought there's no strip of floor between them that isn't the store's.
-/// "Fit Store" refits every area box of the selected stores.
+/// "Fit Store" refits every area box of the selected stores. Fill L Shapes: a room that isn't a rectangle
+/// (an L, a side room) gets more boxes until it's covered (found on a 25 cm floor grid; walls stop it).
 ///
 /// Find fills in a store's Storefront Walls (CuttableWalls along its edge) and Floor Renderers.
 /// Raise stretches a store's segment walls (False Walls) and Storefront Walls up to the ceiling.
@@ -45,6 +46,7 @@ public class MallSetupWindow : EditorWindow
     private float maxReach = 60f;
     private float wallBuffer = 0.1f;
     private float ceilingBuffer = 0.25f;
+    private bool fillShape = true;
 
     // Price settings (kept between sessions).
     private float pricePerSqFt = 10f;
@@ -66,6 +68,7 @@ public class MallSetupWindow : EditorWindow
         maxReach = EditorPrefs.GetFloat("MallSetup.MaxReach", 60f);
         wallBuffer = EditorPrefs.GetFloat("MallSetup.WallBuffer", 0.1f);
         ceilingBuffer = EditorPrefs.GetFloat("MallSetup.CeilingBuffer", 0.25f);
+        fillShape = EditorPrefs.GetBool("MallSetup.FillShape", true);
     }
 
     private void OnGUI()
@@ -82,7 +85,7 @@ public class MallSetupWindow : EditorWindow
     private void PricesGUI()
     {
         EditorGUILayout.HelpBox(
-            "Prices from floor space (the store's area boxes, seen from above; overlaps count twice):\n" +
+            "Prices from floor space (the store's area boxes, seen from above; overlaps count once):\n" +
             "- A store's Price: its base area x the price per square foot.\n" +
             "- Each segment: its area x the price, less the segment discount.\n" +
             "- A starter store's Starting Money: the starting cash less its Price (never below the minimum), so " +
@@ -151,17 +154,43 @@ public class MallSetupWindow : EditorWindow
     private int SegmentPrice(float sqFt) => Round(sqFt * pricePerSqFt * (1f - segmentDiscount));
     private int StartMoney(int storePrice) => Mathf.Max(minStartMoney, Round(startCash - storePrice));
 
-    // Floor space of some boxes, seen from above (their own X by Z, scaled), in square feet.
+    // Floor space of some boxes, seen from above (their own X by Z, scaled), in square feet. Where two
+    // boxes turned the same way overlap (an L filled with two), the overlap counts once.
     private static float SqFt(IEnumerable<BoxCollider> boxes)
     {
+        var list = boxes.Where(b => b != null).ToList();
         float m2 = 0f;
-        foreach (var b in boxes)
+        foreach (var b in list)
         {
-            if (b == null) continue;
             Vector3 s = b.transform.lossyScale;
             m2 += Mathf.Abs(b.size.x * s.x) * Mathf.Abs(b.size.z * s.z);
         }
-        return m2 * SqFtPerSqM;
+        for (int i = 0; i < list.Count; i++)
+            for (int j = i + 1; j < list.Count; j++)
+                m2 -= Overlap(list[i], list[j]);
+        return Mathf.Max(0f, m2) * SqFtPerSqM;
+    }
+
+    // Seen from above, how much two boxes turned the same way (or a quarter turn apart) overlap, in m2.
+    private static float Overlap(BoxCollider a, BoxCollider b)
+    {
+        float yawA = a.transform.eulerAngles.y;
+        float diff = Mathf.Abs(Mathf.DeltaAngle(yawA, b.transform.eulerAngles.y)) % 90f;
+        if (diff > 1f && diff < 89f) return 0f; // at an angle: not worked out (rare)
+        var q = Quaternion.Euler(0f, yawA, 0f);
+        Rect Footprint(BoxCollider box)
+        {
+            Vector3 s = box.transform.lossyScale;
+            Vector3 c = Quaternion.Inverse(q) * box.transform.TransformPoint(box.center);
+            Vector3 size = new(Mathf.Abs(box.size.x * s.x), 0f, Mathf.Abs(box.size.z * s.z));
+            // A quarter turn apart: its X and Z swap in A's frame.
+            if (Mathf.Abs(Mathf.DeltaAngle(yawA, box.transform.eulerAngles.y)) % 180f > 45f) size = new Vector3(size.z, 0f, size.x);
+            return new Rect(c.x - size.x * 0.5f, c.z - size.z * 0.5f, size.x, size.z);
+        }
+        Rect ra = Footprint(a), rb = Footprint(b);
+        float w = Mathf.Min(ra.xMax, rb.xMax) - Mathf.Max(ra.xMin, rb.xMin);
+        float h = Mathf.Min(ra.yMax, rb.yMax) - Mathf.Max(ra.yMin, rb.yMin);
+        return w > 0f && h > 0f ? w * h : 0f;
     }
 
     private static float SegmentSqFt(SerializedProperty seg)
@@ -203,7 +232,8 @@ public class MallSetupWindow : EditorWindow
         EditorGUILayout.HelpBox(
             "1. Make an empty child of the store with a small BoxCollider inside the room (Add Area Box does it).\n" +
             "2. Put down segment walls (each Segment's False Walls) where expansions start.\n" +
-            "3. Fit: each box grows to the walls, floor and ceiling around it.\n" +
+            "3. Fit: each box grows to the walls, floor and ceiling around it. With Fill L shapes on, any part of the room " +
+            "it doesn't reach (an L, a side room) gets more boxes, added to the same list.\n" +
             "Things for sale, store areas, docks, for-sale and renovation walls don't stop it.", MessageType.Info);
 
         EditorGUI.BeginChangeCheck();
@@ -215,8 +245,12 @@ public class MallSetupWindow : EditorWindow
             "Negative: a gap. (Segment walls: always to their middle.)"), wallBuffer);
         ceilingBuffer = EditorGUILayout.FloatField(new GUIContent("Ceiling buffer",
             "How far the box goes past the ceiling (meters), so ceiling lights and signs are inside."), ceilingBuffer);
+        fillShape = EditorGUILayout.Toggle(new GUIContent("Fill L shapes",
+            "After fitting, find any part of the room the box doesn't reach (an L, a side room) and add more boxes " +
+            "until it's covered."), fillShape);
         if (EditorGUI.EndChangeCheck())
         {
+            EditorPrefs.SetBool("MallSetup.FillShape", fillShape);
             EditorPrefs.SetInt("MallSetup.WallMask", wallMask);
             EditorPrefs.SetFloat("MallSetup.DefaultHeight", defaultHeight);
             EditorPrefs.SetFloat("MallSetup.MaxReach", maxReach);
@@ -426,15 +460,231 @@ public class MallSetupWindow : EditorWindow
         Physics.SyncTransforms();
         var ignored = Ignored();
         segmentWalls = SegmentWalls();
-        int fitted = 0;
+        int fitted = 0, added = 0;
+        var done = new List<BoxCollider>();
         foreach (var box in boxes.Distinct())
         {
             if (box == null) continue;
             Undo.RecordObject(box, "Fit area to walls");
-            if (FitBox(box, ignored, out string why)) { fitted++; EditorUtility.SetDirty(box); }
+            if (FitBox(box, ignored, out string why)) { fitted++; EditorUtility.SetDirty(box); done.Add(box); }
             else Debug.LogWarning($"[Mall Setup] Couldn't fit '{box.name}': {why}", box);
         }
-        Debug.Log($"[Mall Setup] Fitted {fitted} of {boxes.Count} area box(es) to the walls.");
+        if (fillShape)
+            foreach (var box in done)
+            {
+                Physics.SyncTransforms();
+                added += FillRoom(box, ignored);
+            }
+        Debug.Log($"[Mall Setup] Fitted {fitted} of {boxes.Count} area box(es) to the walls" +
+                  (added > 0 ? $", and added {added} more for the rest of the room." : "."));
+    }
+
+    /* ========================= FILLING ODD SHAPES (L shapes, side rooms) ========================= */
+
+    private const float Cell = 0.25f;     // the floor grid for working out the room's shape
+    private const int MaxCells = 60000;
+    private const int MaxExtraBoxes = 8;
+
+    // The list a box is in (Base Areas, or a segment's Areas), and its store.
+    private static bool TryFindList(BoxCollider box, out StorePlot plot, out string path)
+    {
+        plot = box.GetComponentInParent<StorePlot>();
+        path = null;
+        var plots = plot != null ? new[] { plot } : Object.FindObjectsByType<StorePlot>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        foreach (var p in plots)
+        {
+            var so = new SerializedObject(p);
+            if (Objects<BoxCollider>(so.FindProperty("baseAreas")).Contains(box)) { plot = p; path = "baseAreas"; return true; }
+            var segs = so.FindProperty("segments");
+            for (int i = 0; segs != null && i < segs.arraySize; i++)
+            {
+                var seg = segs.GetArrayElementAtIndex(i);
+                if (Objects<BoxCollider>(seg.FindPropertyRelative("areas")).Contains(box)) { plot = p; path = $"segments.Array.data[{i}].areas"; return true; }
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// The room around a fitted box, on a floor grid (walls stop it, like they stop Fit). Wherever the room
+    /// goes that the list's boxes don't cover (more than a sliver), a new box is put in the middle of that
+    /// part and fitted, until it's covered. Returns how many boxes it added.
+    /// </summary>
+    private int FillRoom(BoxCollider seedBox, HashSet<Collider> ignored)
+    {
+        if (!TryFindList(seedBox, out var plot, out string path)) return 0;
+        var t = seedBox.transform;
+        Vector3 seed = t.TransformPoint(seedBox.center);
+        Vector3 right = t.right, forward = t.forward;
+        right.y = 0f; forward.y = 0f;
+        if (right.sqrMagnitude < 0.01f || forward.sqrMagnitude < 0.01f) return 0;
+        right.Normalize(); forward.Normalize();
+        float down = Cast(seed, Vector3.down, 20f, seedBox, ignored);
+        if (down >= 20f) return 0;
+        float floor = seed.y - down;
+        Vector3 origin = new(seed.x, floor, seed.z);
+
+        // The room: cells reachable from the seed without crossing a wall, with floor under them.
+        var room = FloodRoom(origin, right, forward, floor, seedBox, ignored, out bool leaked);
+        if (leaked)
+        {
+            Debug.LogWarning($"[Mall Setup] '{seedBox.name}': the room seems open (a doorway with no door, a gap in a wall?), " +
+                             "so no extra boxes were added. Close it off or add boxes by hand.", seedBox);
+            return 0;
+        }
+
+        int added = 0;
+        for (int round = 0; round < MaxExtraBoxes; round++)
+        {
+            var so = new SerializedObject(plot);
+            var list = so.FindProperty(path);
+            var boxes = Objects<BoxCollider>(list).Where(b => b != null).ToList();
+            Physics.SyncTransforms();
+
+            // Uncovered cells, ignoring slivers along walls: a cell counts only if its whole neighborhood is room.
+            var open = new HashSet<Vector2Int>();
+            foreach (var c in room)
+            {
+                if (!Inner(room, c)) continue;
+                Vector3 at = Cell2World(origin, right, forward, c) + Vector3.up * 0.5f;
+                if (!boxes.Any(b => Inside(b, at))) open.Add(c);
+            }
+            if (open.Count == 0) break;
+
+            // The biggest uncovered part; too small (under a square meter): done.
+            var part = Biggest(open);
+            if (part.Count * Cell * Cell < 1f) break;
+
+            // A new box in its middle (the cell furthest from its edges), fitted like the first.
+            var middle = Deepest(part);
+            var go = new GameObject($"{seedBox.gameObject.name} ({boxes.Count + 1})");
+            Undo.RegisterCreatedObjectUndo(go, "Fill room with area boxes");
+            go.transform.SetParent(t.parent, false);
+            go.transform.position = Cell2World(origin, right, forward, middle) + Vector3.up * 0.5f;
+            go.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
+            go.layer = seedBox.gameObject.layer;
+            var box = go.AddComponent<BoxCollider>();
+            box.isTrigger = seedBox.isTrigger;
+            box.size = Vector3.one * 0.5f;
+            list.arraySize++;
+            list.GetArrayElementAtIndex(list.arraySize - 1).objectReferenceValue = box;
+            so.ApplyModifiedProperties();
+            ignored.Add(box);
+            Physics.SyncTransforms();
+            if (!FitBox(box, ignored, out string why))
+            {
+                Debug.LogWarning($"[Mall Setup] Added '{go.name}' for the rest of the room but couldn't fit it: {why}", go);
+                break;
+            }
+            added++;
+            Physics.SyncTransforms();
+            if (!Inside(box, Cell2World(origin, right, forward, middle) + Vector3.up * 0.5f)) break; // didn't take: stop rather than loop
+        }
+        return added;
+    }
+
+    private static Vector3 Cell2World(Vector3 origin, Vector3 right, Vector3 forward, Vector2Int c) =>
+        origin + right * (c.x * Cell) + forward * (c.y * Cell);
+
+    private static readonly Vector2Int[] Steps = { new(1, 0), new(-1, 0), new(0, 1), new(0, -1) };
+
+    private HashSet<Vector2Int> FloodRoom(Vector3 origin, Vector3 right, Vector3 forward, float floor, BoxCollider self,
+                                          HashSet<Collider> ignored, out bool leaked)
+    {
+        var room = new HashSet<Vector2Int> { Vector2Int.zero };
+        var todo = new Queue<Vector2Int>();
+        todo.Enqueue(Vector2Int.zero);
+        float[] heights = { 0.3f, 1.0f, 1.7f };
+        int reach = Mathf.CeilToInt(maxReach / Cell);
+        leaked = false;
+        while (todo.Count > 0)
+        {
+            var c = todo.Dequeue();
+            Vector3 a = Cell2World(origin, right, forward, c);
+            foreach (var step in Steps)
+            {
+                var n = c + step;
+                if (room.Contains(n)) continue;
+                if (Mathf.Abs(n.x) > reach || Mathf.Abs(n.y) > reach || room.Count >= MaxCells) { leaked = true; return room; }
+                Vector3 b = Cell2World(origin, right, forward, n);
+                Vector3 dir = (b - a).normalized;
+                bool blocked = false;
+                foreach (float y in heights)
+                    if (Cast(a + Vector3.up * y, dir, Cell, self, ignored) < Cell) { blocked = true; break; }
+                if (blocked) continue;
+                // Floor under it, at this floor's height (not a hole, stairs or a drop).
+                float d = Cast(b + Vector3.up * 0.5f, Vector3.down, 1.2f, self, ignored);
+                if (d >= 1.2f || Mathf.Abs(b.y + 0.5f - d - floor) > 0.15f) continue;
+                room.Add(n);
+                todo.Enqueue(n);
+            }
+        }
+        return room;
+    }
+
+    // All 8 neighbors are room too (so strips a cell wide along a slanted wall don't count).
+    private static bool Inner(HashSet<Vector2Int> room, Vector2Int c)
+    {
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dy = -1; dy <= 1; dy++)
+                if (!room.Contains(new Vector2Int(c.x + dx, c.y + dy))) return false;
+        return true;
+    }
+
+    private static bool Inside(BoxCollider b, Vector3 world)
+    {
+        Vector3 local = b.transform.InverseTransformPoint(world) - b.center;
+        Vector3 h = b.size * 0.5f;
+        return Mathf.Abs(local.x) <= h.x && Mathf.Abs(local.y) <= h.y && Mathf.Abs(local.z) <= h.z;
+    }
+
+    // The biggest connected group of cells.
+    private static List<Vector2Int> Biggest(HashSet<Vector2Int> cells)
+    {
+        var seen = new HashSet<Vector2Int>();
+        List<Vector2Int> best = new();
+        foreach (var start in cells)
+        {
+            if (seen.Contains(start)) continue;
+            var group = new List<Vector2Int>();
+            var q = new Queue<Vector2Int>();
+            q.Enqueue(start); seen.Add(start);
+            while (q.Count > 0)
+            {
+                var c = q.Dequeue();
+                group.Add(c);
+                foreach (var s in Steps)
+                {
+                    var n = c + s;
+                    if (cells.Contains(n) && seen.Add(n)) q.Enqueue(n);
+                }
+            }
+            if (group.Count > best.Count) best = group;
+        }
+        return best;
+    }
+
+    // The cell furthest from the group's edge.
+    private static Vector2Int Deepest(List<Vector2Int> group)
+    {
+        var inGroup = new HashSet<Vector2Int>(group);
+        var dist = new Dictionary<Vector2Int, int>();
+        var q = new Queue<Vector2Int>();
+        foreach (var c in group)
+            if (Steps.Any(s => !inGroup.Contains(c + s))) { dist[c] = 0; q.Enqueue(c); }
+        Vector2Int deepest = group[0];
+        int most = -1;
+        while (q.Count > 0)
+        {
+            var c = q.Dequeue();
+            if (dist[c] > most) { most = dist[c]; deepest = c; }
+            foreach (var s in Steps)
+            {
+                var n = c + s;
+                if (inGroup.Contains(n) && !dist.ContainsKey(n)) { dist[n] = dist[c] + 1; q.Enqueue(n); }
+            }
+        }
+        return deepest;
     }
 
     // The first thing (not ignored, not the box itself) along a ray, or Max.
