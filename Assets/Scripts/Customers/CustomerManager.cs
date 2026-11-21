@@ -72,6 +72,9 @@ public partial class CustomerManager : NetworkBehaviour
     [SerializeField] private float avoidRange = 1.1f;
     [Tooltip("Someone leaving is out of the mall once this close to the exit (meters), crowd or not.")]
     [SerializeField] private float exitReach = 1.5f;
+    [Tooltip("Leaving the mall and stuck (in the crowd at the doors) within this many meters of the exit: they count as " +
+             "gone, rather than piling up at the door.")]
+    [SerializeField, Min(0f)] private float exitStuckRange = 8f;
     [Tooltip("Customers keep to their own lane, up to this far either side of the shortest path (meters), " +
              "so a hallway fills out instead of everyone walking one line.")]
     [SerializeField] private float laneSpread = 0.7f;
@@ -1034,6 +1037,12 @@ public partial class CustomerManager : NetworkBehaviour
         else if (Time.time - c.stuckSince > 2f)
         {
             stuckEvents++;
+            if (c.mode == Mode.Exiting && toEnd < exitStuckRange)
+            {
+                if (logDecisions) Log(c, $"stuck {toEnd:0.0} m from the exit: out");
+                Arrive(c);
+                return;
+            }
             c.stuckRepaths++;
             if (logDecisions) Log(c, $"stuck at {c.pos:F1} heading for {c.destination:F1} (try {c.stuckRepaths})");
             int tries = c.stuckRepaths;
