@@ -239,6 +239,7 @@ public class PriceScanner : NetworkBehaviour
 
     private void StartTyping()
     {
+        Sfx.ForAll(Cue.PriceScan, targetItem != null ? targetItem.transform.position : targetContainer.transform.position, AnimCue.PriceScan, OwnerClientId);
         bool stock = targetItem == null;
         int current = stock ? targetContainer.GetZone(targetZone).price : targetItem.Price;
         entryContainer = targetContainer;
@@ -305,6 +306,7 @@ public class PriceScanner : NetworkBehaviour
         if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
         {
             bool all = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            Sfx.Play(Cue.PriceSet, transform.position);
             if (entryItem != null) SetItemPriceRpc(entryItem.NetworkObject, entryCents, all);
             else if (entryContainer != null) SetZonePriceRpc(entryContainer.NetworkObject, entryZone, entryCents, all);
             StopTyping();

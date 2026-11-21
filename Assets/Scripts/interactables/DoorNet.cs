@@ -196,7 +196,11 @@ public class DoorNet : NetworkBehaviour
     private bool wasOwned;
 
     // Server: when the store goes back on sale, its doors go back to how they started (locked ones lock and shut).
-    private void OnLockedChanged(bool previous, bool current) => CustomerVersion++;
+    private void OnLockedChanged(bool previous, bool current)
+    {
+        CustomerVersion++;
+        if (previous != current) Sfx.Play(current ? Cue.DoorLock : Cue.DoorUnlock, transform.position);
+    }
 
     private void OnStoreChanged(StorePlot plot)
     {
@@ -244,6 +248,7 @@ public class DoorNet : NetworkBehaviour
     private void OnStateChanged(sbyte previous, sbyte current)
     {
         motion.SetOpen(current != 0, current);
+        if ((previous != 0) != (current != 0)) Sfx.Play(current != 0 ? Cue.DoorOpen : Cue.DoorClose, transform.position);
         // Open or shut decides whether customers can use a storefront door (and a locked automatic one).
         if ((previous != 0) != (current != 0) && (trigger == Trigger.Manual ? !isPublic : IsLocked)) CustomerVersion++;
     }

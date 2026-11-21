@@ -254,6 +254,8 @@ public partial class CustomerManager : NetworkBehaviour
         public Color color = Color.white;
         [Tooltip("Optional: shown instead of the text.")]
         public Sprite icon;
+        [Tooltip("Optional: its sound (otherwise SoundCues' Customer Happy or Customer Unhappy).")]
+        public AudioClip sound;
     }
 
     private static readonly Dictionary<Reaction, (string text, Color color)> DefaultLooks = new()
@@ -305,10 +307,33 @@ public partial class CustomerManager : NetworkBehaviour
         string text = null;
         Color color = Color.white;
         Sprite icon = null;
+        AudioClip sound = null;
         foreach (var look in reactionLooks)
-            if (look != null && look.kind == r) { text = look.text; color = look.color; icon = look.icon; break; }
+            if (look != null && look.kind == r) { text = look.text; color = look.color; icon = look.icon; sound = look.sound; break; }
         if (text == null && icon == null && DefaultLooks.TryGetValue(r, out var d)) { text = d.text; color = d.color; }
         v.ShowReaction(text, color, icon, reactionSeconds);
+        bool good = r is Reaction.Interested or Reaction.Bought or Reaction.Paid or Reaction.Reunited;
+        if (sound != null) ProgramZer0.SoundSystem.WorldAudio.PlayOneShot(sound, v.transform.position);
+        else Sfx.Play(good ? Cue.CustomerHappy : Cue.CustomerUnhappy, v.transform.position);
+        AnimCues.Fire(v.gameObject, good ? AnimCue.ReactHappy : AnimCue.ReactUnhappy);
+    }
+
+    /* ========================= ANIMATIONS (see AnimCues on the look prefab) ========================= */
+
+    /// <summary>Host: a customer's animation, on every machine.</summary>
+    private void Act(Customer c, AnimCue cue, bool on = true)
+    {
+        if (c == null) return;
+        ShowAct(c.id, cue, on);
+        ActRpc(c.id, cue, on);
+    }
+
+    [Rpc(SendTo.NotServer, Delivery = RpcDelivery.Unreliable)]
+    private void ActRpc(ushort id, AnimCue cue, bool on) => ShowAct(id, cue, on);
+
+    private void ShowAct(ushort id, AnimCue cue, bool on)
+    {
+        if (views.TryGetValue(id, out var v) && v != null) AnimCues.Fire(v.gameObject, cue, on);
     }
 
     /// <summary>
@@ -1377,6 +1402,7 @@ public partial class CustomerManager : NetworkBehaviour
                 if (c.arrived)
                 {
                     c.mode = Mode.Looking;
+                    Act(c, AnimCue.Browse);
                     c.until = Time.time + Random.Range(lookSeconds.x, lookSeconds.y);
                     Face(c, c.targetPoint);
                 }
@@ -1915,6 +1941,7 @@ public partial class CustomerManager : NetworkBehaviour
         GroupBought(c, s.itemId);
         c.satisfaction += 0.25f;
         Log(c, $"took {CheckoutCounter.NameOf(s.itemId)} ({CheckoutCounter.FormatAmount(s.priceCents)})");
+        Act(c, AnimCue.TakeItem);
         React(c, Reaction.Bought);
         if (c.thief) GiveBag(c, plot); // a shoplifter brought their own bag (and fills it before paying...)
     }
@@ -2141,6 +2168,7 @@ public partial class CustomerManager : NetworkBehaviour
             counterPace[counter] = Mathf.Lerp(PaceOf(counter), Mathf.Clamp(perItem, 1f, 120f), 0.3f);
             c.nextThink = Time.time;
             Log(c, "paid");
+            Act(c, AnimCue.Pay);
             React(c, Reaction.Paid);
             GiveBag(c, c.store);
             return;
@@ -2197,12 +2225,14 @@ public partial class CustomerManager : NetworkBehaviour
         if (c.running) return;
         c.running = true;
         c.speed *= fleeSpeed;
+        Act(c, AnimCue.Running);
     }
 
     private void FinishStore(Customer c)
     {
         c.hurry = false;
         var plot = c.store;
+        if (c.fleeing && plot != null) Sfx.ForAll(Cue.ShoplifterAlarm, c.entrance.outside); // out the door with it
         if (plot != null && c.fleeing)
         {
             DropFromGroup(c); // running off: on their own now
