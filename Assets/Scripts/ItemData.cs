@@ -14,6 +14,11 @@ public class ItemData : MonoBehaviour
     [Tooltip("The item's catalog entry. Id and World Network Prefab are filled in for you.")]
     public ItemDef item = new();
 
+    [Tooltip("Keep the name as you typed it. Off: Update Item Catalog names it from the prefab's name " +
+             "(\"lowCuts_Stock\" → \"Low Cuts\"). Typing your own name ticks this for you.")]
+    public bool keepName;
+    [HideInInspector] public string autoName; // the name it was last given, to tell yours from ours
+
     /// <summary>This item's id (0 until Update Item Catalog gives it one).</summary>
     public int Id => item != null ? item.id : 0;
 
