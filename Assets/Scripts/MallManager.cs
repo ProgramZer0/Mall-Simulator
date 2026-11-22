@@ -118,9 +118,33 @@ public class MallManager : NetworkBehaviour
         NetworkManager.OnClientConnectedCallback += OnClientConnected;
         NetworkManager.OnClientDisconnectCallback += OnClientDisconnected;
 
-        // Anyone already connected (the host itself) gets a store too.
-        foreach (ulong id in NetworkManager.ConnectedClientsIds)
+        // Anyone already connected (the host itself, and everyone who came from the lobby) gets a store
+        // too, once the stores are spawned: starting the mall from the lobby loads this scene for players
+        // who are already connected, and its stores can spawn after us (an unspawned store can't be given).
+        StartCoroutine(GiveStoresToConnectedWhenReady());
+    }
+
+    private System.Collections.IEnumerator GiveStoresToConnectedWhenReady()
+    {
+        waitingForStores = true;
+        float giveUpAt = Time.realtimeSinceStartup + 10f;
+        while (Time.realtimeSinceStartup < giveUpAt && !StoresSpawned()) yield return null;
+        if (!StoresSpawned())
+            Debug.LogWarning("[MallManager] Some stores still weren't spawned after 10 s; giving out stores anyway.", this);
+        foreach (var plot in FindObjectsByType<StorePlot>(FindObjectsSortMode.None)) Register(plot);
+        waitingForStores = false;
+        foreach (ulong id in new List<ulong>(NetworkManager.ConnectedClientsIds))
             OnClientConnected(id);
+    }
+
+    private bool waitingForStores; // anyone joining meanwhile is given a store when the wait's over
+
+    private static bool StoresSpawned()
+    {
+        foreach (var plot in FindObjectsByType<StorePlot>(FindObjectsSortMode.None))
+            if (plot.isActiveAndEnabled && !plot.IsSpawned) return false;
+        var economy = EconomyManager.Instance;
+        return economy == null || economy.IsSpawned;
     }
 
     public override void OnNetworkDespawn()
@@ -414,6 +438,7 @@ public class MallManager : NetworkBehaviour
 
     private void OnClientConnected(ulong clientId)
     {
+        if (waitingForStores) return;
         // Everyone starts as a team of one.
         if (!ContainsMember(clientId)) ServerSetTeam(clientId, clientId);
 
@@ -422,7 +447,7 @@ public class MallManager : NetworkBehaviour
 
         foreach (var plot in plots.Values)
         {
-            if (plot.IsStarterPlot && !plot.HasOwner)
+            if (plot.IsStarterPlot && !plot.HasOwner && plot.IsSpawned)
             {
                 plot.ServerSetOwner(team);
                 // A team's first store pays its Starting Money (once per team).
