@@ -114,7 +114,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 1
     showInShop: 0
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: dd0862bf0070c5a43b082a389782db0d, type: 3}
     categories:
     - Cosmentics
     - Makeups
@@ -138,6 +138,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 1
+  autoName: 
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &6510995903574772931
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -209,6 +213,9 @@ MonoBehaviour:
   - renderer: {fileID: 5337512600336688506}
     materialIndex: -1
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!114 &5025388292225298263
 MonoBehaviour:
   m_ObjectHideFlags: 0

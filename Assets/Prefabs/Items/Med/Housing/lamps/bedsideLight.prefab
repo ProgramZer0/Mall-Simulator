@@ -113,12 +113,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
     id: 107
-    displayName: bedsideLight
+    displayName: Bedside Light
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 2
     showInShop: 1
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: d13323e5166aa2241b1cf603333b8af1, type: 3}
     categories:
     - furniture
     - Lamps
@@ -138,6 +138,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 0
+  autoName: Bedside Light
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &621716045961849990
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -187,6 +191,7 @@ MonoBehaviour:
   randomVariants: 0
   shelfPose: 0
   unitsPerCrate: 1
+  keepUnits: 0
   physicsMode: 1
   stillSeconds: 4
   maxFallSeconds: 20
@@ -222,6 +227,9 @@ MonoBehaviour:
   - renderer: {fileID: 5241519263325125006}
     materialIndex: -1
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!65 &-2224855582103099496
 BoxCollider:
   m_ObjectHideFlags: 0

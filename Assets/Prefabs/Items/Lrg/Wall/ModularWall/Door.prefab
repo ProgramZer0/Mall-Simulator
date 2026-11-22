@@ -197,7 +197,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 3
     showInShop: 1
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: c6014106b515f224886b79cfc3e82bce, type: 3}
     categories:
     - WallModule
     - StoreItem
@@ -211,10 +211,16 @@ MonoBehaviour:
     specialMarketWeight: 1
     rarity: 0
     marketPrice: 5
+    colors: []
+    colorTastes: []
     deliverySeconds: 60
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 0
+  autoName: Door
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &5246992906918452419
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -237,7 +243,9 @@ MonoBehaviour:
   shelfPrefabs: []
   hangPrefabs: []
   randomVariants: 0
+  shelfPose: 0
   unitsPerCrate: 1
+  keepUnits: 0
   physicsMode: 0
   stillSeconds: 4
   maxFallSeconds: 20
@@ -281,6 +289,9 @@ MonoBehaviour:
   startLocked: 1
   ownerSegment: -1
   linkedDoors: []
+  staffOnly: 0
+  staffOnlyZone: {fileID: 0}
+  staffOnlyDepth: 1.5
   useRange: 3.5
   sensorMask:
     serializedVersion: 2
@@ -325,6 +336,9 @@ MonoBehaviour:
   - renderer: {fileID: 8871544796042669684}
     materialIndex: 0
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &2874378843485636321
 GameObject:
   m_ObjectHideFlags: 0
@@ -486,6 +500,9 @@ MonoBehaviour:
   - renderer: {fileID: 37899971217217980}
     materialIndex: 0
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &8841987221866876305
 GameObject:
   m_ObjectHideFlags: 0
@@ -615,6 +632,9 @@ MonoBehaviour:
   - renderer: {fileID: 6783977326989613826}
     materialIndex: 0
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &9125262637184855153
 GameObject:
   m_ObjectHideFlags: 0

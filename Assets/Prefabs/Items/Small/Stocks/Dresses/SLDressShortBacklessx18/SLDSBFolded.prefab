@@ -169,7 +169,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 1
     showInShop: 0
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: b9208e2e5adbac24e88cbbda915a5b7a, type: 3}
     categories:
     - Dresses
     category: 
@@ -187,6 +187,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 1
+  autoName: 
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &5687386434926034421
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -215,3 +219,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PaintParts
   parts: []
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}

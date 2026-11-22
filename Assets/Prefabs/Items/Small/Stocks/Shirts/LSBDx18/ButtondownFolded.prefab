@@ -169,7 +169,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 1
     showInShop: 0
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: 2b153a4a614a53143a2a69f23546dda6, type: 3}
     categories:
     - Clothing
     - Cheap
@@ -191,6 +191,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 1
+  autoName: 
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &3830383042334630624
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -219,3 +223,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PaintParts
   parts: []
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}

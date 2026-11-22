@@ -114,7 +114,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 1
     showInShop: 0
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: 1708886051926ff43a76389dc1516393, type: 3}
     categories:
     - Cosmentics
     - LipSticks
@@ -135,6 +135,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 1
+  autoName: 
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &470336909990523599
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -206,6 +210,9 @@ MonoBehaviour:
   - renderer: {fileID: 1583118163994481577}
     materialIndex: -1
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!114 &6249492679247158272
 MonoBehaviour:
   m_ObjectHideFlags: 0

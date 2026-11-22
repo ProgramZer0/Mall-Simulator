@@ -112,12 +112,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
     id: 103
-    displayName: officeChair .001
+    displayName: Office Chair
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 2
     showInShop: 1
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: 02cd35e0293b4dc48a2056af3868bb02, type: 3}
     categories:
     - furniture
     - Chairs
@@ -137,6 +137,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 0
+  autoName: Office Chair
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &8483908853151003811
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -186,6 +190,7 @@ MonoBehaviour:
   randomVariants: 0
   shelfPose: 0
   unitsPerCrate: 1
+  keepUnits: 0
   physicsMode: 1
   stillSeconds: 4
   maxFallSeconds: 20
@@ -221,6 +226,9 @@ MonoBehaviour:
   - renderer: {fileID: 6445296366509223752}
     materialIndex: -1
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!65 &-2597113772602540184
 BoxCollider:
   m_ObjectHideFlags: 0

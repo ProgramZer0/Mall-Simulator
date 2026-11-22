@@ -192,12 +192,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
     id: 19
-    displayName: SideTable
+    displayName: Side Table
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 2
     showInShop: 1
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: c75ed64bd0ec4c0479ba3d666ddf3c29, type: 3}
     categories:
     - furniture
     - Tables
@@ -211,10 +211,16 @@ MonoBehaviour:
     specialMarketWeight: 1
     rarity: 0
     marketPrice: 5
+    colors: []
+    colorTastes: []
     deliverySeconds: 60
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 0
+  autoName: Side Table
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &7937510481625265094
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -239,6 +245,7 @@ MonoBehaviour:
   randomVariants: 0
   shelfPose: 0
   unitsPerCrate: 1
+  keepUnits: 0
   physicsMode: 1
   stillSeconds: 4
   maxFallSeconds: 20
@@ -276,9 +283,11 @@ MonoBehaviour:
   hangRails: []
   spacing: 0.01
   hangSpacing: 0
+  clothesFitRailBox: 0
   maxPerZone: 100
   fillFromRight: 1
   fillFromFront: 1
+  splitLongSideLean: 0.25
   blockWhenCovered: 1
   coverMargin: 0.02
 --- !u!64 &3780663302892896896
@@ -334,6 +343,9 @@ MonoBehaviour:
   - renderer: {fileID: 7353599110098505768}
     materialIndex: -1
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!65 &-8663322806425786958
 BoxCollider:
   m_ObjectHideFlags: 0

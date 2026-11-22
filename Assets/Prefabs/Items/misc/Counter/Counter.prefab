@@ -1509,6 +1509,8 @@ MonoBehaviour:
     materialIndex: 0
   zoneName: 
   coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &2547731934076279361
 GameObject:
   m_ObjectHideFlags: 0
@@ -2750,6 +2752,8 @@ MonoBehaviour:
     materialIndex: 0
   zoneName: 
   coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &4151952298632567928
 GameObject:
   m_ObjectHideFlags: 0
@@ -3617,6 +3621,8 @@ MonoBehaviour:
     materialIndex: 0
   zoneName: 
   coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!64 &437214769244484145
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -3861,7 +3867,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2940780817
+  GlobalObjectIdHash: 3073538720
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -3893,7 +3899,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 4
     showInShop: 1
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: a442d49bd8fd1b449867d22c4c508654, type: 3}
     categories:
     - ShopItem
     - Counter
@@ -3912,6 +3918,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 0
+  autoName: Counter
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &2139408183030564068
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3931,6 +3941,8 @@ MonoBehaviour:
   maxItemHeight: 1
   tagPrefab: {fileID: 2245217957217861315, guid: fee0656d590b05f4cb7ccaa979adf3dc, type: 3}
   tagLength: 0.12
+  bagPrefab: {fileID: 0}
+  bagSize: {x: 0.22, y: 0.26, z: 0.12}
   screenItems: {fileID: 2994569136677242257}
   screenTotal: {fileID: 1073630106368184950}
   screenInfo: {fileID: 1445532810312747458}
@@ -4141,6 +4153,8 @@ MonoBehaviour:
     materialIndex: 0
   zoneName: 
   coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &7659183410459673741
 GameObject:
   m_ObjectHideFlags: 0

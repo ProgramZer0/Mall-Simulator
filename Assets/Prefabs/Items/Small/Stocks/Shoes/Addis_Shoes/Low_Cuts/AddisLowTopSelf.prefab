@@ -109,6 +109,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PaintParts
   parts: []
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!114 &2919167297392315864
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -153,7 +156,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 1
     showInShop: 0
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: 51641ee90f561834286007073c18494e, type: 3}
     categories:
     - Clothing
     - Shoes
@@ -178,6 +181,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 1
+  autoName: 
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &8947527600630200432
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -224,3 +231,6 @@ MonoBehaviour:
   - renderer: {fileID: 7310086505779448274}
     materialIndex: 0
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}

@@ -114,7 +114,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 2
     showInShop: 1
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: d9e8610459c9a5c4e9e87e6238e989bc, type: 3}
     categories:
     - furniture
     - Housing
@@ -134,6 +134,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 0
+  autoName: Table
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &430737705861005495
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -183,6 +187,7 @@ MonoBehaviour:
   randomVariants: 0
   shelfPose: 0
   unitsPerCrate: 1
+  keepUnits: 0
   physicsMode: 1
   stillSeconds: 4
   maxFallSeconds: 20
@@ -218,3 +223,6 @@ MonoBehaviour:
   - renderer: {fileID: 7141708454041475390}
     materialIndex: -1
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}

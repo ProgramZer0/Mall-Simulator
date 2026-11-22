@@ -32,10 +32,11 @@ Transform:
   m_GameObject: {fileID: 3929880904900467946}
   serializedVersion: 2
   m_LocalRotation: {x: -0.7071068, y: 0, z: -0, w: 0.7071067}
-  m_LocalPosition: {x: -25.256, y: -0.999, z: -56.215}
-  m_LocalScale: {x: 0.16078424, y: 1, z: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 2913254066945302828}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &4236103742155713495
@@ -112,6 +113,8 @@ MonoBehaviour:
     materialIndex: 0
   zoneName: 
   coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!114 &7232575708890977454
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -131,7 +134,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 1
     showInShop: 0
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: 2fb99d8bcd4b59d4b85c7bd50ce52f71, type: 3}
     categories:
     - Clothing
     - Cheap
@@ -152,6 +155,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 1
+  autoName: 
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &7747686933239024717
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -164,7 +171,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2567758668
+  GlobalObjectIdHash: 1709420854
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -221,3 +228,65 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Sellable
   ShowTopMostFoldoutHeaderGroup: 1
   sellWhenLoose: 1
+--- !u!1001 &2106234429788485450
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 2557515943401331539}
+    m_Modifications:
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.203
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -0.246
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 90
+      objectReference: {fileID: 0}
+    - target: {fileID: 8097223827721448696, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_Name
+      value: pantsHanger
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+--- !u!4 &2913254066945302828 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+  m_PrefabInstance: {fileID: 2106234429788485450}
+  m_PrefabAsset: {fileID: 0}

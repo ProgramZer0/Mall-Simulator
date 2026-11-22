@@ -32,10 +32,11 @@ Transform:
   m_GameObject: {fileID: 8685278669819143565}
   serializedVersion: 2
   m_LocalRotation: {x: -0.7071068, y: 0, z: -0, w: 0.7071067}
-  m_LocalPosition: {x: -25.436129, y: -0.86979806, z: -56.213585}
-  m_LocalScale: {x: 0.16078424, y: 1, z: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 6060705497504029656}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &1340334605159082091
@@ -111,6 +112,9 @@ MonoBehaviour:
   - renderer: {fileID: 0}
     materialIndex: 0
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!114 &2214591264988944747
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -130,7 +134,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 1
     showInShop: 0
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: c7bcd1f5ae414ae4cbde6ce44dd173b4, type: 3}
     categories:
     - Clothing
     - Cheap
@@ -152,6 +156,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 1
+  autoName: 
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &2462462080436898216
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -221,3 +229,65 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Sellable
   ShowTopMostFoldoutHeaderGroup: 1
   sellWhenLoose: 1
+--- !u!1001 &7011224630601829822
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 3367454778955927546}
+    m_Modifications:
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.203
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -0.246
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 90
+      objectReference: {fileID: 0}
+    - target: {fileID: 8097223827721448696, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+      propertyPath: m_Name
+      value: pantsHanger
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+--- !u!4 &6060705497504029656 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 3843589384968459878, guid: fc9d66ec8a99cc947bf082e49dacc45e, type: 3}
+  m_PrefabInstance: {fileID: 7011224630601829822}
+  m_PrefabAsset: {fileID: 0}

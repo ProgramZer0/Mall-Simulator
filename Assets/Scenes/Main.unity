@@ -14912,8 +14912,13 @@ MonoBehaviour:
   exitReach: 1.5
   exitStuckRange: 8
   followSettleDistance: 2.2
+  plainCustomerMaterial: {fileID: 0}
   laneSpread: 1
   keepRight: 0.6
+  walkWeave: 0.22
+  weaveSeconds: {x: 5, y: 11}
+  paceDrift: 0.1
+  laneToTheEnd: 4
   cornerClearance: 0.5
   roamChance: 0.96
   lingerSeconds: {x: 5, y: 25}
@@ -26922,6 +26927,8 @@ MonoBehaviour:
     materialIndex: -1
   zoneName: 
   coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!114 &835698848
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -31029,6 +31036,11 @@ MonoBehaviour:
   clearCartButton: {fileID: 262742929}
   paintBar: {fileID: 2062177751}
   sizePicker: {fileID: 2050987175}
+  tooltipRoot: {fileID: 0}
+  tooltipNameText: {fileID: 0}
+  tooltipDescriptionText: {fileID: 0}
+  tooltipOffset: {x: 8, y: 0}
+  tooltipKeepClear: {fileID: 0}
   statusText: {fileID: 362056655}
   statusSeconds: 1
 --- !u!1 &941608013
@@ -33629,7 +33641,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.83500004, y: 0}
   m_AnchorMax: {x: 1, y: 0.096}
-  m_AnchoredPosition: {x: 2.4486694, y: -0.868103}
+  m_AnchoredPosition: {x: 2.4486694, y: -0.8680725}
   m_SizeDelta: {x: -4.8879013, y: -2.3680992}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1069599436
@@ -46524,6 +46536,7 @@ MonoBehaviour:
   - {fileID: 2981054461520694321, guid: ac3ad50211f2ba14dbd8c615d4f9cd05, type: 3}
   - {fileID: 5794890957630594736, guid: 24d9c846816d4ef4b8e717885ce63c0d, type: 3}
   - {fileID: -6580529932666530809, guid: 3ed8d75846b41764290c6c9215ebe3c6, type: 3}
+  - {fileID: 3302799241021625276, guid: f030217a4996980489fdacd29efe90f9, type: 3}
   items: []
   defaultPickupClip: {fileID: 8300000, guid: b0b6305f02b720e4490beeeb41c410d6, type: 3}
   defaultPlaceClip: {fileID: 8300000, guid: 382cd51e5d8f86d42b7132faadb6ac88, type: 3}

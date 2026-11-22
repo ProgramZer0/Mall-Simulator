@@ -381,7 +381,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 3
     showInShop: 0
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: 93575f499bdff8c44a57053c0bbf7aff, type: 3}
     categories:
     - furniture
     - Housing
@@ -395,10 +395,16 @@ MonoBehaviour:
     specialMarketWeight: 1
     rarity: 1
     marketPrice: 5
+    colors: []
+    colorTastes: []
     deliverySeconds: 60
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 0
+  autoName: Bookshelf
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &2127167339478188754
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -423,6 +429,7 @@ MonoBehaviour:
   randomVariants: 0
   shelfPose: 0
   unitsPerCrate: 1
+  keepUnits: 0
   physicsMode: 1
   stillSeconds: 4
   maxFallSeconds: 20
@@ -477,9 +484,11 @@ MonoBehaviour:
   hangRails: []
   spacing: 0.01
   hangSpacing: 0
+  clothesFitRailBox: 0
   maxPerZone: 100
   fillFromRight: 1
   fillFromFront: 1
+  splitLongSideLean: 0.25
   blockWhenCovered: 1
   coverMargin: 0.02
 --- !u!114 &6733609797009061143
@@ -512,6 +521,9 @@ MonoBehaviour:
   - renderer: {fileID: 4522024858097338856}
     materialIndex: -1
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &6296336975505314970
 GameObject:
   m_ObjectHideFlags: 0

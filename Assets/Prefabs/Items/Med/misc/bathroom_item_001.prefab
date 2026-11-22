@@ -110,12 +110,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
     id: 121
-    displayName: bathroom item 001
+    displayName: Bathroom Item
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 4
     showInShop: 1
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: f854e79497d655144a67434734a2a1d9, type: 3}
     categories:
     - furniture
     - BathroomWare
@@ -135,6 +135,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 0
+  autoName: Bathroom Item
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &6187829970043787793
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -184,6 +188,7 @@ MonoBehaviour:
   randomVariants: 0
   shelfPose: 0
   unitsPerCrate: 1
+  keepUnits: 0
   physicsMode: 1
   stillSeconds: 4
   maxFallSeconds: 20
@@ -219,6 +224,9 @@ MonoBehaviour:
   - renderer: {fileID: 4076655841826181895}
     materialIndex: -1
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!65 &-3381183475614690255
 BoxCollider:
   m_ObjectHideFlags: 0

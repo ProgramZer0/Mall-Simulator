@@ -114,7 +114,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 4
     showInShop: 0
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: 1ada3f1e54a575349a0a3e7fcb9b0e4f, type: 3}
     categories:
     - Misc
     - Random
@@ -135,6 +135,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 1
+  autoName: 
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &1954345498533019668
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -220,3 +224,6 @@ MonoBehaviour:
   - renderer: {fileID: 2205512933093781139}
     materialIndex: -1
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}

@@ -134,12 +134,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
     id: 30
-    displayName: pantsFolded
+    displayName: Pants Folded
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 1
     showInShop: 0
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: ad905d6948bd3cf489889d5d5b321398, type: 3}
     categories:
     - Clothing
     - Pants
@@ -160,6 +160,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 0
+  autoName: Pants Folded
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &8399210473676296267
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -220,3 +224,6 @@ MonoBehaviour:
   - renderer: {fileID: 6001719965375056947}
     materialIndex: 0
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}

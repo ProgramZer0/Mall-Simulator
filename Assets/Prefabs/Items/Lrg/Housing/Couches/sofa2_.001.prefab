@@ -111,12 +111,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
     id: 88
-    displayName: sofa2 .001
+    displayName: Sofa 2
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 3
     showInShop: 1
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: d36fd8c21db50754db50fc4bf9ae7184, type: 3}
     categories:
     - furniture
     - Housing
@@ -136,6 +136,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 0
+  autoName: Sofa 2
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &7039377341478377954
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -185,6 +189,7 @@ MonoBehaviour:
   randomVariants: 0
   shelfPose: 0
   unitsPerCrate: 1
+  keepUnits: 0
   physicsMode: 1
   stillSeconds: 4
   maxFallSeconds: 20
@@ -220,6 +225,9 @@ MonoBehaviour:
   - renderer: {fileID: 6192670481613513683}
     materialIndex: -1
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!65 &-2709713094934617056
 BoxCollider:
   m_ObjectHideFlags: 0

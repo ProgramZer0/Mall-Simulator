@@ -114,7 +114,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 1
     showInShop: 0
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: b8f3c014d7fbb604cb6f6a7cc1a5612e, type: 3}
     categories:
     - Cosmentics
     - Fragrences
@@ -137,6 +137,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 1
+  autoName: 
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &3913087163772195872
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -208,6 +212,9 @@ MonoBehaviour:
   - renderer: {fileID: 9056152969199059230}
     materialIndex: -1
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!114 &9191063240910898647
 MonoBehaviour:
   m_ObjectHideFlags: 0

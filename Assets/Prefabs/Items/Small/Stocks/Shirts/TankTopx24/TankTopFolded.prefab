@@ -139,7 +139,7 @@ MonoBehaviour:
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 1
     showInShop: 0
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: 9852d3326058d20419a327c7f07c479c, type: 3}
     categories:
     - Clothing
     - Shirts
@@ -160,6 +160,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 1
+  autoName: 
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &2684956556140015760
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -220,3 +224,6 @@ MonoBehaviour:
   - renderer: {fileID: 2993137086532015986}
     materialIndex: 0
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}

@@ -110,12 +110,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
     id: 92
-    displayName: tv wall 001
+    displayName: Tv Wall
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 4
     showInShop: 1
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: 6a0320fdbe1650c4e82cfd18f23e5a97, type: 3}
     categories:
     - furniture
     - Housing
@@ -136,6 +136,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 0
+  autoName: Tv Wall
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &2217138162785834696
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -185,6 +189,7 @@ MonoBehaviour:
   randomVariants: 0
   shelfPose: 0
   unitsPerCrate: 1
+  keepUnits: 0
   physicsMode: 1
   stillSeconds: 4
   maxFallSeconds: 20
@@ -220,6 +225,9 @@ MonoBehaviour:
   - renderer: {fileID: 1582186531064345709}
     materialIndex: -1
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!65 &-2358332843374647063
 BoxCollider:
   m_ObjectHideFlags: 0

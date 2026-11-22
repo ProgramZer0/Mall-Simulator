@@ -110,12 +110,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
     id: 126
-    displayName: Dumbell1
+    displayName: Dumbell 1
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 1
     showInShop: 1
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: bf8e9686c52e98244b7bb14bee6ea176, type: 3}
     categories:
     - Workout
     - Sports
@@ -129,10 +129,16 @@ MonoBehaviour:
     specialMarketWeight: 1
     rarity: 0
     marketPrice: 0
+    colors: []
+    colorTastes: []
     deliverySeconds: 30
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 0
+  autoName: Dumbell 1
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &5371186946416749655
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -157,6 +163,7 @@ MonoBehaviour:
   randomVariants: 0
   shelfPose: 0
   unitsPerCrate: 1
+  keepUnits: 0
   physicsMode: 1
   stillSeconds: 4
   maxFallSeconds: 20
@@ -217,6 +224,9 @@ MonoBehaviour:
   - renderer: {fileID: 5574678074508455601}
     materialIndex: -1
   zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!65 &-5009789795429927064
 BoxCollider:
   m_ObjectHideFlags: 0

@@ -19,6 +19,7 @@ GameObject:
   - component: {fileID: 4988795791844834532}
   - component: {fileID: -3670365866274194816}
   - component: {fileID: -489599943347601869}
+  - component: {fileID: 681187097232671573}
   m_Layer: 3
   m_Name: ClothRack
   m_TagString: Untagged
@@ -35,7 +36,7 @@ Transform:
   m_GameObject: {fileID: 2635878287570873435}
   serializedVersion: 2
   m_LocalRotation: {x: -0.7071068, y: -0, z: -0, w: 0.7071067}
-  m_LocalPosition: {x: 3.6520119, y: -0.25, z: 7.159477}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -138,12 +139,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
     id: 2
-    displayName: ClothRack
+    displayName: Cloth Rack
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 2
     showInShop: 1
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: 0165e6797213c5d49b87f20ee6274fd6, type: 3}
     categories:
     - Clothing
     - StoreItem
@@ -165,6 +166,10 @@ MonoBehaviour:
     shipmentPrefab: {fileID: 0}
     pickupClip: {fileID: 0}
     placeClip: {fileID: 0}
+  keepName: 0
+  autoName: Cloth Rack
+  iconTurn: {x: 0, y: 0, z: 0}
+  iconMadeWith: {x: 0, y: 0, z: 0}
 --- !u!114 &5899304444592614379
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -227,7 +232,7 @@ MonoBehaviour:
   - {fileID: 1732227408930462871}
   spacing: 0.01
   hangSpacing: 0
-  clothesFitRailBox: 0
+  clothesFitRailBox: 1
   maxPerZone: 100
   fillFromRight: 1
   fillFromFront: 1
@@ -288,6 +293,29 @@ MonoBehaviour:
     materialIndex: -1
   zoneName: 
   coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
+--- !u!65 &681187097232671573
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2635878287570873435}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.39990234, y: 2.3001711, z: 1.2827069}
+  m_Center: {x: 0.0016511679, y: 0.0035177472, z: -0.44576672}
 --- !u!1 &7364303095756083360
 GameObject:
   m_ObjectHideFlags: 0
@@ -337,7 +365,7 @@ BoxCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 3
-  m_Size: {x: 0.047519445, y: 2.1556864, z: 0.044149164}
-  m_Center: {x: -0.0016082525, y: 0.0013431311, z: 0.32616025}
+  m_Size: {x: 1.2773628, y: 2.1556864, z: 1.2825208}
+  m_Center: {x: -0.0032253265, y: 0.0013431311, z: -0.2930258}
