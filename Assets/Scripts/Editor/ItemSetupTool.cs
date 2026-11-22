@@ -143,28 +143,19 @@ public static class ItemSetupTool
                 report.AppendLine($"'{d.name}' has no NetworkObject: add one.");
         }
 
-        // The catalog lists them by id.
+        // Names from the prefabs (unless kept), and icons from the models (where there's none).
+        NameItems(datas, report);
+        MakeIcons(datas, report, remake: false);
+
+        // Every ItemCatalog lists them by id: the open scenes' (the mall and the main menu both have one),
+        // and, run from the menu, those in the other Build Settings scenes too.
         var sorted = datas.OrderBy(d => d.item.id).ToList();
-        if (catalog == null)
-            report.AppendLine("No ItemCatalog in the open scene: open the scene with it and run this again.");
-        else
-        {
-            var so = new SerializedObject(catalog);
-            FillSizeDefaults(so, report);
-            var list = so.FindProperty("itemPrefabs");
-            bool same = list.arraySize == sorted.Count;
-            for (int i = 0; same && i < sorted.Count; i++)
-                same = list.GetArrayElementAtIndex(i).objectReferenceValue == sorted[i];
-            if (!same)
-            {
-                list.arraySize = sorted.Count;
-                for (int i = 0; i < sorted.Count; i++) list.GetArrayElementAtIndex(i).objectReferenceValue = sorted[i];
-                so.ApplyModifiedPropertiesWithoutUndo();
-                EditorUtility.SetDirty(catalog);
-                if (!Application.isPlaying) EditorSceneManager.MarkSceneDirty(catalog.gameObject.scene);
-                report.AppendLine($"ItemCatalog lists {sorted.Count} item prefab(s).");
-            }
-        }
+        lastSorted = sorted;
+        var catalogs = Object.FindObjectsByType<ItemCatalog>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        foreach (var c in catalogs) WriteCatalog(c, sorted, report);
+        if (!quiet && !Application.isPlaying) UpdateOtherScenes(sorted, report);
+        else if (catalogs.Length == 0)
+            report.AppendLine("No ItemCatalog in the open scene(s): run Update Item Catalog from the menu to fill the ones in your Build Settings scenes.");
 
         // Every item prefab in the network prefab list.
         int added = AddToNetworkPrefabs(datas.Select(d => d.gameObject));
@@ -175,6 +166,166 @@ public static class ItemSetupTool
         if (report.Length > 0) Debug.Log($"[Items] Update Item Catalog ({datas.Count} item prefabs):\n{report}");
         else if (!quiet) Debug.Log($"[Items] Update Item Catalog: {datas.Count} item prefabs, all up to date.");
         Debug.Log(UnlockReport(datas));
+    }
+
+    private static List<ItemData> lastSorted;
+
+    // One catalog: its size defaults, and its list of item prefabs by id.
+    private static void WriteCatalog(ItemCatalog catalog, List<ItemData> sorted, StringBuilder report)
+    {
+        var so = new SerializedObject(catalog);
+        FillSizeDefaults(so, report);
+        var list = so.FindProperty("itemPrefabs");
+        bool same = list.arraySize == sorted.Count;
+        for (int i = 0; same && i < sorted.Count; i++)
+            same = list.GetArrayElementAtIndex(i).objectReferenceValue == sorted[i];
+        if (same) { so.ApplyModifiedPropertiesWithoutUndo(); return; }
+        list.arraySize = sorted.Count;
+        for (int i = 0; i < sorted.Count; i++) list.GetArrayElementAtIndex(i).objectReferenceValue = sorted[i];
+        so.ApplyModifiedPropertiesWithoutUndo();
+        EditorUtility.SetDirty(catalog);
+        if (!Application.isPlaying) EditorSceneManager.MarkSceneDirty(catalog.gameObject.scene);
+        report.AppendLine($"ItemCatalog in '{catalog.gameObject.scene.name}' lists {sorted.Count} item prefab(s).");
+    }
+
+    // The Build Settings scenes that aren't open: opened beside the open ones, their catalog filled, saved, closed.
+    private static void UpdateOtherScenes(List<ItemData> sorted, StringBuilder report)
+    {
+        foreach (var entry in EditorBuildSettings.scenes)
+        {
+            if (!entry.enabled || string.IsNullOrEmpty(entry.path)) continue;
+            var open = UnityEngine.SceneManagement.SceneManager.GetSceneByPath(entry.path);
+            if (open.IsValid() && open.isLoaded) continue; // done above
+            var scene = EditorSceneManager.OpenScene(entry.path, OpenSceneMode.Additive);
+            try
+            {
+                bool changed = false;
+                foreach (var root in scene.GetRootGameObjects())
+                    foreach (var c in root.GetComponentsInChildren<ItemCatalog>(true))
+                    {
+                        int before = report.Length;
+                        WriteCatalog(c, sorted, report);
+                        changed |= report.Length != before;
+                    }
+                if (changed) EditorSceneManager.SaveScene(scene);
+            }
+            finally { EditorSceneManager.CloseScene(scene, true); }
+        }
+    }
+
+    // A scene with an ItemCatalog opened in the editor: its list brought up to date straight away.
+    [InitializeOnLoadMethod]
+    private static void HookSceneOpened()
+    {
+        EditorSceneManager.sceneOpened += (scene, mode) =>
+        {
+            if (Application.isPlaying || lastSorted == null) return;
+            var report = new StringBuilder();
+            foreach (var root in scene.GetRootGameObjects())
+                foreach (var c in root.GetComponentsInChildren<ItemCatalog>(true))
+                    if (lastSorted.All(d => d != null)) WriteCatalog(c, lastSorted, report);
+            if (report.Length > 0) Debug.Log($"[Items] {report}");
+        };
+    }
+
+    /* ========================= NAMES ========================= */
+
+    // Each item's name from its prefab's name, tidied ("lowCuts_Stock" → "Low Cuts"), unless Keep Name is
+    // ticked. A name that isn't one we gave (typed in) ticks Keep Name, so it's never overwritten.
+    private static void NameItems(List<ItemData> datas, StringBuilder report)
+    {
+        string suffix = StockBoxGenerator.Settings(false)?.nameSuffix;
+        foreach (var d in datas)
+        {
+            if (d.item == null || d.keepName) continue;
+            string raw = d.name.Replace('_', ' ').Trim();
+            string current = d.item.displayName ?? "";
+            string baseName = d.name;
+            if (!string.IsNullOrEmpty(suffix) && baseName.EndsWith(suffix)) baseName = baseName.Substring(0, baseName.Length - suffix.Length);
+            string nice = NiceName(baseName);
+            if (string.IsNullOrEmpty(nice)) continue;
+            bool ours = string.IsNullOrWhiteSpace(current) || current == d.autoName || current == raw ||
+                        current == baseName.Trim() || current == nice;
+            if (!ours)
+            {
+                d.keepName = true; // typed in: theirs
+                EditorUtility.SetDirty(d);
+                continue;
+            }
+            if (current == nice && d.autoName == nice) continue;
+            if (current != nice) report.AppendLine($"'{d.name}' is called \"{nice}\" (tick Keep Name on its ItemData to name it yourself).");
+            d.item.displayName = nice;
+            d.autoName = nice;
+            EditorUtility.SetDirty(d);
+        }
+    }
+
+    private static readonly HashSet<string> NoiseWords = new(System.StringComparer.OrdinalIgnoreCase)
+    {
+        "prefab", "pf", "sm", "mdl", "mesh", "model", "fbx", "final", "new", "copy", "variant", "lod", "lod0", "geo", "obj",
+    };
+    private static readonly HashSet<string> SmallWords = new(System.StringComparer.OrdinalIgnoreCase)
+    {
+        "a", "an", "and", "of", "the", "with", "for", "on", "in", "to", "or",
+    };
+
+    /// <summary>A tidy display name from a prefab or file name: words split, noise dropped, Title Case.</summary>
+    public static string NiceName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "";
+        name = System.Text.RegularExpressions.Regex.Replace(name, @"\(\d+\)$", ""); // "(1)" copies
+        // Word breaks: _ - . and spaces; lower→Upper ("lowCuts"); letters↔digits ("Shelf2"); "TVStand" → "TV Stand".
+        string s = System.Text.RegularExpressions.Regex.Replace(name, @"[_\-\.]+", " ");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|(?<=[A-Za-z])(?=\d)|(?<=\d)(?=[A-Za-z])", " ");
+        var words = new List<string>();
+        foreach (var w in s.Split(' ', System.StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (NoiseWords.Contains(w)) continue;
+            if (w.Length > 1 && w.All(char.IsDigit) && words.Count > 0 && w.Length > 2) continue; // long number tags
+            string word = w.All(char.IsUpper) && w.Length <= 4 ? w // TV, XL, USB
+                        : words.Count > 0 && SmallWords.Contains(w) ? w.ToLowerInvariant()
+                        : char.ToUpperInvariant(w[0]) + (w.Length > 1 ? w.Substring(1).ToLowerInvariant() : "");
+            words.Add(word);
+        }
+        return string.Join(" ", words);
+    }
+
+    /* ========================= ICONS ========================= */
+
+    [MenuItem(MenuRoot + "Remake Item Icons", priority = 2)]
+    private static void RemakeIconsMenu()
+    {
+        allPrefabs = LoadAllPrefabs();
+        var report = new StringBuilder();
+        MakeIcons(FindItemPrefabs(), report, remake: true);
+        allPrefabs = null;
+        AssetDatabase.SaveAssets();
+        Debug.Log($"[Items] Remake Item Icons:\n{(report.Length > 0 ? report.ToString() : "nothing to make (items with an icon of their own keep it)")}");
+    }
+
+    // Items with no icon get one made from their model (Assets/Art/ItemIcons). Remake: also redo the ones
+    // made before (after changing models or the icon angle). An icon you picked yourself is never touched.
+    private static void MakeIcons(List<ItemData> datas, StringBuilder report, bool remake)
+    {
+        int made = 0;
+        try
+        {
+            for (int i = 0; i < datas.Count; i++)
+            {
+                var d = datas[i];
+                if (d.item == null || d.item.id <= 0) continue;
+                bool ours = ItemIconMaker.IsMadeIcon(d.item.icon);
+                if (d.item.icon != null && !(remake && ours)) continue;
+                if (EditorUtility.DisplayCancelableProgressBar("Item icons", d.name, i / (float)Mathf.Max(1, datas.Count))) break;
+                var sprite = ItemIconMaker.Make(d.gameObject, $"{d.item.id}_{d.name}");
+                if (sprite == null) { report.AppendLine($"'{d.name}': no icon made (nothing visible on the prefab)."); continue; }
+                d.item.icon = sprite;
+                EditorUtility.SetDirty(d);
+                made++;
+            }
+        }
+        finally { EditorUtility.ClearProgressBar(); }
+        if (made > 0) report.AppendLine($"Made {made} item icon(s) in {ItemIconMaker.Folder}.");
     }
 
     /* ========================= UNLOCK REPORT ========================= */
