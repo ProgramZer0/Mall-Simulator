@@ -1379,7 +1379,7 @@ public class StockContainer : NetworkBehaviour
         var go = Instantiate(template, position, rotation, parent); // parent is unscaled, so the prefab keeps its size
         go.name = prefab.name;
         if (batched && shape != null) shape = PaintedShape(prefab, shape, paint);
-        else if (paint != 0) PaintParts.ApplySetToCopy(prefab, go, paint); // drawn by its own renderers
+        else if (paint != 0 || PaintParts.HasOriginalColors(prefab)) PaintParts.ApplySetToCopy(prefab, go, paint); // drawn by its own renderers
         if (batched && shape != null)
         {
             // Drawn with the rest of its kind nearby (StockBatcher); its own renderers are off.
@@ -1397,9 +1397,15 @@ public class StockContainer : NetworkBehaviour
     private static List<StockBatcher.PartShape> PaintedShape(GameObject prefab, List<StockBatcher.PartShape> shape, uint paint)
     {
         byte color = PaintSet.Get(paint, 0);
-        if (shape == null || color == 0 || !PaintParts.IsPaintable(prefab)) return shape;
+        if (shape == null || !PaintParts.IsPaintable(prefab)) return shape;
+        Color original = default;
+        if (color == 0)
+        {
+            var zone = prefab.GetComponentInChildren<PaintParts>(true);
+            if (zone == null || !zone.TryGetOriginalColor(out original)) return shape; // its own colors
+        }
         if (Painted.TryGetValue((shape, color), out var done)) return done;
-        done = StockBatcher.Tinted(shape, color);
+        done = color == 0 ? StockBatcher.Tinted(shape, original) : StockBatcher.Tinted(shape, color);
         Painted[(shape, color)] = done;
         return done;
     }

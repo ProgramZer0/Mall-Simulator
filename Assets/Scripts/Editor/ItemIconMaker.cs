@@ -29,12 +29,17 @@ public static class ItemIconMaker
         icon != null && AssetDatabase.GetAssetPath(icon).Replace('\\', '/').StartsWith(Folder + "/");
 
     /// <summary>Photograph the prefab and save it as its icon sprite. Null if it has nothing to see.</summary>
-    public static Sprite Make(GameObject prefab, string fileName)
+    public static Sprite Make(GameObject prefab, string fileName, Vector3 turn = default)
     {
         int size = Mathf.Clamp(Size, 32, 1024);
-        var black = Shoot(prefab, size, Color.black);
+        // Standing the way it's placed (the prefab's own rotation and its Model Rotation, like
+        // PlacementCheck.ModelFix: so a Blender model isn't lying on its back), then the extra turn.
+        Vector3 fix = prefab.TryGetComponent<WallOpening>(out var o) ? o.modelRotation
+                    : prefab.TryGetComponent<ItemPickupNet>(out var p) ? p.ModelRotation : Vector3.zero;
+        Quaternion rotation = Quaternion.Euler(turn) * prefab.transform.localRotation * Quaternion.Euler(fix);
+        var black = Shoot(prefab, size, Color.black, rotation);
         if (black == null) return null;
-        var white = Shoot(prefab, size, Color.white);
+        var white = Shoot(prefab, size, Color.white, rotation);
         if (white == null) { Object.DestroyImmediate(black); return null; }
 
         // Shot on black (B) and on white (W): alpha = 1 - (W - B); colour = B / alpha.
@@ -72,14 +77,14 @@ public static class ItemIconMaker
         return AssetDatabase.LoadAssetAtPath<Sprite>(path);
     }
 
-    private static Texture2D Shoot(GameObject prefab, int size, Color background)
+    private static Texture2D Shoot(GameObject prefab, int size, Color background, Quaternion rotation)
     {
         var scene = EditorSceneManager.NewPreviewScene();
         RenderTexture rt = null;
         try
         {
             var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab, scene);
-            go.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+            go.transform.SetPositionAndRotation(Vector3.zero, rotation);
 
             // What there is to see.
             bool any = false;

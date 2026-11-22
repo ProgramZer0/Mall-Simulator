@@ -19,6 +19,12 @@ public class ItemData : MonoBehaviour
     public bool keepName;
     [HideInInspector] public string autoName; // the name it was last given, to tell yours from ours
 
+    [Tooltip("Its shop icon (made from the model when Icon is empty) is shot standing the way it's placed, " +
+             "from the front; this turns it more for the photo (degrees: X tips it toward you, Y turns it round, " +
+             "Z leans it). Changing it remakes the icon on the next Update Item Catalog.")]
+    public Vector3 iconTurn;
+    [HideInInspector] public Vector3 iconMadeWith = new(float.NaN, 0f, 0f); // the turn the made icon was shot with
+
     /// <summary>This item's id (0 until Update Item Catalog gives it one).</summary>
     public int Id => item != null ? item.id : 0;
 

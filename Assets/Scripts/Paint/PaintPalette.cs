@@ -267,6 +267,14 @@ public class PaintPalette : MonoBehaviour
         if (renderer.TryGetComponent<CuttableWall>(out var wall)) wall.MirrorPaint(renderer, materialIndex, id, coverTexture);
     }
 
+    /// <summary>Paint a renderer a color that isn't a palette one (a PaintParts' Original Color).</summary>
+    public static void ApplyColor(Renderer renderer, int materialIndex, Color c, bool coverTexture)
+    {
+        if (renderer == null) return;
+        block ??= new MaterialPropertyBlock();
+        SetColor(renderer, materialIndex, c, coverTexture);
+    }
+
     private static void ApplyOne(Renderer renderer, int materialIndex, byte id, bool coverTexture)
     {
         if (DebugApply) LogApply(renderer, materialIndex, id, coverTexture);
@@ -280,7 +288,12 @@ public class PaintPalette : MonoBehaviour
                 if (materialIndex < 0 || i == materialIndex) renderer.SetPropertyBlock(block, i);
             return;
         }
+        SetColor(renderer, materialIndex, c, coverTexture);
+    }
 
+    private static void SetColor(Renderer renderer, int materialIndex, Color c, bool coverTexture)
+    {
+        int count = renderer.sharedMaterials.Length;
         for (int i = 0; i < count; i++)
         {
             if (materialIndex >= 0 && i != materialIndex) continue;

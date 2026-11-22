@@ -315,11 +315,13 @@ public static class ItemSetupTool
                 var d = datas[i];
                 if (d.item == null || d.item.id <= 0) continue;
                 bool ours = ItemIconMaker.IsMadeIcon(d.item.icon);
-                if (d.item.icon != null && !(remake && ours)) continue;
+                bool turned = ours && d.iconMadeWith != d.iconTurn; // its Icon Turn was changed: shoot it again
+                if (d.item.icon != null && !(ours && (remake || turned))) continue;
                 if (EditorUtility.DisplayCancelableProgressBar("Item icons", d.name, i / (float)Mathf.Max(1, datas.Count))) break;
-                var sprite = ItemIconMaker.Make(d.gameObject, $"{d.item.id}_{d.name}");
+                var sprite = ItemIconMaker.Make(d.gameObject, $"{d.item.id}_{d.name}", d.iconTurn);
                 if (sprite == null) { report.AppendLine($"'{d.name}': no icon made (nothing visible on the prefab)."); continue; }
                 d.item.icon = sprite;
+                d.iconMadeWith = d.iconTurn;
                 EditorUtility.SetDirty(d);
                 made++;
             }
