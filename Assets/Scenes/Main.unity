@@ -14304,7 +14304,7 @@ MonoBehaviour:
     minPercent: -75
     maxPercent: 300
   showDebugHud: 0
-  devHotkeys: 1
+  devHotkeys: 0
 --- !u!114 &451575854
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -14556,7 +14556,7 @@ MonoBehaviour:
   ballotLength: 200
   optionsPerBallot: 4
   noVotesPicksRandom: 0
-  devHotkey: 1
+  devHotkey: 0
 --- !u!114 &451575857
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -15067,7 +15067,7 @@ MonoBehaviour:
   repairSeconds: 30
   reportRange: 15
   complainAfterSeconds: 60
-  debugLogs: 1
+  debugLogs: 0
 --- !u!1 &451774814
 GameObject:
   m_ObjectHideFlags: 0
