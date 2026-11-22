@@ -57,8 +57,11 @@ public class BuyMenu : MonoBehaviour, IShopScreen
 
     [Header("Cart")]
     [SerializeField] private bool useCart = true;
-    [Tooltip("Lists what's in the cart and the total.")]
+    [Tooltip("Lists what's in the cart and the total. Click a line to take one of it out (right-click or " +
+             "Shift-click: all of it).")]
     [SerializeField] private TMP_Text cartText;
+    [Tooltip("Shown at the end of each cart line, to say it can be clicked off.")]
+    [SerializeField] private string removeMark = "  <color=#ff8080>[-]</color>";
     [SerializeField] private Button checkoutButton;
     [SerializeField] private Button clearCartButton;
 
@@ -144,6 +147,11 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         shop = GetComponentInParent<ShopUIController>(true);
         if (shop == null) shop = FindAnyObjectByType<ShopUIController>(FindObjectsInactive.Include);
         if (shop != null) shop.Closed += OnShopClosed;
+        if (cartText != null)
+        {
+            if (!cartText.TryGetComponent<TextLinkClicks>(out var clicks)) clicks = cartText.gameObject.AddComponent<TextLinkClicks>();
+            clicks.Clicked += OnCartLineClicked;
+        }
         if (nextPageButton != null) nextPageButton.onClick.AddListener(() => ChangePage(+1));
         if (previousPageButton != null) previousPageButton.onClick.AddListener(() => ChangePage(-1));
         if (checkoutButton != null) checkoutButton.onClick.AddListener(Checkout);
@@ -655,6 +663,18 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     /// </summary>
     protected virtual float GetDeliverySeconds(int[] itemIds, int[] quantities) => -1f;
 
+    // A cart line clicked: one fewer of it (right-click or Shift: all of it).
+    private void OnCartLineClicked(string id, UnityEngine.EventSystems.PointerEventData e)
+    {
+        if (waitingForResult || !int.TryParse(id, out int i) || i < 0 || i >= cart.Count) return;
+        bool all = e.button == UnityEngine.EventSystems.PointerEventData.InputButton.Right ||
+                   Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+        var (itemId, paint, quantity) = cart[i];
+        if (all || quantity <= 1) cart.RemoveAt(i);
+        else cart[i] = (itemId, paint, quantity - 1);
+        RefreshCart();
+    }
+
     private void ClearCart()
     {
         cart.Clear();
@@ -694,13 +714,15 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         int total = 0;
         var catalog = ItemCatalog.Instance;
         var lines = new System.Text.StringBuilder();
-        foreach (var (itemId, paint, quantity) in cart)
+        for (int i = 0; i < cart.Count; i++)
         {
+            var (itemId, paint, quantity) = cart[i];
             if (catalog == null || !catalog.TryGet(itemId, out var def)) continue;
             int sub = (MarketModifiers.OrderCost(def) + MarketModifiers.DeliveryFee(def)) * quantity; // with events
             total += sub;
             string color = paint != 0 ? $" ({PaintPalette.NameOf(paint)})" : "";
-            lines.AppendLine($"{def.displayName}{color} x{quantity}   ${sub:N0}");
+            // A link per line: clicking it takes one out (see OnCartLineClicked).
+            lines.AppendLine($"<link=\"{i}\">{def.displayName}{color} x{quantity}   ${sub:N0}{removeMark}</link>");
         }
 
         int money = EconomyManager.Instance != null ? EconomyManager.Instance.LocalMoney : 0;
