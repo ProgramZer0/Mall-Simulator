@@ -14873,6 +14873,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CustomerManager
   ShowTopMostFoldoutHeaderGroup: 1
   lostChildEveryMinutes: 15
+  lostChildChance: {x: 0.01, y: 0.06}
   firstLostChildAfterMinutes: 15
   maxLostAtOnce: 1
   lostDistance: {x: 40, y: 105}
@@ -14909,6 +14910,8 @@ MonoBehaviour:
   personalSpace: 1.05
   avoidRange: 1.43
   exitReach: 1.5
+  exitStuckRange: 8
+  followSettleDistance: 2.2
   laneSpread: 1
   keepRight: 0.6
   cornerClearance: 0.5
@@ -14957,42 +14960,52 @@ MonoBehaviour:
     text: Interested
     color: {r: 0.7735849, g: 0.60882497, b: 0.348843, a: 0}
     icon: {fileID: 21300000, guid: 73d1abd55c583d846a6f45a82c24fb06, type: 3}
+    sound: {fileID: 0}
   - kind: 1
     text: Bought
     color: {r: 0.35162356, g: 0.5773585, b: 0.27342823, a: 0}
     icon: {fileID: 21300000, guid: 27b5b1abab4296047b424b2fafe9391f, type: 3}
+    sound: {fileID: 0}
   - kind: 2
     text: Too Pricey
     color: {r: 0.6377357, g: 0.12393729, b: 0.12393729, a: 0}
     icon: {fileID: 21300000, guid: 40dd0c7d4153dee408e6b7f30774ed8f, type: 3}
+    sound: {fileID: 0}
   - kind: 3
     text: Sold Out
     color: {r: 0.5245282, g: 0.21278028, b: 0.45050243, a: 0}
     icon: {fileID: 21300000, guid: 771fd59c6622cb5479a2dc99e6b07197, type: 3}
+    sound: {fileID: 0}
   - kind: 4
     text: Nothing For Me
     color: {r: 1, g: 1, b: 1, a: 0}
     icon: {fileID: 21300000, guid: 2959f4171fae5c440acda931baa3009c, type: 3}
+    sound: {fileID: 0}
   - kind: 5
     text: Line Too long
     color: {r: 0.37658843, g: 0.4037736, b: 0.23083659, a: 0}
     icon: {fileID: 21300000, guid: 2af4bfabbd3d5024b91ea5a3bb98ac5e, type: 3}
+    sound: {fileID: 0}
   - kind: 6
     text: Gave Up Waiting
     color: {r: 0.30820215, g: 0.5320754, b: 0.5124778, a: 0}
     icon: {fileID: 21300000, guid: 2b06a1ed2abc5d243af54b958edb6ccb, type: 3}
+    sound: {fileID: 0}
   - kind: 7
     text: Paid
     color: {r: 0.008384943, g: 1, b: 0, a: 0}
     icon: {fileID: 21300000, guid: 75b9c549752e2a9448f340c9d1896217, type: 3}
+    sound: {fileID: 0}
   - kind: 8
     text: Store Cclosed
     color: {r: 0, g: 0, b: 0, a: 0}
     icon: {fileID: 21300000, guid: 8ca8cd6e38eb9374582936d4ade30869, type: 3}
+    sound: {fileID: 0}
   - kind: 9
     text: No Checkout
     color: {r: 0.5018867, g: 0.5018867, b: 0.5018867, a: 0}
     icon: {fileID: 21300000, guid: 29ed7470c0a100e4e87042de632fe910, type: 3}
+    sound: {fileID: 0}
   reactionSeconds: 2.5
   reactionRange: 30
   sendRate: 10
@@ -27447,41 +27460,6 @@ MonoBehaviour:
   tile: 1
   flipTile: 0
   fitToSection: 1
---- !u!1 &849628855
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 849628856}
-  m_Layer: 5
-  m_Name: PauseMenu
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!224 &849628856
-RectTransform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 849628855}
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 2074313687}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: -0.00012207031}
-  m_SizeDelta: {x: 0, y: 0.59448}
-  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &849835773
 GameObject:
   m_ObjectHideFlags: 0
@@ -38602,6 +38580,7 @@ MonoBehaviour:
   text: {fileID: 1419451457}
   root: {fileID: 919882254}
   format: ${0:N0}
+  playSounds: 1
 --- !u!114 &1232210832
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -38670,6 +38649,7 @@ MonoBehaviour:
   progress: {fileID: 901036962}
   root: {fileID: 1839839857}
   format: Lv {0}
+  playSounds: 1
 --- !u!114 &1232210836
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -66037,7 +66017,6 @@ RectTransform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 849628856}
   - {fileID: 667172753}
   m_Father: {fileID: 744671985}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}

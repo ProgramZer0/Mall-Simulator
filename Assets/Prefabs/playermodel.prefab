@@ -375,6 +375,10 @@ MonoBehaviour:
   killHeight: -50
   groundedGrace: 0.15
   debugFalls: 0
+  floorLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  maxSinkRescue: 1.2
   cameraRoot: {fileID: 4351029141827459660}
   freeLookButton: 1
   freeLookMaxAngle: 150
@@ -588,7 +592,7 @@ MonoBehaviour:
   handVisualPrefab: {fileID: 9017273729147295850, guid: d6987c5a39e7c7446a78e4bcc60f2eae, type: 3}
   displayTextName: 
   hand: {fileID: 0}
-  handOffset: {x: 0.2, y: -0.16, z: 0.3}
+  handOffset: {x: 0.2, y: -0.16, z: 1}
   handRotation: {x: -90, y: 0, z: 0}
   typingShift: {x: -0.06, y: 0.06, z: -0.04}
   typingShiftSpeed: 8
@@ -613,7 +617,7 @@ MonoBehaviour:
   holdSeconds: 0.25
   handVisualPrefab: {fileID: 3782376872447599808}
   hand: {fileID: 0}
-  handOffset: {x: 0.3, y: -0.25, z: 0.15}
+  handOffset: {x: 0.3, y: -0.25, z: 1}
   handRotation: {x: 0, y: -90, z: 0}
   range: 4
   debugLogs: 0
@@ -632,7 +636,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PhoneController
   phonePrefab: {fileID: 5336375860569609011, guid: 547e3193ba5dcdc488f33b69174000a6, type: 3}
-  holdOffset: {x: 0, y: -0.02, z: 0.32}
+  holdOffset: {x: 0, y: -0.02, z: 1}
   holdRotation: {x: 0, y: 180, z: 0}
   raiseFrom: 1
   raiseSeconds: 0.45
