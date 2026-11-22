@@ -840,6 +840,8 @@ public class ItemDataEditor : Editor
         var id = serializedObject.FindProperty("item.id");
         string shown = id.hasMultipleDifferentValues ? "—" : id.intValue > 0 ? id.intValue.ToString() : "none yet (given before Play)";
         EditorGUILayout.LabelField("Item Id", shown);
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("keepName"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("iconTurn"));
         EditorGUILayout.Space(4);
 
         var prop = serializedObject.FindProperty("item");
