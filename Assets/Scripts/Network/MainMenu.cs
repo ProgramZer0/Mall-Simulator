@@ -73,8 +73,22 @@ public class MainMenu : MonoBehaviour
         canvasRoot.SetActive(false);
     }
 
+    // Joining a friend: the screen goes away by itself once you're in their lobby (your new player's there).
+    private bool closeWhenJoined;
+
     private void Update()
     {
+        if (closeWhenJoined)
+        {
+            var net = Unity.Netcode.NetworkManager.Singleton;
+            if (net != null && net.IsServer) closeWhenJoined = false; // back to hosting (alone): stay
+            else if (net != null && net.IsConnectedClient && net.LocalClient?.PlayerObject != null)
+            {
+                closeWhenJoined = false;
+                if (IsOpen) Close();
+                else UIState.CloseMenu(this);
+            }
+        }
         if (!IsOpen) return;
         if (UIState.TakeEscape()) { Close(); return; }
         // On a computer: F (when not typing) or right click steps back, like the shop monitor.
@@ -191,7 +205,7 @@ public class MainMenu : MonoBehaviour
     private void StartZoomBack()
     {
         if (zoomingBack) return;
-        if (viewCam == null) { TakeOffComputer(); return; }
+        if (viewCam == null) { TakeOffComputer(); UIState.CloseMenu(this); return; }
         zoomFromPos = viewCam.transform.position;
         zoomFromRot = viewCam.transform.rotation;
         zoomT = 0f;
@@ -226,7 +240,9 @@ public class MainMenu : MonoBehaviour
     private void LateUpdate()
     {
         if (computer == null) return;
-        if (viewCam == null) { TakeOffComputer(); return; }
+        // The camera's gone (joining a friend stops single player, and your player and its camera go
+        // with it): the screen's put away, and so is the menu, or it would hold your new player still.
+        if (viewCam == null) { TakeOffComputer(); UIState.CloseMenu(this); return; }
         zoomT = Mathf.Min(1f, zoomT + Time.unscaledDeltaTime / zoomSeconds);
         float t = zoomT * zoomT * (3f - 2f * zoomT);
         if (!zoomingBack)
@@ -383,7 +399,7 @@ public class MainMenu : MonoBehaviour
         string error = await Conn.JoinOnline(codeField != null ? codeField.text : "");
         busy = false;
         if (error != null) SetStatus(error, true);
-        else SetStatus("Connecting...", false);
+        else { SetStatus("Connecting...", false); closeWhenJoined = true; }
 #else
         await System.Threading.Tasks.Task.Yield();
 #endif
@@ -403,6 +419,7 @@ public class MainMenu : MonoBehaviour
         busy = false;
         if (this == null) return;
         if (error != null) SetStatus(error, true);
+        else closeWhenJoined = true;
     }
 
     private static int ParseInt(TMP_InputField f, int fallback) => f != null && int.TryParse(f.text, out int v) ? v : fallback;
