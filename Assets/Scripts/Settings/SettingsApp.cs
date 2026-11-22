@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// The phone's Settings app (see PhoneScreen): volume, mouse, field of view, graphics quality, V-Sync,
-/// frame cap and fullscreen. Saved on this machine (GameSettings) and applied straight away.
+/// frame cap and fullscreen. (Joining and leaving are in the Multiplayer app.) Saved on this machine (GameSettings) and applied straight away.
 ///
 /// Setup: an empty panel under the phone's canvas, stretched over the app area, with this on it. The
 /// page is built inside it by code (Style sets colours and sizes). Replaces the Settings placeholder
@@ -30,7 +30,6 @@ public class SettingsApp : MonoBehaviour, IPhoneApp
     public void OnAppOpened()
     {
         tipsReset = false;
-        leaveArmed = false;
         if (content == null) content = PhoneUI.ScrollPage((RectTransform)transform);
         Build();
         GameSettings.Changed += Refresh;
@@ -43,8 +42,6 @@ public class SettingsApp : MonoBehaviour, IPhoneApp
         PhoneUI.Clear(content);
         live.Clear();
         y = style.padding;
-
-        MallSection();
 
         Header("Sound");
         SliderRow("Volume", () => $"{GameSettings.MasterVolume * 100f:0}%", 0f, 1f, GameSettings.MasterVolume, GameSettings.SetMasterVolume);
@@ -70,44 +67,6 @@ public class SettingsApp : MonoBehaviour, IPhoneApp
         PhoneUI.Button(content, "Reset to defaults", y, style.rowHeight, style, () => { GameSettings.ResetAll(); Build(); });
         y += style.rowHeight + style.padding;
         content.sizeDelta = new Vector2(content.sizeDelta.x, y);
-    }
-
-    private bool leaveArmed; // Leave was tapped once: tap again to really go
-
-    // How friends join (the host), and leaving.
-    private void MallSection()
-    {
-        var nm = Unity.Netcode.NetworkManager.Singleton;
-        var conn = MallConnection.Instance;
-        if (nm == null || !nm.IsListening) return;
-        var mode = conn != null ? conn.CurrentMode : MallConnection.Mode.Off;
-        if (mode == MallConnection.Mode.Solo && conn.InLobby) return; // nothing to leave
-        Header("Mall");
-        if (mode == MallConnection.Mode.Hosting)
-        {
-            if (!string.IsNullOrEmpty(conn.JoinCode))
-                ButtonRow("Join code", () => conn.JoinCode, () => GUIUtility.systemCopyBuffer = conn.JoinCode);
-            else if (conn.Port > 0)
-                ButtonRow("Join at", () => $"{MallConnection.LocalAddresses()} : {conn.Port}",
-                          () => GUIUtility.systemCopyBuffer = $"{MallConnection.LocalAddresses()}:{conn.Port}");
-            ButtonRow("Players", () => $"{nm.ConnectedClientsIds.Count} / {conn.MaxPlayers}", () => { });
-        }
-        bool lobby = conn != null && conn.InLobby;
-        string label = mode == MallConnection.Mode.Solo ? "Back to the main menu"
-                     : nm.IsServer ? (lobby ? "Close the lobby" : "End mall for everyone")
-                     : lobby ? "Leave the lobby" : "Leave mall";
-        var b = PhoneUI.Button(content, label, y, style.rowHeight, style, () =>
-        {
-            if (!leaveArmed) { leaveArmed = true; Build(); return; }
-            leaveArmed = false;
-            if (conn != null) conn.Leave(); else nm.Shutdown();
-        });
-        if (leaveArmed)
-        {
-            var t = b.GetComponentInChildren<TMPro.TMP_Text>();
-            if (t != null) t.text = mode == MallConnection.Mode.Solo ? "Tap again to go" : nm.IsServer ? "Tap again: end it for everyone" : "Tap again to leave";
-        }
-        y += style.rowHeight + style.spacing;
     }
 
     private void Header(string text)

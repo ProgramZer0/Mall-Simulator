@@ -67,7 +67,7 @@ public class PerksScreen : MonoBehaviour, IShopScreen
     private void Awake()
     {
         if (resetButton != null) resetButton.onClick.AddListener(OnReset);
-        if (tooltipRoot != null) tooltipRoot.SetActive(false);
+        if (tooltipRoot != null) TooltipFade.Hide(tooltipRoot, instant: true);
         // Our own placing would fight a layout group left on these.
         DisableLayout(rowParent);
         DisableLayout(tabBar);
@@ -302,7 +302,7 @@ public class PerksScreen : MonoBehaviour, IShopScreen
             tooltipDescriptionText.text = text;
         }
 
-        tooltipRoot.SetActive(true);
+        TooltipFade.Show(tooltipRoot);
         tooltipRoot.transform.SetAsLastSibling();
         UILayout.PlaceBeside(tooltipRoot.transform as RectTransform, (RectTransform)row.transform, tooltipOffset);
     }
@@ -310,7 +310,7 @@ public class PerksScreen : MonoBehaviour, IShopScreen
     private void HideTooltip()
     {
         hovered = null;
-        if (tooltipRoot != null) tooltipRoot.SetActive(false);
+        TooltipFade.Hide(tooltipRoot);
     }
 
     private static bool AnyBuyable(ProgressionManager pm, int plotId, string branchName)

@@ -50,6 +50,9 @@ public class PhoneController : MonoBehaviour
     [Tooltip("Comes up from this far below the held spot.")]
     [SerializeField, Min(0f)] private float raiseFrom = 0.25f;
     [SerializeField, Min(0.01f)] private float raiseSeconds = 0.15f;
+    [Tooltip("The field of view Hold Offset is set for. With a wider one (Settings → Field of view) the phone " +
+             "is held that much closer, so it looks the same size and stays readable; narrower, further. 0: off.")]
+    [SerializeField, Min(0f)] private float holdOffsetFov = 60f;
 
     [SerializeField] private KeyCode homeKey = KeyCode.Escape;
     [SerializeField] private KeyCode notificationsKey = KeyCode.Tab;
@@ -214,8 +217,18 @@ public class PhoneController : MonoBehaviour
     {
         float t = Mathf.Clamp01((Time.unscaledTime - raisedAt) / raiseSeconds);
         t = 1f - (1f - t) * (1f - t);
-        phone.transform.localPosition = holdOffset + Vector3.down * (raiseFrom * (1f - t));
+        phone.transform.localPosition = (holdOffset + Vector3.down * (raiseFrom * (1f - t))) * FovScale();
         phone.transform.localRotation = Quaternion.Euler(holdRotation);
+    }
+
+    // Same size on screen whatever the field of view: closer when it's wider (never inside the near clip).
+    private float FovScale()
+    {
+        var cam = phone != null && phone.transform.parent != null ? phone.transform.parent.GetComponent<Camera>() : null;
+        if (holdOffsetFov <= 0f || cam == null) return 1f;
+        float scale = Mathf.Tan(holdOffsetFov * 0.5f * Mathf.Deg2Rad) / Mathf.Tan(Mathf.Clamp(cam.fieldOfView, 10f, 170f) * 0.5f * Mathf.Deg2Rad);
+        if (holdOffset.z > 0f) scale = Mathf.Max(scale, (cam.nearClipPlane + 0.03f) / holdOffset.z);
+        return scale;
     }
 
     private void RefreshHint()

@@ -87,6 +87,17 @@ public partial class CustomerManager : NetworkBehaviour
     [Tooltip("How much customers keep to the right of the path (0 = either side, 1 = always right), so people " +
              "going opposite ways down a hallway or round a corner use different sides instead of meeting head on.")]
     [Range(0f, 1f)] [SerializeField] private float keepRight = 0.6f;
+    [Tooltip("Walking a long way, customers weave a little from side to side, each at their own pace, instead " +
+             "of walking dead straight (how far they turn off their line: 0 = straight, 0.3 ≈ 17°).")]
+    [Range(0f, 0.6f)] [SerializeField] private float walkWeave = 0.22f;
+    [Tooltip("Seconds for one weave from side to side and back (each customer picks one in this range).")]
+    [SerializeField] private Vector2 weaveSeconds = new(5f, 11f);
+    [Tooltip("Each customer's speed drifts this much (fraction) above and below their own, slowly, so people " +
+             "walking the same way don't march in step.")]
+    [Range(0f, 0.3f)] [SerializeField] private float paceDrift = 0.1f;
+    [Tooltip("Heading for where they're going (the end of their path, a store or the exit), customers stay in " +
+             "their lane until this close, then close in on it (meters), so a crowd doesn't funnel into one line.")]
+    [SerializeField, Min(0f)] private float laneToTheEnd = 4f;
     [Tooltip("At a corner of a wall, the path swings this far wide of it (meters) instead of hugging the corner, " +
              "and nobody cuts a corner unless they'd clear it by this much.")]
     [SerializeField] private float cornerClearance = 0.5f;
@@ -412,6 +423,7 @@ public partial class CustomerManager : NetworkBehaviour
         public int stuckRepaths;   // new paths in a row without getting anywhere
         public string pathProblem; // the last reason a path failed (debug)
         public float lane;         // their side of the path (meters, + = right)
+        public float weavePhase, weaveRate; // their own side-to-side weave and pace drift
         public int laneCorner = -1;
         public float nextSeeCheck;      // when to look past the next corner again (see Walk)
         public int remainingCorner = -1; // RemainingAfter worked out for this corner...
@@ -900,6 +912,8 @@ public partial class CustomerManager : NetworkBehaviour
             nextThink = Time.time,
             cameFrom = hit.position,
             lane = Random.Range(Mathf.Lerp(-laneSpread, 0f, keepRight), laneSpread),
+            weavePhase = Random.Range(0f, Mathf.PI * 2f),
+            weaveRate = Mathf.PI * 2f / Mathf.Max(0.5f, Random.Range(weaveSeconds.x, weaveSeconds.y)),
         };
         c.thief = Random.value < personality.shopliftChance * eventShoplifting;
         if (personality.bystander) // here for a walk: stays a while, whatever their money
@@ -1029,10 +1043,27 @@ public partial class CustomerManager : NetworkBehaviour
 
         // Close to the end, people in the way matter less (someone may be standing near their spot).
         float toEnd = FlatDistance(c.pos, c.destination);
+
+        // Variety on long walks: heading for the end, keep to their lane until close; weave a little.
+        bool free = c.mode != Mode.Follow && !InDoorway(c.pos) && Time.time >= c.squeezeUntil;
+        if (free && c.corner == c.corners.Count - 1 && laneToTheEnd > 0f && left > 1.5f)
+        {
+            Vector3 laneSide = new Vector3(dir.z, 0f, -dir.x) * (c.lane * Mathf.Clamp01((left - 1.5f) / laneToTheEnd));
+            Vector3 d2 = to + laneSide - c.pos;
+            d2.y = 0f;
+            if (d2.sqrMagnitude > 1e-6f) dir = d2.normalized;
+        }
+        float wave = Mathf.Sin(Time.time * c.weaveRate + c.weavePhase);
+        if (free && walkWeave > 0f && left > 2f)
+        {
+            float fade = Mathf.Clamp01((left - 2f) / 3f); // straightens up near each corner
+            dir = (dir + new Vector3(dir.z, 0f, -dir.x) * (wave * walkWeave * fade)).normalized;
+        }
         float avoidWeight = Mathf.Clamp01(toEnd - 0.3f);
         if (c.mode == Mode.Exiting && toEnd < exitReach) { Arrive(c); return; } // out the door
         if (InDoorway(c.pos) || Time.time < c.squeezeUntil) avoidWeight = 0f; // coming and going (or stuck): straight through
         float speed = GroupSpeed(c) * (c.hurry ? closedStoreHurry : 1f);
+        if (c.mode != Mode.Follow) speed *= 1f + paceDrift * Mathf.Sin(Time.time * c.weaveRate * 0.37f + c.weavePhase * 1.7f);
         Vector3 vel = dir * speed + Avoidance(c, dir) * (speed * avoidWeight);
         vel = Vector3.ClampMagnitude(vel, speed * 1.15f);
         if (vel.magnitude * dt > left && Vector3.Dot(vel, dir) > 0.5f * vel.magnitude)

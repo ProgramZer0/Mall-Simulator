@@ -69,6 +69,16 @@ public class BuyMenu : MonoBehaviour, IShopScreen
              "items are ordered in their middle size.")]
     [SerializeField] private SizePicker sizePicker;
 
+    [Header("Tooltip (optional)")]
+    [Tooltip("Hover an item: this panel (hidden at start, Raycast Target off on its graphics) shows its name and " +
+             "details beside the tile, fading in and out.")]
+    [SerializeField] private GameObject tooltipRoot;
+    [SerializeField] private TMP_Text tooltipNameText;
+    [SerializeField] private TMP_Text tooltipDescriptionText;
+    [SerializeField] private Vector2 tooltipOffset = new(8f, 0f);
+    [Tooltip("Optional: the tooltip goes beside the tile without covering this (e.g. the item grid's area).")]
+    [SerializeField] private RectTransform tooltipKeepClear;
+
     [Header("Info")]
     [Tooltip("Short messages: added to cart, ordered, not enough money, ...")]
     [SerializeField] private TMP_Text statusText;
@@ -110,6 +120,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         if (filterInput != null) filterInput.onSubmit.AddListener(_ => ApplyFilter());
 
         if (itemSlotPrefab == null) BuildPage();
+        if (tooltipRoot != null) TooltipFade.Hide(tooltipRoot, instant: true);
     }
 
     private void OnEnable()
@@ -417,7 +428,58 @@ public class BuyMenu : MonoBehaviour, IShopScreen
             button.onClick.AddListener(() => OnBuyClicked(def));
             button.interactable = !locked;
         }
-        if (go != null && go.TryGetComponent<BuyItemSlot>(out var slot)) ShowColors(slot.colors, def);
+        if (go != null)
+        {
+            if (!go.TryGetComponent<BuyItemSlot>(out var slot)) slot = go.AddComponent<BuyItemSlot>(); // (for the tooltip)
+            slot.Def = def;
+            slot.Menu = this;
+            ShowColors(slot.colors, def);
+            if (hoveredTile == slot) ShowTooltip(slot); // refilled under the mouse (a new page)
+        }
+    }
+
+    /* ========================= TOOLTIP ========================= */
+
+    private BuyItemSlot hoveredTile;
+
+    /// <summary>The mouse went onto (or off) an item tile.</summary>
+    public void OnTileHover(BuyItemSlot tile, bool over)
+    {
+        if (over) { hoveredTile = tile; ShowTooltip(tile); }
+        else if (tile == hoveredTile) { hoveredTile = null; if (tooltipRoot != null) TooltipFade.Hide(tooltipRoot); }
+    }
+
+    private void ShowTooltip(BuyItemSlot tile)
+    {
+        var def = tile != null ? tile.Def : null;
+        if (tooltipRoot == null || def == null || !tile.gameObject.activeInHierarchy) return;
+        if (tooltipNameText != null) tooltipNameText.text = def.displayName;
+        if (tooltipDescriptionText != null) tooltipDescriptionText.text = Describe(def);
+        TooltipFade.Show(tooltipRoot);
+        tooltipRoot.transform.SetAsLastSibling();
+        var cell = (RectTransform)tile.transform;
+        if (tooltipKeepClear != null) UILayout.PlaceBeside(tooltipRoot.transform as RectTransform, cell, tooltipOffset, tooltipKeepClear);
+        else UILayout.PlaceBeside(tooltipRoot.transform as RectTransform, cell, tooltipOffset);
+    }
+
+    // What's worth knowing before buying one.
+    private string Describe(ItemDef def)
+    {
+        var sb = new System.Text.StringBuilder();
+        bool levelLocked = !ProgressionManager.CanOrder(LocalTeam, def);
+        bool licenseLocked = !LicenseManager.CanOrder(LocalTeam, def, out var license);
+        if (levelLocked) sb.AppendLine($"<color=#ff8080>Unlocks at level {ProgressionManager.LevelNeeded(def, LocalTeam)}</color>");
+        else if (licenseLocked) sb.AppendLine($"<color=#ff8080>Needs the {license.displayName} license</color>");
+
+        int cost = MarketModifiers.OrderCost(def), fee = MarketModifiers.DeliveryFee(def);
+        sb.AppendLine(fee > 0 ? $"${cost:N0} + ${fee:N0} delivery" : $"${cost:N0}");
+        int perCrate = StockContainer.GetUnitsPerCrate(def.id);
+        if (perCrate > 0) sb.AppendLine($"Stock: {perCrate} to a crate, for shelves");
+        if (def.sizes != ItemDef.SizeSet.None) sb.AppendLine($"Comes in sizes ({(def.sizes == ItemDef.SizeSet.Clothing ? "XS to XXL" : "4 to 12")})");
+        if (def.rarity != ItemDef.Rarity.Common) sb.AppendLine($"{def.rarity}");
+        var cats = new List<string>(def.Categories);
+        if (cats.Count > 0) sb.AppendLine(string.Join(", ", cats));
+        return sb.ToString().TrimEnd();
     }
 
     private static readonly List<byte> tileColors = new();
