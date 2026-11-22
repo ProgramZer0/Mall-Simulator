@@ -51,6 +51,9 @@ public class StoreEditController : NetworkBehaviour
     [Tooltip("Moving something up with the arrows: the bottom of it goes no higher than this above the store's " +
              "floor (meters). 0: up to the ceiling.")]
     [SerializeField, Min(0f)] private float maxLiftHeight = 2.2f;
+    [Tooltip("Turning something with the rings into the floor (or what it's on): lift it just enough to turn, so " +
+             "something lying flat can be stood back up. Letting go drops it back down.")]
+    [SerializeField] private bool liftToRotate = true;
     [Tooltip("How long the drop takes, in seconds.")]
     [SerializeField, Min(0.01f)] private float settleSeconds = 0.25f;
     [Tooltip("Wall tool: build walls between two clicked points (needs BuiltWallSettings in the scene).")]
@@ -1248,10 +1251,26 @@ public class StoreEditController : NetworkBehaviour
             Quaternion nextRot = q * dragStartRot;
             Vector3 nextPos = dragPivot + q * (dragStartPos - dragPivot); // spin around the item's middle
 
-            // Rotations that would push into something are skipped, so nothing ends up overlapping.
-            if (PlacementCheck.IsClear(selected.Def, nextPos, nextRot, mask, selected.transform) &&
-                editPlot.ContainsItem(selected.Def, nextPos, nextRot))
+            // Rotations that would push into something are skipped, so nothing ends up overlapping. Turning
+            // into the floor (or what it sits on), it's lifted just enough to turn instead: something lying
+            // flat can be stood back up. Letting go drops it back down (Settle).
+            if (!editPlot.ContainsItem(selected.Def, nextPos, nextRot)) return;
+            if (PlacementCheck.IsClear(selected.Def, nextPos, nextRot, mask, selected.transform))
+            {
                 selected.SetPose(nextPos, nextRot);
+                return;
+            }
+            if (!liftToRotate) return;
+            var size = selected.Def.LocalBounds.size;
+            float most = Vector3.Scale(size, selected.transform.lossyScale).magnitude;
+            for (float up = 0.04f; up <= most + 0.04f; up += 0.04f)
+            {
+                Vector3 lifted = nextPos + Vector3.up * up;
+                if (!editPlot.ContainsItem(selected.Def, lifted, nextRot)) break;
+                if (!PlacementCheck.IsClear(selected.Def, lifted, nextRot, mask, selected.transform)) continue;
+                selected.SetPose(lifted, nextRot);
+                break;
+            }
         }
     }
 

@@ -20,6 +20,10 @@ using UnityEngine.UI;
 public class PhoneScreen : MonoBehaviour
 {
     [SerializeField] private Canvas canvas;
+    [Tooltip("The phone's background (behind the home screen and the apps): shows the colour and picture picked " +
+             "in the Customize app. Empty: one is made as the canvas's first child. Panels on top of it need to be " +
+             "see-through to show it.")]
+    [SerializeField] private Image wallpaperImage;
     [SerializeField] private GameObject home;
     [SerializeField] private PhoneAppButton appButtonPrefab;
     [SerializeField] private RectTransform appGrid;
@@ -30,7 +34,7 @@ public class PhoneScreen : MonoBehaviour
     [SerializeField] private string homeTitle = "";
     [SerializeField] private Button backButton;
     [Tooltip("The only apps on the phone in the office (the lobby). Empty: all of them.")]
-    [SerializeField] private string[] officeApps = { "Settings", "Help", "Multiplayer", "Quit" };
+    [SerializeField] private string[] officeApps = { "Settings", "Help", "Multiplayer", "Customize", "Quit" };
     [Tooltip("Apps only on the phone in the office.")]
     [SerializeField] private string[] officeOnlyApps = { "Quit" };
 
@@ -43,6 +47,53 @@ public class PhoneScreen : MonoBehaviour
     public string CurrentApp => current >= 0 && current < apps.Count ? ((IPhoneApp)apps[current]).AppName : null;
 
     /// <summary>Called once by PhoneController after it makes the phone.</summary>
+    private Color wallpaperStartColor, titleStartColor;
+    private bool titleRemembered;
+    private Sprite wallpaperStartSprite;
+    private bool wallpaperMade, wallpaperRemembered;
+
+    private void OnDestroy() => PhoneTheme.Changed -= ApplyTheme;
+
+    private void ApplyTheme()
+    {
+        if (this == null) return;
+        if (wallpaperImage == null && canvas != null && (PhoneTheme.Current != null || PhoneTheme.Wallpaper != null))
+        {
+            var go = new GameObject("Wallpaper", typeof(RectTransform), typeof(Image));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(canvas.transform, false);
+            rt.SetAsFirstSibling();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = rt.offsetMax = Vector2.zero;
+            wallpaperImage = go.GetComponent<Image>();
+            wallpaperImage.raycastTarget = false;
+            wallpaperMade = true;
+        }
+        if (wallpaperImage == null) { ApplyTitle(); return; }
+        if (!wallpaperRemembered)
+        {
+            wallpaperRemembered = true;
+            wallpaperStartColor = wallpaperMade ? new Color(0f, 0f, 0f, 0f) : wallpaperImage.color;
+            wallpaperStartSprite = wallpaperMade ? null : wallpaperImage.sprite;
+        }
+        var paper = PhoneTheme.Wallpaper;
+        wallpaperImage.sprite = paper != null ? paper : wallpaperStartSprite;
+        wallpaperImage.color = paper != null ? Color.white
+                             : PhoneTheme.Current != null ? PhoneTheme.Current.background : wallpaperStartColor;
+        wallpaperImage.preserveAspect = false;
+        ApplyTitle();
+    }
+
+    private void ApplyTitle()
+    {
+        if (titleText != null)
+        {
+            if (!titleRemembered) { titleRemembered = true; titleStartColor = titleText.color; }
+            titleText.color = PhoneTheme.Current != null ? PhoneTheme.Current.text : titleStartColor;
+        }
+    }
+
     public void Init(Camera cam)
     {
         if (canvas == null) canvas = GetComponentInChildren<Canvas>(true);
@@ -51,6 +102,13 @@ public class PhoneScreen : MonoBehaviour
             canvas.renderMode = RenderMode.WorldSpace;
             canvas.worldCamera = cam;
         }
+        // The player's chosen look (Customize app), and the background showing it.
+        var styleApp = GetComponentInChildren<PhoneStyleApp>(true);
+        if (styleApp != null) styleApp.ApplySaved();
+        PhoneTheme.Changed -= ApplyTheme;
+        PhoneTheme.Changed += ApplyTheme;
+        ApplyTheme();
+
         // A phone model in front of the camera mustn't bump into things.
         foreach (var c in GetComponentsInChildren<Collider>(true)) c.enabled = false;
 

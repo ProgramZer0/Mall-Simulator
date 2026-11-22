@@ -39,16 +39,38 @@ public class MultiplayerApp : MonoBehaviour, IPhoneApp
 
     public void OnAppClosed() => leaveArmed = false;
 
+    // Pings update in place; the page is rebuilt only when who's here (or the mode) changes, since
+    // rebuilding under the mouse would eat a click.
+    private readonly List<(TMP_Text label, System.Func<string> text)> live = new();
+
     private void Update()
     {
         if (content == null || Time.unscaledTime < nextRefresh) return;
         nextRefresh = Time.unscaledTime + refreshEvery;
-        Build();
+        if (Shape() != lastShape) { Build(); return; }
+        foreach (var (label, text) in live) if (label != null) label.text = text();
+    }
+
+    private static string Shape()
+    {
+        var nm = NetworkManager.Singleton;
+        var conn = MallConnection.Instance;
+        if (nm == null || !nm.IsListening) return "off";
+        var sb = new System.Text.StringBuilder();
+        sb.Append(conn != null ? conn.CurrentMode.ToString() : "?").Append(conn != null && conn.InLobby ? 'L' : 'M');
+        if (conn != null) sb.Append(conn.JoinCode).Append(conn.Port);
+        if (nm.IsServer) foreach (ulong id in nm.ConnectedClientsIds) sb.Append(',').Append(id).Append(PlayerNameTag.NameOf(id));
+        else if (nm.SpawnManager != null)
+            foreach (var o in nm.SpawnManager.SpawnedObjectsList)
+                if (o.IsPlayerObject) sb.Append(',').Append(o.OwnerClientId).Append(PlayerNameTag.NameOf(o.OwnerClientId));
+        return sb.ToString();
     }
 
     private void Build()
     {
         nextRefresh = Time.unscaledTime + refreshEvery;
+        lastShape = Shape();
+        live.Clear();
         PhoneUI.Clear(content);
         y = style.padding;
 
@@ -103,13 +125,15 @@ public class MultiplayerApp : MonoBehaviour, IPhoneApp
             string tags = "";
             if (id == NetworkManager.ServerClientId) tags += " (host)";
             if (id == nm.LocalClientId) tags += " (you)";
-            string ping = "";
+            System.Func<string> ping = null;
+            ulong who = id;
             if (utp != null && id != nm.LocalClientId)
             {
-                if (nm.IsServer) ping = $"{utp.GetCurrentRtt(id)} ms";
-                else if (id == NetworkManager.ServerClientId) ping = $"{utp.GetCurrentRtt(NetworkManager.ServerClientId)} ms";
+                if (nm.IsServer) ping = () => $"{utp.GetCurrentRtt(who)} ms";
+                else if (id == NetworkManager.ServerClientId) ping = () => $"{utp.GetCurrentRtt(NetworkManager.ServerClientId)} ms";
             }
-            Row(name + tags, ping, null);
+            var label = Row(name + tags, ping != null ? ping() : "", null);
+            if (ping != null && label != null) live.Add((label, ping));
         }
     }
 
@@ -134,7 +158,7 @@ public class MultiplayerApp : MonoBehaviour, IPhoneApp
     {
         if (y > style.padding) y += style.spacing;
         var t = PhoneUI.Text(content, $"<b>{text}</b>", y, style.rowHeight * 0.8f, style, true, TextAlignmentOptions.BottomLeft);
-        t.color = style.accent;
+        t.color = PhoneTheme.AccentOf(style);
         y += style.rowHeight * 0.8f + style.spacing * 0.5f;
     }
 
@@ -145,8 +169,9 @@ public class MultiplayerApp : MonoBehaviour, IPhoneApp
     }
 
     // A name on the left, its value on the right (a button to tap when there's something to do).
-    private void Row(string name, string value, UnityEngine.Events.UnityAction onClick)
+    private TMP_Text Row(string name, string value, UnityEngine.Events.UnityAction onClick)
     {
+        TMP_Text shown = null;
         PhoneUI.Text(content, name, y, style.rowHeight, style, false, TextAlignmentOptions.Left);
         if (onClick != null)
         {
@@ -157,9 +182,11 @@ public class MultiplayerApp : MonoBehaviour, IPhoneApp
         else if (!string.IsNullOrEmpty(value))
         {
             var t = PhoneUI.Text(content, value, y, style.rowHeight, style, false, TextAlignmentOptions.Right);
-            t.color = style.dimText;
+            t.color = PhoneTheme.DimOf(style);
+            shown = t;
         }
         y += style.rowHeight + style.spacing;
+        return shown;
     }
 
     private void Finish()
