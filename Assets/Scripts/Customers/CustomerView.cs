@@ -37,7 +37,7 @@ public class CustomerView : MonoBehaviour
             go.transform.localScale = new Vector3(0.6f, 0.9f, 0.6f) * scale;
             go.transform.SetPositionAndRotation(position + Vector3.up * lift, Quaternion.Euler(0f, yaw, 0f));
             var r = go.GetComponent<Renderer>();
-            if (r != null) r.material.color = Color.HSVToRGB((id * 0.137f) % 1f, 0.45f, 0.85f);
+            PlainLook.Apply(r, Color.HSVToRGB((id * 0.137f) % 1f, 0.45f, 0.85f)); // (a primitive's own material is pink in builds)
         }
         go.name = $"Customer {id}";
         foreach (var c in go.GetComponentsInChildren<Collider>(true)) Destroy(c); // never in anyone's way
@@ -132,7 +132,7 @@ public class CustomerView : MonoBehaviour
                 bag = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 bag.transform.localScale = new Vector3(0.12f, 0.3f, 0.25f);
                 var r = bag.GetComponent<Renderer>();
-                if (r != null) r.material.color = new Color(0.78f, 0.62f, 0.42f);
+                PlainLook.Apply(r, new Color(0.78f, 0.62f, 0.42f));
             }
             bag.name = "Bag";
             if (randomColors) PaintBag(bag, i);

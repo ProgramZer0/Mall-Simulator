@@ -78,6 +78,9 @@ public partial class CustomerManager : NetworkBehaviour
     [Tooltip("Someone following (a child with a parent) stays where they are while whoever they follow stands still " +
              "this close (meters), instead of stepping round to stay beside them.")]
     [SerializeField, Min(0.5f)] private float followSettleDistance = 2.2f;
+    [Tooltip("Material for stand-in shapes made in code (plain capsule customers, paper bags...), tinted a color " +
+             "each. Empty: URP Lit. (A primitive's own default material isn't in builds, so they'd show pink.)")]
+    [SerializeField] private Material plainCustomerMaterial;
     [Tooltip("Customers keep to their own lane, up to this far either side of the shortest path (meters), " +
              "so a hallway fills out instead of everyone walking one line.")]
     [SerializeField] private float laneSpread = 0.7f;
@@ -522,6 +525,7 @@ public partial class CustomerManager : NetworkBehaviour
     private void Awake()
     {
         Instance = this;
+        PlainLook.Override = plainCustomerMaterial;
         if (GetComponent<CustomerNavMesh>() == null) gameObject.AddComponent<CustomerNavMesh>();
     }
 
