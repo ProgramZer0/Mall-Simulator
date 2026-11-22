@@ -30,7 +30,7 @@ public class PhoneScreen : MonoBehaviour
     [SerializeField] private string homeTitle = "";
     [SerializeField] private Button backButton;
     [Tooltip("The only apps on the phone in the office (the lobby). Empty: all of them.")]
-    [SerializeField] private string[] officeApps = { "Settings", "Help", "Quit" };
+    [SerializeField] private string[] officeApps = { "Settings", "Help", "Multiplayer", "Quit" };
     [Tooltip("Apps only on the phone in the office.")]
     [SerializeField] private string[] officeOnlyApps = { "Quit" };
 

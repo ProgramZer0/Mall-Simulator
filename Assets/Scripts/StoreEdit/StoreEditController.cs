@@ -48,6 +48,9 @@ public class StoreEditController : NetworkBehaviour
     [Tooltip("Let go of something (after dragging, sliding or turning it) with nothing under it and it drops onto " +
              "whatever's below, with anything on top of it. Things on a wall stay there. Off: things hang where they're put.")]
     [SerializeField] private bool settleOnRelease = true;
+    [Tooltip("Moving something up with the arrows: the bottom of it goes no higher than this above the store's " +
+             "floor (meters). 0: up to the ceiling.")]
+    [SerializeField, Min(0f)] private float maxLiftHeight = 2.2f;
     [Tooltip("How long the drop takes, in seconds.")]
     [SerializeField, Min(0.01f)] private float settleSeconds = 0.25f;
     [Tooltip("Wall tool: build walls between two clicked points (needs BuiltWallSettings in the scene).")]
@@ -740,6 +743,12 @@ public class StoreEditController : NetworkBehaviour
             }
 
             var item = hit.collider.GetComponentInParent<EditLocalItem>();
+            if (item != null && IsBusyCounter(RealOf(item)))
+            {
+                Deselect();
+                ShowEditMessage("Someone's checking out at this counter: it stays put until they're served.");
+                return;
+            }
             if (item != null)
             {
                 if (item != selected) Select(item);
@@ -763,6 +772,10 @@ public class StoreEditController : NetworkBehaviour
 
         Deselect();
     }
+
+    // A checkout counter with a customer at it (or their things on it) can't be moved or removed in edit mode.
+    private static bool IsBusyCounter(Component real) =>
+        real != null && real.TryGetComponent<CheckoutCounter>(out var counter) && counter.IsBusy;
 
     /* ========================= STOREFRONT ========================= */
 
@@ -1210,6 +1223,12 @@ public class StoreEditController : NetworkBehaviour
 
             // Slide from where the item is now toward the mouse, stopping at the first contact.
             Vector3 target = dragStartPos + axis * (t - dragStartT);
+            // Not up near the ceiling: the bottom of it stays within Max Lift Height of the floor.
+            if (maxLiftHeight > 0f && target.y > pos.y && TryColliderBounds(selected, out var lb))
+            {
+                float room = editPlot.FloorHeight + maxLiftHeight - lb.min.y; // how much higher it may go from here
+                target.y = Mathf.Min(target.y, pos.y + Mathf.Max(0f, room));
+            }
             Vector3 delta = target - pos;
             float dist = delta.magnitude;
             if (dist < 1e-5f) return;
@@ -2911,13 +2930,14 @@ public class StoreEditController : NetworkBehaviour
     private void SubmitEditPosesRpc(int sessionId, int start, Vector3[] positions, Quaternion[] rotations,
                                     RpcParams rpcParams = default)
     {
-        if (!ServerTryGetSession(rpcParams, sessionId, out _)) return;
+        if (!ServerTryGetSession(rpcParams, sessionId, out var plot)) return;
 
         int n = Mathf.Min(positions.Length, rotations.Length);
         for (int k = 0; k < n; k++)
         {
             int index = start + k;
             if (index < 0 || index >= pendingPositions.Length) continue;
+            if (index < plot.ServerEditSession.Count && IsBusyCounter(plot.ServerEditSession[index].live)) continue; // stays put
             pendingPositions[index] = positions[k];
             pendingRotations[index] = rotations[k];
         }
@@ -2981,7 +3001,11 @@ public class StoreEditController : NetworkBehaviour
     {
         if (indices == null || !ServerTryGetSession(rpcParams, sessionId, out var plot)) return;
         ulong team = MallManager.GetTeamOf(OwnerClientId);
-        foreach (int i in indices) plot.ServerRemoveEditItem(i, team, out _);
+        foreach (int i in indices)
+        {
+            if (i >= 0 && i < plot.ServerEditSession.Count && IsBusyCounter(plot.ServerEditSession[i].live)) continue;
+            plot.ServerRemoveEditItem(i, team, out _);
+        }
     }
 
     /// <summary>Host: after this save, will the store still have a door in its front wall?</summary>

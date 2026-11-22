@@ -71,7 +71,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
 
     private void Awake()
     {
-        if (tooltipRoot != null) tooltipRoot.SetActive(false);
+        if (tooltipRoot != null) TooltipFade.Hide(tooltipRoot, instant: true);
         foreach (var parent in new[] { cardParent, ownedCardParent })
             if (parent != null)
                 foreach (var g in parent.GetComponents<UnityEngine.UI.LayoutGroup>()) g.enabled = false;
@@ -341,7 +341,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
             text += "\n\nClick to give it up (no money back)";
             tooltipDescriptionText.text = text;
         }
-        tooltipRoot.SetActive(true);
+        TooltipFade.Show(tooltipRoot);
         tooltipRoot.transform.SetAsLastSibling();
         UILayout.PlaceBeside(tooltipRoot.transform as RectTransform, (RectTransform)card.transform, tooltipOffset, KeepClear);
     }
@@ -391,7 +391,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
             else text += lm.CanBuy(team, l, out string why) ? "\n\nClick to buy" : $"\n\nCan't buy: {why}";
             tooltipDescriptionText.text = text;
         }
-        tooltipRoot.SetActive(true);
+        TooltipFade.Show(tooltipRoot);
         tooltipRoot.transform.SetAsLastSibling();
         UILayout.PlaceBeside(tooltipRoot.transform as RectTransform, (RectTransform)card.transform, tooltipOffset, KeepClear);
     }
@@ -399,7 +399,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
     private void HideTooltip()
     {
         hovered = null;
-        if (tooltipRoot != null) tooltipRoot.SetActive(false);
+        TooltipFade.Hide(tooltipRoot);
     }
 
     private void Status(string text)
