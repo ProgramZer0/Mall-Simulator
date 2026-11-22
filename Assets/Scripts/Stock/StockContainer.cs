@@ -1028,7 +1028,9 @@ public class StockContainer : NetworkBehaviour
                 float across = alongZ ? size.x : size.z;
                 if (drop > size.y + 1e-3f || h.x * 2f > across + 1e-3f) n = 0;
             }
-            layout = new Layout { capacity = Mathf.Min(n, max), slots = Mathf.Min(n, max), step = step, orient = o, half = h,
+            // Posed: the model stood up the way its prefab stands (model.fix: a Blender model's -90 on X),
+            // then turned/tipped as above.
+            layout = new Layout { capacity = Mathf.Min(n, max), slots = Mathf.Min(n, max), step = step, orient = o * model.fix, half = h,
                                   railLength = length, railAlongZ = alongZ, hook = hook, anchored = !part.Whole };
         }
         else
@@ -1049,10 +1051,11 @@ public class StockContainer : NetworkBehaviour
 
     private struct HangShape
     {
-        public Vector3 center;     // middle of the meshes from the pivot (scaled, unrotated)
-        public Vector3 half;       // half size of the meshes (scaled, unrotated)
-        public Vector3 hook;       // the HangPoint child from the pivot (scaled, unrotated)
+        public Vector3 center;     // middle of the meshes from the pivot (scaled, as it stands upright)
+        public Vector3 half;       // half size of the meshes (scaled, as it stands upright)
+        public Vector3 hook;       // the HangPoint child from the pivot (scaled, as it stands upright)
         public bool hasHangPoint;
+        public Quaternion fix;     // how the model stands upright (its prefab root's rotation, and Model Rotation)
     }
 
     private static readonly Dictionary<GameObject, HangShape> HangShapes = new();
@@ -1067,6 +1070,11 @@ public class StockContainer : NetworkBehaviour
         Vector3 scale = root.localScale;
         bool any = false;
         Bounds b = default;
+        // Measured standing the way the prefab does (its root rotation, e.g. Blender's -90 on X, and any
+        // Model Rotation): placing the copies with a fresh rotation would otherwise leave that out and lay
+        // the clothes on their backs.
+        Vector3 extra = root.TryGetComponent<ItemPickupNet>(out var pickup) ? pickup.ModelRotation : Vector3.zero;
+        Quaternion fix = root.localRotation * Quaternion.Euler(extra);
 
         void Add(Transform t, Bounds local)
         {
@@ -1075,7 +1083,7 @@ public class StockContainer : NetworkBehaviour
             {
                 Vector3 corner = local.center + Vector3.Scale(local.extents,
                     new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
-                Vector3 p = Vector3.Scale(m.MultiplyPoint3x4(corner), scale);
+                Vector3 p = fix * Vector3.Scale(m.MultiplyPoint3x4(corner), scale);
                 if (!any) { b = new Bounds(p, Vector3.zero); any = true; }
                 else b.Encapsulate(p);
             }
@@ -1087,11 +1095,11 @@ public class StockContainer : NetworkBehaviour
             Add(sk.transform, sk.localBounds);
         if (!any) b = new Bounds(Vector3.zero, Vector3.one * 0.3f);
 
-        shape = new HangShape { center = b.center, half = b.extents };
+        shape = new HangShape { center = b.center, half = b.extents, fix = fix };
         foreach (var t in prefab.GetComponentsInChildren<Transform>(true))
         {
             if (t.name != "HangPoint") continue;
-            shape.hook = Vector3.Scale(toRoot.MultiplyPoint3x4(t.position), scale);
+            shape.hook = fix * Vector3.Scale(toRoot.MultiplyPoint3x4(t.position), scale);
             shape.hasHangPoint = true;
             break;
         }
