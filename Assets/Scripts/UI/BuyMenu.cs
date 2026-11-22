@@ -64,6 +64,10 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     [SerializeField] private string removeMark = "  <color=#ff8080>[-]</color>";
     [SerializeField] private Button checkoutButton;
     [SerializeField] private Button clearCartButton;
+    [Tooltip("Clear Cart asks first: the first press changes its label to this, a second press within Confirm " +
+             "Seconds clears. Empty: clears at once.")]
+    [SerializeField] private string clearConfirmLabel = "Clear everything?";
+    [SerializeField, Min(0.5f)] private float clearConfirmSeconds = 3f;
 
     [Header("Paint (optional)")]
     [Tooltip("Color swatches: paintable items are bought in the picked color (free).")]
@@ -155,7 +159,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         if (nextPageButton != null) nextPageButton.onClick.AddListener(() => ChangePage(+1));
         if (previousPageButton != null) previousPageButton.onClick.AddListener(() => ChangePage(-1));
         if (checkoutButton != null) checkoutButton.onClick.AddListener(Checkout);
-        if (clearCartButton != null) clearCartButton.onClick.AddListener(ClearCart);
+        if (clearCartButton != null) clearCartButton.onClick.AddListener(OnClearPressed);
 
         if (filterButton != null) filterButton.onClick.AddListener(ApplyFilter);
         if (clearFilterButton != null) clearFilterButton.onClick.AddListener(ClearFilter);
@@ -171,12 +175,17 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         RefreshAll();
     }
 
-    private void OnDisable() => Unsubscribe();
+    private void OnDisable()
+    {
+        Unsubscribe();
+        DisarmClear();
+    }
 
     private int shownForLevel = -1;
 
     private void Update()
     {
+        if (clearArmedUntil > 0f && Time.unscaledTime >= clearArmedUntil) DisarmClear(); // not pressed again: back to normal
         if (statusText != null && statusUntil > 0f && Time.unscaledTime > statusUntil)
         {
             statusText.text = "";
@@ -673,6 +682,36 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         if (all || quantity <= 1) cart.RemoveAt(i);
         else cart[i] = (itemId, paint, quantity - 1);
         RefreshCart();
+    }
+
+    // Clear Cart: the first press asks (the button says Clear Confirm Label), the second clears.
+    private float clearArmedUntil;
+    private string clearLabel;
+
+    private void OnClearPressed()
+    {
+        if (string.IsNullOrEmpty(clearConfirmLabel) || Time.unscaledTime < clearArmedUntil)
+        {
+            DisarmClear();
+            ClearCart();
+            return;
+        }
+        clearArmedUntil = Time.unscaledTime + clearConfirmSeconds;
+        var label = clearCartButton.GetComponentInChildren<TMP_Text>(true);
+        if (label != null)
+        {
+            clearLabel ??= label.text;
+            label.text = clearConfirmLabel;
+        }
+        ShowStatus("Press again to empty the cart.");
+    }
+
+    private void DisarmClear()
+    {
+        clearArmedUntil = 0f;
+        if (clearLabel == null || clearCartButton == null) return;
+        var label = clearCartButton.GetComponentInChildren<TMP_Text>(true);
+        if (label != null) label.text = clearLabel;
     }
 
     private void ClearCart()
