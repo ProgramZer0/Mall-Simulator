@@ -171,6 +171,31 @@ public sealed class StockBatcher : MonoBehaviour
         return result;
     }
 
+    private static readonly Dictionary<(Material, Color), Material> ColoredMaterials = new();
+
+    /// <summary>A shape's parts in a given color (a PaintParts' Original Color).</summary>
+    public static List<PartShape> Tinted(List<PartShape> shape, Color c)
+    {
+        if (shape == null) return null;
+        var result = new List<PartShape>(shape.Count);
+        foreach (var p in shape)
+        {
+            if (!ColoredMaterials.TryGetValue((p.material, c), out var m) || m == null)
+            {
+                m = new Material(p.material) { name = p.material.name + " (original color)", enableInstancing = true };
+                if (m.HasProperty(BaseColorId)) m.SetColor(BaseColorId, c);
+                if (m.HasProperty(ColorId)) m.SetColor(ColorId, c);
+                ColoredMaterials[(p.material, c)] = m;
+            }
+            result.Add(new PartShape
+            {
+                mesh = p.mesh, submesh = p.submesh, material = m, local = p.local, shadows = p.shadows,
+                receiveShadows = p.receiveShadows, layer = p.layer, renderingLayers = p.renderingLayers,
+            });
+        }
+        return result;
+    }
+
     // The material with GPU instancing on (a copy if the asset doesn't have it ticked).
     private static Material InstancedOf(Material m)
     {

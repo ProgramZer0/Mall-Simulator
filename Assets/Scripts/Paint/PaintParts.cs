@@ -41,6 +41,31 @@ public class PaintParts : MonoBehaviour
     [Tooltip("Painted, hide the model's texture too, so the paint is a solid color (white paint really looks white). " +
              "Off: the paint tints the texture, so a dark texture stays dark and white changes nothing.")]
     [SerializeField] private bool coverTexture;
+    [Tooltip("Unpainted (Original), show this color instead of the model's own. So the model can be white (for the " +
+             "paint colors to come out true) and still start out, say, red.")]
+    [SerializeField] private bool useOriginalColor;
+    [SerializeField] private Color originalColor = Color.white;
+
+    /// <summary>The color it is unpainted, when it has one (Use Original Color).</summary>
+    public bool TryGetOriginalColor(out Color color)
+    {
+        color = originalColor;
+        return useOriginalColor;
+    }
+
+    /// <summary>Does any zone of this object have an Original Color?</summary>
+    public static bool HasOriginalColors(GameObject go)
+    {
+        if (go == null) return false;
+        foreach (var z in go.GetComponentsInChildren<PaintParts>(true)) if (z.useOriginalColor) return true;
+        return false;
+    }
+
+    // Unpainted to start with: its Original Color, if it has one.
+    private void Awake()
+    {
+        if (useOriginalColor && Current == 0) Apply(0);
+    }
 
     public byte Current { get; private set; }
 
@@ -77,7 +102,14 @@ public class PaintParts : MonoBehaviour
     public void Apply(byte id)
     {
         Current = id;
-        foreach (var (r, index) in Targets(this, transform)) PaintPalette.Apply(r, index, id, coverTexture);
+        foreach (var (r, index) in Targets(this, transform)) Paint(this, r, index, id);
+    }
+
+    // A palette color, or (Original) the zone's Original Color if it has one, else the model's own.
+    private static void Paint(PaintParts zone, Renderer r, int index, byte id)
+    {
+        if (id == 0 && zone.useOriginalColor) PaintPalette.ApplyColor(r, index, zone.originalColor, zone.coverTexture);
+        else PaintPalette.Apply(r, index, id, zone.coverTexture);
     }
 
     // What a zone paints, on the object it's on (Self) or the same spot in a copy (Root of the copy).
@@ -155,7 +187,7 @@ public class PaintParts : MonoBehaviour
             Transform at = path.Length == 0 ? copy.transform : copy.transform.Find(path);
             if (at == null) continue;
             byte id = PaintSet.Get(set, i);
-            foreach (var (r, index) in Targets(zones[i], at)) PaintPalette.Apply(r, index, id, zones[i].coverTexture);
+            foreach (var (r, index) in Targets(zones[i], at)) Paint(zones[i], r, index, id);
         }
     }
 
