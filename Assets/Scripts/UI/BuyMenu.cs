@@ -57,10 +57,17 @@ public class BuyMenu : MonoBehaviour, IShopScreen
 
     [Header("Cart")]
     [SerializeField] private bool useCart = true;
-    [Tooltip("Lists what's in the cart and the total.")]
+    [Tooltip("Lists what's in the cart and the total. Click a line to take one of it out (right-click or " +
+             "Shift-click: all of it).")]
     [SerializeField] private TMP_Text cartText;
+    [Tooltip("Shown at the end of each cart line, to say it can be clicked off.")]
+    [SerializeField] private string removeMark = "  <color=#ff8080>[-]</color>";
     [SerializeField] private Button checkoutButton;
     [SerializeField] private Button clearCartButton;
+    [Tooltip("Clear Cart asks first: the first press changes its label to this, a second press within Confirm " +
+             "Seconds clears. Empty: clears at once.")]
+    [SerializeField] private string clearConfirmLabel = "Clear everything?";
+    [SerializeField, Min(0.5f)] private float clearConfirmSeconds = 3f;
 
     [Header("Paint (optional)")]
     [Tooltip("Color swatches: paintable items are bought in the picked color (free).")]
@@ -108,12 +115,51 @@ public class BuyMenu : MonoBehaviour, IShopScreen
 
     /* ========================= SETUP ========================= */
 
+    [Header("Cart reminder")]
+    [Tooltip("Closing the shop with things still in the cart (not ordered): a phone notification saying so.")]
+    [SerializeField] private bool remindOfCart = true;
+
+    private ShopUIController shop;
+    private Note cartNote; // the reminder, cleared when the cart is ordered or emptied
+
+    // The shop closed (not just another tab): anything left in the cart wasn't ordered.
+    private void OnShopClosed()
+    {
+        if (!remindOfCart || cart.Count == 0) return;
+        int things = 0;
+        foreach (var c in cart) things += c.quantity;
+        string store = plot != null ? plot.DisplayName : "your store";
+        if (cartNote != null) Notifications.Clear(cartNote);
+        cartNote = Notifications.Post("Cart not ordered",
+            $"{things} thing{(things == 1 ? "" : "s")} for {store} still in the cart. Open the shop and press Checkout to order them.");
+    }
+
+    private void ForgetCartNote()
+    {
+        if (cartNote == null) return;
+        Notifications.Clear(cartNote);
+        cartNote = null;
+    }
+
+    private void OnDestroy()
+    {
+        if (shop != null) shop.Closed -= OnShopClosed;
+    }
+
     private void Awake()
     {
+        shop = GetComponentInParent<ShopUIController>(true);
+        if (shop == null) shop = FindAnyObjectByType<ShopUIController>(FindObjectsInactive.Include);
+        if (shop != null) shop.Closed += OnShopClosed;
+        if (cartText != null)
+        {
+            if (!cartText.TryGetComponent<TextLinkClicks>(out var clicks)) clicks = cartText.gameObject.AddComponent<TextLinkClicks>();
+            clicks.Clicked += OnCartLineClicked;
+        }
         if (nextPageButton != null) nextPageButton.onClick.AddListener(() => ChangePage(+1));
         if (previousPageButton != null) previousPageButton.onClick.AddListener(() => ChangePage(-1));
         if (checkoutButton != null) checkoutButton.onClick.AddListener(Checkout);
-        if (clearCartButton != null) clearCartButton.onClick.AddListener(ClearCart);
+        if (clearCartButton != null) clearCartButton.onClick.AddListener(OnClearPressed);
 
         if (filterButton != null) filterButton.onClick.AddListener(ApplyFilter);
         if (clearFilterButton != null) clearFilterButton.onClick.AddListener(ClearFilter);
@@ -129,12 +175,17 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         RefreshAll();
     }
 
-    private void OnDisable() => Unsubscribe();
+    private void OnDisable()
+    {
+        Unsubscribe();
+        DisarmClear();
+    }
 
     private int shownForLevel = -1;
 
     private void Update()
     {
+        if (clearArmedUntil > 0f && Time.unscaledTime >= clearArmedUntil) DisarmClear(); // not pressed again: back to normal
         if (statusText != null && statusUntil > 0f && Time.unscaledTime > statusUntil)
         {
             statusText.text = "";
@@ -621,6 +672,48 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     /// </summary>
     protected virtual float GetDeliverySeconds(int[] itemIds, int[] quantities) => -1f;
 
+    // A cart line clicked: one fewer of it (right-click or Shift: all of it).
+    private void OnCartLineClicked(string id, UnityEngine.EventSystems.PointerEventData e)
+    {
+        if (waitingForResult || !int.TryParse(id, out int i) || i < 0 || i >= cart.Count) return;
+        bool all = e.button == UnityEngine.EventSystems.PointerEventData.InputButton.Right ||
+                   Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+        var (itemId, paint, quantity) = cart[i];
+        if (all || quantity <= 1) cart.RemoveAt(i);
+        else cart[i] = (itemId, paint, quantity - 1);
+        RefreshCart();
+    }
+
+    // Clear Cart: the first press asks (the button says Clear Confirm Label), the second clears.
+    private float clearArmedUntil;
+    private string clearLabel;
+
+    private void OnClearPressed()
+    {
+        if (string.IsNullOrEmpty(clearConfirmLabel) || Time.unscaledTime < clearArmedUntil)
+        {
+            DisarmClear();
+            ClearCart();
+            return;
+        }
+        clearArmedUntil = Time.unscaledTime + clearConfirmSeconds;
+        var label = clearCartButton.GetComponentInChildren<TMP_Text>(true);
+        if (label != null)
+        {
+            clearLabel ??= label.text;
+            label.text = clearConfirmLabel;
+        }
+        ShowStatus("Press again to empty the cart.");
+    }
+
+    private void DisarmClear()
+    {
+        clearArmedUntil = 0f;
+        if (clearLabel == null || clearCartButton == null) return;
+        var label = clearCartButton.GetComponentInChildren<TMP_Text>(true);
+        if (label != null) label.text = clearLabel;
+    }
+
     private void ClearCart()
     {
         cart.Clear();
@@ -656,16 +749,19 @@ public class BuyMenu : MonoBehaviour, IShopScreen
 
     private void RefreshCart()
     {
+        if (cart.Count == 0) ForgetCartNote(); // ordered or emptied: the reminder's done
         int total = 0;
         var catalog = ItemCatalog.Instance;
         var lines = new System.Text.StringBuilder();
-        foreach (var (itemId, paint, quantity) in cart)
+        for (int i = 0; i < cart.Count; i++)
         {
+            var (itemId, paint, quantity) = cart[i];
             if (catalog == null || !catalog.TryGet(itemId, out var def)) continue;
             int sub = (MarketModifiers.OrderCost(def) + MarketModifiers.DeliveryFee(def)) * quantity; // with events
             total += sub;
             string color = paint != 0 ? $" ({PaintPalette.NameOf(paint)})" : "";
-            lines.AppendLine($"{def.displayName}{color} x{quantity}   ${sub:N0}");
+            // A link per line: clicking it takes one out (see OnCartLineClicked).
+            lines.AppendLine($"<link=\"{i}\">{def.displayName}{color} x{quantity}   ${sub:N0}{removeMark}</link>");
         }
 
         int money = EconomyManager.Instance != null ? EconomyManager.Instance.LocalMoney : 0;
