@@ -73,7 +73,7 @@ public class SettingsApp : MonoBehaviour, IPhoneApp
     {
         if (y > style.padding) y += style.spacing;
         var t = PhoneUI.Text(content, $"<b>{text}</b>", y, style.rowHeight * 0.8f, style, true, TextAlignmentOptions.BottomLeft);
-        t.color = style.accent;
+        t.color = PhoneTheme.AccentOf(style);
         y += style.rowHeight * 0.8f + style.spacing * 0.5f;
     }
 
@@ -81,7 +81,7 @@ public class SettingsApp : MonoBehaviour, IPhoneApp
     private void SliderRow(string name, System.Func<string> value, float min, float max, float now, UnityEngine.Events.UnityAction<float> set)
     {
         var label = PhoneUI.Text(content, "", y, style.rowHeight * 0.75f, style, false, TextAlignmentOptions.Left);
-        live.Add((label, () => $"{name}  <color=#{ColorUtility.ToHtmlStringRGB(style.dimText)}>{value()}</color>"));
+        live.Add((label, () => $"{name}  <color=#{ColorUtility.ToHtmlStringRGB(PhoneTheme.DimOf(style))}>{value()}</color>"));
         y += style.rowHeight * 0.75f;
         PhoneUI.Slider(content, y, style, min, max, now, set, style.padding);
         y += style.rowHeight + style.spacing;

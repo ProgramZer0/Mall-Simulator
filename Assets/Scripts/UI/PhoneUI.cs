@@ -60,7 +60,7 @@ public static class PhoneUI
         if (s.font != null) t.font = s.font;
         t.text = text;
         t.fontSize = small ? s.smallFontSize : s.fontSize;
-        t.color = small ? s.dimText : s.text;
+        t.color = small ? PhoneTheme.DimOf(s) : PhoneTheme.TextOf(s);
         t.alignment = align;
         t.textWrappingMode = TextWrappingModes.Normal;
         t.raycastTarget = false;
@@ -72,7 +72,7 @@ public static class PhoneUI
     {
         var rt = Row("Button", parent, y, height, s, left, right);
         var img = rt.gameObject.AddComponent<Image>();
-        img.color = s.button;
+        img.color = PhoneTheme.ButtonOf(s);
         var b = rt.gameObject.AddComponent<Button>();
         b.targetGraphic = img;
         var colors = b.colors;
@@ -93,13 +93,13 @@ public static class PhoneUI
         track.anchorMin = new Vector2(0f, 0.5f);
         track.anchorMax = new Vector2(1f, 0.5f);
         track.sizeDelta = new Vector2(0f, 6f);
-        track.gameObject.AddComponent<Image>().color = s.track;
+        track.gameObject.AddComponent<Image>().color = PhoneTheme.TrackOf(s);
         var area = Rect("Fill Area", rt);
         area.anchorMin = new Vector2(0f, 0.5f);
         area.anchorMax = new Vector2(1f, 0.5f);
         area.sizeDelta = new Vector2(0f, 6f);
         var fill = Rect("Fill", area);
-        fill.gameObject.AddComponent<Image>().color = s.accent;
+        fill.gameObject.AddComponent<Image>().color = PhoneTheme.AccentOf(s);
         fill.sizeDelta = Vector2.zero;
         var handleArea = Rect("Handle Area", rt);
         Stretch(handleArea);
@@ -108,7 +108,7 @@ public static class PhoneUI
         var handle = Rect("Handle", handleArea);
         handle.sizeDelta = new Vector2(16f, 0f);
         var handleImg = handle.gameObject.AddComponent<Image>();
-        handleImg.color = s.text;
+        handleImg.color = PhoneTheme.TextOf(s);
         var slider = rt.gameObject.AddComponent<Slider>();
         slider.fillRect = fill;
         slider.handleRect = handle;
