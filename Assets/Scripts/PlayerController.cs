@@ -146,6 +146,7 @@ public class PlayerController3D : NetworkBehaviour
         var audioListener = playerCamera != null ? playerCamera.GetComponent<AudioListener>() : null;
         if (audioListener != null) audioListener.enabled = true;
 
+        localOwner = this;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
@@ -223,10 +224,15 @@ public class PlayerController3D : NetworkBehaviour
         hasSafe = true;
     }
 
+    // This machine's own player. Starting the mall swaps it for a fresh one, and the old one can go
+    // after the new one has locked the cursor: only the one still ours frees it.
+    private static PlayerController3D localOwner;
+
     public override void OnDestroy()
     {
-        if (IsOwner)
+        if (IsOwner && (localOwner == this || localOwner == null))
         {
+            localOwner = null;
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
         }
