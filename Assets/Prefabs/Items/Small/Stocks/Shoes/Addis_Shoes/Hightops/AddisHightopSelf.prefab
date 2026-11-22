@@ -201,7 +201,7 @@ MonoBehaviour:
   itemId: 70
   mounting: 0
   editModeOnly: 0
-  modelRotation: {x: -90, y: 0, z: 0}
+  modelRotation: {x: 0, y: 0, z: 0}
   startsOnWall: 0
   isStockCrate: 0
   shelfPrefabs: []
