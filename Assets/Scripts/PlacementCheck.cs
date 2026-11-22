@@ -394,19 +394,29 @@ public static class PlacementCheck
     public static bool HasWallBehind(ItemDef def, Vector3 position, Quaternion rotation, int wallMask)
     {
         if (!GetTestBox(def, position, rotation, out Vector3 center, out Vector3 halfExtents)) return false;
-        bool thinX = halfExtents.x < halfExtents.z;
-        Vector3 axis = rotation * (thinX ? Vector3.right : Vector3.forward);
-        float extent = thinX ? halfExtents.x : halfExtents.z;
-
-        for (int side = -1; side <= 1; side += 2)
+        // Against the thinner of its two sideways sides (as it stands: a Blender model's own z is up, so
+        // its own axes are told apart by which way they point, not by name). Both, if about the same.
+        float thinnest = float.MaxValue;
+        for (int i = 0; i < 3; i++)
+            if (Mathf.Abs((rotation * Axis(i)).y) <= 0.5f) thinnest = Mathf.Min(thinnest, halfExtents[i]);
+        if (thinnest == float.MaxValue) return false;
+        for (int i = 0; i < 3; i++)
         {
-            Vector3 dir = axis * side;
-            Vector3 face = center + dir * (extent + Skin);
-            if (Physics.Raycast(face - dir * 0.05f, dir, 0.05f + SupportProbe, wallMask, QueryTriggerInteraction.Ignore))
-                return true;
+            Vector3 axis = rotation * Axis(i);
+            if (Mathf.Abs(axis.y) > 0.5f || halfExtents[i] > thinnest + 0.02f) continue; // up-and-down, or the wide side
+            float extent = halfExtents[i];
+            for (int side = -1; side <= 1; side += 2)
+            {
+                Vector3 dir = axis * side;
+                Vector3 face = center + dir * (extent + Skin);
+                if (Physics.Raycast(face - dir * 0.05f, dir, 0.05f + SupportProbe, wallMask, QueryTriggerInteraction.Ignore))
+                    return true;
+            }
         }
         return false;
     }
+
+    private static Vector3 Axis(int i) => i == 0 ? Vector3.right : i == 1 ? Vector3.up : Vector3.forward;
 
     private static readonly Collider[] EditHits = new Collider[32];
     private static readonly RaycastHit[] EditCastHits = new RaycastHit[32];
