@@ -954,7 +954,7 @@ public class CheckoutCounter : NetworkBehaviour
         body.transform.localScale = bagSize;
         body.transform.localPosition = Vector3.up * (bagSize.y * 0.5f);
         var r = body.GetComponent<Renderer>();
-        if (r != null) r.material.color = new Color(0.72f, 0.56f, 0.38f, 1f); // (as the tags do)
+        PlainLook.Apply(r, new Color(0.72f, 0.56f, 0.38f, 1f)); // (as the tags do)
         return root;
     }
 
@@ -1159,7 +1159,7 @@ public class CheckoutCounter : NetworkBehaviour
         body.transform.SetParent(root.transform, false);
         body.transform.localScale = size;
         var r = body.GetComponent<Renderer>();
-        if (r != null) r.material.color = color;
+        PlainLook.Apply(r, color);
 
         var textGo = new GameObject("Label");
         textGo.transform.SetParent(root.transform, false);
