@@ -108,8 +108,42 @@ public class BuyMenu : MonoBehaviour, IShopScreen
 
     /* ========================= SETUP ========================= */
 
+    [Header("Cart reminder")]
+    [Tooltip("Closing the shop with things still in the cart (not ordered): a phone notification saying so.")]
+    [SerializeField] private bool remindOfCart = true;
+
+    private ShopUIController shop;
+    private Note cartNote; // the reminder, cleared when the cart is ordered or emptied
+
+    // The shop closed (not just another tab): anything left in the cart wasn't ordered.
+    private void OnShopClosed()
+    {
+        if (!remindOfCart || cart.Count == 0) return;
+        int things = 0;
+        foreach (var c in cart) things += c.quantity;
+        string store = plot != null ? plot.DisplayName : "your store";
+        if (cartNote != null) Notifications.Clear(cartNote);
+        cartNote = Notifications.Post("Cart not ordered",
+            $"{things} thing{(things == 1 ? "" : "s")} for {store} still in the cart. Open the shop and press Checkout to order them.");
+    }
+
+    private void ForgetCartNote()
+    {
+        if (cartNote == null) return;
+        Notifications.Clear(cartNote);
+        cartNote = null;
+    }
+
+    private void OnDestroy()
+    {
+        if (shop != null) shop.Closed -= OnShopClosed;
+    }
+
     private void Awake()
     {
+        shop = GetComponentInParent<ShopUIController>(true);
+        if (shop == null) shop = FindAnyObjectByType<ShopUIController>(FindObjectsInactive.Include);
+        if (shop != null) shop.Closed += OnShopClosed;
         if (nextPageButton != null) nextPageButton.onClick.AddListener(() => ChangePage(+1));
         if (previousPageButton != null) previousPageButton.onClick.AddListener(() => ChangePage(-1));
         if (checkoutButton != null) checkoutButton.onClick.AddListener(Checkout);
@@ -656,6 +690,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
 
     private void RefreshCart()
     {
+        if (cart.Count == 0) ForgetCartNote(); // ordered or emptied: the reminder's done
         int total = 0;
         var catalog = ItemCatalog.Instance;
         var lines = new System.Text.StringBuilder();
