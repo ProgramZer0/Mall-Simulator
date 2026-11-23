@@ -127,7 +127,7 @@ public class LicenseManager : NetworkBehaviour
     /// <summary>Can this team order this item, license-wise? Missing: the license it needs.</summary>
     public static bool CanOrder(ulong team, ItemDef item, out LicenseDef missing)
     {
-        missing = Instance != null && Instance.IsSpawned ? Instance.MissingFor(team, item) : null;
+        missing = Instance != null && Instance.IsSpawned && !FranchiseManager.Unlocks(team, item) ? Instance.MissingFor(team, item) : null;
         return missing == null;
     }
 
