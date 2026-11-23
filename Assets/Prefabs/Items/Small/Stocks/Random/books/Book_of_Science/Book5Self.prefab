@@ -116,9 +116,8 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: 53c2167df7049bd4182c289da6dbef38, type: 3}
     categories:
-    - Books
-    - Cheap
-    - Electronics
+    - Random
+    - books
     category: 
     price: 10
     sizes: 0

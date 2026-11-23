@@ -117,8 +117,8 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: f1683b93e892ab74fb89090556fa40a6, type: 3}
     categories:
     - Electronics
+    - Cameras
     - Cheap
-    - Camera
     category: 
     price: 10
     sizes: 0

@@ -158,12 +158,9 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: 2e0b3914c282bde4aa1fdb63eb3fe210, type: 3}
     categories:
-    - Clothing
     - Shoes
-    - Expensive
-    - Exclusive
+    - High Tops
     - Addis
-    - HighTop
     category: 
     price: 10
     sizes: 2

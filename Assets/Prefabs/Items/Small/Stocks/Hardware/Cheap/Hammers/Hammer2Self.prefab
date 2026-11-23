@@ -117,8 +117,7 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: 4c90d2a8471c59048a97151df19682c4, type: 3}
     categories:
     - Hardware
-    - Tools
-    - Hammers
+    - Cheap
     category: 
     price: 10
     sizes: 0

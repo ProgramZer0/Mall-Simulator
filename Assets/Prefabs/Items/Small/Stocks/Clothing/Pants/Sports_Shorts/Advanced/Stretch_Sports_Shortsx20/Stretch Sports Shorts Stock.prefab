@@ -1,0 +1,147 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &775871467083701452
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: itemId
+      value: 604
+      objectReference: {fileID: 0}
+    - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: hangPrefabs.Array.size
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: shelfPrefabs.Array.size
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: 'hangPrefabs.Array.data[0]'
+      value: 
+      objectReference: {fileID: 3929880904900467946, guid: 55527ae66cbe86e42b9846ca6d359972, type: 3}
+    - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: 'shelfPrefabs.Array.data[0]'
+      value: 
+      objectReference: {fileID: 8229881343678767302, guid: c53d50e5067306a458b7dbdd9584e6d1, type: 3}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: item.id
+      value: 604
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: autoName
+      value: Stretch Sports Shorts
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: item.icon
+      value: 
+      objectReference: {fileID: 21300000, guid: e3efda53f9362a04c9af36edef876957, type: 3}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: item.price
+      value: 200
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: item.sizes
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: iconMadeWith.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: item.showInShop
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: item.displayName
+      value: Stretch Sports Shorts
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: item.deliverySeconds
+      value: 30
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: item.specialMarketWeight
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: item.categories.Array.size
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: 'item.categories.Array.data[0]'
+      value: Clothing
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: 'item.categories.Array.data[1]'
+      value: Pants
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: 'item.categories.Array.data[2]'
+      value: Sports Shorts
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: 'item.categories.Array.data[3]'
+      value: Advanced
+      objectReference: {fileID: 0}
+    - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: 'item.categories.Array.data[4]'
+      value: Boxed
+      objectReference: {fileID: 0}
+    - target: {fileID: 2129252736326913349, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -27.30884
+      objectReference: {fileID: 0}
+    - target: {fileID: 2129252736326913349, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -1.6317601
+      objectReference: {fileID: 0}
+    - target: {fileID: 2129252736326913349, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -52.16315
+      objectReference: {fileID: 0}
+    - target: {fileID: 2129252736326913349, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.7071067
+      objectReference: {fileID: 0}
+    - target: {fileID: 2129252736326913349, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: 2129252736326913349, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2129252736326913349, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2129252736326913349, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2129252736326913349, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2129252736326913349, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4223701351420822915, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: m_Name
+      value: Stretch Sports Shorts Stock
+      objectReference: {fileID: 0}
+    - target: {fileID: 8513666520626042969, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
+      propertyPath: GlobalObjectIdHash
+      value: 2031265276
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}

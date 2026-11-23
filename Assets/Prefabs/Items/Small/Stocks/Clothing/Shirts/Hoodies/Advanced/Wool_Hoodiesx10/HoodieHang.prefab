@@ -118,9 +118,9 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: eb4d68cb00af57c48bed9f0ec5452e55, type: 3}
     categories:
     - Clothing
-    - Cheap
     - Shirts
     - Hoodies
+    - Advanced
     category: 
     price: 10
     sizes: 1

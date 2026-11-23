@@ -116,9 +116,8 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: 4041436932f89ec469dc8a2d93412f7b, type: 3}
     categories:
-    - Books
-    - Cheap
-    - Liquor
+    - Random
+    - books
     category: 
     price: 10
     sizes: 0

@@ -117,9 +117,8 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: a1666399765e743418e1e0e65a6b4c12, type: 3}
     categories:
     - Toys
-    - Family
+    - Cheap
     - Kids
-    - Cars
     category: 
     price: 10
     sizes: 0

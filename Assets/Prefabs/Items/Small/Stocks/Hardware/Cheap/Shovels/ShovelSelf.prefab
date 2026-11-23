@@ -117,8 +117,7 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: 89e711af90952c6469495a69e19dc18c, type: 3}
     categories:
     - Hardware
-    - Tools
-    - Shovels
+    - Cheap
     category: 
     price: 10
     sizes: 0

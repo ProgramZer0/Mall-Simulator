@@ -116,10 +116,9 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: 6179687b2589eba4ca91995d14f7ffff, type: 3}
     categories:
-    - Drinks
+    - Food Drinks
     - Sodas
-    - Cheap
-    - Cola
+    - cheap
     category: 
     price: 10
     sizes: 0

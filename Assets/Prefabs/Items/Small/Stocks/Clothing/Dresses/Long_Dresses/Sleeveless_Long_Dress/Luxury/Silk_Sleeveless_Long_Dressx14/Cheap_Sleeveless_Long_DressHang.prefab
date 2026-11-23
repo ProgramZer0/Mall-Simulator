@@ -109,7 +109,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
-    id: 43
+    id: 533
     displayName: SleethlessDressLong
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
@@ -118,10 +118,10 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: 8ad2b05a7b97c0844b40c9df24e600ee, type: 3}
     categories:
     - Clothing
-    - Cheap
     - Dresses
-    - SleeveLess Dress
-    - Long Dress
+    - Long Dresses
+    - Sleeveless Long Dress
+    - Luxury
     category: 
     price: 10
     sizes: 1
@@ -179,7 +179,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 43
+  itemId: 533
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}

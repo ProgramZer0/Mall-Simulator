@@ -133,7 +133,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
-    id: 30
+    id: 584
     displayName: Cheap Cargo Shorts Folded
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
@@ -143,8 +143,8 @@ MonoBehaviour:
     categories:
     - Clothing
     - Pants
-    - Jeans
-    - Cheap
+    - Cargo Shorts
+    - Luxury
     category: 
     price: 10
     sizes: 1
@@ -177,7 +177,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 30
+  itemId: 584
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}

@@ -117,8 +117,7 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: 93d0419ae62a08945bf3000ddeeb48ec, type: 3}
     categories:
     - Cosmentics
-    - Fragrences
-    - cologne
+    - Perfume
     - Captura
     category: 
     price: 10

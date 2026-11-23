@@ -116,7 +116,8 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: ad08f4204a89948449dc00c90648ecc7, type: 3}
     categories:
-    - KitchenWare
+    - Kitchenware
+    - Cheap
     - Pans
     category: 
     price: 10

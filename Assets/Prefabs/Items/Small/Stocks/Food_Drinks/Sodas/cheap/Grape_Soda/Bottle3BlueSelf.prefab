@@ -116,10 +116,9 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: f647467df6bbbdc478f11cc006910bad, type: 3}
     categories:
-    - Drinks
+    - Food Drinks
     - Sodas
-    - Grape
-    - Cheap
+    - cheap
     category: 
     price: 10
     sizes: 0

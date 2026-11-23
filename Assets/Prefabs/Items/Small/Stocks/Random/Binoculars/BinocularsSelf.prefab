@@ -115,7 +115,8 @@ MonoBehaviour:
     sizeClass: 1
     showInShop: 0
     icon: {fileID: 21300000, guid: d3fac7117e4f81245b790903a4cca9db, type: 3}
-    categories: []
+    categories:
+    - Random
     category: 
     price: 10
     sizes: 0

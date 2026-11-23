@@ -158,12 +158,9 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: cfd9366699e7f974b9adb39c6bf5ec5a, type: 3}
     categories:
-    - Clothing
     - Shoes
-    - Expensive
-    - Exclusive
-    - Addis
     - Sandles
+    - Addis
     category: 
     price: 10
     sizes: 2

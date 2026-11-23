@@ -116,9 +116,9 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: 3b20c2ebba9095e4f99329fbe6bccff0, type: 3}
     categories:
-    - Action Figures
-    - Pipes
     - Toys
+    - Cheap
+    - Action Figures
     category: 
     price: 10
     sizes: 0

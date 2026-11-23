@@ -117,9 +117,8 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: e706f0deb9fa8514f8be71a07130f4ea, type: 3}
     categories:
     - Toys
-    - Family
+    - Cheap
     - Kids
-    - Board Games
     category: 
     price: 10
     sizes: 0

@@ -117,9 +117,8 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: eddec439daa561843b7f7d26d8dd8f14, type: 3}
     categories:
     - Toys
-    - Family
+    - Cheap
     - Kids
-    - Helicopters
     category: 
     price: 10
     sizes: 0

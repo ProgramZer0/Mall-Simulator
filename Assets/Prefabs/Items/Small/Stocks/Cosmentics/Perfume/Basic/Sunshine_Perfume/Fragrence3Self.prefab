@@ -117,8 +117,8 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: e7228bba52b19504780c95ab38cd7222, type: 3}
     categories:
     - Cosmentics
-    - Fragrences
     - Perfume
+    - Basic
     category: 
     price: 10
     sizes: 0

@@ -109,7 +109,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
-    id: 171
+    id: 656
     displayName: Long Sleeve Button Down Hang
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
@@ -118,10 +118,9 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: d0c31f312b8159a4ab6b0b04eb5f89ef, type: 3}
     categories:
     - Clothing
-    - Cheap
     - Shirts
-    - Long Sleeve
-    - Button Down
+    - Long Sleeve Button Downs
+    - Luxury
     category: 
     price: 10
     sizes: 1
@@ -179,7 +178,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 171
+  itemId: 656
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}

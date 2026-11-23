@@ -118,10 +118,9 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: f1119fa4c303d8a4b91d48c80176640e, type: 3}
     categories:
     - Clothing
-    - Cheap
     - Pants
-    - Shorts
     - Cargo Shorts
+    - Advanced
     category: 
     price: 10
     sizes: 1

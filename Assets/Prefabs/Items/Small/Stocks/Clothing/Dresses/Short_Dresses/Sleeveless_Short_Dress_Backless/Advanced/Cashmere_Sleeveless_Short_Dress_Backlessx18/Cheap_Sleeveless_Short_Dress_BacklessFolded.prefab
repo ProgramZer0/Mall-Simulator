@@ -171,7 +171,11 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: 3a7dbb7df58ddaa42b6f5bc64399a607, type: 3}
     categories:
+    - Clothing
     - Dresses
+    - Short Dresses
+    - Sleeveless Short Dress Backless
+    - Advanced
     category: 
     price: 10
     sizes: 1

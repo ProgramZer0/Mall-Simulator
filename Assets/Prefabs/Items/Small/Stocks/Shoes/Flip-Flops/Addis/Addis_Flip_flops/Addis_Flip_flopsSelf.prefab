@@ -158,12 +158,9 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: e6564321d37102c45a788312dfbf3ec3, type: 3}
     categories:
-    - Clothing
     - Shoes
-    - Expensive
-    - Exclusive
+    - Flip-Flops
     - Addis
-    - Flip Flops
     category: 
     price: 10
     sizes: 2

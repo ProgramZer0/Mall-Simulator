@@ -109,7 +109,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
-    id: 51
+    id: 588
     displayName: Cheap Cargo Short
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
@@ -118,10 +118,9 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: f1119fa4c303d8a4b91d48c80176640e, type: 3}
     categories:
     - Clothing
-    - Cheap
     - Pants
-    - Shorts
     - Cargo Shorts
+    - Standard
     category: 
     price: 10
     sizes: 1
@@ -179,7 +178,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 51
+  itemId: 588
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}

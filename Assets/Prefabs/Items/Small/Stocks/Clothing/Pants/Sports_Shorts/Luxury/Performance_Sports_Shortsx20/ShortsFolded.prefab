@@ -133,7 +133,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
-    id: 419
+    id: 612
     displayName: Cheap Jeans
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
@@ -143,8 +143,8 @@ MonoBehaviour:
     categories:
     - Clothing
     - Pants
-    - Jeans
-    - Cheap
+    - Sports Shorts
+    - Luxury
     category: 
     price: 10
     sizes: 1
@@ -177,7 +177,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 419
+  itemId: 612
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}

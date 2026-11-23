@@ -117,8 +117,7 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: 5a9cc6e950d631746878677fedeeca79, type: 3}
     categories:
     - Hardware
-    - Tools
-    - ScrewDrivers
+    - Cheap
     category: 
     price: 10
     sizes: 0

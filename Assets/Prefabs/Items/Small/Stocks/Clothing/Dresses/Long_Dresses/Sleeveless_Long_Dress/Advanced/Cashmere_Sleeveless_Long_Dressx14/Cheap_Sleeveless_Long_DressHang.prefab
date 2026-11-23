@@ -118,10 +118,10 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: 8ad2b05a7b97c0844b40c9df24e600ee, type: 3}
     categories:
     - Clothing
-    - Cheap
     - Dresses
-    - SleeveLess Dress
-    - Long Dress
+    - Long Dresses
+    - Sleeveless Long Dress
+    - Advanced
     category: 
     price: 10
     sizes: 1

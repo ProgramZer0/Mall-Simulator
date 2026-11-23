@@ -133,7 +133,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 64
+  itemId: 659
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}
@@ -163,7 +163,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
-    id: 64
+    id: 659
     displayName: Long Sleeve Button Down Folded
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
@@ -172,10 +172,9 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: 54a10703cb3d93344a594868c0d2ca2f, type: 3}
     categories:
     - Clothing
-    - Cheap
     - Shirts
-    - Long Sleeve
-    - Button Down
+    - Long Sleeve Button Downs
+    - Standard
     category: 
     price: 10
     sizes: 1

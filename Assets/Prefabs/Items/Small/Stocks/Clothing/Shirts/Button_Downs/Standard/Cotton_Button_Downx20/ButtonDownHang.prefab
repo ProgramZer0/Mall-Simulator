@@ -109,7 +109,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
-    id: 169
+    id: 628
     displayName: Cheap Button Down Shirt
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
@@ -118,10 +118,9 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: bcb69624fa8f72f468ced6829702b02a, type: 3}
     categories:
     - Clothing
-    - Cheap
     - Shirts
-    - Button Down
-    - T-Shirt
+    - Button Downs
+    - Standard
     category: 
     price: 10
     sizes: 1
@@ -179,7 +178,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 169
+  itemId: 628
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}

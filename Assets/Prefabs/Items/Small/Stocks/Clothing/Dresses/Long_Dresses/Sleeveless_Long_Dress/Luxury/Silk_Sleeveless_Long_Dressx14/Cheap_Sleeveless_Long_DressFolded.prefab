@@ -133,7 +133,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 136
+  itemId: 532
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}
@@ -163,7 +163,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
-    id: 136
+    id: 532
     displayName: Cheap Sleeveless Long Dress Folded
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
@@ -171,7 +171,11 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: 80e50879acc51c64189369f250e5e7a5, type: 3}
     categories:
+    - Clothing
     - Dresses
+    - Long Dresses
+    - Sleeveless Long Dress
+    - Luxury
     category: 
     price: 10
     sizes: 1

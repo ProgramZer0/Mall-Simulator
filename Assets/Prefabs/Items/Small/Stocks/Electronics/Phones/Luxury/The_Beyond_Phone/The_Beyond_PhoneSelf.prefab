@@ -117,8 +117,8 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: cbe1ab280318a904ea1d47d4e3334c0b, type: 3}
     categories:
     - Electronics
-    - Cheap
-    - Phone
+    - Phones
+    - Luxury
     category: 
     price: 10
     sizes: 0

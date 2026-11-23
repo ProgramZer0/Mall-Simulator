@@ -134,7 +134,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
-    id: 36
+    id: 693
     displayName: Cheap T Shirt
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
@@ -144,8 +144,8 @@ MonoBehaviour:
     categories:
     - Clothing
     - Shirts
+    - T-Shirts
     - Cheap
-    - T-Shirt
     category: 
     price: 10
     sizes: 1
@@ -178,7 +178,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 36
+  itemId: 693
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}

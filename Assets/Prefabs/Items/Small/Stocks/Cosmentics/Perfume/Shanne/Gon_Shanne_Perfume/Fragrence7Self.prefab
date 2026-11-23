@@ -117,8 +117,8 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: f19e7ef1773ec1e4b857a63b7953bfc3, type: 3}
     categories:
     - Cosmentics
-    - Fragrences
     - Perfume
+    - Shanne
     category: 
     price: 10
     sizes: 0

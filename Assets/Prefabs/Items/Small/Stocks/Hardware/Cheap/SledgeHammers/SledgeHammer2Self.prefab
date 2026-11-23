@@ -117,8 +117,7 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: 9a3eb805f4329634286a1e9731ca985e, type: 3}
     categories:
     - Hardware
-    - Tools
-    - SledgeHammers
+    - Cheap
     category: 
     price: 10
     sizes: 0

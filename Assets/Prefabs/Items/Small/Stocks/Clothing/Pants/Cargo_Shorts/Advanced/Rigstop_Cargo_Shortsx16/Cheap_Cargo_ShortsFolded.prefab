@@ -143,8 +143,8 @@ MonoBehaviour:
     categories:
     - Clothing
     - Pants
-    - Jeans
-    - Cheap
+    - Cargo Shorts
+    - Advanced
     category: 
     price: 10
     sizes: 1

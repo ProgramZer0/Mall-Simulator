@@ -72,7 +72,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 20160046c6bb9c84fbb61de6bc73091d, type: 2}
+  - {fileID: 2100000, guid: 1a639d4e96d45304ea6d52cbc52e9398, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -134,7 +134,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
-    id: 29
+    id: 601
     displayName: Cheap Jeans
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
@@ -145,7 +145,7 @@ MonoBehaviour:
     - Clothing
     - Pants
     - Jeans
-    - Cheap
+    - Standard
     category: 
     price: 10
     sizes: 1
@@ -178,7 +178,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 29
+  itemId: 601
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}

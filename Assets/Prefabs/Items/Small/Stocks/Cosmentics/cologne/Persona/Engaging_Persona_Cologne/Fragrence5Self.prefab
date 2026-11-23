@@ -117,7 +117,6 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: 012b4a7fcef5ebb44b6c1ba2c1d73674, type: 3}
     categories:
     - Cosmentics
-    - Fragrences
     - cologne
     - Persona
     category: 

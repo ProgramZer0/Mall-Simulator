@@ -118,9 +118,9 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: 4bb2f0ad819708d44a0909f3f72b1821, type: 3}
     categories:
     - Clothing
-    - Cheap
     - Shirts
-    - Tank Top
+    - Tank Tops
+    - Advanced
     category: 
     price: 10
     sizes: 1

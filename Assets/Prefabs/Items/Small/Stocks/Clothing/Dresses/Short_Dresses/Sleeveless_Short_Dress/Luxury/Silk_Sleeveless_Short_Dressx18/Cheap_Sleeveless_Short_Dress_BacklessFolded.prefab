@@ -133,7 +133,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 138
+  itemId: 558
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}
@@ -163,7 +163,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
-    id: 138
+    id: 558
     displayName: Cheap Sleeveless Short Dress Backless Folded
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
@@ -171,7 +171,11 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: 2d52671791096cd42ad3b1e02e156eab, type: 3}
     categories:
+    - Clothing
     - Dresses
+    - Short Dresses
+    - Sleeveless Short Dress
+    - Luxury
     category: 
     price: 10
     sizes: 1

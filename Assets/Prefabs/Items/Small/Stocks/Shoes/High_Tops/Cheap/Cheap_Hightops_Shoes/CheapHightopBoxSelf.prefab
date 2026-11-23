@@ -158,10 +158,9 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: 71ca354e65fa72947a09f0972439cb7d, type: 3}
     categories:
-    - Clothing
     - Shoes
+    - High Tops
     - Cheap
-    - HighTops
     category: 
     price: 10
     sizes: 2

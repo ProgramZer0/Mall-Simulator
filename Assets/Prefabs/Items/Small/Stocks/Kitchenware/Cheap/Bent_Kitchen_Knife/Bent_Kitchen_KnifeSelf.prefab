@@ -117,6 +117,7 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: 09bda714dd187b84d86de8e99955f4cc, type: 3}
     categories:
     - Kitchenware
+    - Cheap
     category: 
     price: 10
     sizes: 0

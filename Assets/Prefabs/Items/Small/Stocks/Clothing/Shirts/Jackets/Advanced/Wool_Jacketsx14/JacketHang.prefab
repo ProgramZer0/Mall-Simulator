@@ -118,9 +118,9 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: e1f8cfe50ce1c5e42b7091bda1cc62fc, type: 3}
     categories:
     - Clothing
-    - Cheap
     - Shirts
     - Jackets
+    - Advanced
     category: 
     price: 10
     sizes: 1

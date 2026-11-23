@@ -109,7 +109,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   item:
-    id: 57
+    id: 638
     displayName: Cheap Hoodie
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
@@ -118,9 +118,9 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: eb4d68cb00af57c48bed9f0ec5452e55, type: 3}
     categories:
     - Clothing
-    - Cheap
     - Shirts
     - Hoodies
+    - Standard
     category: 
     price: 10
     sizes: 1
@@ -178,7 +178,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickupNet
   ShowTopMostFoldoutHeaderGroup: 1
-  itemId: 57
+  itemId: 638
   mounting: 0
   editModeOnly: 0
   modelRotation: {x: 0, y: 0, z: 0}

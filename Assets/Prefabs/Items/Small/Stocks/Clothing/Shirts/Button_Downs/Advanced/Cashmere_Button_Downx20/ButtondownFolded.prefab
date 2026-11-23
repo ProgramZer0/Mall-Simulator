@@ -172,10 +172,9 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: 8f7f9580cda83474184eb7141b951328, type: 3}
     categories:
     - Clothing
-    - Cheap
     - Shirts
-    - Button Down
-    - T-Shirt
+    - Button Downs
+    - Advanced
     category: 
     price: 10
     sizes: 1

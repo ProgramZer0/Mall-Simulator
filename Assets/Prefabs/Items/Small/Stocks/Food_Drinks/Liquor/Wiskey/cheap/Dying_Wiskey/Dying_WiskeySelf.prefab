@@ -116,9 +116,10 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: a056227820dc66d4cb1fcde4a602b6ad, type: 3}
     categories:
-    - Drinks
+    - Food Drinks
     - Liquor
     - Wiskey
+    - cheap
     category: 
     price: 10
     sizes: 0

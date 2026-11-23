@@ -172,10 +172,9 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: 54a10703cb3d93344a594868c0d2ca2f, type: 3}
     categories:
     - Clothing
-    - Cheap
     - Shirts
-    - Long Sleeve
-    - Button Down
+    - Long Sleeve Button Downs
+    - Advanced
     category: 
     price: 10
     sizes: 1

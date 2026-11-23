@@ -144,8 +144,8 @@ MonoBehaviour:
     categories:
     - Clothing
     - Shirts
-    - Cheap
-    - T-Shirt
+    - T-Shirts
+    - Advanced
     category: 
     price: 10
     sizes: 1

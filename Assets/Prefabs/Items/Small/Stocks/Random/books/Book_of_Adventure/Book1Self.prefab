@@ -116,9 +116,8 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: 9f8298f155d896e42b768200d8b26547, type: 3}
     categories:
-    - Books
-    - Cheap
-    - Adventure
+    - Random
+    - books
     category: 
     price: 10
     sizes: 0

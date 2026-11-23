@@ -117,8 +117,7 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: c3529e986e85c6d49ae8b05b9ada2592, type: 3}
     categories:
     - Hardware
-    - Tools
-    - Tape Measurers
+    - Cheap
     category: 
     price: 10
     sizes: 0

@@ -117,9 +117,8 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: 902d5976c8caacd44843867d82fafacc, type: 3}
     categories:
     - Toys
-    - Family
+    - Cheap
     - Kids
-    - Trains
     category: 
     price: 10
     sizes: 0

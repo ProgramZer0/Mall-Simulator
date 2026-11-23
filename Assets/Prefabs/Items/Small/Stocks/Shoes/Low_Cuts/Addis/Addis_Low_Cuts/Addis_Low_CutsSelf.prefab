@@ -158,12 +158,9 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: 51641ee90f561834286007073c18494e, type: 3}
     categories:
-    - Clothing
     - Shoes
-    - Expensive
-    - Exclusive
+    - Low Cuts
     - Addis
-    - LowCuts
     category: 
     price: 10
     sizes: 2

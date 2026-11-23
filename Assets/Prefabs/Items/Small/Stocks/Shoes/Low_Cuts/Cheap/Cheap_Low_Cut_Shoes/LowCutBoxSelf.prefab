@@ -158,10 +158,9 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: f8d977a21f4d3c040950cc41e8a5ae5b, type: 3}
     categories:
-    - Clothing
     - Shoes
+    - Low Cuts
     - Cheap
-    - LowCuts
     category: 
     price: 10
     sizes: 2

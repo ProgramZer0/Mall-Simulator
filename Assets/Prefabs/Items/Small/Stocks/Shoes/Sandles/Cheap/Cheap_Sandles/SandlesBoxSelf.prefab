@@ -158,10 +158,9 @@ MonoBehaviour:
     showInShop: 0
     icon: {fileID: 21300000, guid: b215d01b49ef5a14bb350cce6228bd6f, type: 3}
     categories:
-    - Clothing
     - Shoes
-    - Cheap
     - Sandles
+    - Cheap
     category: 
     price: 10
     sizes: 2
