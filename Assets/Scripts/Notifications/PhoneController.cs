@@ -208,6 +208,7 @@ public class PhoneController : MonoBehaviour
         }
         phone = Instantiate(phonePrefab, cam.transform);
         phone.Init(cam);
+        PhoneOverlay.Setup(cam, phone.gameObject); // drawn over the world: never pokes into shelves and walls
         phone.gameObject.SetActive(false);
         return true;
     }
