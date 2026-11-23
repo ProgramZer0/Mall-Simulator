@@ -30,6 +30,13 @@ public class FranchiseDef : ScriptableObject
     [Min(10f)] public float auctionSeconds = 180f;
     [Tooltip("Team level needed to bid (0 or 1 = from the start).")]
     [Min(0)] public int minLevel = 0;
+    [Tooltip("Item categories the team must have unlocked before it can bid: reached each one's unlock level " +
+             "(ProgressionManager's Category Unlocks) and holding the licenses it needs. E.g. \"Bags\".")]
+    public List<string> needsCategories = new();
+    [Tooltip("Holding it unlocks ALL its items: ones in its categories can be ordered even if their other " +
+             "categories are still locked (by level or license). Their own Min Level still counts. Off: they " +
+             "need those unlocked as usual.")]
+    public bool unlocksItsItems;
     [Tooltip("The brand's colors: extra colors for everything it covers, on top of the colors each item comes in " +
              "anyway. Exclusive colors listed here can be used on them.")]
     [PaletteColor] public List<string> colors = new();

@@ -170,6 +170,46 @@ public class FranchiseManager : NetworkBehaviour
         return missing == null;
     }
 
+    /// <summary>
+    /// Does a franchise this team holds unlock this item past its categories' levels and licenses (the
+    /// franchise's Unlocks Its Items)?
+    /// </summary>
+    public static bool Unlocks(ulong team, ItemDef item)
+    {
+        var fm = Instance;
+        if (fm == null || !fm.IsSpawned || item == null) return false;
+        foreach (var f in fm.franchises)
+            if (f != null && f.unlocksItsItems && f.Covers(item) && fm.TryGetState(f.id, out var s) && s.holder == team) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// What this team still needs for the franchise's Needs Categories ("Bags (level 5)", "the Bags
+    /// license"), or null when it has them all.
+    /// </summary>
+    public static string MissingNeeds(ulong team, FranchiseDef f)
+    {
+        if (f == null || f.needsCategories == null) return null;
+        var missing = new List<string>();
+        int level = ProgressionManager.LevelOf(team);
+        var lm = LicenseManager.Instance;
+        foreach (var raw in f.needsCategories)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            string cat = raw.Trim();
+            int unlock = ProgressionManager.CategoryLevel(cat);
+            if (unlock > level) missing.Add($"{cat} (level {unlock})");
+            if (lm == null || !lm.IsSpawned) continue;
+            foreach (var l in lm.Licenses)
+            {
+                if (l == null || lm.Holds(team, l.id)) continue;
+                foreach (var c in l.AllCategories)
+                    if (string.Equals(c.Trim(), cat, StringComparison.OrdinalIgnoreCase)) { missing.Add($"the {l.displayName} license"); break; }
+            }
+        }
+        return missing.Count == 0 ? null : string.Join(", ", missing);
+    }
+
     /// <summary>Is this item a franchise's (whoever holds it)?</summary>
     /// <summary>The first franchise covering this item (null if none).</summary>
     public static FranchiseDef FranchiseOf(ItemDef item)
@@ -197,6 +237,7 @@ public class FranchiseManager : NetworkBehaviour
         else if (s.topTeam == team) reason = "You have the top bid";
         else if (s.banned == team) reason = "You gave this one up";
         else if (f.minLevel > ProgressionManager.LevelOf(team)) reason = $"Needs level {f.minLevel}";
+        else if (MissingNeeds(team, f) is string needs) reason = $"Needs {needs}";
         else if (amount < MinimumBid(f, s)) reason = $"Bid at least ${MinimumBid(f, s):N0}";
         else if (EconomyManager.Instance != null && EconomyManager.Instance.GetTeamMoney(team) < amount) reason = "Not enough money";
         return reason == null;

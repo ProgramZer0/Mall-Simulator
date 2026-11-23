@@ -124,6 +124,7 @@ public class FranchisesPanel : MonoBehaviour
                     ? $"Not held\nBidding opens in {Clock(opens)}"
                     : $"{holder}: {Clock(s.heldUntil - fm.Now)} left\nBidding opens in {Clock(opens)}";
             }
+            if (FranchiseManager.MissingNeeds(me, f) is string needs) text += $"\n<color=#ff8080>To bid, unlock: {needs}</color>";
             if (row.statusText != null) row.statusText.text = text;
             if (row.heldMark != null) row.heldMark.SetActive(s.holder == me);
             if (row.giveUpButton != null) row.giveUpButton.gameObject.SetActive(s.holder == me);

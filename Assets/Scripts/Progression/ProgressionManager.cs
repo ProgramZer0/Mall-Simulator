@@ -224,7 +224,20 @@ public class ProgressionManager : NetworkBehaviour
     /// The level this team needs for this item: the same for every team (a franchise doesn't skip its
     /// categories' unlock levels; kept for the callers that pass a team).
     /// </summary>
-    public static int LevelNeeded(ItemDef def, ulong team) => LevelNeeded(def);
+    public static int LevelNeeded(ItemDef def, ulong team) =>
+        def != null && FranchiseManager.Unlocks(team, def) ? def.minLevel : LevelNeeded(def); // a franchise unlocking its items: only their own Min Level
+
+    /// <summary>The team level a category unlocks at (Category Unlocks; 0 if it's never locked).</summary>
+    public static int CategoryLevel(string category)
+    {
+        var pm = Instance;
+        if (pm == null || pm.categoryUnlocks == null || string.IsNullOrWhiteSpace(category)) return 0;
+        int need = 0;
+        foreach (var u in pm.categoryUnlocks)
+            if (u != null && u.level > need && string.Equals(u.category?.Trim(), category.Trim(), System.StringComparison.OrdinalIgnoreCase))
+                need = u.level;
+        return need;
+    }
 
     /// <summary>
     /// The team level this item needs: the highest of its own Min Level and its categories' unlock levels.
