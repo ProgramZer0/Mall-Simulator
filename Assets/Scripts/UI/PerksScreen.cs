@@ -43,6 +43,9 @@ public class PerksScreen : MonoBehaviour, IShopScreen
     [Header("Hover Pop-up")]
     [Tooltip("A panel shown beside the perk under the pointer (hidden at start). Put it last on the screen so " +
              "it draws on top, and untick Raycast Target on its graphics so it doesn't steal the hover.")]
+    [Tooltip("Optional: a tooltip prefab (with TooltipView) for this screen. Empty, with no Tooltip Root: the shared one, " +
+             "Resources/Tooltip (Tools > Mall Sim > UI > Create Tooltip Prefab).")]
+    [SerializeField] private TooltipView tooltipPrefab;
     [SerializeField] private GameObject tooltipRoot;
     [SerializeField] private TMP_Text tooltipNameText;
     [SerializeField] private TMP_Text tooltipDescriptionText;
@@ -285,6 +288,7 @@ public class PerksScreen : MonoBehaviour, IShopScreen
         hovered = row;
         int index = rows.IndexOf(row);
         var pm = ProgressionManager.Instance;
+        TooltipView.Fill(transform, tooltipPrefab, ref tooltipRoot, ref tooltipNameText, ref tooltipDescriptionText);
         if (tooltipRoot == null || pm == null || plot == null || index < 0 || index >= shown.Count) { HideTooltip(); return; }
         var perk = shown[index].perk;
         int rank = pm.GetRank(plot.PlotId, perk.id);

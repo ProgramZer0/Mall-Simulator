@@ -79,6 +79,9 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     [Header("Tooltip (optional)")]
     [Tooltip("Hover an item: this panel (hidden at start, Raycast Target off on its graphics) shows its name and " +
              "details beside the tile, fading in and out.")]
+    [Tooltip("Optional: a tooltip prefab (with TooltipView) for this screen. Empty, with no Tooltip Root: the shared one, " +
+             "Resources/Tooltip (Tools > Mall Sim > UI > Create Tooltip Prefab).")]
+    [SerializeField] private TooltipView tooltipPrefab;
     [SerializeField] private GameObject tooltipRoot;
     [SerializeField] private TMP_Text tooltipNameText;
     [SerializeField] private TMP_Text tooltipDescriptionText;
@@ -503,6 +506,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     private void ShowTooltip(BuyItemSlot tile)
     {
         var def = tile != null ? tile.Def : null;
+        TooltipView.Fill(transform, tooltipPrefab, ref tooltipRoot, ref tooltipNameText, ref tooltipDescriptionText);
         if (tooltipRoot == null || def == null || !tile.gameObject.activeInHierarchy) return;
         if (tooltipNameText != null) tooltipNameText.text = def.displayName;
         if (tooltipDescriptionText != null) tooltipDescriptionText.text = Describe(def);
