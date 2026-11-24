@@ -33,6 +33,15 @@ public class HelpApp : MonoBehaviour, IPhoneApp
     [SerializeField] private string appName = "Help";
     [SerializeField] private Sprite icon;
     [SerializeField] private List<Topic> topics = new();
+    [Header("Your own buttons (optional)")]
+    [Tooltip("A button (with a TMP text in it for the topic's title) used for each topic in the list instead of " +
+             "the built-in one. Its own size and scale are kept; it's only made narrower if it wouldn't fit.")]
+    [SerializeField] private Button topicButtonPrefab;
+    [Tooltip("The same, for Back on a topic's page (its text is set to Back Label).")]
+    [SerializeField] private Button backButtonPrefab;
+    [SerializeField] private string backLabel = "‹ Back";
+    [Tooltip("Stretch your buttons across the page instead of keeping their own width.")]
+    [SerializeField] private bool stretchButtons;
     [SerializeField] private PhoneUI.Style style = new();
 
     public string AppName => appName;
@@ -96,10 +105,39 @@ public class HelpApp : MonoBehaviour, IPhoneApp
         foreach (var topic in Topics)
         {
             var t = topic;
-            PhoneUI.Button(content, t.title, y, style.rowHeight, style, () => ShowTopic(t));
-            y += style.rowHeight + style.spacing;
+            if (topicButtonPrefab != null) y += OwnButton(topicButtonPrefab, t.title, y, () => ShowTopic(t)) + style.spacing;
+            else
+            {
+                PhoneUI.Button(content, t.title, y, style.rowHeight, style, () => ShowTopic(t));
+                y += style.rowHeight + style.spacing;
+            }
         }
         SetHeight(y + style.padding);
+    }
+
+    // One of your buttons at this height: its own size and scale (narrowed only to fit the page, or
+    // stretched across it). Returns how tall it is on the page.
+    private float OwnButton(Button prefab, string label, float y, UnityEngine.Events.UnityAction onClick)
+    {
+        var b = Instantiate(prefab, content, false);
+        var rt = (RectTransform)b.transform;
+        var source = (RectTransform)prefab.transform;
+        Vector3 scale = source.localScale;
+        float sx = Mathf.Approximately(scale.x, 0f) ? 1f : scale.x, sy = Mathf.Approximately(scale.y, 0f) ? 1f : scale.y;
+        float room = Mathf.Max(20f, (content.rect.width > 0f ? content.rect.width : 300f) - style.padding * 2f);
+        float width = source.rect.width * sx;
+        if (stretchButtons || width > room || width <= 0f) width = room;
+        float height = source.rect.height * sy;
+        if (height <= 0f) height = style.rowHeight;
+        rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0f, 1f);
+        rt.localScale = scale;
+        rt.sizeDelta = new Vector2(width / sx, height / sy);
+        rt.anchoredPosition = new Vector2(style.padding, -y);
+        var text = b.GetComponentInChildren<TMP_Text>(true);
+        if (text != null) text.text = label;
+        b.onClick.AddListener(onClick);
+        return height;
     }
 
     private void ShowTopic(Topic topic)
@@ -107,8 +145,12 @@ public class HelpApp : MonoBehaviour, IPhoneApp
         StopVideo();
         PhoneUI.Clear(content);
         float y = style.padding;
-        PhoneUI.Button(content, "‹ Back", y, style.rowHeight, style, ShowList, -1f, (content.rect.width > 0f ? content.rect.width : 300f) * 0.6f);
-        y += style.rowHeight + style.spacing;
+        if (backButtonPrefab != null) y += OwnButton(backButtonPrefab, backLabel, y, ShowList) + style.spacing;
+        else
+        {
+            PhoneUI.Button(content, backLabel, y, style.rowHeight, style, ShowList, -1f, (content.rect.width > 0f ? content.rect.width : 300f) * 0.6f);
+            y += style.rowHeight + style.spacing;
+        }
         var title = PhoneUI.Text(content, $"<b>{topic.title}</b>", y, style.rowHeight, style, false, TextAlignmentOptions.Left);
         title.color = PhoneTheme.AccentOf(style);
         y += style.rowHeight + style.spacing * 0.5f;
