@@ -28,6 +28,16 @@ public class PhoneScreen : MonoBehaviour
              "the Customize app's colors too: texts its Text color, buttons its Button color (a PhoneThemeRole on " +
              "any text or image picks another, or Keep). Off: only apps built in code follow the theme.")]
     [SerializeField] private bool themeDesignedApps = true;
+    [Tooltip("Your button for every button the apps make in code (a Button with a TMP text in it), fitted to " +
+             "each row. Empty: Resources/UIButton if there is one, else the built-in ones.")]
+    [SerializeField] private Button buttonPrefab;
+
+    [Header("Opening and closing apps")]
+    [Tooltip("Apps grow out of their icon when opened and shrink back into it going home; the home screen " +
+             "eases back and forth behind them.")]
+    [SerializeField] private bool animateApps = true;
+    [SerializeField, Min(0.01f)] private float appOpenSeconds = 0.2f;
+    [SerializeField, Min(0.01f)] private float appCloseSeconds = 0.16f;
     [SerializeField] private GameObject home;
     [SerializeField] private PhoneAppButton appButtonPrefab;
     [SerializeField] private RectTransform appGrid;
@@ -150,6 +160,8 @@ public class PhoneScreen : MonoBehaviour
             canvas.renderMode = RenderMode.WorldSpace;
             canvas.worldCamera = cam;
         }
+        if (buttonPrefab != null) CodeButton.PhonePrefab = buttonPrefab;
+
         // The player's chosen look (Customize app), and the background showing it.
         var styleApp = GetComponentInChildren<PhoneStyleApp>(true);
         if (styleApp != null) styleApp.ApplySaved();
@@ -195,8 +207,10 @@ public class PhoneScreen : MonoBehaviour
 
     public void ShowHome()
     {
-        CloseCurrent();
+        int was = current;
+        CloseCurrent(animated: true);
         if (home != null) home.SetActive(true);
+        if (was >= 0) Animate(home, from: 1.08f, to: 1f, fadeIn: true, appCloseSeconds, null, null);
         if (titleText != null) titleText.text = homeTitle;
         if (backButton != null) backButton.gameObject.SetActive(false);
         RefreshBadges();
@@ -219,9 +233,14 @@ public class PhoneScreen : MonoBehaviour
     {
         if (index < 0 || index >= apps.Count || ((IPhoneApp)apps[index]).LockedReason != null) return;
         CloseCurrent();
-        if (home != null) home.SetActive(false);
+        if (home != null)
+        {
+            if (animateApps && home.activeInHierarchy) Animate(home, from: 1f, to: 1.08f, fadeIn: false, appOpenSeconds, null, () => home.SetActive(false));
+            else home.SetActive(false);
+        }
         current = index;
         apps[index].gameObject.SetActive(true);
+        Animate(apps[index].gameObject, from: 0.25f, to: 1f, fadeIn: true, appOpenSeconds, IconOf(index), null);
         var app = (IPhoneApp)apps[index];
         app.OnAppOpened();
         if (titleText != null) titleText.text = app.AppName;
@@ -229,14 +248,101 @@ public class PhoneScreen : MonoBehaviour
     }
 
     /// <summary>Put every app away (the phone is going down).</summary>
-    public void CloseApps() => CloseCurrent();
+    public void CloseApps()
+    {
+        FinishAnimations();
+        CloseCurrent();
+    }
 
-    private void CloseCurrent()
+    private void CloseCurrent(bool animated = false)
     {
         if (current < 0 || current >= apps.Count) { current = -1; return; }
         ((IPhoneApp)apps[current]).OnAppClosed();
-        apps[current].gameObject.SetActive(false);
+        var go = apps[current].gameObject;
+        if (animated && animateApps) Animate(go, from: 1f, to: 0.25f, fadeIn: false, appCloseSeconds, IconOf(current), () => go.SetActive(false));
+        else go.SetActive(false);
         current = -1;
+    }
+
+    /* ========================= APP ANIMATIONS ========================= */
+
+    private class Tween
+    {
+        public RectTransform rt;
+        public CanvasGroup group;
+        public float from, to, seconds, t;
+        public bool fadeIn;
+        public Vector2 offset; // toward the icon at the small end
+        public System.Action done;
+    }
+
+    private readonly List<Tween> tweens = new();
+    private readonly Dictionary<RectTransform, (Vector2 pos, Vector3 scale)> rests = new();
+
+    private RectTransform IconOf(int appIndex) =>
+        appIndex >= 0 && appIndex < buttons.Count && buttons[appIndex] != null ? (RectTransform)buttons[appIndex].transform : null;
+
+    // Scale From → To (and fade in or out), the small end at the icon if there is one; Done when finished.
+    private void Animate(GameObject go, float from, float to, bool fadeIn, float seconds, RectTransform icon, System.Action done)
+    {
+        if (go == null || go.transform is not RectTransform rt) { done?.Invoke(); return; }
+        for (int i = tweens.Count - 1; i >= 0; i--) // one at a time per object: the last one jumps to its end
+            if (tweens[i].rt == rt) { Finish(tweens[i]); tweens.RemoveAt(i); }
+        if (!rests.ContainsKey(rt)) rests[rt] = (rt.anchoredPosition, rt.localScale);
+        if (!animateApps || !isActiveAndEnabled) { done?.Invoke(); return; }
+        if (!go.TryGetComponent<CanvasGroup>(out var group)) group = go.AddComponent<CanvasGroup>();
+        Vector2 offset = Vector2.zero;
+        if (icon != null && rt.parent is RectTransform parent)
+        {
+            Vector3 iconCenter = parent.InverseTransformPoint(icon.TransformPoint(icon.rect.center));
+            Vector3 panelCenter = parent.InverseTransformPoint(rt.TransformPoint(rt.rect.center));
+            offset = (Vector2)(iconCenter - panelCenter);
+        }
+        var tw = new Tween { rt = rt, group = group, from = from, to = to, seconds = seconds, fadeIn = fadeIn, offset = offset, done = done };
+        tweens.Add(tw);
+        Step(tw, 0f);
+    }
+
+    private void LateUpdate()
+    {
+        for (int i = tweens.Count - 1; i >= 0; i--)
+        {
+            var tw = tweens[i];
+            if (tw.rt == null) { tweens.RemoveAt(i); continue; }
+            tw.t += Time.unscaledDeltaTime / tw.seconds;
+            if (tw.t >= 1f) { Finish(tw); tweens.RemoveAt(i); }
+            else Step(tw, tw.t);
+        }
+    }
+
+    private void Step(Tween tw, float t)
+    {
+        var (pos, scale) = rests[tw.rt];
+        float e = 1f - Mathf.Pow(1f - Mathf.Clamp01(t), 3f); // ease out
+        float s = Mathf.Lerp(tw.from, tw.to, e);
+        tw.rt.localScale = scale * s;
+        // At the small end it sits on the icon; at full size, where it belongs.
+        float small = Mathf.Min(tw.from, tw.to), big = Mathf.Max(tw.from, tw.to);
+        float towardIcon = big > small ? Mathf.InverseLerp(big, small, s) : 0f;
+        tw.rt.anchoredPosition = pos + tw.offset * towardIcon;
+        if (tw.group != null) tw.group.alpha = tw.fadeIn ? Mathf.Clamp01(e * 1.4f) : 1f - Mathf.Clamp01(e * 1.2f);
+    }
+
+    private void Finish(Tween tw)
+    {
+        if (tw.rt != null && rests.TryGetValue(tw.rt, out var rest))
+        {
+            tw.rt.localScale = rest.scale;
+            tw.rt.anchoredPosition = rest.pos;
+        }
+        if (tw.group != null) tw.group.alpha = 1f;
+        tw.done?.Invoke();
+    }
+
+    private void FinishAnimations()
+    {
+        for (int i = tweens.Count - 1; i >= 0; i--) Finish(tweens[i]);
+        tweens.Clear();
     }
 
     private void RefreshBadges()

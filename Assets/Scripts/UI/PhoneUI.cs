@@ -72,6 +72,24 @@ public static class PhoneUI
     public static Button Button(RectTransform parent, string label, float y, float height, Style s, UnityAction onClick,
                                 float left = -1f, float right = -1f)
     {
+        // Your button (PhoneScreen's Button Prefab, or Resources/UIButton), fitted to the row.
+        var prefab = CodeButton.PhonePrefab != null ? CodeButton.PhonePrefab : CodeButton.Shared;
+        if (prefab != null)
+        {
+            var own = CodeButton.Make(prefab, parent, label, onClick);
+            var row = Row("Button Row", parent, y, height, s, left, right); // (just for where it goes)
+            var ort = (RectTransform)own.transform;
+            ort.anchorMin = row.anchorMin;
+            ort.anchorMax = row.anchorMax;
+            ort.pivot = row.pivot;
+            ort.offsetMin = row.offsetMin;
+            ort.offsetMax = row.offsetMax;
+            ort.localScale = Vector3.one;
+            UnityEngine.Object.Destroy(row.gameObject);
+            var label2 = own.GetComponentInChildren<TMP_Text>(true);
+            if (label2 != null) PhoneTheme.ApplyOutline(label2);
+            return own;
+        }
         var rt = Row("Button", parent, y, height, s, left, right);
         var img = rt.gameObject.AddComponent<Image>();
         img.color = PhoneTheme.ButtonOf(s);

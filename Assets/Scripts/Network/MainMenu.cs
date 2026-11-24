@@ -38,6 +38,9 @@ public class MainMenu : MonoBehaviour
     [SerializeField] private Color buttonColor = new(0.24f, 0.45f, 0.85f, 1f);
     [Tooltip("Color of the chosen option (Online or Direct IP) on the host screen.")]
     [SerializeField] private Color selectedButtonColor = new(0.2f, 0.7f, 0.35f, 1f);
+    [Tooltip("Your button for the menu's buttons (a Button with a TMP text in it), at its own height. Empty: " +
+             "Resources/UIButton if there is one, else the plain built-in ones.")]
+    [SerializeField] private Button buttonPrefab;
     [SerializeField] private Color textColor = Color.white;
     [SerializeField] private TMP_FontAsset font;
     [Header("On an office computer")]
@@ -529,6 +532,17 @@ public class MainMenu : MonoBehaviour
 
     private void UIButton(string text, UnityEngine.Events.UnityAction onClick, bool selected = false)
     {
+        // Your button (Button Prefab, or Resources/UIButton), at its own height in the list.
+        var prefab = buttonPrefab != null ? buttonPrefab : CodeButton.Shared;
+        if (prefab != null)
+        {
+            var own = CodeButton.Make(prefab, panel, text, onClick);
+            var le = own.GetComponent<LayoutElement>() ?? own.gameObject.AddComponent<LayoutElement>();
+            float h = ((RectTransform)prefab.transform).rect.height;
+            le.minHeight = h > 0f ? h : 58f;
+            if (selected && own.targetGraphic != null) own.targetGraphic.color = selectedButtonColor;
+            return;
+        }
         var r = Rect("Button", panel);
         r.gameObject.AddComponent<LayoutElement>().minHeight = 58f;
         var img = r.gameObject.AddComponent<Image>();
