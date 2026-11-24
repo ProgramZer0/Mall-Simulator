@@ -56,7 +56,18 @@ public class CustomerView : MonoBehaviour
             foreach (var p in view.animator.parameters)
                 if (p.nameHash == SpeedId && p.type == AnimatorControllerParameterType.Float) view.hasSpeed = true;
         }
+        SetLayer(go);
         return view;
+    }
+
+    private static int customersLayer = -2;
+
+    /// <summary>Everything a customer is made of goes on the "Customers" layer (if it's set up).</summary>
+    public static void SetLayer(GameObject go)
+    {
+        if (customersLayer == -2) customersLayer = LayerMask.NameToLayer("Customers");
+        if (customersLayer < 0 || go == null) return;
+        foreach (var t in go.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = customersLayer;
     }
 
     // The bubble over their head (made the first time it's needed).
@@ -135,6 +146,7 @@ public class CustomerView : MonoBehaviour
                 PlainLook.Apply(r, new Color(0.78f, 0.62f, 0.42f));
             }
             bag.name = "Bag";
+            SetLayer(bag);
             if (randomColors) PaintBag(bag, i);
             foreach (var c in bag.GetComponentsInChildren<Collider>(true)) Destroy(c);
             var t = bag.transform;

@@ -17,6 +17,7 @@ public class DockGuide : MonoBehaviour
     public void Show(Vector3 target, Material material, Color color, float width, float lineHeight, float arriveDistance, float seconds)
     {
         Target = target;
+        endLooked = false;
         height = lineHeight;
         arrive = arriveDistance;
         until = seconds > 0f ? Time.time + seconds : float.MaxValue;
@@ -55,6 +56,34 @@ public class DockGuide : MonoBehaviour
 
     public void Hide() => gameObject.SetActive(false);
 
+    private bool endLooked, endFound;
+    private Vector3 endPoint;
+
+    private bool EndPoint(out Vector3 point)
+    {
+        if (!endLooked) { endLooked = true; endFound = OnSameFloor(Target, out endPoint); }
+        point = endPoint;
+        return endFound;
+    }
+
+    // The walkable floor nearest the dock, on the dock's own floor (within 1.5 m up or down): straight
+    // below first, then rings round it out to 15 m.
+    private static bool OnSameFloor(Vector3 target, out Vector3 point)
+    {
+        point = target;
+        if (NavMesh.SamplePosition(target, out var hit, 1.5f, NavMesh.AllAreas) && Mathf.Abs(hit.position.y - target.y) < 1.5f)
+        { point = hit.position; return true; }
+        for (float r = 1f; r <= 15f; r += 1f)
+            for (int i = 0; i < 16; i++)
+            {
+                float a = i * Mathf.PI * 2f / 16f;
+                Vector3 p = target + new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r);
+                if (NavMesh.SamplePosition(p, out hit, 1f, NavMesh.AllAreas) && Mathf.Abs(hit.position.y - target.y) < 1.5f)
+                { point = hit.position; return true; }
+            }
+        return false;
+    }
+
     private void Update()
     {
         var nm = NetworkManager.Singleton;
@@ -67,19 +96,20 @@ public class DockGuide : MonoBehaviour
         if (Time.time < nextPath) return;
         nextPath = Time.time + 0.5f;
 
-        // Along the walkable floor if there's a way (the mall's NavMesh), else straight there.
+        // Along the walkable floor. The dock's end is found on its own floor (a wide search could land on
+        // the floor below and send you downstairs), and where the walkable floor stops short of the dock,
+        // the line only goes straight on for the last few meters (never across the mall through walls).
         points.Clear();
-        bool found = false;
-        if (NavMesh.SamplePosition(from, out var a, 3f, NavMesh.AllAreas) &&
-            NavMesh.SamplePosition(Target, out var b, 4f, NavMesh.AllAreas) &&
-            NavMesh.CalculatePath(a.position, b.position, NavMesh.AllAreas, path) &&
+        if (NavMesh.SamplePosition(from, out var a, 3f, NavMesh.AllAreas) && EndPoint(out var b) &&
+            NavMesh.CalculatePath(a.position, b, NavMesh.AllAreas, path) &&
             path.status != NavMeshPathStatus.PathInvalid && path.corners.Length >= 2)
         {
-            found = true;
             foreach (var c in path.corners) points.Add(c + Vector3.up * height);
-            if (path.status == NavMeshPathStatus.PathPartial) points.Add(Target + Vector3.up * height);
+            Vector3 last = path.corners[path.corners.Length - 1];
+            if (Mathf.Abs(last.y - Target.y) < 1.5f && Vector3.Distance(last, Target) < 8f)
+                points.Add(new Vector3(Target.x, last.y, Target.z) + Vector3.up * height);
         }
-        if (!found)
+        else
         {
             points.Add(from + Vector3.up * height);
             points.Add(Target + Vector3.up * height);
