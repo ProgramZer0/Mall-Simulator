@@ -37,6 +37,11 @@ public partial class CustomerManager : NetworkBehaviour
     [SerializeField] private float bystanderArrivalsPerMinute = 20f;
     [Tooltip("Most stores one customer goes into before leaving.")]
     [SerializeField] private int maxStoresPerVisit = 4;
+    [Tooltip("Before leaving, customers (and bystanders) walk the mall end to end this many times (2 = there and " +
+             "back), keeping to one side, then the other, popping into stores they pass. Skipped once they've " +
+             "spent their money or visited Max Stores Per Visit. Still under Min Minutes In Mall after that: they " +
+             "keep going. Ends: MallEnd markers on their floor, else the walkway's far ends. 0: straight to the exit.")]
+    [SerializeField, Min(0)] private int hallLegsBeforeLeaving = 2;
     [Tooltip("Minutes a customer stays in the mall at most (then heads for the exit).")]
     [SerializeField] private float maxMinutesInMall = 8f;
     [Tooltip("Minutes a customer stays at least: with no store to go to before then, they stroll the hallways.")]
@@ -434,6 +439,7 @@ public partial class CustomerManager : NetworkBehaviour
         public float leaveAt;
         public float stayUntil;    // they don't leave before this unless done shopping
         public int storesVisited;
+        public int hallLegs;       // walks end to end done before leaving
         public int budgetCents;
         public int wants;
         public readonly HashSet<StorePlot> passed = new();
@@ -1542,6 +1548,23 @@ public partial class CustomerManager : NetworkBehaviour
             if (PathTo(c, stroll)) { Log(c, $"no store to go to ({WhyNoStores()}): strolling"); return; }
         }
 
+        // Before leaving: end to end along the mall (twice), unless they've spent up or seen their stores.
+        bool shoppedOut = c.storesVisited >= maxStoresPerVisit || (!bystander && BudgetLeft(c) <= 0);
+        if (!shoppedOut && hallLegsBeforeLeaving > 0 && (c.hallLegs < hallLegsBeforeLeaving || Time.time < c.stayUntil) &&
+            TryFarEnd(c.pos, out var end))
+        {
+            c.mode = Mode.Wander;
+            c.goalStore = null;
+            c.lane = -c.lane; // the other side of the walkway, each way
+            if (PathTo(c, end))
+            {
+                c.hallLegs++;
+                Log(c, $"walking to the far end of the mall ({c.hallLegs} of {hallLegsBeforeLeaving}) before leaving");
+                return;
+            }
+            c.lane = -c.lane;
+        }
+
         // Done (or nowhere to go): the exit.
         var exit = PickSpawnPoint(sp => sp.isExit && (sp.transform.position - c.cameFrom).sqrMagnitude > 25f)
                    ?? PickSpawnPoint(sp => sp.isExit);
@@ -1564,6 +1587,49 @@ public partial class CustomerManager : NetworkBehaviour
     }
 
     // A random walkable spot in the hallways (not in any store), at least 8 m away.
+    // The far end of the mall from here, on this floor: the MallEnd marker furthest away, else the end of
+    // the walkway (its longest side) furthest away.
+    private static bool TryFarEnd(Vector3 from, out Vector3 end)
+    {
+        end = default;
+        float best = 25f; // at least 5 m away, or it's no walk
+        foreach (var m in MallEnd.All)
+        {
+            if (m == null || Mathf.Abs(m.transform.position.y - from.y) > 3f) continue;
+            float d = (m.transform.position - from).sqrMagnitude;
+            if (d <= best || !NavMesh.SamplePosition(m.transform.position, out var hit, 3f, CustomerNavMesh.PreferMask)) continue;
+            best = d;
+            end = hit.position;
+        }
+        if (best > 25f) return true;
+
+        var nav = CustomerNavMesh.Instance;
+        if (nav == null) return false;
+        Bounds b = nav.BuiltBounds;
+        bool alongX = b.size.x >= b.size.z;
+        float inset = 3f;
+        for (int side = 0; side < 2; side++)
+        {
+            // This end, tried across the walkway (the middle first), clear of the stores.
+            float along = alongX ? (side == 0 ? b.min.x + inset : b.max.x - inset) : (side == 0 ? b.min.z + inset : b.max.z - inset);
+            for (int k = 0; k < 7; k++)
+            {
+                float across = (alongX ? b.center.z : b.center.x) + (k % 2 == 0 ? 1 : -1) * ((k + 1) / 2) * (alongX ? b.size.z : b.size.x) / 8f;
+                var p = alongX ? new Vector3(along, from.y, across) : new Vector3(across, from.y, along);
+                if (!NavMesh.SamplePosition(p, out var hit, 6f, CustomerNavMesh.PreferMask) || Mathf.Abs(hit.position.y - from.y) > 3f) continue;
+                bool inStore = false;
+                if (MallManager.Instance != null)
+                    foreach (var plot in MallManager.Instance.Plots)
+                        if (plot != null && plot.Contains(hit.position + Vector3.up * 0.1f)) { inStore = true; break; }
+                if (inStore) continue;
+                float d = (hit.position - from).sqrMagnitude;
+                if (d > best) { best = d; end = hit.position; }
+                break;
+            }
+        }
+        return best > 25f;
+    }
+
     private static bool TryHallwaySpot(Vector3 from, out Vector3 spot)
     {
         spot = default;
