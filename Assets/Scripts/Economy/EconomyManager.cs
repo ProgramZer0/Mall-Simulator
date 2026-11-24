@@ -46,6 +46,9 @@ public class EconomyManager : NetworkBehaviour
     [Header("Deliveries")]
     [Tooltip("Seconds a delivery is held for the team that ordered it before anyone may take it (GDD: 10 minutes).")]
     [SerializeField] private float reservationSeconds = 600f;
+
+    /// <summary>How long a delivery is held for the team that ordered it (seconds).</summary>
+    public float ReservationSeconds => reservationSeconds;
     [Tooltip("A delivery's boxes come down one at a time, this many seconds apart (0: all at once).")]
     [SerializeField, Min(0f)] private float boxSpawnInterval = 0.3f;
     [Tooltip("One delivery at a time per store: another order waits in line, and its clock only starts once the one " +
@@ -60,6 +63,28 @@ public class EconomyManager : NetworkBehaviour
     [SerializeField] private float packStep = 0.2f;
     [Tooltip("A delivery that's due but has no room at the dock looks again this often (seconds).")]
     [SerializeField] private float fitCheckInterval = 1f;
+
+    [Header("Trucks (stores whose dock has Truck Bays)")]
+    [Tooltip("The delivery trucks, smallest first (small, medium, large). A shipment comes in the smallest whose " +
+             "cargo floor it fills no more than Truck Max Fill of. Empty: deliveries are set down on the shipment " +
+             "spots as before.")]
+    [SerializeField] private DeliveryTruck[] truckPrefabs = new DeliveryTruck[0];
+    [Tooltip("How much of a truck's cargo floor a shipment may take (0.75 = 75%) before it needs the next size.")]
+    [SerializeField, Range(0.2f, 1f)] private float truckMaxFill = 0.75f;
+    [Tooltip("Seconds added to (or taken off) the delivery time for each truck size: small, medium, large.")]
+    [SerializeField] private float[] truckSizeSeconds = { -30f, 0f, 45f };
+    [Tooltip("Delivery time = the slowest item's time + this much of all the items' times added up (0.05 = 5%) " +
+             "+ the truck size's seconds (then Logistics perks).")]
+    [SerializeField, Range(0f, 1f)] private float truckTotalTimeShare = 0.05f;
+    [Tooltip("Seconds the truck waits at the dock for someone to open its door; then it leaves with the shipment " +
+             "and part of the cost comes back (Unopened Refund).")]
+    [SerializeField, Min(10f)] private float truckDoorWaitSeconds = 180f;
+    [SerializeField, Range(0f, 1f)] private float truckUnopenedRefund = 0.5f;
+    [Tooltip("Seconds to unload once the door's open; then the door shuts and the truck leaves with whatever's " +
+             "still on it (no refund).")]
+    [SerializeField, Min(10f)] private float truckUnloadSeconds = 120f;
+    [Tooltip("Emptied: it leaves this many seconds later.")]
+    [SerializeField, Min(0f)] private float truckLeaveWhenEmptySeconds = 4f;
 
     [Header("Development")]
     [Tooltip("O = order Dev Order Item Id for the store you're standing in. M = give your team Dev Money Amount. " +
@@ -99,6 +124,12 @@ public class EconomyManager : NetworkBehaviour
         public double stampTime; // server time when remaining was recorded
         public bool blocked;     // due, but no room in the shipment zones yet: waiting
         public bool inLine;      // behind another delivery to the same store: its clock hasn't started
+        public int cost;         // what it cost (for a refund)
+        public sbyte truckSize;  // which truck brings it (-1: none, set down on the shipment spots)
+        public byte stage;       // trucks: 0 on its way, 1 waiting for a bay, 2 at the dock (door shut), 3 unloading
+        public double deadline;  // trucks: server time the truck leaves (stages 2 and 3)
+
+        public const byte OnItsWay = 0, WaitingForBay = 1, AtDock = 2, Unloading = 3;
 
         public void NetworkSerialize<T>(BufferSerializer<T> s) where T : IReaderWriter
         {
@@ -110,11 +141,16 @@ public class EconomyManager : NetworkBehaviour
             s.SerializeValue(ref stampTime);
             s.SerializeValue(ref blocked);
             s.SerializeValue(ref inLine);
+            s.SerializeValue(ref cost);
+            s.SerializeValue(ref truckSize);
+            s.SerializeValue(ref stage);
+            s.SerializeValue(ref deadline);
         }
 
         public bool Equals(OrderInfo o) =>
             orderId == o.orderId && teamId == o.teamId && plotId == o.plotId && boxCount == o.boxCount &&
-            remaining.Equals(o.remaining) && stampTime.Equals(o.stampTime) && blocked == o.blocked && inLine == o.inLine;
+            remaining.Equals(o.remaining) && stampTime.Equals(o.stampTime) && blocked == o.blocked && inLine == o.inLine &&
+            cost == o.cost && truckSize == o.truckSize && stage == o.stage && deadline.Equals(o.deadline);
 
         /// <summary>Seconds left at a given server time (doesn't go down while blocked or in line).</summary>
         public float RemainingAt(double now) =>
@@ -412,7 +448,7 @@ public class EconomyManager : NetworkBehaviour
         ulong team = MallManager.GetTeamOf(clientId);
         long cost = 0;
         int boxes = 0;
-        float slowest = 0f;
+        float slowest = 0f, allTimes = 0f;
         for (int i = 0; i < itemIds.Length; i++)
         {
             if (ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemIds[i], out var def) ||
@@ -431,10 +467,18 @@ public class EconomyManager : NetworkBehaviour
             // Running mall events can change the cost, add a delivery fee and change delivery time.
             cost += (long)UnitCost(i, def) * quantities[i];
             slowest = Mathf.Max(slowest, MarketModifiers.DeliverySeconds(def));
+            allTimes += MarketModifiers.DeliverySeconds(def) * quantities[i];
         }
 
         BuildBoxes(itemIds, quantities, null);
-        if (!ShipmentPacker.CouldEverFit(plot.ShipmentZones, planBoxes))
+        // By truck (the store's dock has bays): the smallest truck it fits; else on the shipment spots.
+        sbyte truckSize = -1;
+        if (UsesTrucks(plot))
+        {
+            truckSize = (sbyte)PickTruckSize(planBoxes);
+            if (truckSize < 0) return OrderResult.TooBig;
+        }
+        else if (!ShipmentPacker.CouldEverFit(plot.ShipmentZones, planBoxes))
             return OrderResult.TooBig;
 
         if (cost > int.MaxValue || !ServerTrySpend(team, (int)cost))
@@ -462,10 +506,13 @@ public class EconomyManager : NetworkBehaviour
             teamId = team,
             plotId = plotId,
             boxCount = boxes,
-            remaining = Mathf.Max(0f, (deliverySeconds < 0f ? slowest : deliverySeconds) * sooner),
+            remaining = Mathf.Max(0f, TruckTime(deliverySeconds < 0f ? slowest : deliverySeconds, allTimes, truckSize) * sooner),
             stampTime = NetworkManager.ServerTime.Time,
             blocked = false,
-            inLine = oneDeliveryAtATime && HasOrderFor(plotId),
+            inLine = oneDeliveryAtATime && HasOrderFor(plotId, waitingOnly: truckSize >= 0),
+            cost = (int)cost,
+            truckSize = truckSize,
+            stage = OrderInfo.OnItsWay,
         });
         for (int i = 0; i < itemIds.Length; i++)
         {
@@ -489,7 +536,7 @@ public class EconomyManager : NetworkBehaviour
     private void Update()
     {
         ImGuiHost.Set(this, showDebugHud && Debug.isDebugBuild && IsSpawned ? drawHud ??= DrawHud : null);
-        if (IsServer && IsSpawned) { ServerSpawnQueued(); ServerUpdateOrders(); }
+        if (IsServer && IsSpawned) { ServerSpawnQueued(); ServerUpdateOrders(); ServerDespawnGoneTrucks(); }
         if (devHotkeys && IsSpawned && !UIState.IsMenuOpen) DevKeys();
     }
 
@@ -498,9 +545,10 @@ public class EconomyManager : NetworkBehaviour
     /// it waits at the dock (re-checking every Fit Check Interval) until there is. Nothing checks for
     /// room before then.
     /// </summary>
-    private bool HasOrderFor(int plotId)
+    private bool HasOrderFor(int plotId, bool waitingOnly = false)
     {
-        foreach (var o in orders.Each()) if (o.plotId == plotId) return true;
+        // (Trucks: one at the dock doesn't hold up the next one's clock; only one on its way does.)
+        foreach (var o in orders.Each()) if (o.plotId == plotId && (!waitingOnly || o.truckSize < 0 || o.stage < OrderInfo.AtDock)) return true;
         return false;
     }
 
@@ -517,7 +565,8 @@ public class EconomyManager : NetworkBehaviour
                 for (int j = 0; j < orders.Count && !ahead; j++)
                 {
                     var other = orders[j];
-                    if (j != i && other.plotId == o.plotId && (!other.inLine || other.orderId < o.orderId)) ahead = true;
+                    if (j != i && other.plotId == o.plotId && (!other.inLine || other.orderId < o.orderId) &&
+                        !(o.truckSize >= 0 && other.truckSize >= 0 && other.stage >= OrderInfo.AtDock)) ahead = true; // a truck at the dock doesn't hold it up
                 }
             if (ahead) continue;
             o.inLine = false;
@@ -551,6 +600,11 @@ public class EconomyManager : NetworkBehaviour
                 NotificationManager.Instance.ServerNotifyTeam(o.teamId, NotificationManager.Kind.DeliverySoon, o.plotId, o.boxCount);
             soonLeft[o.orderId] = left;
 
+            if (o.truckSize >= 0)
+            {
+                if (left <= 0f || o.stage > OrderInfo.OnItsWay) ServerTruckStep(i, o, plot, now);
+                continue;
+            }
             if (left > 0f) continue;
 
             // Due. Another delivery's boxes still coming down in this store: after them (their spots are taken).
@@ -627,6 +681,7 @@ public class EconomyManager : NetworkBehaviour
         public Pose pose;
         public ulong teamId;
         public float at; // Time.time it comes down
+        public int truckOrder; // on a truck: its order (0: not)
     }
     private readonly List<QueuedBox> queued = new();
 
@@ -643,7 +698,9 @@ public class EconomyManager : NetworkBehaviour
         while (done < queued.Count && Time.time >= queued[done].at)
         {
             var q = queued[done++];
-            if (q.prefab != null) SpawnBox(q.prefab, q.itemId, q.paint, q.pose, q.teamId);
+            if (q.prefab == null) continue;
+            var no = SpawnBox(q.prefab, q.itemId, q.paint, q.pose, q.teamId);
+            if (q.truckOrder != 0 && no != null) TruckBoxes(q.truckOrder).Add(no);
         }
         if (done > 0) queued.RemoveRange(0, done);
     }
@@ -671,7 +728,7 @@ public class EconomyManager : NetworkBehaviour
         return true;
     }
 
-    private void SpawnBox(NetworkObject prefab, int itemId, byte paint, Pose pose, ulong teamId)
+    private NetworkObject SpawnBox(NetworkObject prefab, int itemId, byte paint, Pose pose, ulong teamId)
     {
         var spawned = Instantiate(prefab, pose.position, pose.rotation);
         Sfx.ForAll(Cue.DeliveryArrived, pose.position); // each box as it comes down (Min Gap keeps a big order tidy)
@@ -693,6 +750,7 @@ public class EconomyManager : NetworkBehaviour
         Physics.SyncTransforms(); // so the next plan sees this box
 
         if (box != null) box.ServerReserve(teamId, reservationSeconds);
+        return spawned;
     }
 
     private static int BaseIdOf(int itemId) =>
@@ -701,12 +759,235 @@ public class EconomyManager : NetworkBehaviour
     private void ServerRemoveOrderAt(int index)
     {
         int id = orders[index].orderId;
+        truckBoxes.Remove(id);
+        loadedTrucks.Remove(id);
         fitCache.Remove(id);
         dockFullNoticed.Remove(id);
         soonLeft.Remove(id);
         for (int i = orderLines.Count - 1; i >= 0; i--)
             if (orderLines[i].orderId == id) orderLines.RemoveAt(i);
         orders.RemoveAt(index);
+    }
+
+    /* ========================= TRUCKS (SERVER) ========================= */
+
+    private readonly Dictionary<int, List<NetworkObject>> truckBoxes = new(); // order → the boxes put on its truck
+    private readonly HashSet<int> loadedTrucks = new();                       // orders whose truck has been loaded
+    private readonly List<DeliveryTruck> leavingTrucks = new();
+    private readonly List<TruckBay> baysScratch = new();
+
+    private List<NetworkObject> TruckBoxes(int order)
+    {
+        if (!truckBoxes.TryGetValue(order, out var list)) truckBoxes[order] = list = new List<NetworkObject>();
+        return list;
+    }
+
+    /// <summary>Does this store get its deliveries by truck? (Trucks set up, and a Truck Bay at its dock.)</summary>
+    public bool UsesTrucks(StorePlot plot) => truckPrefabs != null && truckPrefabs.Length > 0 && BaysFor(plot, baysScratch) > 0;
+
+    /// <summary>The truck bays at the docks this store's shipment spots are in.</summary>
+    public static int BaysFor(StorePlot plot, List<TruckBay> into)
+    {
+        into.Clear();
+        if (plot == null || plot.ShipmentZones == null) return 0;
+        foreach (var z in plot.ShipmentZones)
+        {
+            if (z == null) continue;
+            var dock = LoadingDockZone.GetDockAt(z.transform.TransformPoint(z.center));
+            if (dock == null) continue;
+            foreach (var bay in TruckBay.All)
+                if (bay != null && bay.Dock == dock && !into.Contains(bay)) into.Add(bay);
+        }
+        return into.Count;
+    }
+
+    // The smallest truck whose cargo floor this shipment fills no more than Truck Max Fill of (-1: none).
+    private int PickTruckSize(List<ShipmentPacker.Box> boxes)
+    {
+        float need = 0f, longest = 0f;
+        foreach (var b in boxes) { need += b.half.x * b.half.z * 4f; longest = Mathf.Max(longest, Mathf.Max(b.half.x, b.half.z) * 2f); }
+        for (int i = 0; i < truckPrefabs.Length; i++)
+        {
+            var t = truckPrefabs[i];
+            if (t == null || t.cargoArea == null) continue;
+            Vector3 size = Vector3.Scale(t.cargoArea.size, t.cargoArea.transform.lossyScale);
+            if (longest > Mathf.Max(size.x, size.z) + 0.01f) continue;
+            if (need <= size.x * size.z * truckMaxFill) return i;
+        }
+        return -1;
+    }
+
+    // Slowest item's time + a share of all the items' times + the truck size's seconds.
+    private float TruckTime(float slowest, float allTimes, int size)
+    {
+        if (size < 0) return slowest;
+        float extra = truckSizeSeconds != null && size < truckSizeSeconds.Length ? truckSizeSeconds[size] : 0f;
+        return Mathf.Max(5f, slowest + truckTotalTimeShare * allTimes + extra);
+    }
+
+    // One truck delivery, once its time's up: to a free bay, loaded once there, waiting to be opened,
+    // unloaded, gone.
+    private void ServerTruckStep(int index, OrderInfo o, StorePlot plot, double now)
+    {
+        var truck = TruckFor(o.orderId);
+        switch (o.stage)
+        {
+            case OrderInfo.OnItsWay:
+            case OrderInfo.WaitingForBay:
+            {
+                // One truck per store at a time, at a free bay at its dock.
+                foreach (var other in orders.Each())
+                    if (other.orderId != o.orderId && other.plotId == o.plotId && other.stage >= OrderInfo.AtDock) { SetStage(index, o, OrderInfo.WaitingForBay); return; }
+                TruckBay free = null;
+                BaysFor(plot, baysScratch);
+                foreach (var bay in baysScratch)
+                {
+                    bool taken = false;
+                    foreach (var t in DeliveryTruck.All) if (t != null && t.BayIndex == bay.Index) { taken = true; break; }
+                    if (!taken) { free = bay; break; }
+                }
+                if (free == null)
+                {
+                    if (o.stage != OrderInfo.WaitingForBay && NotificationManager.Instance != null)
+                        NotificationManager.Instance.ServerNotifyTeamText(o.teamId, "Truck waiting", $"Every truck bay at {plot.DisplayName}'s dock is in use: your truck parks as soon as one's free.");
+                    SetStage(index, o, OrderInfo.WaitingForBay);
+                    return;
+                }
+                var prefab = truckPrefabs[Mathf.Clamp(o.truckSize, 0, truckPrefabs.Length - 1)];
+                if (prefab == null) { ServerRemoveOrderAt(index); return; }
+                var made = Instantiate(prefab, free.transform.position, free.transform.rotation);
+                made.NetworkObject.Spawn(true);
+                made.ServerSetup(o.orderId, o.teamId, free.Index);
+                o.stage = OrderInfo.AtDock;
+                o.deadline = now + truckDoorWaitSeconds + 10f; // (+ driving in)
+                orders[index] = o;
+                return;
+            }
+            case OrderInfo.AtDock:
+            {
+                if (truck == null) { ServerRemoveOrderAt(index); return; }
+                if (!loadedTrucks.Contains(o.orderId))
+                {
+                    if (!truck.Arrived) return;
+                    ServerLoadTruck(o, truck);
+                    truck.ServerParked();
+                    o.deadline = now + truckDoorWaitSeconds;
+                    orders[index] = o;
+                    if (NotificationManager.Instance != null)
+                        NotificationManager.Instance.ServerNotifyTeam(o.teamId, NotificationManager.Kind.Delivered, o.plotId, o.boxCount);
+                    return;
+                }
+                if (truck.DoorOpen)
+                {
+                    o.stage = OrderInfo.Unloading;
+                    o.deadline = now + truckUnloadSeconds;
+                    orders[index] = o;
+                    return;
+                }
+                if (now < o.deadline) return;
+                // Nobody came: off it goes with the shipment, part of the cost back.
+                int refund = Mathf.RoundToInt(o.cost * truckUnopenedRefund);
+                if (refund > 0) ServerAddMoney(o.teamId, refund);
+                if (NotificationManager.Instance != null)
+                    NotificationManager.Instance.ServerNotifyTeamText(o.teamId, "Truck left",
+                        $"Nobody opened the truck at {plot.DisplayName}'s dock: it took the shipment back. ${refund:N0} refunded.");
+                SendOff(index, o, truck);
+                return;
+            }
+            case OrderInfo.Unloading:
+            {
+                if (truck == null) { ServerRemoveOrderAt(index); return; }
+                int left = BoxesOnTruck(o.orderId, truck);
+                if (left == 0 && o.deadline > now + truckLeaveWhenEmptySeconds)
+                {
+                    o.deadline = now + truckLeaveWhenEmptySeconds; // emptied: off soon
+                    orders[index] = o;
+                }
+                if (now < o.deadline) return;
+                if (left > 0 && NotificationManager.Instance != null)
+                    NotificationManager.Instance.ServerNotifyTeamText(o.teamId, "Truck left",
+                        $"The truck at {plot.DisplayName}'s dock left with {left} thing{(left == 1 ? "" : "s")} still on it (no refund).");
+                SendOff(index, o, truck);
+                return;
+            }
+        }
+    }
+
+    private void SetStage(int index, OrderInfo o, byte stage)
+    {
+        if (o.stage == stage) return;
+        o.stage = stage;
+        orders[index] = o;
+    }
+
+    private static DeliveryTruck TruckFor(int orderId)
+    {
+        foreach (var t in DeliveryTruck.All) if (t != null && t.OrderId == orderId && t.CurrentPhase != DeliveryTruck.Phase.Leaving) return t;
+        return null;
+    }
+
+    // The shipment set down in the truck's cargo area (one box at a time, like the dock).
+    private void ServerLoadTruck(OrderInfo o, DeliveryTruck truck)
+    {
+        loadedTrucks.Add(o.orderId);
+        var lines = GetOrderLines(o.orderId);
+        var ids = new int[lines.Count];
+        var qty = new int[lines.Count];
+        var paints = new byte[lines.Count];
+        for (int i = 0; i < lines.Count; i++) { ids[i] = lines[i].itemId; qty[i] = lines[i].quantity; paints[i] = lines[i].paint; }
+        BuildBoxes(ids, qty, paints);
+        var zones = new[] { truck.cargoArea };
+        if (!ShipmentPacker.TryPlan(zones, planBoxes, BlockingMask(), packStep, plan) || plan.Count != planItems.Count)
+        {
+            // Packed in with nothing in the way (it fit by floor area when ordered).
+            Debug.LogWarning($"[EconomyManager] Order {o.orderId} didn't pack neatly into its truck: stacking it in the middle.");
+            plan.Clear();
+            Vector3 mid = truck.cargoArea.transform.TransformPoint(truck.cargoArea.center);
+            for (int i = 0; i < planItems.Count; i++)
+                plan.Add(new Pose(mid + Vector3.up * (0.4f * i), truck.transform.rotation));
+        }
+        float t = Time.time;
+        for (int i = 0; i < plan.Count; i++)
+            queued.Add(new QueuedBox
+            {
+                prefab = planItems[i].prefab, itemId = planItems[i].itemId, paint = planItems[i].paint, pose = plan[i],
+                teamId = o.teamId, plotId = -1 - o.plotId, at = t + i * Mathf.Min(boxSpawnInterval, 0.05f), truckOrder = o.orderId,
+            });
+    }
+
+    // How many of its boxes are still in the truck (not picked up, not carried off).
+    private int BoxesOnTruck(int orderId, DeliveryTruck truck)
+    {
+        if (!truckBoxes.TryGetValue(orderId, out var list)) return 0;
+        int n = 0;
+        foreach (var no in list) if (no != null && no.IsSpawned && truck.CargoContains(no.transform.position)) n++;
+        foreach (var q in queued) if (q.truckOrder == orderId) n++; // still being loaded
+        return n;
+    }
+
+    // Door shut, whatever's still on it goes with it, the order's done.
+    private void SendOff(int index, OrderInfo o, DeliveryTruck truck)
+    {
+        if (truckBoxes.TryGetValue(o.orderId, out var list))
+            foreach (var no in list)
+                if (no != null && no.IsSpawned && truck.CargoContains(no.transform.position)) no.Despawn(true);
+        queued.RemoveAll(q => q.truckOrder == o.orderId);
+        truck.ServerLeave();
+        leavingTrucks.Add(truck);
+        ServerRemoveOrderAt(index);
+    }
+
+    // Trucks that have driven off: gone.
+    private void ServerDespawnGoneTrucks()
+    {
+        for (int i = leavingTrucks.Count - 1; i >= 0; i--)
+        {
+            var t = leavingTrucks[i];
+            if (t == null) { leavingTrucks.RemoveAt(i); continue; }
+            if (!t.Gone) continue;
+            if (t.IsSpawned) t.NetworkObject.Despawn(true);
+            leavingTrucks.RemoveAt(i);
+        }
     }
 
     /* ========================= DEV ========================= */
