@@ -54,6 +54,8 @@ public class SettingsApp : MonoBehaviour, IPhoneApp
         float fov = GameSettings.FieldOfView > 0f ? GameSettings.FieldOfView : CurrentFov();
         SliderRow("Field of view", () => $"{(GameSettings.FieldOfView > 0f ? GameSettings.FieldOfView : CurrentFov()):0}°", 50f, 110f, fov,
                   v => GameSettings.SetFieldOfView(Mathf.Round(v)));
+        SliderRow("Phone size", () => $"{PhoneController.Size * 100f:0}%", 0.7f, 2.5f, PhoneController.Size,
+                  v => PhoneController.SetSize(Mathf.Round(v * 20f) / 20f)); // held closer; never bigger than the screen
         ButtonRow("Quality", () => QualityName(GameSettings.Quality), () =>
             GameSettings.SetQuality((GameSettings.Quality + 1) % Mathf.Max(1, QualitySettings.names.Length)));
         ButtonRow("V-Sync", () => GameSettings.VSync ? "On" : "Off", () => GameSettings.SetVSync(!GameSettings.VSync));

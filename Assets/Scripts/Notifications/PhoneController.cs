@@ -218,8 +218,58 @@ public class PhoneController : MonoBehaviour
     {
         float t = Mathf.Clamp01((Time.unscaledTime - raisedAt) / raiseSeconds);
         t = 1f - (1f - t) * (1f - t);
-        phone.transform.localPosition = (holdOffset + Vector3.down * (raiseFrom * (1f - t))) * FovScale();
+        phone.transform.localPosition = (holdOffset + Vector3.down * (raiseFrom * (1f - t))) * (FovScale() / sizeNow);
+        if (t >= 1f) FitOnScreen(); // (raised: how big it may be on this screen)
         phone.transform.localRotation = Quaternion.Euler(holdRotation);
+    }
+
+    /* ========================= PHONE SIZE (Settings) ========================= */
+
+    private const string SizeKey = "Phone.Size";
+
+    /// <summary>How big the phone is held (Settings → Phone size): 1 = as set up, 2 = twice as big (held closer).</summary>
+    public static float Size => Mathf.Clamp(PlayerPrefs.GetFloat(SizeKey, 1f), 0.7f, 2.5f);
+
+    public static void SetSize(float size)
+    {
+        PlayerPrefs.SetFloat(SizeKey, Mathf.Clamp(size, 0.7f, 2.5f));
+        PlayerPrefs.Save();
+    }
+
+    private float sizeNow = 1f;             // the size in use: Size, but never bigger than fits on the screen
+    private readonly Vector3[] corners = new Vector3[4];
+
+    // Held at Size, unless that would go past the screen's edges: then as big as fits (a little margin).
+    private void FitOnScreen()
+    {
+        var cam = phone != null && phone.transform.parent != null ? phone.transform.parent.GetComponent<Camera>() : null;
+        if (cam == null) { sizeNow = Size; return; }
+        float worst = 0f; // furthest any part of the phone reaches from the screen's middle (0.5 = the edge)
+        foreach (var r in phone.GetComponentsInChildren<Renderer>())
+        {
+            var b = r.bounds;
+            for (int i = 0; i < 8; i++)
+            {
+                var p = new Vector3(i % 2 == 0 ? b.min.x : b.max.x, (i / 2) % 2 == 0 ? b.min.y : b.max.y, i < 4 ? b.min.z : b.max.z);
+                worst = Mathf.Max(worst, Reach(cam, p));
+            }
+        }
+        foreach (var c in phone.GetComponentsInChildren<Canvas>())
+        {
+            ((RectTransform)c.transform).GetWorldCorners(corners);
+            foreach (var p in corners) worst = Mathf.Max(worst, Reach(cam, p));
+        }
+        if (worst <= 0.001f) { sizeNow = Size; return; }
+        // Size on screen grows with it (closer), around the screen's middle: so this much bigger still fits.
+        float fits = sizeNow * 0.47f / worst;
+        float want = Mathf.Min(Size, fits);
+        sizeNow = Mathf.Abs(want - sizeNow) < 0.005f ? sizeNow : want;
+    }
+
+    private static float Reach(Camera cam, Vector3 world)
+    {
+        var v = cam.WorldToViewportPoint(world);
+        return Mathf.Max(Mathf.Abs(v.x - 0.5f), Mathf.Abs(v.y - 0.5f));
     }
 
     // Same size on screen whatever the field of view: closer when it's wider (never inside the near clip).

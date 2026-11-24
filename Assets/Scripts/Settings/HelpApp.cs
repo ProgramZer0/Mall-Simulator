@@ -28,6 +28,19 @@ public class HelpApp : MonoBehaviour, IPhoneApp
         [TextArea(4, 20)] public string body;
         [Tooltip("Optional: a short clip shown above the text, looping, muted (an mp4, H.264, 720p, 10-20 s works well).")]
         public VideoClip video;
+        [Tooltip("Optional: the page as blocks, top to bottom (text, a video, more text, a picture...). When there " +
+                 "are any, they're the page and Body/Video above aren't used.")]
+        public List<Block> blocks = new();
+    }
+
+    [System.Serializable]
+    public class Block
+    {
+        public enum Kind { Text, Video, Picture }
+        public Kind kind = Kind.Text;
+        [TextArea(3, 15)] public string text;
+        public VideoClip video;
+        public Sprite picture;
     }
 
     [SerializeField] private string appName = "Help";
@@ -112,21 +125,60 @@ public class HelpApp : MonoBehaviour, IPhoneApp
         var title = PhoneUI.Text(content, $"<b>{topic.title}</b>", y, style.rowHeight, style, false, TextAlignmentOptions.Left);
         title.color = PhoneTheme.AccentOf(style);
         y += style.rowHeight + style.spacing * 0.5f;
-        if (topic.video != null) y = ShowVideo(topic.video, y);
+        if (topic.blocks != null && topic.blocks.Count > 0)
+        {
+            foreach (var b in topic.blocks)
+            {
+                if (b == null) continue;
+                if (b.kind == Block.Kind.Video && b.video != null) y = ShowVideo(b.video, y);
+                else if (b.kind == Block.Kind.Picture && b.picture != null) y = ShowPicture(b.picture, y);
+                else if (b.kind == Block.Kind.Text && !string.IsNullOrEmpty(b.text)) y = ShowText(b.text, y);
+            }
+        }
+        else
+        {
+            if (topic.video != null) y = ShowVideo(topic.video, y);
+            y = ShowText(topic.body, y);
+        }
+        SetHeight(y + style.padding);
+    }
 
-        var body = PhoneUI.Text(content, topic.body, y, 10f, style);
+    // A block of text across the page, as tall as it needs. Returns the y under it.
+    private float ShowText(string text, float y)
+    {
+        var body = PhoneUI.Text(content, text, y, 10f, style);
         float width = Mathf.Max(50f, content.rect.width - style.padding * 2f);
-        float h = body.GetPreferredValues(topic.body, width, 0f).y + 4f;
+        float h = body.GetPreferredValues(text, width, 0f).y + 4f;
         var rt = (RectTransform)body.transform;
         rt.offsetMin = new Vector2(rt.offsetMin.x, -y - h);
-        y += h + style.padding;
-        SetHeight(y);
+        return y + h + style.spacing;
+    }
+
+    // A picture across the page, at its own shape. Returns the y under it.
+    private float ShowPicture(Sprite picture, float y)
+    {
+        float width = Mathf.Max(50f, (content.rect.width > 0f ? content.rect.width : 300f) - style.padding * 2f);
+        float aspect = picture.rect.height > 0f ? picture.rect.width / picture.rect.height : 1f;
+        float h = width / aspect;
+        var go = new GameObject("Picture", typeof(RectTransform), typeof(Image));
+        var rt = (RectTransform)go.transform;
+        rt.SetParent(content, false);
+        rt.anchorMin = new Vector2(0f, 1f);
+        rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.offsetMin = new Vector2(style.padding, -y - h);
+        rt.offsetMax = new Vector2(-style.padding, -y);
+        var img = go.GetComponent<Image>();
+        img.sprite = picture;
+        img.preserveAspect = true;
+        img.raycastTarget = false;
+        return y + h + style.spacing;
     }
 
     /* ========================= VIDEO ========================= */
 
-    private VideoPlayer player;
-    private RenderTexture videoTexture;
+    // One player (and picture) per video on the page.
+    private readonly List<(VideoPlayer player, RenderTexture texture)> videos = new();
 
     // The clip across the page (its own shape), playing on a loop with no sound. Returns the y under it.
     private float ShowVideo(VideoClip clip, float y)
@@ -136,23 +188,7 @@ public class HelpApp : MonoBehaviour, IPhoneApp
         float h = width / aspect;
 
         int tw = (int)Mathf.Clamp(clip.width, 16, 1920), th = (int)Mathf.Clamp(clip.height, 16, 1080);
-        if (videoTexture == null || videoTexture.width != tw || videoTexture.height != th)
-        {
-            if (videoTexture != null) videoTexture.Release();
-            videoTexture = new RenderTexture(tw, th, 0) { name = "Help Video" };
-        }
-        if (player == null)
-        {
-            player = gameObject.AddComponent<VideoPlayer>();
-            player.playOnAwake = false;
-            player.isLooping = true;
-            player.renderMode = VideoRenderMode.RenderTexture;
-            player.audioOutputMode = VideoAudioOutputMode.None;
-            player.skipOnDrop = true;
-        }
-        player.targetTexture = videoTexture;
-        player.clip = clip;
-        player.Play();
+        var texture = new RenderTexture(tw, th, 0) { name = "Help Video" };
 
         var go = new GameObject("Video", typeof(RectTransform), typeof(RawImage));
         var rt = (RectTransform)go.transform;
@@ -163,20 +199,33 @@ public class HelpApp : MonoBehaviour, IPhoneApp
         rt.offsetMin = new Vector2(style.padding, -y - h);
         rt.offsetMax = new Vector2(-style.padding, -y);
         var image = go.GetComponent<RawImage>();
-        image.texture = videoTexture;
+        image.texture = texture;
         image.raycastTarget = false;
+
+        var player = go.AddComponent<VideoPlayer>();
+        player.playOnAwake = false;
+        player.isLooping = true;
+        player.renderMode = VideoRenderMode.RenderTexture;
+        player.audioOutputMode = VideoAudioOutputMode.None;
+        player.skipOnDrop = true;
+        player.targetTexture = texture;
+        player.clip = clip;
+        player.Play();
+        videos.Add((player, texture));
         return y + h + style.spacing;
     }
 
     private void StopVideo()
     {
-        if (player != null && player.isPlaying) player.Stop();
+        foreach (var (player, texture) in videos)
+        {
+            if (player != null) player.Stop();
+            if (texture != null) texture.Release();
+        }
+        videos.Clear();
     }
 
-    private void OnDestroy()
-    {
-        if (videoTexture != null) videoTexture.Release();
-    }
+    private void OnDestroy() => StopVideo();
 
     private void SetHeight(float h)
     {

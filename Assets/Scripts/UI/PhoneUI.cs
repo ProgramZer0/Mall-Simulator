@@ -64,6 +64,8 @@ public static class PhoneUI
         t.alignment = align;
         t.textWrappingMode = TextWrappingModes.Normal;
         t.raycastTarget = false;
+        PhoneTheme.ApplyOutline(t);
+        t.gameObject.AddComponent<PhoneThemeRole>().role = PhoneThemeRole.Role.Keep; // themed already, as built
         return t;
     }
 
@@ -73,6 +75,7 @@ public static class PhoneUI
         var rt = Row("Button", parent, y, height, s, left, right);
         var img = rt.gameObject.AddComponent<Image>();
         img.color = PhoneTheme.ButtonOf(s);
+        if (!img.TryGetComponent<PhoneThemeRole>(out _)) img.gameObject.AddComponent<PhoneThemeRole>().role = PhoneThemeRole.Role.Keep;
         var b = rt.gameObject.AddComponent<Button>();
         b.targetGraphic = img;
         var colors = b.colors;
@@ -109,6 +112,7 @@ public static class PhoneUI
         handle.sizeDelta = new Vector2(16f, 0f);
         var handleImg = handle.gameObject.AddComponent<Image>();
         handleImg.color = PhoneTheme.TextOf(s);
+        handle.gameObject.AddComponent<PhoneThemeRole>().role = PhoneThemeRole.Role.Keep;
         var slider = rt.gameObject.AddComponent<Slider>();
         slider.fillRect = fill;
         slider.handleRect = handle;
