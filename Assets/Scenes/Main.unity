@@ -14238,7 +14238,7 @@ MonoBehaviour:
   wallPrefab: {fileID: 3756940047382866070, guid: 40f753db4fa66ac418acc60bdfadb923, type: 3}
   thickness: 0.41
   halfHeight: 1.7
-  fullHeight: 4.25
+  fullHeight: 0
   gridSize: 0.5
   minLength: 0.5
   maxWallsPerStore: 64
@@ -14696,7 +14696,7 @@ MonoBehaviour:
   mallEvents: 1
   ballots: 1
   progression: 1
-  debugLogs: 1
+  debugLogs: 0
 --- !u!114 &451575859
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -14873,10 +14873,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CustomerManager
   ShowTopMostFoldoutHeaderGroup: 1
   lostChildEveryMinutes: 15
-  lostChildChance: {x: 0.01, y: 0.06}
-  firstLostChildAfterMinutes: 15
+  lostChildChance: {x: 0.01, y: 0.05}
+  firstLostChildAfterMinutes: 30
   maxLostAtOnce: 1
-  lostDistance: {x: 40, y: 105}
+  lostDistance: {x: 50, y: 105}
   lostWalkSeconds: 90
   searchRadius: 5
   reunionDistance: 2.5
@@ -14885,8 +14885,8 @@ MonoBehaviour:
   helperFollowSpeed: 4
   lostFindThemselvesMinutes: 5
   reunionHappiness: 1
-  reunionXp: 50
-  maxCustomers: 400
+  reunionXp: 100
+  maxCustomers: 500
   arrivalsPerMinute: 60
   maxBystanders: 300
   bystanderArrivalsPerMinute: 40
@@ -15066,9 +15066,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BreakManager
   ShowTopMostFoldoutHeaderGroup: 1
-  breaksPerHour: 2
-  maxBroken: 3
-  firstBreakAfter: 120
+  breaksPerHour: 4
+  maxBroken: 15
+  firstBreakAfter: 600
   repairSeconds: 30
   reportRange: 15
   complainAfterSeconds: 60
