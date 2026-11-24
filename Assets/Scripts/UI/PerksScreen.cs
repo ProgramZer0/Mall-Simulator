@@ -43,8 +43,6 @@ public class PerksScreen : MonoBehaviour, IShopScreen
     [Header("Hover Pop-up")]
     [Tooltip("A panel shown beside the perk under the pointer (hidden at start). Put it last on the screen so " +
              "it draws on top, and untick Raycast Target on its graphics so it doesn't steal the hover.")]
-    [Tooltip("Optional: a tooltip prefab (with TooltipView) for this screen. Empty, with no Tooltip Root: the shared one, " +
-             "Resources/Tooltip (Tools > Mall Sim > UI > Create Tooltip Prefab).")]
     [SerializeField] private TooltipView tooltipPrefab;
     [SerializeField] private GameObject tooltipRoot;
     [SerializeField] private TMP_Text tooltipNameText;

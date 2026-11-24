@@ -79,8 +79,6 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     [Header("Tooltip (optional)")]
     [Tooltip("Hover an item: this panel (hidden at start, Raycast Target off on its graphics) shows its name and " +
              "details beside the tile, fading in and out.")]
-    [Tooltip("Optional: a tooltip prefab (with TooltipView) for this screen. Empty, with no Tooltip Root: the shared one, " +
-             "Resources/Tooltip (Tools > Mall Sim > UI > Create Tooltip Prefab).")]
     [SerializeField] private TooltipView tooltipPrefab;
     [SerializeField] private GameObject tooltipRoot;
     [SerializeField] private TMP_Text tooltipNameText;
