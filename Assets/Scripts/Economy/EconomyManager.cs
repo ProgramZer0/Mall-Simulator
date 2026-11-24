@@ -472,11 +472,10 @@ public class EconomyManager : NetworkBehaviour
 
         BuildBoxes(itemIds, quantities, null);
         // By truck (the store's dock has bays): the smallest truck it fits; else on the shipment spots.
-        sbyte truckSize = -1;
-        if (UsesTrucks(plot))
+        bool byTruck = UsesTrucks(plot);
+        if (byTruck)
         {
-            truckSize = (sbyte)PickTruckSize(planBoxes);
-            if (truckSize < 0) return OrderResult.TooBig;
+            foreach (var b in planBoxes) if (!FitsBiggestTruck(b)) return OrderResult.TooBig; // one box too big for any truck
         }
         else if (!ShipmentPacker.CouldEverFit(plot.ShipmentZones, planBoxes))
             return OrderResult.TooBig;
@@ -499,31 +498,62 @@ public class EconomyManager : NetworkBehaviour
         // Logistics perks: sooner deliveries (at most 75% off).
         float sooner = 1f - Mathf.Clamp(ProgressionManager.StoreStat(plot, PerkStat.FasterDelivery), 0f, 0.75f);
 
-        int id = nextOrderId++;
-        orders.Add(new OrderInfo
-        {
-            orderId = id,
-            teamId = team,
-            plotId = plotId,
-            boxCount = boxes,
-            remaining = Mathf.Max(0f, TruckTime(deliverySeconds < 0f ? slowest : deliverySeconds, allTimes, truckSize) * sooner),
-            stampTime = NetworkManager.ServerTime.Time,
-            blocked = false,
-            inLine = oneDeliveryAtATime && HasOrderFor(plotId, waitingOnly: truckSize >= 0),
-            cost = (int)cost,
-            truckSize = truckSize,
-            stage = OrderInfo.OnItsWay,
-        });
+        // The colors the items come in: only on items that can be painted, only a real color, and (from the
+        // shop) only one the item comes in that the team has unlocked; otherwise their own colors.
+        var lineColors = new byte[itemIds.Length];
         for (int i = 0; i < itemIds.Length; i++)
         {
-            // Paint only sticks to items that can be painted, only with a real color, and (from the shop) only a
-            // color the item comes in that the team has unlocked; otherwise it comes in its own colors.
             byte paint = paints != null && i < paints.Length ? paints[i] : (byte)0;
             if (!PaintPalette.IsValid(paint) || !(ItemCatalog.Instance.TryGet(itemIds[i], out var d) && PaintParts.IsPaintable(d)))
                 paint = 0;
             else if (!anyoneMayBuy && !ColorRules.Allows(d, paint, team, out _))
                 paint = 0;
-            orderLines.Add(new OrderLine { orderId = id, itemId = itemIds[i], quantity = quantities[i], paint = paint });
+            lineColors[i] = paint;
+        }
+
+        // By truck: as many truckloads as it takes (by volume), each its own delivery in the smallest truck
+        // it fits; else one delivery to the shipment spots.
+        var loads = byTruck ? SplitIntoTruckloads(itemIds, quantities) : new List<int[]> { (int[])quantities.Clone() };
+        foreach (var load in loads)
+        {
+            int count = 0;
+            long loadCost = 0;
+            float loadSlowest = 0f, loadAll = 0f;
+            for (int i = 0; i < itemIds.Length; i++)
+            {
+                if (load[i] <= 0 || !ItemCatalog.Instance.TryGet(itemIds[i], out var def)) continue;
+                count += load[i];
+                loadCost += (long)UnitCost(i, def) * load[i];
+                loadSlowest = Mathf.Max(loadSlowest, MarketModifiers.DeliverySeconds(def));
+                loadAll += MarketModifiers.DeliverySeconds(def) * load[i];
+            }
+            if (count == 0) continue;
+            sbyte truckSize = -1;
+            if (byTruck)
+            {
+                BuildBoxes(itemIds, load, null);
+                truckSize = (sbyte)Mathf.Max(0, PickTruckSize(planBoxes));
+            }
+            float baseTime = deliverySeconds < 0f ? (byTruck ? loadSlowest : slowest) : deliverySeconds;
+
+            int id = nextOrderId++;
+            orders.Add(new OrderInfo
+            {
+                orderId = id,
+                teamId = team,
+                plotId = plotId,
+                boxCount = count,
+                remaining = Mathf.Max(0f, TruckTime(baseTime, loadAll, truckSize) * sooner),
+                stampTime = NetworkManager.ServerTime.Time,
+                blocked = false,
+                inLine = oneDeliveryAtATime && HasOrderFor(plotId, waitingOnly: truckSize >= 0),
+                cost = (int)Mathf.Min(int.MaxValue, loadCost),
+                truckSize = truckSize,
+                stage = OrderInfo.OnItsWay,
+            });
+            for (int i = 0; i < itemIds.Length; i++)
+                if (load[i] > 0)
+                    orderLines.Add(new OrderLine { orderId = id, itemId = itemIds[i], quantity = load[i], paint = lineColors[i] });
         }
 
         return OrderResult.Ordered;
@@ -801,20 +831,77 @@ public class EconomyManager : NetworkBehaviour
         return into.Count;
     }
 
-    // The smallest truck whose cargo floor this shipment fills no more than Truck Max Fill of (-1: none).
+    // A truck's cargo space (meters), and how much of it a load may fill (Truck Max Fill).
+    private static Vector3 CargoSize(DeliveryTruck t) =>
+        t == null || t.cargoArea == null ? Vector3.zero : Vector3.Scale(t.cargoArea.size, t.cargoArea.transform.lossyScale);
+
+    private float Capacity(DeliveryTruck t) { var c = CargoSize(t); return c.x * c.y * c.z * truckMaxFill; }
+
+    private static float Volume(ShipmentPacker.Box b) => b.half.x * b.half.y * b.half.z * 8f;
+
+    private DeliveryTruck Biggest()
+    {
+        DeliveryTruck best = null;
+        foreach (var t in truckPrefabs) if (t != null && t.cargoArea != null && (best == null || Capacity(t) > Capacity(best))) best = t;
+        return best;
+    }
+
+    // Does this box go in the biggest truck at all (either way round)?
+    private bool FitsBiggestTruck(ShipmentPacker.Box b)
+    {
+        var c = CargoSize(Biggest());
+        Vector3 s = b.half * 2f;
+        return s.y <= c.y + 0.01f && ((s.x <= c.x + 0.01f && s.z <= c.z + 0.01f) || (s.z <= c.x + 0.01f && s.x <= c.z + 0.01f));
+    }
+
+    // The smallest truck whose cargo space this load fills no more than Truck Max Fill of (by volume), with
+    // room for its biggest box (-1: none).
     private int PickTruckSize(List<ShipmentPacker.Box> boxes)
     {
-        float need = 0f, longest = 0f;
-        foreach (var b in boxes) { need += b.half.x * b.half.z * 4f; longest = Mathf.Max(longest, Mathf.Max(b.half.x, b.half.z) * 2f); }
+        float need = 0f;
+        foreach (var b in boxes) need += Volume(b);
         for (int i = 0; i < truckPrefabs.Length; i++)
         {
             var t = truckPrefabs[i];
-            if (t == null || t.cargoArea == null) continue;
-            Vector3 size = Vector3.Scale(t.cargoArea.size, t.cargoArea.transform.lossyScale);
-            if (longest > Mathf.Max(size.x, size.z) + 0.01f) continue;
-            if (need <= size.x * size.z * truckMaxFill) return i;
+            if (t == null || t.cargoArea == null || need > Capacity(t)) continue;
+            var c = CargoSize(t);
+            bool all = true;
+            foreach (var b in boxes)
+            {
+                Vector3 s = b.half * 2f;
+                if (!(s.y <= c.y + 0.01f && ((s.x <= c.x + 0.01f && s.z <= c.z + 0.01f) || (s.z <= c.x + 0.01f && s.x <= c.z + 0.01f)))) { all = false; break; }
+            }
+            if (all) return i;
         }
         return -1;
+    }
+
+    // An order split into truckloads (how many of each line in each), each no more than the biggest truck
+    // holds (by volume): biggest things first, a new truck when the current one's full.
+    private List<int[]> SplitIntoTruckloads(int[] itemIds, int[] quantities)
+    {
+        float cap = Mathf.Max(0.001f, Capacity(Biggest()));
+        var units = new List<(int line, float volume)>();
+        for (int i = 0; i < itemIds.Length; i++)
+        {
+            if (!ItemCatalog.Instance.TryGet(itemIds[i], out var def)) continue;
+            var prefab = def.GetShipmentPrefab();
+            if (prefab == null) continue;
+            float v = Volume(ShipmentPacker.GetBox(prefab.gameObject));
+            for (int q = 0; q < quantities[i]; q++) units.Add((i, v));
+        }
+        units.Sort((a, b) => b.volume.CompareTo(a.volume));
+        var loads = new List<(int[] qty, float used)>();
+        foreach (var (line, v) in units)
+        {
+            int k = loads.FindIndex(l => l.used + v <= cap); // the first truck it still fits in
+            if (k < 0) { loads.Add((new int[itemIds.Length], 0f)); k = loads.Count - 1; }
+            var l2 = loads[k];
+            l2.qty[line]++;
+            l2.used += v;
+            loads[k] = l2;
+        }
+        return loads.ConvertAll(l => l.qty);
     }
 
     // Slowest item's time + a share of all the items' times + the truck size's seconds.
@@ -936,8 +1023,7 @@ public class EconomyManager : NetworkBehaviour
         var paints = new byte[lines.Count];
         for (int i = 0; i < lines.Count; i++) { ids[i] = lines[i].itemId; qty[i] = lines[i].quantity; paints[i] = lines[i].paint; }
         BuildBoxes(ids, qty, paints);
-        var zones = new[] { truck.cargoArea };
-        if (!ShipmentPacker.TryPlan(zones, planBoxes, BlockingMask(), packStep, plan) || plan.Count != planItems.Count)
+        if (!PackTruck(truck, planBoxes, plan) || plan.Count != planItems.Count)
         {
             // Packed in with nothing in the way (it fit by floor area when ordered).
             Debug.LogWarning($"[EconomyManager] Order {o.orderId} didn't pack neatly into its truck: stacking it in the middle.");
@@ -953,6 +1039,41 @@ public class EconomyManager : NetworkBehaviour
                 prefab = planItems[i].prefab, itemId = planItems[i].itemId, paint = planItems[i].paint, pose = plan[i],
                 teamId = o.teamId, plotId = -1 - o.plotId, at = t + i * Mathf.Min(boxSpawnInterval, 0.05f), truckOrder = o.orderId,
             });
+    }
+
+    // Boxes stacked into a truck's cargo space: biggest first, in rows across, rows back to front, then a
+    // layer on top (each box turned whichever way fits). Poses for planBoxes' order; false if it runs out of room.
+    private static bool PackTruck(DeliveryTruck truck, List<ShipmentPacker.Box> boxes, List<Pose> poses)
+    {
+        poses.Clear();
+        var area = truck.cargoArea;
+        if (area == null) return false;
+        Vector3 c = CargoSize(truck);
+        var order = new List<int>();
+        for (int i = 0; i < boxes.Count; i++) { order.Add(i); poses.Add(default); }
+        order.Sort((a, b) => Volume(boxes[b]).CompareTo(Volume(boxes[a])));
+        const float gap = 0.02f;
+        float x = 0f, z = 0f, y = 0f, rowDepth = 0f, layerHeight = 0f;
+        Quaternion rot = area.transform.rotation;
+        foreach (int i in order)
+        {
+            Vector3 s = boxes[i].half * 2f;
+            bool turn = s.x > c.x - x + 0.001f && s.z <= c.x - x + 0.001f; // turned, if that fits this row
+            float w = turn ? s.z : s.x, d = turn ? s.x : s.z;
+            if (x + w > c.x + 0.001f) { x = 0f; z += rowDepth + gap; rowDepth = 0f; }            // next row
+            if (z + d > c.z + 0.001f) { z = 0f; x = 0f; y += layerHeight + gap; layerHeight = 0f; rowDepth = 0f; } // next layer
+            if (y + s.y > c.y + 0.001f || x + w > c.x + 0.001f || z + d > c.z + 0.001f) return false;
+            // From the cargo space's corner (its local -x, floor, -z) to this box's middle.
+            Vector3 local = new Vector3(-c.x * 0.5f + x + w * 0.5f, -c.y * 0.5f + y + s.y * 0.5f, -c.z * 0.5f + z + d * 0.5f);
+            Vector3 lossy = area.transform.lossyScale;
+            Vector3 middle = area.transform.TransformPoint(area.center + new Vector3(local.x / Mathf.Max(lossy.x, 1e-4f), local.y / Mathf.Max(lossy.y, 1e-4f), local.z / Mathf.Max(lossy.z, 1e-4f)));
+            Quaternion r = turn ? rot * Quaternion.Euler(0f, 90f, 0f) : rot;
+            poses[i] = new Pose(middle - r * boxes[i].pivotOffset, r); // (the prefab's pivot, not its middle)
+            x += w + gap;
+            rowDepth = Mathf.Max(rowDepth, d);
+            layerHeight = Mathf.Max(layerHeight, s.y);
+        }
+        return true;
     }
 
     // How many of its boxes are still in the truck (not picked up, not carried off).
