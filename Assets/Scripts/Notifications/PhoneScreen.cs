@@ -24,6 +24,10 @@ public class PhoneScreen : MonoBehaviour
              "in the Customize app. Empty: one is made as the canvas's first child. Panels on top of it need to be " +
              "see-through to show it.")]
     [SerializeField] private Image wallpaperImage;
+    [Tooltip("Apps laid out in the prefab (Notifications, Franchises, Lost and Found...) and the home screen take " +
+             "the Customize app's colors too: texts its Text color, buttons its Button color (a PhoneThemeRole on " +
+             "any text or image picks another, or Keep). Off: only apps built in code follow the theme.")]
+    [SerializeField] private bool themeDesignedApps = true;
     [SerializeField] private GameObject home;
     [SerializeField] private PhoneAppButton appButtonPrefab;
     [SerializeField] private RectTransform appGrid;
@@ -54,8 +58,52 @@ public class PhoneScreen : MonoBehaviour
 
     private void OnDestroy() => PhoneTheme.Changed -= ApplyTheme;
 
+    // What each recolored part looked like as designed (back to that with the Default theme).
+    private readonly System.Collections.Generic.Dictionary<Graphic, Color> designed = new();
+    private float nextThemePass;
+
+    private void Update()
+    {
+        // New rows appear in designed apps as they fill: recolor now and then while the phone's up.
+        if (Time.unscaledTime < nextThemePass) return;
+        nextThemePass = Time.unscaledTime + 0.4f;
+        ThemeDesigned();
+    }
+
+    private void ThemeDesigned()
+    {
+        if (!themeDesignedApps || canvas == null) return;
+        var theme = PhoneTheme.Current;
+        foreach (var g in canvas.GetComponentsInChildren<Graphic>(false))
+        {
+            if (g == wallpaperImage) continue;
+            var role = g.TryGetComponent<PhoneThemeRole>(out var r) ? r.role : PhoneThemeRole.Role.Auto;
+            if (role == PhoneThemeRole.Role.Auto)
+            {
+                if (g is TMPro.TMP_Text) role = PhoneThemeRole.Role.Text;
+                else if (g.GetComponentInParent<Selectable>() is Selectable sel && sel.targetGraphic == g) role = PhoneThemeRole.Role.Button;
+            }
+            if (g is TMPro.TMP_Text text) PhoneTheme.ApplyOutline(text);
+            if (role == PhoneThemeRole.Role.Auto || role == PhoneThemeRole.Role.Keep) continue;
+            if (!designed.ContainsKey(g)) designed[g] = g.color;
+            Color c = theme == null ? designed[g] : role switch
+            {
+                PhoneThemeRole.Role.Text => theme.text,
+                PhoneThemeRole.Role.DimText => theme.dimText,
+                PhoneThemeRole.Role.Button => theme.button,
+                PhoneThemeRole.Role.Accent => theme.accent,
+                PhoneThemeRole.Role.Background => theme.background,
+                PhoneThemeRole.Role.Track => theme.track,
+                _ => g.color,
+            };
+            c.a = theme == null ? c.a : designed[g].a * c.a; // keep see-through parts see-through
+            if (g.color != c) g.color = c;
+        }
+    }
+
     private void ApplyTheme()
     {
+        nextThemePass = 0f;
         if (this == null) return;
         if (wallpaperImage == null && canvas != null && (PhoneTheme.Current != null || PhoneTheme.Wallpaper != null))
         {

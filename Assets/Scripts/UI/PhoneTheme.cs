@@ -18,6 +18,28 @@ public static class PhoneTheme
         public Color button = new(0.2f, 0.24f, 0.32f);
         public Color accent = new(0.3f, 0.6f, 1f);
         public Color track = new(0.18f, 0.2f, 0.26f);
+        [Tooltip("Outline every phone text in Outline Color (always, with this theme). Texts get one anyway over a " +
+                 "background picture, so they read on any picture.")]
+        public bool outline;
+        public Color outlineColor = new(0f, 0f, 0f, 0.75f);
+    }
+
+    /// <summary>Outline phone texts? (A background picture is up, or the theme asks for it.)</summary>
+    public static bool Outline => Wallpaper != null || (Current != null && Current.outline);
+
+    /// <summary>The outline color: the theme's, else dark (or light, for dark text).</summary>
+    public static Color OutlineColorFor(Color text) =>
+        Current != null && Current.outline ? Current.outlineColor
+        : (text.r * 0.3f + text.g * 0.59f + text.b * 0.11f) > 0.5f ? new Color(0f, 0f, 0f, 0.75f) : new Color(1f, 1f, 1f, 0.75f);
+
+    /// <summary>Give a phone text the outline (or take it off) as the look says.</summary>
+    public static void ApplyOutline(TMPro.TMP_Text t)
+    {
+        if (t == null) return;
+        bool on = Outline;
+        if (!on && t.outlineWidth <= 0f) return; // (don't make a material copy for nothing)
+        t.outlineWidth = on ? 0.18f : 0f;
+        if (on) t.outlineColor = OutlineColorFor(t.color);
     }
 
     /// <summary>The picked colours (null: each app's own, as set up).</summary>
