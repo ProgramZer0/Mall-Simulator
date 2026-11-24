@@ -29,6 +29,9 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
     [SerializeField] private Vector2 cellSpacing = new(8f, 8f);
     [SerializeField, Min(0f)] private float padding = 6f;
 
+    [Tooltip("Optional: a tooltip prefab (with TooltipView) for this screen. Empty, with no Tooltip Root: the shared one, " +
+             "Resources/Tooltip (Tools > Mall Sim > UI > Create Tooltip Prefab).")]
+    [SerializeField] private TooltipView tooltipPrefab;
     [SerializeField] private GameObject tooltipRoot;
     [SerializeField] private TMP_Text tooltipNameText;
     [SerializeField] private TMP_Text tooltipDescriptionText;
@@ -328,6 +331,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
         if (!over) { if (card == hovered) HideTooltip(); return; }
         int index = franchiseCards.IndexOf(card);
         var fm = FranchiseManager.Instance;
+        TooltipView.Fill(transform, tooltipPrefab, ref tooltipRoot, ref tooltipNameText, ref tooltipDescriptionText);
         if (tooltipRoot == null || fm == null || index < 0 || index >= franchisesShown.Count) return;
         hovered = card;
         var f = franchisesShown[index];
@@ -373,6 +377,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
         hovered = card;
         int index = cards.IndexOf(card);
         var lm = LicenseManager.Instance;
+        TooltipView.Fill(transform, tooltipPrefab, ref tooltipRoot, ref tooltipNameText, ref tooltipDescriptionText);
         if (tooltipRoot == null || lm == null || index < 0 || index >= shown.Count) { HideTooltip(); return; }
         var l = shown[index];
         ulong team = LocalTeam;
