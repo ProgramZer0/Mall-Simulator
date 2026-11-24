@@ -632,7 +632,11 @@ public class PlayerInventoryNet : NetworkBehaviour
         // it up owns it), so a box can't be parked at the dock to get in others' way.
         bool leftAtDock = cart == null && box != null && LoadingDockZone.GetDockAt(position) != null &&
                           !MallManager.IsOwnShipmentArea(sender, position);
-        if (leftAtDock) box.ServerReserve(ulong.MaxValue, 0f);
+        // In the placer's own storage spot at the dock: held for their team (the usual delivery hold).
+        var spot = cart == null && box != null ? DockStorageSpot.At(position) : null;
+        if (spot != null && spot.Owner == sender && EconomyManager.Instance != null)
+            box.ServerReserve(MallManager.GetTeamOf(sender), EconomyManager.Instance.ReservationSeconds);
+        else if (leftAtDock) box.ServerReserve(ulong.MaxValue, 0f);
         // Otherwise still the delivery of the team that ordered it (not held for them any more, just marked theirs).
         else if (box != null && heldOrderedBy != ulong.MaxValue) box.ServerReserve(heldOrderedBy, 0f);
         heldOrderedBy = ulong.MaxValue;
