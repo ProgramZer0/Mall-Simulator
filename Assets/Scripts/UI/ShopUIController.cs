@@ -111,6 +111,10 @@ public class ShopUIController : MonoBehaviour
                         (Input.GetKeyDown(KeyCode.F) || Input.GetMouseButtonDown(1)); // not the F that opened it
         bool closeKeyDown = Input.GetKeyDown(closeKey);
         if (closeKeyDown && closeKey == KeyCode.Escape) UIState.MarkEscapeTaken(); // not the phone too
+        // A size picker up: right click / F / the close key shut just that, not the whole monitor.
+        if (!lost && (closeKeyDown || stepBack))
+            foreach (var picker in FindObjectsByType<SizePicker>(FindObjectsSortMode.None))
+                if (picker.IsOpen) { picker.Close(); return; }
         if (closeKeyDown || stepBack || lost) Close();
     }
 

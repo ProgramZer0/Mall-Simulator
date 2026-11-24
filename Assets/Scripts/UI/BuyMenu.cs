@@ -76,6 +76,12 @@ public class BuyMenu : MonoBehaviour, IShopScreen
              "items are ordered in their middle size.")]
     [SerializeField] private SizePicker sizePicker;
 
+    [Header("Tiles")]
+    [Tooltip("Tiles show just the picture (no name, the buy button without words); hovering one swaps the " +
+             "picture for Hover Label and shows the tooltip, which has the name. Off: names and \"Buy\" as set up.")]
+    [SerializeField] private bool compactTiles = true;
+    [SerializeField] private string hoverLabel = "Click to buy";
+
     [Header("Tooltip (optional)")]
     [Tooltip("Hover an item: this panel (hidden at start, Raycast Target off on its graphics) shows its name and " +
              "details beside the tile, fading in and out.")]
@@ -465,7 +471,13 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     {
         if (go != null) go.SetActive(true);
         if (icon != null && def.icon != null) icon.sprite = def.icon;
-        if (nameText != null) nameText.text = def.displayName;
+        if (icon != null) icon.enabled = true;
+        if (nameText != null)
+        {
+            nameText.text = def.displayName;
+            nameText.gameObject.SetActive(!compactTiles); // compact: the name's in the tooltip
+        }
+        if (compactTiles && button != null) SetButtonLabel(button, "");
         // Locked until the team's level reaches the item's level (its Min Level, or its categories' unlock level).
         bool levelLocked = !ProgressionManager.CanOrder(LocalTeam, def);
         bool licenseLocked = !LicenseManager.CanOrder(LocalTeam, def, out var license);
@@ -497,8 +509,41 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     /// <summary>The mouse went onto (or off) an item tile.</summary>
     public void OnTileHover(BuyItemSlot tile, bool over)
     {
+        if (over && sizePicker != null && sizePicker.IsOpen) over = false; // picking a size: no tooltips under it
         if (over) { hoveredTile = tile; ShowTooltip(tile); }
         else if (tile == hoveredTile) { hoveredTile = null; if (tooltipRoot != null) TooltipFade.Hide(tooltipRoot); }
+        if (compactTiles && tile != null) ShowHoverLabel(tile, over);
+    }
+
+    // Compact tiles: hovered, the picture gives way to "Click to buy" (on a tile that can be bought).
+    private void ShowHoverLabel(BuyItemSlot tile, bool over)
+    {
+        var button = tile.buyButton != null ? tile.buyButton : tile.GetComponentInChildren<Button>(true);
+        var icon = tile.icon != null ? tile.icon : TileIcon(tile.gameObject, button);
+        bool show = over && button != null && button.interactable;
+        if (icon != null) icon.enabled = !show;
+        if (button != null) SetButtonLabel(button, show ? hoverLabel : "");
+    }
+
+    private static Image TileIcon(GameObject tile, Button button)
+    {
+        foreach (var img in tile.GetComponentsInChildren<Image>(true))
+            if (img.gameObject != tile && (button == null || img.gameObject != button.gameObject) && img.sprite != null) return img;
+        return null;
+    }
+
+    private static void SetButtonLabel(Button button, string text)
+    {
+        var label = button.GetComponentInChildren<TMP_Text>(true);
+        if (label != null) label.text = text;
+    }
+
+    /// <summary>The size picker's up: hide the tooltip (it opened over the tiles).</summary>
+    private void HideTileTooltip()
+    {
+        if (hoveredTile != null && compactTiles) ShowHoverLabel(hoveredTile, false);
+        hoveredTile = null;
+        if (tooltipRoot != null) TooltipFade.Hide(tooltipRoot);
     }
 
     private void ShowTooltip(BuyItemSlot tile)
@@ -610,7 +655,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         var sizes = ItemCatalog.Instance != null ? ItemCatalog.Instance.GetSizes(def.id) : null;
         if (sizes != null && sizes.Count > 0)
         {
-            if (sizePicker != null) sizePicker.Open(def, sizes, picked => Buy(picked, paint));
+            if (sizePicker != null) { HideTileTooltip(); sizePicker.Open(def, sizes, picked => Buy(picked, paint)); }
             else Buy(new[] { (sizes[Sizes.Middle(def.sizes)], 1) }, paint);
             return;
         }

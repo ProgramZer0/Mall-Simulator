@@ -28,6 +28,16 @@ public class MarketScreen : MonoBehaviour, IShopScreen
     [SerializeField] private GameObject emptyText;
     [SerializeField] private TMP_Text statusText;
 
+    [Header("Cards like the buy menu's tiles")]
+    [Tooltip("Cards show just the picture, how many are left (Left Text) and the color swatch; hovering one swaps " +
+             "the picture for Hover Label and shows a tooltip with the rest (name, price, what it was, time left, " +
+             "color). Off: every part shown on the card as set up.")]
+    [SerializeField] private bool compactCards = true;
+    [SerializeField] private string hoverLabel = "Click to buy";
+    [Tooltip("Optional: a tooltip prefab (TooltipView); empty: the shared Resources/Tooltip.")]
+    [SerializeField] private TooltipView tooltipPrefab;
+    [SerializeField] private Vector2 tooltipOffset = new(8f, 0f);
+
     private StorePlot plot;
     private readonly List<MarketDealRow> rows = new();
     private readonly List<SpecialMarket.Deal> shown = new();
@@ -95,6 +105,8 @@ public class MarketScreen : MonoBehaviour, IShopScreen
                 var row = Instantiate(cardPrefab, cardParent);
                 int index = rows.Count;
                 if (row.buyButton != null) row.buyButton.onClick.AddListener(() => Buy(index));
+                var hover = row.gameObject.AddComponent<HoverReporter>();
+                hover.Hovered += over => OnCardHover(index, over);
                 rows.Add(row);
             }
             int money = EconomyManager.Instance != null ? EconomyManager.Instance.GetTeamMoney(LocalTeam) : int.MaxValue;
@@ -126,11 +138,66 @@ public class MarketScreen : MonoBehaviour, IShopScreen
                 bool can = money >= d.price;
                 if (row.buyButton != null) row.buyButton.interactable = can;
                 if (row.buttonText != null) row.buttonText.text = money < d.price ? "Not enough money" : "Buy";
+                if (compactCards)
+                {
+                    // Like the buy menu's tiles: the picture, how many are left, the swatch; the rest on hover.
+                    if (row.nameText != null) row.nameText.gameObject.SetActive(false);
+                    if (row.priceText != null) row.priceText.gameObject.SetActive(false);
+                    if (row.timeText != null) row.timeText.gameObject.SetActive(false);
+                    if (row.colorText != null) row.colorText.gameObject.SetActive(false);
+                    if (row.leftText != null) row.leftText.text = d.left.ToString();
+                    bool hovering = hoveredCard == i;
+                    if (row.icon != null) row.icon.enabled = !(hovering && can);
+                    if (row.buttonText != null) row.buttonText.text = hovering ? (can ? hoverLabel : "Not enough money") : "";
+                }
             }
             cardParent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, UILayout.GridHeight(shown.Count, cols, cellSize, cellSpacing, padding));
         }
         if (emptyText != null) emptyText.SetActive(shown.Count == 0);
         RefreshTimes();
+    }
+
+    /* ========================= HOVER ========================= */
+
+    private int hoveredCard = -1;
+    private TooltipView tooltip;
+
+    private void OnCardHover(int index, bool over)
+    {
+        if (over) hoveredCard = index;
+        else if (hoveredCard == index) hoveredCard = -1;
+        if (compactCards) dirty = true; // the card swaps its picture for "Click to buy" (and back)
+        ShowTooltip();
+    }
+
+    private void ShowTooltip()
+    {
+        tooltip ??= TooltipView.For(transform, tooltipPrefab);
+        if (tooltip == null) return;
+        var m = SpecialMarket.Instance;
+        var catalog = ItemCatalog.Instance;
+        if (hoveredCard < 0 || hoveredCard >= shown.Count || hoveredCard >= rows.Count || m == null || catalog == null ||
+            !catalog.TryGet(shown[hoveredCard].itemId, out var def))
+        {
+            TooltipFade.Hide(tooltip.gameObject);
+            return;
+        }
+        var d = shown[hoveredCard];
+        if (tooltip.nameText != null) tooltip.nameText.text = def.displayName;
+        if (tooltip.descriptionText != null)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine(d.MarketOnly ? $"${d.price:N0}  <color=#ffd060>Market only</color>" : $"${d.price:N0}  (usually ${d.usualPrice:N0})");
+            sb.AppendLine($"{d.left} of {d.total} left");
+            float s = m.SecondsLeft(d);
+            sb.AppendLine($"Ends in {(int)(s / 60f)}:{(int)(s % 60f):00}");
+            if (d.paint != 0) sb.AppendLine($"Comes in {PaintPalette.NameOf(d.paint)}");
+            if (d.left > 1) sb.Append($"Shift-click: buy {Mathf.Min(shiftAmount, d.left)}");
+            tooltip.descriptionText.text = sb.ToString().TrimEnd();
+        }
+        TooltipFade.Show(tooltip.gameObject);
+        tooltip.transform.SetAsLastSibling();
+        UILayout.PlaceBeside((RectTransform)tooltip.transform, (RectTransform)rows[hoveredCard].transform, tooltipOffset);
     }
 
     private void RefreshTimes()
@@ -143,6 +210,8 @@ public class MarketScreen : MonoBehaviour, IShopScreen
             float s = m.SecondsLeft(shown[i]);
             rows[i].timeText.text = $"Ends in {(int)(s / 60f)}:{(int)(s % 60f):00}";
         }
+        if (hoveredCard >= 0) ShowTooltip(); // its time left
+
     }
 
     private void Buy(int index)
