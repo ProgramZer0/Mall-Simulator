@@ -88,19 +88,19 @@ public class PhoneStyleApp : MonoBehaviour, IPhoneApp
         for (int i = 0; i < themes.Count; i++)
         {
             int index = i;
-            var b = PhoneUI.Button(content, (i == theme ? "✓ " : "") + themes[i].name, y, style.rowHeight, style, () => Pick(ThemeKey, index));
+            var b = PhoneUI.Button(content, (i == theme ? "> " : "") + themes[i].name, y, style.rowHeight, style, () => Pick(ThemeKey, index));
             if (!themes[i].useAppColors) Swatches(b, themes[i].colors);
             y += style.rowHeight + style.spacing;
         }
 
         y = Header("Background", y);
-        PhoneUI.Button(content, (paper < 0 ? "✓ " : "") + "None", y, style.rowHeight, style, () => Pick(WallpaperKey, -1));
+        PhoneUI.Button(content, (paper < 0 ? "> " : "") + "None", y, style.rowHeight, style, () => Pick(WallpaperKey, -1));
         y += style.rowHeight + style.spacing;
         for (int i = 0; i < wallpapers.Count; i++)
         {
             int index = i;
             float h = style.rowHeight * 2f;
-            var b = PhoneUI.Button(content, (i == paper ? "✓ " : "") + wallpapers[i].name, y, h, style, () => Pick(WallpaperKey, index));
+            var b = PhoneUI.Button(content, (i == paper ? "> " : "") + wallpapers[i].name, y, h, style, () => Pick(WallpaperKey, index));
             if (wallpapers[i].sprite != null) Thumbnail(b, wallpapers[i].sprite, h);
             y += h + style.spacing;
         }

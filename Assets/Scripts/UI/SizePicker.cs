@@ -32,7 +32,9 @@ public class SizePicker : MonoBehaviour
     private readonly List<int> counts = new();
     private Action<IReadOnlyList<(ItemDef def, int quantity)>> onAdd;
 
-    public bool IsOpen => root != null && root.activeSelf;
+    // Really showing (Root on, and everything above it): a Root left ticked under an unticked picker
+    // isn't open.
+    public bool IsOpen => root != null && root.activeInHierarchy;
 
     private void Awake()
     {
@@ -75,6 +77,9 @@ public class SizePicker : MonoBehaviour
             int rowsUsed = (sizes.Count + columns - 1) / columns;
             optionParent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, rowsUsed * cellSize.y + Mathf.Max(0, rowsUsed - 1) * spacing.y);
         }
+        // The picker's own object may have been left unticked in the scene (its Root under it): switch it
+        // on (that hides Root once, in Awake), then show Root.
+        if (!gameObject.activeSelf) gameObject.SetActive(true);
         root.SetActive(true);
         root.transform.SetAsLastSibling();
         Refresh();
