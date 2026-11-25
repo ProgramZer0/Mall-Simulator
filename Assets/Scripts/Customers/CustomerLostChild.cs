@@ -178,12 +178,12 @@ public partial class CustomerManager
     // not in a No Lost Child Zone.
     private bool GoodLostSpot(Vector3 p)
     {
-        if (!NavMesh.SamplePosition(p, out var hit, 0.6f, NavMesh.AllAreas)) return false;
+        if (!NavMesh.SamplePosition(p, out var hit, 0.6f, CustomerNavMesh.CustomerMask)) return false;
         p = hit.position;
         for (int i = 0; i < 4; i++)
         {
             Vector3 d = Quaternion.Euler(0f, i * 90f, 0f) * Vector3.forward * 0.7f;
-            if (NavMesh.SamplePosition(p + d, out var h, 0.5f, NavMesh.AllAreas) && Mathf.Abs(h.position.y - p.y) > 0.12f)
+            if (NavMesh.SamplePosition(p + d, out var h, 0.5f, CustomerNavMesh.CustomerMask) && Mathf.Abs(h.position.y - p.y) > 0.12f)
                 return false; // sloping or stepped: stairs, a ramp
         }
         if (InDoorway(p) || NoLostChildZone.Contains(p)) return false;
@@ -200,7 +200,7 @@ public partial class CustomerManager
             for (int i = 0; i < 12; i++)
             {
                 Vector3 p = from + Quaternion.Euler(0f, i * 30f, 0f) * Vector3.forward * r;
-                if (!NavMesh.SamplePosition(p, out var hit, 1f, NavMesh.AllAreas) || Mathf.Abs(hit.position.y - from.y) > 1.5f) continue;
+                if (!NavMesh.SamplePosition(p, out var hit, 1f, CustomerNavMesh.CustomerMask) || Mathf.Abs(hit.position.y - from.y) > 1.5f) continue;
                 if (!GoodLostSpot(hit.position)) continue;
                 spot = hit.position;
                 return true;

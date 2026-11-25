@@ -150,7 +150,12 @@ public class HelpApp : MonoBehaviour, IPhoneApp
         var text = b.GetComponentInChildren<TMP_Text>(true);
         if (text != null) text.text = label;
         b.onClick.AddListener(onClick);
-        return height;
+        // As tall as it really is: its own layout may have resized it, and a glow, shadow or hover frame
+        // can poke out past its rect. Moved down by what pokes out on top, so nothing overlaps.
+        var vis = PhoneUI.VisualRect(rt);
+        rt.anchoredPosition = new Vector2(style.padding + Mathf.Max(0f, rt.rect.xMin - vis.xMin) * sx,
+                                          -y - Mathf.Max(0f, vis.yMax - rt.rect.yMax) * sy);
+        return vis.height * sy;
     }
 
     private void ShowTopic(Topic topic)

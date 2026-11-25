@@ -69,7 +69,7 @@ public class FindDockApp : MonoBehaviour, IPhoneApp
     {
         var sb = new System.Text.StringBuilder();
         foreach (var (name, point) in docks) sb.Append(name).Append(point.ToString("F1"));
-        sb.Append(guide != null && guide.isActiveAndEnabled ? guide.Target.ToString("F1") : "-");
+        sb.Append(guide != null && guide.isActiveAndEnabled ? guide.Target.ToString("F1") + guide.NoPath : "-");
         return sb.ToString();
     }
 
@@ -108,7 +108,15 @@ public class FindDockApp : MonoBehaviour, IPhoneApp
                 if (showing) StopGuide(); else StartGuide(p);
                 Build();
             });
-            y += style.rowHeight + style.spacing * 2f;
+            y += style.rowHeight + style.spacing;
+            if (showing && guide.NoPath)
+            {
+                var none = PhoneUI.Text(content, "No path found: there's no walkable way from here to this dock.",
+                                        y, style.rowHeight * 1.6f, style, false);
+                none.color = PhoneTheme.DimOf(style);
+                y += style.rowHeight * 1.6f;
+            }
+            y += style.spacing;
         }
         content.sizeDelta = new Vector2(content.sizeDelta.x, y + style.padding);
     }

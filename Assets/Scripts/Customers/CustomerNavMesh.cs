@@ -40,11 +40,24 @@ public class CustomerNavMesh : MonoBehaviour
     [Tooltip("How many times longer a path through an Avoid zone counts as. Higher: they go further round to keep out.")]
     [Min(1f)] [SerializeField] private float avoidCost = 20f;
 
+    [Header("Staff doors")]
+    [Tooltip("The navigation area the doorways of doors customers can't use (staff, back rooms, docks) are " +
+             "marked with. 3 or higher, not the avoid area, and not used for anything else (name it 'Staff Only' " +
+             "under Navigation > Areas if you like). Customers never path through it; players' guides (Find My " +
+             "Dock) do.")]
+    [Range(3, 31)] [SerializeField] private int staffArea = 4;
+
+    /// <summary>The navigation area staff-only doorways are marked with.</summary>
+    public static int StaffArea { get; private set; } = 4;
+
+    /// <summary>Everywhere a customer may walk (not through staff-only doorways).</summary>
+    public static int CustomerMask => NavMesh.AllAreas & ~(1 << StaffArea);
+
     /// <summary>The navigation area Avoid zones mark.</summary>
     public static int AvoidArea { get; private set; } = 3;
 
     /// <summary>Every area but the avoid area: for "can I walk straight there" checks that shouldn't cut through it.</summary>
-    public static int PreferMask => NavMesh.AllAreas & ~(1 << AvoidArea);
+    public static int PreferMask => CustomerMask & ~(1 << AvoidArea);
 
     [Tooltip("Seconds after the last change before updating (a burst of changes is done together).")]
     [SerializeField] private float rebuildDelay = 1.5f;
@@ -132,6 +145,7 @@ public class CustomerNavMesh : MonoBehaviour
         buildTimer.Restart();
 
         AvoidArea = avoidArea;
+        StaffArea = staffArea == avoidArea ? (avoidArea == 31 ? 30 : avoidArea + 1) : staffArea;
         NavMesh.SetAreaCost(avoidArea, avoidCost);
         settings = NavMesh.GetSettingsByID(0);
         settings.agentRadius = agentRadius;
@@ -262,8 +276,9 @@ public class CustomerNavMesh : MonoBehaviour
         return false;
     }
 
-    // Door leaves are left out above (doorways are walkable). Doors customers mustn't use (locked,
-    // or manual and not public: staff, back rooms, docks) get a solid block where the shut door is.
+    // Door leaves are left out above (doorways are walkable). Doorways of doors customers mustn't use
+    // (locked, or manual and not public: staff, back rooms, docks) are marked Staff Only: customers'
+    // paths leave that area out, so to them it's a wall, but players' guides can go through.
     private void AddDoorBlockers(Bounds area)
     {
         foreach (var door in DoorNet.All)
@@ -271,15 +286,15 @@ public class CustomerNavMesh : MonoBehaviour
             if (door == null || door.CustomersCanUse || !door.TryGetComponent<DoorMotion>(out var motion) ||
                 !motion.TryGetClosedBounds(out var b) || !area.Intersects(b)) continue;
             Vector3 size = b.size;
-            size.x = Mathf.Max(size.x, 0.5f); // a thin leaf would slip between the build's samples
-            size.z = Mathf.Max(size.z, 0.5f);
-            size.y += 0.2f;
+            size.x = Mathf.Max(size.x, 0.7f); // a thin leaf would slip between the build's samples
+            size.z = Mathf.Max(size.z, 0.7f);
+            size.y += 0.6f; // reaches the floor under the leaf
             sources.Add(new NavMeshBuildSource
             {
-                shape = NavMeshBuildSourceShape.Box,
+                shape = NavMeshBuildSourceShape.ModifierBox,
                 size = size,
-                transform = Matrix4x4.TRS(b.center - Vector3.up * 0.1f, Quaternion.identity, Vector3.one),
-                area = 1, // Not Walkable
+                transform = Matrix4x4.TRS(b.center - Vector3.up * 0.3f, Quaternion.identity, Vector3.one),
+                area = StaffArea,
             });
         }
     }
