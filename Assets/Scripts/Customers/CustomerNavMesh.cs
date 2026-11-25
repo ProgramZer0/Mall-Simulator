@@ -42,7 +42,7 @@ public class CustomerNavMesh : MonoBehaviour
 
     [Header("Staff doors")]
     [Tooltip("The navigation area the doorways of doors customers can't use (staff, back rooms, docks) are " +
-             "marked with. 3 or higher, not the avoid area, and not used for anything else (name it 'Staff Only' " +
+             "marked with, and No Walk zones (CustomerNoWalkZone) too. 3 or higher, not the avoid area, and not used for anything else (name it 'Staff Only' " +
              "under Navigation > Areas if you like). Customers never path through it; players' guides (Find My " +
              "Dock) do.")]
     [Range(3, 31)] [SerializeField] private int staffArea = 4;
@@ -179,7 +179,7 @@ public class CustomerNavMesh : MonoBehaviour
         AddItems(bounds);
         AddDoorBlockers(bounds);
         foreach (var zone in CustomerNoWalkZone.All)
-            if (zone != null && bounds.Intersects(zone.WorldBounds)) sources.Add(zone.ToSource(avoidArea));
+            if (zone != null && bounds.Intersects(zone.WorldBounds)) sources.Add(zone.ToSource(avoidArea, StaffArea));
 
         if (data == null)
         {

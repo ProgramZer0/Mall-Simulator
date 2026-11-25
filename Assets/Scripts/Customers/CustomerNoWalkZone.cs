@@ -72,15 +72,17 @@ public class CustomerNoWalkZone : MonoBehaviour
     }
 
     /// <summary>
-    /// The zone for the walkable-area build: No Walk is a solid, not-walkable block; Avoid marks the floor
-    /// inside it as the avoid area (walkable, but costly to path through).
+    /// The zone for the walkable-area build: it marks the floor inside it. No Walk: the customers-only-keep-out
+    /// area (the same one staff doorways use), so customers never path through it but players' guides
+    /// (Find My Dock) still can. Avoid: the avoid area (walkable, but costly to path through). Reaches a
+    /// little below the box, so a box sat on the floor still marks it.
     /// </summary>
-    public NavMeshBuildSource ToSource(int avoidArea) => new()
+    public NavMeshBuildSource ToSource(int avoidArea, int noWalkArea) => new()
     {
-        shape = kind == Kind.Avoid ? NavMeshBuildSourceShape.ModifierBox : NavMeshBuildSourceShape.Box,
-        transform = transform.localToWorldMatrix * Matrix4x4.Translate(box.center),
-        size = box.size,
-        area = kind == Kind.Avoid ? avoidArea : 1, // 1: Not Walkable
+        shape = NavMeshBuildSourceShape.ModifierBox,
+        transform = transform.localToWorldMatrix * Matrix4x4.Translate(box.center + Vector3.down * 0.15f),
+        size = box.size + Vector3.up * 0.3f,
+        area = kind == Kind.Avoid ? avoidArea : noWalkArea,
     };
 
     public Bounds WorldBounds => box.bounds;
