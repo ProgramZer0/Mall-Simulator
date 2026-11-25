@@ -46,12 +46,24 @@ public class CustomerNavMesh : MonoBehaviour
              "under Navigation > Areas if you like). Customers never path through it; players' guides (Find My " +
              "Dock) do.")]
     [Range(3, 31)] [SerializeField] private int staffArea = 4;
+    [Tooltip("The same for locked doors (and the doors of stores nobody owns). Find My Dock only goes through " +
+             "these when your team can unlock them. 3 or higher, not either of the others.")]
+    [Range(3, 31)] [SerializeField] private int lockedArea = 5;
 
     /// <summary>The navigation area staff-only doorways are marked with.</summary>
     public static int StaffArea { get; private set; } = 4;
 
-    /// <summary>Everywhere a customer may walk (not through staff-only doorways).</summary>
-    public static int CustomerMask => NavMesh.AllAreas & ~(1 << StaffArea);
+    /// <summary>The navigation area locked doorways are marked with.</summary>
+    public static int LockedArea { get; private set; } = 5;
+
+    /// <summary>Everywhere a customer may walk (not through staff-only or locked doorways).</summary>
+    public static int CustomerMask => NavMesh.AllAreas & ~(1 << StaffArea) & ~(1 << LockedArea);
+
+    /// <summary>
+    /// Something on this machine needs the walkable area (Find My Dock's line). The host always builds it
+    /// (for customers); anyone else only while this is on.
+    /// </summary>
+    public static bool NeededHere { get; set; }
 
     /// <summary>The navigation area Avoid zones mark.</summary>
     public static int AvoidArea { get; private set; } = 3;
@@ -73,7 +85,7 @@ public class CustomerNavMesh : MonoBehaviour
     public string Describe()
     {
         var nm = Unity.Netcode.NetworkManager.Singleton;
-        if (nm == null || !nm.IsServer) return "the walkable area is only built on the host";
+        if (nm == null || (!nm.IsServer && !NeededHere)) return "the walkable area is only built on the host";
         if (building != null) return $"the walkable area is still being built ({buildTimer.Elapsed.TotalSeconds:0.0} s so far)";
         if (!Ready) return "the walkable area hasn't been built yet";
         return $"walkable area ready ({sources.Count} colliders)";
@@ -110,7 +122,7 @@ public class CustomerNavMesh : MonoBehaviour
     private void Update()
     {
         var nm = Unity.Netcode.NetworkManager.Singleton;
-        if (nm == null || !nm.IsServer) return; // only the host paths customers
+        if (nm == null || (!nm.IsServer && !NeededHere)) return; // the host paths customers; others only for Find My Dock
 
         if (Time.time >= nextPoll)
         {
@@ -145,7 +157,9 @@ public class CustomerNavMesh : MonoBehaviour
         buildTimer.Restart();
 
         AvoidArea = avoidArea;
-        StaffArea = staffArea == avoidArea ? (avoidArea == 31 ? 30 : avoidArea + 1) : staffArea;
+        // (Three different areas, even if they were set the same.)
+        StaffArea = Unused(staffArea, avoidArea, -1);
+        LockedArea = Unused(lockedArea, avoidArea, StaffArea);
         NavMesh.SetAreaCost(avoidArea, avoidCost);
         settings = NavMesh.GetSettingsByID(0);
         settings.agentRadius = agentRadius;
@@ -171,6 +185,16 @@ public class CustomerNavMesh : MonoBehaviour
         }
         building = NavMeshBuilder.UpdateNavMeshDataAsync(data, settings, sources, bounds);
         prepMs = buildTimer.Elapsed.TotalMilliseconds; // the part on the main thread (the rest runs in the background)
+    }
+
+    private static int Unused(int want, int a, int b)
+    {
+        for (int i = 0; i < 29; i++)
+        {
+            int v = 3 + (want - 3 + i) % 29;
+            if (v != a && v != b) return v;
+        }
+        return want;
     }
 
     // A mesh collider whose model doesn't have Read/Write on can't be read in a build (the editor lets it,
@@ -294,7 +318,7 @@ public class CustomerNavMesh : MonoBehaviour
                 shape = NavMeshBuildSourceShape.ModifierBox,
                 size = size,
                 transform = Matrix4x4.TRS(b.center - Vector3.up * 0.3f, Quaternion.identity, Vector3.one),
-                area = StaffArea,
+                area = door.IsLocked ? LockedArea : StaffArea,
             });
         }
     }
