@@ -243,6 +243,7 @@ GameObject:
   - component: {fileID: 5545095278233832638}
   - component: {fileID: 2641139864148988977}
   - component: {fileID: 7041014569599709894}
+  - component: {fileID: 1013653069717961992}
   m_Layer: 0
   m_Name: Empty
   m_TagString: Untagged
@@ -369,6 +370,19 @@ MonoBehaviour:
   m_hasFontAssetChanged: 1
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!114 &1013653069717961992
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1427355078107650131}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10ee446ca2cf48289d25d0a2a2150225, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PhoneThemeRole
+  role: 2
 --- !u!1 &1433943878260414385
 GameObject:
   m_ObjectHideFlags: 0
@@ -380,6 +394,7 @@ GameObject:
   - component: {fileID: 1545501608895741034}
   - component: {fileID: 9142931157011420224}
   - component: {fileID: 3150943313393269262}
+  - component: {fileID: 7187890207888216590}
   m_Layer: 0
   m_Name: Text (TMP)
   m_TagString: Untagged
@@ -506,6 +521,19 @@ MonoBehaviour:
   m_hasFontAssetChanged: 1
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!114 &7187890207888216590
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1433943878260414385}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10ee446ca2cf48289d25d0a2a2150225, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PhoneThemeRole
+  role: 0
 --- !u!1 &1814674055833447772
 GameObject:
   m_ObjectHideFlags: 0
@@ -675,6 +703,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PhoneScreen
   canvas: {fileID: 8544258598755942248}
   wallpaperImage: {fileID: 8331957576352380609}
+  themeDesignedApps: 1
+  buttonPrefab: {fileID: 290798372888040304, guid: 9b72d634d3adca147b7a6fcf34e469b7, type: 3}
+  animateApps: 1
+  appOpenSeconds: 0.2
+  appCloseSeconds: 0.16
   home: {fileID: 5661611720259801986}
   appButtonPrefab: {fileID: 6352466662402508229, guid: 43936089813a2074187947e7ffdc3a98, type: 3}
   appGrid: {fileID: 2525065335892653851}
@@ -702,6 +735,7 @@ GameObject:
   - component: {fileID: 4942930642347304785}
   - component: {fileID: 6495027651405498214}
   - component: {fileID: 2508016082720281585}
+  - component: {fileID: 8808974866204776432}
   m_Layer: 0
   m_Name: Text (TMP)
   m_TagString: Untagged
@@ -828,6 +862,19 @@ MonoBehaviour:
   m_hasFontAssetChanged: 1
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!114 &8808974866204776432
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2337543009500942526}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10ee446ca2cf48289d25d0a2a2150225, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PhoneThemeRole
+  role: 0
 --- !u!1 &2365744259546875135
 GameObject:
   m_ObjectHideFlags: 0
@@ -1039,6 +1086,72 @@ MonoBehaviour:
   m_hasFontAssetChanged: 0
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!1 &2756193707015572136
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2350837469792003734}
+  - component: {fileID: 8100509172411191543}
+  m_Layer: 0
+  m_Name: Shipments
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!224 &2350837469792003734
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2756193707015572136}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: -5}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 5230052667094434087}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: -1.2774353, y: 12.76001}
+  m_SizeDelta: {x: -11.4, y: -58.66}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &8100509172411191543
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2756193707015572136}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e3aa8027eba43d8931c099ccf65f18c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ShipmentsApp
+  appName: Shipments
+  icon: {fileID: 0}
+  style:
+    rowHeight: 30
+    spacing: 6
+    padding: 8
+    fontSize: 16
+    smallFontSize: 13
+    text: {r: 0.92, g: 0.94, b: 0.97, a: 1}
+    dimText: {r: 0.65, g: 0.7, b: 0.78, a: 1}
+    button: {r: 0.2, g: 0.24, b: 0.32, a: 1}
+    accent: {r: 0.3, g: 0.6, b: 1, a: 1}
+    track: {r: 0.18, g: 0.2, b: 0.26, a: 1}
+    font: {fileID: 0}
+  truckNames:
+  - Box Truck
+  - 26' Straight Truck
+  - Semi Truck
 --- !u!1 &2888124564190878075
 GameObject:
   m_ObjectHideFlags: 0
@@ -1290,8 +1403,8 @@ MonoBehaviour:
     rowHeight: 30
     spacing: 6
     padding: 8
-    fontSize: 22
-    smallFontSize: 16
+    fontSize: 30
+    smallFontSize: 24
     text: {r: 0, g: 0, b: 0, a: 1}
     dimText: {r: 0.65, g: 0.7, b: 0.78, a: 1}
     button: {r: 0.2, g: 0.24, b: 0.32, a: 1}
@@ -1351,7 +1464,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NotificationsApp
   appName: Notifications
   icon: {fileID: 21300000, guid: 5800d2a3a08e98f46a36886bc8011279, type: 3}
-  rowPrefab: {fileID: 5629579366459846492, guid: 508cadeacf329ba4fb7bd9bb0093226d, type: 3}
+  rowPrefab: {fileID: 5629579366459846492, guid: 3ccae106f9ee9d04ab5840dacf4cd811, type: 3}
   rowParent: {fileID: 3977189545939444000}
   rowHeight: 122.9
   rowSpacing: 4
@@ -1434,6 +1547,7 @@ MonoBehaviour:
       middle of the screen always says what <b>F</b> will do with what you''re looking
       at.'
     video: {fileID: 0}
+    blocks: []
   - id: phone
     title: Your phone
     body: '<b>Esc</b> brings the phone up on its home screen, <b>Tab</b> straight
@@ -1457,6 +1571,7 @@ MonoBehaviour:
       <b>Settings:</b> sound, mouse, display, and Reset
       help tips to see the tips again.'
     video: {fileID: 0}
+    blocks: []
   - id: your-store
     title: Your store
     body: 'You start with a small store. Stand at its monitor and press F to order
@@ -1471,6 +1586,7 @@ MonoBehaviour:
       Press
       <b>I</b> for the store checker: what customers think of your store and why.'
     video: {fileID: 0}
+    blocks: []
   - id: ordering
     title: Ordering and deliveries
     body: 'Order from your store''s monitor. Stock comes in crates, each holding
@@ -1483,6 +1599,7 @@ MonoBehaviour:
       10 minutes; after that anyone can take them. Carrying another store''s delivery
       to them earns a help point.'
     video: {fileID: 0}
+    blocks: []
   - id: stocking
     title: Stocking shelves
     body: 'Hold a crate and look at a shelf: <b>F</b> stocks one (the preview shows
@@ -1504,6 +1621,7 @@ MonoBehaviour:
       A crate with room left can be topped up with more of the
       same product.'
     video: {fileID: 0}
+    blocks: []
   - id: placing
     title: Placing things
     body: 'Pick something up with <b>F</b>. A see-through preview shows where it''ll
@@ -1520,6 +1638,7 @@ MonoBehaviour:
       To move a lot at once, or to build,
       use store edit mode (<b>0</b>).'
     video: {fileID: 0}
+    blocks: []
   - id: carts
     title: Carts
     body: 'Look at your store''s cart with empty hands and press <b>F</b> to push
@@ -1531,6 +1650,7 @@ MonoBehaviour:
       walls and shelves. Pull too far from a stuck cart and you let go. Only your
       team can use your carts.'
     video: {fileID: 0}
+    blocks: []
   - id: prices
     title: Prices
     body: 'Press <b>1</b> for the price scanner and click something for sale. Type
@@ -1544,6 +1664,7 @@ MonoBehaviour:
       are more tempted), low and they buy more but you make less. Market prices move
       with events and seasons.'
     video: {fileID: 0}
+    blocks: []
   - id: checkout
     title: The checkout
     body: 'Customers line up and put their things on the belt. Click each thing to
@@ -1560,6 +1681,7 @@ MonoBehaviour:
       A customer who waits too long walks off and
       leaves their things: click them to take them back to the shelves.'
     video: {fileID: 0}
+    blocks: []
   - id: customers
     title: Customers
     body: 'Customers come in different kinds, each liking different things and caring
@@ -1577,6 +1699,7 @@ MonoBehaviour:
       on seasons, events, and the mall''s reputation: broken lights and lost children
       nobody helped keep shoppers away.'
     video: {fileID: 0}
+    blocks: []
   - id: shoplifters
     title: Shoplifters
     body: 'Some customers steal, more so when a price is well over what the item
@@ -1589,6 +1712,7 @@ MonoBehaviour:
       drops what they took as crates at their feet: pick them up and put them back.
       Catching someone stealing from another store earns a help point.'
     video: {fileID: 0}
+    blocks: []
   - id: editing
     title: Editing your store
     body: 'Press <b>0</b> to edit (the store closes while you do). Move the camera
@@ -1604,6 +1728,7 @@ MonoBehaviour:
 
       Press <b>0</b> again to save.'
     video: {fileID: 0}
+    blocks: []
   - id: painting
     title: Painting and colors
     body: 'Tap <b>2</b> (empty hands) for the paint brush; hold <b>2</b> for the
@@ -1617,6 +1742,7 @@ MonoBehaviour:
       it covers. Customers like some colors better on some things, and some kinds
       of customer have favorite colors.'
     video: {fileID: 32900000, guid: f9db0f538152532418cff906625e967e, type: 3}
+    blocks: []
   - id: levels
     title: Levels and perks
     body: 'Happy customers and profit level your team up, unlocking items, colors,
@@ -1628,6 +1754,7 @@ MonoBehaviour:
       You can respec for free, but a store whose layout doesn''t match its perks
       sells less.'
     video: {fileID: 0}
+    blocks: []
   - id: licenses
     title: Licenses
     body: 'Some categories need a license before you can order them, and only so
@@ -1638,6 +1765,7 @@ MonoBehaviour:
       Giving up a license you never ordered anything with earns a help
       point (someone else can use it).'
     video: {fileID: 0}
+    blocks: []
   - id: franchises
     title: Franchises
     body: "A franchise makes your team the only one allowed to order its category
@@ -1646,6 +1774,7 @@ MonoBehaviour:
       bid when the auction ends wins. When it runs out, or its holder gives it up,
       bidding opens again."
     video: {fileID: 0}
+    blocks: []
   - id: votes
     title: Mall votes
     body: 'Every so often a vote opens at the mall''s kiosks. Look at an option''s
@@ -1656,6 +1785,7 @@ MonoBehaviour:
       Help points make your
       vote count more: see Help points.'
     video: {fileID: 0}
+    blocks: []
   - id: events
     title: Mall events and seasons
     body: 'Seasons run one after another, and events come and go on top of them.
@@ -1667,6 +1797,7 @@ MonoBehaviour:
       running now is shown on screen. Stock up on what an event makes popular, and
       watch your prices when market prices move.'
     video: {fileID: 0}
+    blocks: []
   - id: help-points
     title: Help points
     body: "Helping the mall earns help points:\n\u2022 bringing a lost child back
@@ -1676,6 +1807,7 @@ MonoBehaviour:
       Help points make your mall vote count more; the ones that did are used up when
       the vote closes."
     video: {fileID: 0}
+    blocks: []
   - id: lost-children
     title: Lost children
     body: "Now and then a child wanders away from their family. Everyone's told,
@@ -1686,6 +1818,7 @@ MonoBehaviour:
       for a help point and experience.\n\nA child nobody helps eventually finds their
       family alone, but word gets around: fewer shoppers come to the mall for a while."
     video: {fileID: 0}
+    blocks: []
   - id: broken
     title: Broken lights and screens
     body: 'Things in the mall break now and then: a light flickers or goes out, a
@@ -1697,6 +1830,11 @@ MonoBehaviour:
       and press <b>F</b> to report it: you get a help point and maintenance fixes
       it shortly. If nobody does, shoppers start complaining.'
     video: {fileID: 0}
+    blocks: []
+  topicButtonPrefab: {fileID: 0}
+  backButtonPrefab: {fileID: 0}
+  backLabel: "\u2039 Back"
+  stretchButtons: 1
   style:
     rowHeight: 30
     spacing: 6
@@ -1851,6 +1989,7 @@ GameObject:
   - component: {fileID: 8421988302996229201}
   - component: {fileID: 1982237923744098680}
   - component: {fileID: 6507016356728809658}
+  - component: {fileID: 5715517364881116397}
   m_Layer: 0
   m_Name: Parents
   m_TagString: Untagged
@@ -1960,6 +2099,19 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &5715517364881116397
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5488625941788423332}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10ee446ca2cf48289d25d0a2a2150225, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PhoneThemeRole
+  role: 0
 --- !u!1 &5623772943691198637
 GameObject:
   m_ObjectHideFlags: 0
@@ -2331,7 +2483,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3d486c5ecd2f47d89b6f17011eb079b7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FranchisesPanel
-  rowPrefab: {fileID: 5589400944901538638, guid: 3091596bc6f07294187b6594e3f2d34c, type: 3}
+  rowPrefab: {fileID: 5589400944901538638, guid: ef08864b468f45c4dbdec1460419a5ab, type: 3}
   rowParent: {fileID: 1926642115069171470}
   rowHeight: 103.8
   rowSpacing: 6
@@ -2614,6 +2766,8 @@ MonoBehaviour:
       button: {r: 0.2, g: 0.24, b: 0.32, a: 1}
       accent: {r: 0.3, g: 0.6, b: 1, a: 1}
       track: {r: 0.18, g: 0.2, b: 0.26, a: 1}
+      outline: 0
+      outlineColor: {r: 0, g: 0, b: 0, a: 0.75}
   - name: Light
     useAppColors: 0
     colors:
@@ -2624,6 +2778,8 @@ MonoBehaviour:
       button: {r: 0.82, g: 0.85, b: 0.9, a: 1}
       accent: {r: 0.15, g: 0.45, b: 0.95, a: 1}
       track: {r: 0.75, g: 0.78, b: 0.84, a: 1}
+      outline: 0
+      outlineColor: {r: 0, g: 0, b: 0, a: 0.75}
   - name: Mint
     useAppColors: 0
     colors:
@@ -2634,6 +2790,8 @@ MonoBehaviour:
       button: {r: 0.13, g: 0.27, b: 0.23, a: 1}
       accent: {r: 0.25, g: 0.85, b: 0.6, a: 1}
       track: {r: 0.1, g: 0.2, b: 0.17, a: 1}
+      outline: 0
+      outlineColor: {r: 0, g: 0, b: 0, a: 0.75}
   - name: Sunset
     useAppColors: 0
     colors:
@@ -2644,6 +2802,8 @@ MonoBehaviour:
       button: {r: 0.33, g: 0.14, b: 0.18, a: 1}
       accent: {r: 1, g: 0.55, b: 0.3, a: 1}
       track: {r: 0.25, g: 0.1, b: 0.13, a: 1}
+      outline: 0
+      outlineColor: {r: 0, g: 0, b: 0, a: 0.75}
   - name: Midnight
     useAppColors: 0
     colors:
@@ -2654,6 +2814,8 @@ MonoBehaviour:
       button: {r: 0.1, g: 0.1, b: 0.2, a: 1}
       accent: {r: 0.6, g: 0.45, b: 1, a: 1}
       track: {r: 0.08, g: 0.08, b: 0.15, a: 1}
+      outline: 0
+      outlineColor: {r: 0, g: 0, b: 0, a: 0.75}
   wallpapers:
   - name: Flowers
     sprite: {fileID: 21300000, guid: 3fe88e4eaf2950d4eb88aed1e6a439a4, type: 3}
@@ -2765,7 +2927,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &5396366900331835426
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2855,6 +3017,7 @@ RectTransform:
   - {fileID: 8275267277979209542}
   - {fileID: 8552505523568599921}
   - {fileID: 2170731789836836897}
+  - {fileID: 2350837469792003734}
   - {fileID: 164513990845410445}
   - {fileID: 6785790980939263574}
   m_Father: {fileID: 1061948242683757144}
@@ -3120,6 +3283,7 @@ GameObject:
   - component: {fileID: 6984482219356333939}
   - component: {fileID: 5713588539267125429}
   - component: {fileID: 2688043224952180087}
+  - component: {fileID: 604971190195143765}
   m_Layer: 0
   m_Name: Info
   m_TagString: Untagged
@@ -3246,6 +3410,19 @@ MonoBehaviour:
   m_hasFontAssetChanged: 1
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!114 &604971190195143765
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9187658927569140502}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10ee446ca2cf48289d25d0a2a2150225, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PhoneThemeRole
+  role: 2
 --- !u!1 &9209838656909270902
 GameObject:
   m_ObjectHideFlags: 0
@@ -3258,6 +3435,7 @@ GameObject:
   - component: {fileID: 406521820165601756}
   - component: {fileID: 3511459270845348537}
   - component: {fileID: 1654327663836165541}
+  - component: {fileID: 7966257258186118005}
   m_Layer: 0
   m_Name: Child
   m_TagString: Untagged
@@ -3367,3 +3545,16 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &7966257258186118005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9209838656909270902}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10ee446ca2cf48289d25d0a2a2150225, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PhoneThemeRole
+  role: 0
