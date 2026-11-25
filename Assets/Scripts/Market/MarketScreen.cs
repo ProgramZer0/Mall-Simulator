@@ -147,7 +147,8 @@ public class MarketScreen : MonoBehaviour, IShopScreen
                     if (row.colorText != null) row.colorText.gameObject.SetActive(false);
                     if (row.leftText != null) row.leftText.text = d.left.ToString();
                     bool hovering = hoveredCard == i;
-                    if (row.icon != null) row.icon.enabled = !(hovering && can);
+                    // Faded, not switched off (off, it stops catching the mouse and the hover flickers).
+                    if (row.icon != null) { row.icon.enabled = true; row.icon.canvasRenderer.SetAlpha(hovering && can ? 0f : 1f); }
                     if (row.buttonText != null) row.buttonText.text = hovering ? (can ? hoverLabel : "Not enough money") : "";
                 }
             }

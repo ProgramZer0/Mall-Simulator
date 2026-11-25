@@ -471,7 +471,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     {
         if (go != null) go.SetActive(true);
         if (icon != null && def.icon != null) icon.sprite = def.icon;
-        if (icon != null) icon.enabled = true;
+        if (icon != null) { icon.enabled = true; icon.canvasRenderer.SetAlpha(1f); }
         if (nameText != null)
         {
             nameText.text = def.displayName;
@@ -521,7 +521,9 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         var button = tile.buyButton != null ? tile.buyButton : tile.GetComponentInChildren<Button>(true);
         var icon = tile.icon != null ? tile.icon : TileIcon(tile.gameObject, button);
         bool show = over && button != null && button.interactable;
-        if (icon != null) icon.enabled = !show;
+        // Faded out, not switched off: a switched-off picture stops catching the mouse, which reads as the
+        // mouse leaving the tile (the tooltip and label would flicker off and on, or not show at all).
+        if (icon != null) icon.canvasRenderer.SetAlpha(show ? 0f : 1f);
         if (button != null) SetButtonLabel(button, show ? hoverLabel : "");
     }
 

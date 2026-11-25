@@ -896,7 +896,7 @@ public partial class CustomerManager : NetworkBehaviour
             warnedNoPersonality = true;
             return null;
         }
-        if (!NavMesh.SamplePosition(near, out var hit, 5f, NavMesh.AllAreas))
+        if (!NavMesh.SamplePosition(near, out var hit, 5f, CustomerNavMesh.CustomerMask))
         {
             why = "no walkable floor within 5 m of it (is it inside CustomerNavMesh's area, on a floor with a collider?)";
             return null;
@@ -985,9 +985,9 @@ public partial class CustomerManager : NetworkBehaviour
         c.corners.Clear();
         c.corner = 0;
         string problem = null;
-        if (!NavMesh.SamplePosition(to, out var hit, 2f, NavMesh.AllAreas))
+        if (!NavMesh.SamplePosition(to, out var hit, 2f, CustomerNavMesh.CustomerMask))
             problem = $"no walkable floor within 2 m of {to:F1}";
-        else if (!NavMesh.CalculatePath(c.pos, hit.position, NavMesh.AllAreas, path) ||
+        else if (!NavMesh.CalculatePath(c.pos, hit.position, CustomerNavMesh.CustomerMask, path) ||
                  path.status == NavMeshPathStatus.PathInvalid || path.corners.Length == 0)
             problem = $"no path from {c.pos:F1} to {hit.position:F1}";
         // Partial: the place can't be reached (behind a wall or a shut door); the path only gets as near
@@ -1079,21 +1079,21 @@ public partial class CustomerManager : NetworkBehaviour
         Vector3 next = c.pos + step;
         float along = left > 1e-4f ? Mathf.Clamp01(Vector3.Dot(step, dir) / left) : 1f;
         next.y = Mathf.Lerp(c.pos.y, to.y, along); // height follows the path (stairs, ramps)
-        if (NavMesh.Raycast(c.pos, next, out var hit, NavMesh.AllAreas))
+        if (NavMesh.Raycast(c.pos, next, out var hit, CustomerNavMesh.CustomerMask))
         {
             // Hit an edge (a wall, a shelf corner): slide along it instead of stopping.
             Vector3 slide = Vector3.ProjectOnPlane(step, hit.normal);
             slide.y = 0f;
             Vector3 alt = hit.position + slide * 0.9f;
             alt.y = next.y;
-            next = NavMesh.Raycast(hit.position, alt, out var hit2, NavMesh.AllAreas) ? hit2.position : alt;
+            next = NavMesh.Raycast(hit.position, alt, out var hit2, CustomerNavMesh.CustomerMask) ? hit2.position : alt;
             // Pinned in a corner (the slide goes nowhere): try turning a little either way instead.
             Vector3 got = next - c.pos;
             got.y = 0f;
             if (got.sqrMagnitude < step.sqrMagnitude * 0.04f) next = Sidestep(c, step, next);
         }
         // Keep them on the walkable surface (two floors over each other: the right one).
-        if (NavMesh.SamplePosition(next, out var onMesh, 0.6f, NavMesh.AllAreas)) next.y = onMesh.position.y;
+        if (NavMesh.SamplePosition(next, out var onMesh, 0.6f, CustomerNavMesh.CustomerMask)) next.y = onMesh.position.y;
 
         Vector3 moved = next - c.pos;
         moved.y = 0f;
@@ -1147,7 +1147,7 @@ public partial class CustomerManager : NetworkBehaviour
         {
             Vector3 turned = Quaternion.Euler(0f, a, 0f) * step;
             Vector3 to = c.pos + turned;
-            if (!NavMesh.Raycast(c.pos, to, out _, NavMesh.AllAreas)) return to;
+            if (!NavMesh.Raycast(c.pos, to, out _, CustomerNavMesh.CustomerMask)) return to;
         }
         return fallback;
     }
@@ -1160,7 +1160,7 @@ public partial class CustomerManager : NetworkBehaviour
         d.y = 0f;
         if (d.sqrMagnitude < 1e-4f) return;
         Vector3 want = c.pos + d.normalized * Mathf.Min(0.6f, d.magnitude);
-        if (!NavMesh.SamplePosition(want, out var hit, 0.8f, NavMesh.AllAreas)) return;
+        if (!NavMesh.SamplePosition(want, out var hit, 0.8f, CustomerNavMesh.CustomerMask)) return;
         if (Mathf.Abs(hit.position.y - c.pos.y) > 1f) return; // not onto another floor
         if (logDecisions) Log(c, $"nudged from {c.pos:F1} to {hit.position:F1}");
         c.pos = hit.position;
@@ -1392,7 +1392,7 @@ public partial class CustomerManager : NetworkBehaviour
             }
             if (push.sqrMagnitude < 1e-6f) continue;
             Vector3 to = c.pos + Vector3.ClampMagnitude(push * 0.5f, maxStep);
-            if (NavMesh.Raycast(c.pos, to, out var hit, NavMesh.AllAreas)) to = hit.position; // stay on the floor
+            if (NavMesh.Raycast(c.pos, to, out var hit, CustomerNavMesh.CustomerMask)) to = hit.position; // stay on the floor
             c.pos = to;
             c.dirty = true;
         }
@@ -2125,7 +2125,7 @@ public partial class CustomerManager : NetworkBehaviour
             shape = (Time.time, new List<Vector3>(), Vector3.zero);
             counter.GetQueueSpot(0, queueSpacing, out Vector3 p0, out Vector3 frontFacing);
             counter.GetQueueSpot(1, queueSpacing, out Vector3 p1, out _);
-            if (NavMesh.SamplePosition(p0, out var h0, 1.5f, NavMesh.AllAreas)) p0 = h0.position;
+            if (NavMesh.SamplePosition(p0, out var h0, 1.5f, CustomerNavMesh.CustomerMask)) p0 = h0.position;
             shape.front = frontFacing;
             shape.spots.Add(p0);
             Vector3 dir = p1 - p0;
@@ -2185,7 +2185,7 @@ public partial class CustomerManager : NetworkBehaviour
         if (lineLooseness > 0f) // a little off the line, the same way every time for this customer
         {
             Vector3 loose = new Vector3(Mathf.Sin(c.id * 12.9898f), 0f, Mathf.Cos(c.id * 78.233f)) * lineLooseness;
-            if (!NavMesh.Raycast(spot, spot + loose, out _, NavMesh.AllAreas)) spot += loose;
+            if (!NavMesh.Raycast(spot, spot + loose, out _, CustomerNavMesh.CustomerMask)) spot += loose;
         }
         if ((c.queueSpot - spot).sqrMagnitude < 0.09f) // same place as before: on the way, or there
         {
@@ -2725,15 +2725,15 @@ public partial class CustomerManager : NetworkBehaviour
                 bool sawInside = false, sawOutside = false;
                 foreach (float depth in DoorDepths)
                 {
-                    bool inOk = NavMesh.SamplePosition(foot + inward * depth, out var inHit, 1f, NavMesh.AllAreas) &&
+                    bool inOk = NavMesh.SamplePosition(foot + inward * depth, out var inHit, 1f, CustomerNavMesh.CustomerMask) &&
                                 plot.Contains(inHit.position + Vector3.up * 0.1f);
-                    bool outOk = NavMesh.SamplePosition(foot - inward * depth, out var outHit, 1f, NavMesh.AllAreas) &&
+                    bool outOk = NavMesh.SamplePosition(foot - inward * depth, out var outHit, 1f, CustomerNavMesh.CustomerMask) &&
                                  !plot.Contains(outHit.position + Vector3.up * 0.1f);
                     sawInside |= inOk;
                     sawOutside |= outOk;
                     if (!inOk || !outOk) continue;
                     // Through the doorway, not round the long way (or not at all: a shut door).
-                    if (!NavMesh.CalculatePath(outHit.position, inHit.position, NavMesh.AllAreas, path) ||
+                    if (!NavMesh.CalculatePath(outHit.position, inHit.position, CustomerNavMesh.CustomerMask, path) ||
                         path.status != NavMeshPathStatus.PathComplete || PathLength(path) > depth * 2f + 4f)
                     {
                         blocked = true;

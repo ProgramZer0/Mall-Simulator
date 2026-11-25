@@ -53,6 +53,10 @@ public class PhoneController : MonoBehaviour
     [Tooltip("The field of view Hold Offset is set for. With a wider one (Settings → Field of view) the phone " +
              "is held that much closer, so it looks the same size and stays readable; narrower, further. 0: off.")]
     [SerializeField, Min(0f)] private float holdOffsetFov = 60f;
+    [Tooltip("Settings → Phone size can make it only so big: until some part of the phone (its model or its " +
+             "screen) is this close to the edge of the view, as a share of the way from the middle to the " +
+             "edge (0.03: 3%). Smaller lets it grow bigger.")]
+    [SerializeField, Range(0f, 0.3f)] private float sizeEdgeMargin = 0.03f;
 
     [SerializeField] private KeyCode homeKey = KeyCode.Escape;
     [SerializeField] private KeyCode notificationsKey = KeyCode.Tab;
@@ -228,11 +232,22 @@ public class PhoneController : MonoBehaviour
     private const string SizeKey = "Phone.Size";
 
     /// <summary>How big the phone is held (Settings → Phone size): 1 = as set up, 2 = twice as big (held closer).</summary>
-    public static float Size => Mathf.Clamp(PlayerPrefs.GetFloat(SizeKey, 1f), 0.7f, 2.5f);
+    public static float Size => Mathf.Clamp(PlayerPrefs.GetFloat(SizeKey, 1f), MinSize, 2.5f);
+
+    public const float MinSize = 0.7f;
+
+    /// <summary>
+    /// The biggest it can be on this screen (field of view, window shape) before it would go past the
+    /// edge, to the nearest 5%. Worked out while the phone's up; 2.5 until then.
+    /// </summary>
+    public static float MaxSize { get; private set; } = 2.5f;
+
+    /// <summary>The size it's actually held at: Size, but no bigger than MaxSize.</summary>
+    public static float SizeInUse => Mathf.Min(Size, MaxSize);
 
     public static void SetSize(float size)
     {
-        PlayerPrefs.SetFloat(SizeKey, Mathf.Clamp(size, 0.7f, 2.5f));
+        PlayerPrefs.SetFloat(SizeKey, Mathf.Clamp(size, MinSize, 2.5f));
         PlayerPrefs.Save();
     }
 
@@ -261,7 +276,11 @@ public class PhoneController : MonoBehaviour
         }
         if (worst <= 0.001f) { sizeNow = Size; return; }
         // Size on screen grows with it (closer), around the screen's middle: so this much bigger still fits.
-        float fits = sizeNow * 0.47f / worst;
+        // Worked out from how far it reaches now; checked again each frame as it grows, so it settles on
+        // the real edge even though a tilted phone's near end grows a little faster than its far end.
+        float fits = sizeNow * (0.5f - sizeEdgeMargin) / worst;
+        float max = Mathf.Clamp(Mathf.Floor(fits * 20f + 0.001f) / 20f, MinSize, 2.5f);
+        if (Mathf.Abs(max - MaxSize) > 0.001f) MaxSize = max;
         float want = Mathf.Min(Size, fits);
         sizeNow = Mathf.Abs(want - sizeNow) < 0.005f ? sizeNow : want;
     }

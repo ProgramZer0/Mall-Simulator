@@ -86,6 +86,7 @@ public static class PhoneUI
             ort.offsetMax = row.offsetMax;
             ort.localScale = Vector3.one;
             UnityEngine.Object.Destroy(row.gameObject);
+            FitInside(ort);
             var label2 = own.GetComponentInChildren<TMP_Text>(true);
             if (label2 != null) PhoneTheme.ApplyOutline(label2);
             return own;
@@ -143,6 +144,46 @@ public static class PhoneUI
     }
 
     // A rect at y (down from the top of Parent), Height tall, inset Left / Right (padding when < 0).
+    /// <summary>
+    /// Where a button's pictures really reach, in its own space: its rect, grown by any picture that pokes
+    /// out past it (a glow, a shadow, a hover frame), after its own layout (a Content Size Fitter) has run.
+    /// Text is left out (its box is often bigger than what's written).
+    /// </summary>
+    public static Rect VisualRect(RectTransform rt)
+    {
+        LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
+        Rect r = rt.rect;
+        float xMin = r.xMin, xMax = r.xMax, yMin = r.yMin, yMax = r.yMax;
+        var corners = new Vector3[4];
+        foreach (var g in rt.GetComponentsInChildren<Graphic>(true))
+        {
+            if (g is TMP_Text || g.rectTransform == rt) continue;
+            g.rectTransform.GetWorldCorners(corners);
+            foreach (var c in corners)
+            {
+                Vector3 p = rt.InverseTransformPoint(c);
+                xMin = Mathf.Min(xMin, p.x); xMax = Mathf.Max(xMax, p.x);
+                yMin = Mathf.Min(yMin, p.y); yMax = Mathf.Max(yMax, p.y);
+            }
+        }
+        return Rect.MinMaxRect(xMin, yMin, xMax, yMax);
+    }
+
+    // A button fitted to a row whose pictures poke out past it: shrunk (evenly, round its middle) and
+    // moved so all of it is inside the row, and it doesn't overlap the next one.
+    private static void FitInside(RectTransform rt)
+    {
+        Vector2 room = rt.rect.size; // the row
+        Rect vis = VisualRect(rt), row = rt.rect; // (row: after its own layout)
+        if (vis.width <= room.x + 0.5f && vis.height <= room.y + 0.5f) return;
+        float k = Mathf.Min(1f, room.x / Mathf.Max(1f, vis.width), room.y / Mathf.Max(1f, vis.height));
+        Vector2 pivotWas = rt.pivot;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition += (rt.pivot - pivotWas) * row.size; // (same place, new pivot)
+        rt.localScale = new Vector3(k, k, 1f);
+        rt.anchoredPosition -= (vis.center - row.center) * k; // its pictures centred in the row
+    }
+
     private static RectTransform Row(string name, RectTransform parent, float y, float height, Style s, float left, float right)
     {
         var rt = Rect(name, parent);

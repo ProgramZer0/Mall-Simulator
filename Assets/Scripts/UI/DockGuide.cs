@@ -8,6 +8,9 @@ public class DockGuide : MonoBehaviour
 {
     public Vector3 Target { get; private set; }
 
+    /// <summary>There's no walkable way from you to the dock (nothing's drawn; the app says so).</summary>
+    public bool NoPath { get; private set; }
+
     private LineRenderer line;
     private NavMeshPath path;
     private float height, arrive, until, nextPath;
@@ -18,6 +21,7 @@ public class DockGuide : MonoBehaviour
     {
         Target = target;
         endLooked = false;
+        NoPath = false;
         height = lineHeight;
         arrive = arriveDistance;
         until = seconds > 0f ? Time.time + seconds : float.MaxValue;
@@ -96,24 +100,28 @@ public class DockGuide : MonoBehaviour
         if (Time.time < nextPath) return;
         nextPath = Time.time + 0.5f;
 
-        // Along the walkable floor. The dock's end is found on its own floor (a wide search could land on
-        // the floor below and send you downstairs), and where the walkable floor stops short of the dock,
-        // the line only goes straight on for the last few meters (never across the mall through walls).
+        // Along the walkable floor, round walls and through doors (staff and dock doors too: only
+        // customers keep out of those). The dock's end is found on its own floor (a wide search could
+        // land on the floor below and send you downstairs). Never a straight line through walls: if the
+        // floor doesn't join up, nothing's drawn and the app says there's no way there.
         points.Clear();
+        bool found = false;
         if (NavMesh.SamplePosition(from, out var a, 3f, NavMesh.AllAreas) && EndPoint(out var b) &&
             NavMesh.CalculatePath(a.position, b, NavMesh.AllAreas, path) &&
             path.status != NavMeshPathStatus.PathInvalid && path.corners.Length >= 2)
         {
-            foreach (var c in path.corners) points.Add(c + Vector3.up * height);
             Vector3 last = path.corners[path.corners.Length - 1];
-            if (Mathf.Abs(last.y - Target.y) < 1.5f && Vector3.Distance(last, Target) < 8f)
-                points.Add(new Vector3(Target.x, last.y, Target.z) + Vector3.up * height);
+            // A partial path counts only if it got all the way to the dock's floor spot anyway.
+            found = path.status == NavMeshPathStatus.PathComplete ||
+                    (Mathf.Abs(last.y - b.y) < 1f && Vector3.Distance(last, b) < 1.5f);
+            if (found)
+            {
+                foreach (var c in path.corners) points.Add(c + Vector3.up * height);
+                if (Mathf.Abs(last.y - Target.y) < 1.5f && Vector3.Distance(last, Target) < 3f)
+                    points.Add(new Vector3(Target.x, last.y, Target.z) + Vector3.up * height);
+            }
         }
-        else
-        {
-            points.Add(from + Vector3.up * height);
-            points.Add(Target + Vector3.up * height);
-        }
+        NoPath = !found;
         line.positionCount = points.Count;
         for (int i = 0; i < points.Count; i++) line.SetPosition(i, points[i]);
     }

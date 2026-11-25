@@ -54,8 +54,12 @@ public class SettingsApp : MonoBehaviour, IPhoneApp
         float fov = GameSettings.FieldOfView > 0f ? GameSettings.FieldOfView : CurrentFov();
         SliderRow("Field of view", () => $"{(GameSettings.FieldOfView > 0f ? GameSettings.FieldOfView : CurrentFov()):0}°", 50f, 110f, fov,
                   v => GameSettings.SetFieldOfView(Mathf.Round(v)));
-        SliderRow("Phone size", () => $"{PhoneController.Size * 100f:0}%", 0.7f, 2.5f, PhoneController.Size,
-                  v => PhoneController.SetSize(Mathf.Round(v * 20f) / 20f)); // held closer; never bigger than the screen
+        // Held closer the bigger it is; the slider only goes as far as fits on this screen (and follows it
+        // if the window or field of view changes).
+        sizeSlider = SliderRow("Phone size", () => $"{PhoneController.SizeInUse * 100f:0}%", PhoneController.MinSize,
+                               PhoneController.MaxSize, PhoneController.SizeInUse,
+                               v => PhoneController.SetSize(Mathf.Round(v * 20f) / 20f));
+        sizeMax = PhoneController.MaxSize;
         ButtonRow("Quality", () => QualityName(GameSettings.Quality), () =>
             GameSettings.SetQuality((GameSettings.Quality + 1) % Mathf.Max(1, QualitySettings.names.Length)));
         ButtonRow("V-Sync", () => GameSettings.VSync ? "On" : "Off", () => GameSettings.SetVSync(!GameSettings.VSync));
@@ -80,13 +84,27 @@ public class SettingsApp : MonoBehaviour, IPhoneApp
     }
 
     // A name with its value on the left; a slider under it.
-    private void SliderRow(string name, System.Func<string> value, float min, float max, float now, UnityEngine.Events.UnityAction<float> set)
+    private Slider SliderRow(string name, System.Func<string> value, float min, float max, float now, UnityEngine.Events.UnityAction<float> set)
     {
         var label = PhoneUI.Text(content, "", y, style.rowHeight * 0.75f, style, false, TextAlignmentOptions.Left);
         live.Add((label, () => $"{name}  <color=#{ColorUtility.ToHtmlStringRGB(PhoneTheme.DimOf(style))}>{value()}</color>"));
         y += style.rowHeight * 0.75f;
-        PhoneUI.Slider(content, y, style, min, max, now, set, style.padding);
+        var slider = PhoneUI.Slider(content, y, style, min, max, now, v => { set(v); Refresh(); }, style.padding); // the % follows the drag
         y += style.rowHeight + style.spacing;
+        Refresh();
+        return slider;
+    }
+
+    private Slider sizeSlider;
+    private float sizeMax;
+
+    // The phone's biggest size can change while the app's open (it's worked out as the phone grows).
+    private void Update()
+    {
+        if (sizeSlider == null || Mathf.Approximately(sizeMax, PhoneController.MaxSize)) return;
+        sizeMax = PhoneController.MaxSize;
+        sizeSlider.SetValueWithoutNotify(Mathf.Min(sizeSlider.value, sizeMax));
+        sizeSlider.maxValue = sizeMax;
         Refresh();
     }
 
