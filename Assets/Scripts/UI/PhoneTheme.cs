@@ -38,8 +38,15 @@ public static class PhoneTheme
         if (t == null) return;
         bool on = Outline;
         if (!on && t.outlineWidth <= 0f) return; // (don't make a material copy for nothing)
-        t.outlineWidth = on ? 0.18f : 0f;
-        if (on) t.outlineColor = OutlineColorFor(t.color);
+        // Only when it changes: setting them redoes the text's material (a flicker, every pass).
+        float width = on ? 0.18f : 0f;
+        if (!Mathf.Approximately(t.outlineWidth, width)) t.outlineWidth = width;
+        if (on)
+        {
+            Color32 want = OutlineColorFor(t.color);
+            Color32 has = t.outlineColor;
+            if (want.r != has.r || want.g != has.g || want.b != has.b || want.a != has.a) t.outlineColor = want;
+        }
     }
 
     /// <summary>The picked colours (null: each app's own, as set up).</summary>
