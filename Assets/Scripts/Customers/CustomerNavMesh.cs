@@ -75,6 +75,9 @@ public class CustomerNavMesh : MonoBehaviour
     [SerializeField] private float rebuildDelay = 1.5f;
     [SerializeField] private bool logBuilds = true;
 
+    /// <summary>The layers walked on (for Find My Dock's debug messages).</summary>
+    public LayerMask Layers => layers;
+
     /// <summary>The space the walkable area was last built over.</summary>
     public Bounds BuiltBounds { get; private set; }
 
@@ -146,7 +149,7 @@ public class CustomerNavMesh : MonoBehaviour
             building = null;
             Ready = true;
             if (logBuilds)
-                Debug.Log($"[CustomerNavMesh] Updated in {buildTimer.ElapsedMilliseconds} ms ({prepMs:0.0} ms of it on the main thread, {sources.Count} colliders).", this);
+                Debug.Log($"[CustomerNavMesh] Updated in {buildTimer.ElapsedMilliseconds} ms ({prepMs:0.0} ms of it on the main thread, {sources.Count} colliders, over {BuiltBounds.min} to {BuiltBounds.max}).", this);
         }
         if (pending && Time.time - lastChange >= (Ready ? rebuildDelay : 0f)) Build();
     }
@@ -336,6 +339,9 @@ public class CustomerNavMesh : MonoBehaviour
         if (MallManager.Instance != null)
             foreach (var plot in MallManager.Instance.Plots) if (plot != null) Add(plot.GetWorldBounds());
         foreach (var sp in CustomerSpawnPoint.All) if (sp != null) Add(new Bounds(sp.transform.position, Vector3.one));
+        // Docks and truck bays too (they can sit outside the stores' plots): players are shown the way there.
+        foreach (var dock in LoadingDockZone.All) if (dock != null && dock.TryGetBounds(out var db)) Add(db);
+        foreach (var bay in TruckBay.All) if (bay != null) Add(new Bounds(bay.transform.position, Vector3.one * 2f));
         if (!any) b = new Bounds(transform.position, Vector3.one * 100f);
         b.Expand(new Vector3(margin * 2f, 10f, margin * 2f));
         return b;
