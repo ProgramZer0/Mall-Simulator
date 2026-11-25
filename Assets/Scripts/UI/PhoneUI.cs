@@ -149,10 +149,10 @@ public static class PhoneUI
     /// out past it (a glow, a shadow, a hover frame), after its own layout (a Content Size Fitter) has run.
     /// Text is left out (its box is often bigger than what's written).
     /// </summary>
-    public static Rect VisualRect(RectTransform rt)
+    public static UnityEngine.Rect VisualRect(RectTransform rt)
     {
         LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
-        Rect r = rt.rect;
+        UnityEngine.Rect r = rt.rect;
         float xMin = r.xMin, xMax = r.xMax, yMin = r.yMin, yMax = r.yMax;
         var corners = new Vector3[4];
         foreach (var g in rt.GetComponentsInChildren<Graphic>(true))
@@ -166,7 +166,7 @@ public static class PhoneUI
                 yMin = Mathf.Min(yMin, p.y); yMax = Mathf.Max(yMax, p.y);
             }
         }
-        return Rect.MinMaxRect(xMin, yMin, xMax, yMax);
+        return UnityEngine.Rect.MinMaxRect(xMin, yMin, xMax, yMax);
     }
 
     // A button fitted to a row whose pictures poke out past it: shrunk (evenly, round its middle) and
@@ -174,7 +174,7 @@ public static class PhoneUI
     private static void FitInside(RectTransform rt)
     {
         Vector2 room = rt.rect.size; // the row
-        Rect vis = VisualRect(rt), row = rt.rect; // (row: after its own layout)
+        UnityEngine.Rect vis = VisualRect(rt), row = rt.rect; // (row: after its own layout)
         if (vis.width <= room.x + 0.5f && vis.height <= room.y + 0.5f) return;
         float k = Mathf.Min(1f, room.x / Mathf.Max(1f, vis.width), room.y / Mathf.Max(1f, vis.height));
         Vector2 pivotWas = rt.pivot;
