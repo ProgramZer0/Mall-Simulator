@@ -4,7 +4,8 @@ using UnityEngine;
 
 /// <summary>
 /// A delivery truck (see EconomyManager → Trucks). It backs into a TruckBay with the shipment inside its
-/// Cargo Area, behind a rolling Door. The team it's for opens the door (F); the boxes are theirs to unload
+/// Cargo Area. The team it's for opens the dock door (TruckBay → Door) with F, on the door or the truck; the
+/// boxes are theirs to unload
 /// until the truck leaves. Its comings and goings are driven by the host (EconomyManager); every machine
 /// moves it the same way from the synced phase and start time (no NetworkTransform needed).
 ///
@@ -13,7 +14,9 @@ using UnityEngine;
 /// along +Z (it drives off forward). The root's own rotation in the prefab is kept on top of the bay's
 /// (a Blender model's -90° X stays standing; facing backwards: add 180 to its Y). No other NetworkObjects
 /// inside it (a door prefab's): a spawned prefab can't have them. Cargo Area: a BoxCollider over the cargo floor (turned off at runtime);
-/// Door: the rolling door (with a collider, so nothing's reachable while it's shut).
+/// Door (optional, usually empty now the door's on the dock): a door on the truck itself, opened with the dock's.
+/// Sounds (optional): Engine Loop while it drives in and out, Reversing Loop (beeping) while it backs in,
+/// Park Sound when it stops (air brakes), Depart Sound as it pulls away.
 /// </summary>
 public class DeliveryTruck : NetworkBehaviour, IPlayerUsable
 {
@@ -23,13 +26,25 @@ public class DeliveryTruck : NetworkBehaviour, IPlayerUsable
 
     [Tooltip("A BoxCollider over the cargo floor: the shipment is set down in it.")]
     public BoxCollider cargoArea;
-    [Tooltip("The rolling door. It moves by Door Open Offset (its own space) to open.")]
+    [Tooltip("Optional: a door on the truck itself (the dock's door is on its TruckBay). It moves by Door Open " +
+             "Offset (its own space) to open, along with the dock's.")]
     [SerializeField] private Transform door;
     [SerializeField] private Vector3 doorOpenOffset = new(0f, 2.4f, 0f);
     [SerializeField, Min(0.05f)] private float doorSeconds = 0.8f;
     [Tooltip("How far it drives in and out (meters), and how long that takes.")]
     [SerializeField, Min(0f)] private float driveDistance = 12f;
     [SerializeField, Min(0.1f)] private float driveSeconds = 3f;
+
+    [Header("Sounds (optional)")]
+    [Tooltip("Plays while it drives in and while it drives off.")]
+    [SerializeField] private AudioClip engineLoop;
+    [Tooltip("Plays (with the engine) while it backs into the bay: the beeping.")]
+    [SerializeField] private AudioClip reversingLoop;
+    [Tooltip("Once, as it stops at the bay (air brakes, engine off).")]
+    [SerializeField] private AudioClip parkSound;
+    [Tooltip("Once, as it starts to pull away.")]
+    [SerializeField] private AudioClip departSound;
+    [SerializeField, Range(0f, 1f)] private float volume = 0.8f;
 
     private readonly NetworkVariable<int> orderId = new();
     private readonly NetworkVariable<ulong> teamId = new();
@@ -178,6 +193,52 @@ public class DeliveryTruck : NetworkBehaviour, IPlayerUsable
             doorT = Mathf.MoveTowards(doorT, doorOpen.Value ? 1f : 0f, Time.deltaTime / doorSeconds);
             door.localPosition = doorClosedPos + doorOpenOffset * doorT;
         }
+        UpdateSounds(t);
+    }
+
+    /* ========================= SOUNDS ========================= */
+
+    private AudioSource engine, beeps, once;
+    private int heardPhase = -1;
+    private bool heardStop;
+
+    private AudioSource MakeSource(string label, AudioClip loop)
+    {
+        var go = new GameObject(label);
+        go.transform.SetParent(transform, false);
+        var src = go.AddComponent<AudioSource>();
+        ProgramZer0.SoundSystem.WorldAudio.ConfigureSource(src); // 3D, falloff, mixer
+        src.playOnAwake = false;
+        if (loop != null) { src.clip = loop; src.loop = true; }
+        src.volume = volume;
+        return src;
+    }
+
+    // Each machine plays them from the synced phase (no sound messages needed).
+    private void UpdateSounds(float t)
+    {
+        var p = CurrentPhase;
+        bool driving = (p == Phase.Arriving || p == Phase.Leaving) && t < 1f;
+        bool backing = p == Phase.Arriving && t < 1f;
+        if (engineLoop != null)
+        {
+            engine ??= MakeSource("Engine", engineLoop);
+            if (driving && !engine.isPlaying) engine.Play();
+            else if (!driving && engine.isPlaying) engine.Stop();
+        }
+        if (reversingLoop != null)
+        {
+            beeps ??= MakeSource("Reversing", reversingLoop);
+            if (backing && !beeps.isPlaying) beeps.Play();
+            else if (!backing && beeps.isPlaying) beeps.Stop();
+        }
+        // Stopped at the bay (driven in all the way), and pulling away: once each.
+        bool stopped = p == Phase.Parked || (p == Phase.Arriving && t >= 1f);
+        if (stopped && !heardStop && heardPhase >= 0 && parkSound != null) (once ??= MakeSource("Truck Sounds", null)).PlayOneShot(parkSound, volume);
+        if (p == Phase.Leaving && heardPhase != (int)Phase.Leaving && heardPhase >= 0 && departSound != null)
+            (once ??= MakeSource("Truck Sounds", null)).PlayOneShot(departSound, volume);
+        heardStop = stopped;
+        heardPhase = (int)p;
     }
 
     /* ========================= OPENING (F) ========================= */
@@ -185,7 +246,7 @@ public class DeliveryTruck : NetworkBehaviour, IPlayerUsable
     public string Prompt(ulong clientId)
     {
         if (!IsSpawned || doorOpen.Value || CurrentPhase != Phase.Parked) return null;
-        return MallManager.GetTeamOf(clientId) == teamId.Value ? "F: Open the truck" : null;
+        return MallManager.GetTeamOf(clientId) == teamId.Value ? "F: Open the dock door" : null;
     }
 
     public void Use(ulong clientId) => RequestOpenRpc();
