@@ -42,6 +42,15 @@ public partial class CustomerManager : NetworkBehaviour
              "spent their money or visited Max Stores Per Visit. Still under Min Minutes In Mall after that: they " +
              "keep going. Ends: MallEnd markers on their floor, else the walkway's far ends. 0: straight to the exit.")]
     [SerializeField, Min(0)] private int hallLegsBeforeLeaving = 2;
+    [Tooltip("Each walk to an end picks one of the mall's ends at random (MallEnd markers, on any floor): this is " +
+             "the chance it's on another floor when there is one, so the stairs get used. 0: always this floor's far end.")]
+    [SerializeField, Range(0f, 1f)] private float otherFloorEndChance = 0.5f;
+    [Tooltip("They head for a random spot this far (meters) around the end, not the end itself, so they don't all " +
+             "bunch up on one point.")]
+    [SerializeField, Min(0f)] private float endSpread = 4f;
+    [Tooltip("Seconds they mill about around an end (a few short steps) before heading on: the other end, a store " +
+             "that caught their eye, or out.")]
+    [SerializeField, Min(0f)] private float endWanderSeconds = 5f;
     [Tooltip("Minutes a customer stays in the mall at most (then heads for the exit).")]
     [SerializeField] private float maxMinutesInMall = 8f;
     [Tooltip("Minutes a customer stays at least: with no store to go to before then, they stroll the hallways.")]
@@ -440,6 +449,10 @@ public partial class CustomerManager : NetworkBehaviour
         public float stayUntil;    // they don't leave before this unless done shopping
         public int storesVisited;
         public int hallLegs;       // walks end to end done before leaving
+        public bool hallEnd;       // walking to (or milling about at) one of the mall's ends
+        public Vector3 endCenter;  // ...that end
+        public float endUntil;     // ...milling about until (0: not got there yet)
+        public Vector3 lastEnd = new(float.NaN, 0f, 0f); // the end they were last at (not picked again straight away)
         public int budgetCents;
         public int wants;
         public readonly HashSet<StorePlot> passed = new();
@@ -1478,6 +1491,7 @@ public partial class CustomerManager : NetworkBehaviour
     // kind of customer), or the exit when they're done.
     private void PickGoal(Customer c)
     {
+        if (c.hallEnd) { c.hallEnd = false; c.endUntil = 0f; }
         if (FollowInstead(c)) return; // in a group: the leader chooses
         if (FamilyPlans(c)) return;   // a family splitting up, or meeting again
 
@@ -1551,15 +1565,19 @@ public partial class CustomerManager : NetworkBehaviour
         // Before leaving: end to end along the mall (twice), unless they've spent up or seen their stores.
         bool shoppedOut = c.storesVisited >= maxStoresPerVisit || (!bystander && BudgetLeft(c) <= 0);
         if (!shoppedOut && hallLegsBeforeLeaving > 0 && (c.hallLegs < hallLegsBeforeLeaving || Time.time < c.stayUntil) &&
-            TryFarEnd(c.pos, out var end))
+            TryPickEnd(c, out var end, out bool otherFloor))
         {
             c.mode = Mode.Wander;
             c.goalStore = null;
             c.lane = -c.lane; // the other side of the walkway, each way
-            if (PathTo(c, end))
+            if (PathTo(c, AroundEnd(end, end, c.pos, 0f)))
             {
                 c.hallLegs++;
-                Log(c, $"walking to the far end of the mall ({c.hallLegs} of {hallLegsBeforeLeaving}) before leaving");
+                c.hallEnd = true;
+                c.endCenter = end;
+                c.endUntil = 0f;
+                Log(c, $"walking to {(otherFloor ? "an end of the mall on the other floor" : "the other end of the mall")} " +
+                       $"({c.hallLegs} of {hallLegsBeforeLeaving}) before leaving");
                 return;
             }
             c.lane = -c.lane;
@@ -1586,26 +1604,137 @@ public partial class CustomerManager : NetworkBehaviour
         return point;
     }
 
-    // A random walkable spot in the hallways (not in any store), at least 8 m away.
-    // The far end of the mall from here, on this floor: the MallEnd marker furthest away, else the end of
-    // the walkway (its longest side) furthest away.
-    private static bool TryFarEnd(Vector3 from, out Vector3 end)
+    // One of the mall's ends to walk to: MallEnd markers on any floor (else each floor's walkway ends, worked
+    // out from the stores' plots), not the one they were just at and not one right here. Another floor's,
+    // Other Floor End Chance of the time (when there is one): the stairs get used.
+    private readonly List<Vector3> sameFloorEnds = new(), otherFloorEnds = new();
+
+    private bool TryPickEnd(Customer c, out Vector3 end, out bool otherFloor)
     {
         end = default;
-        float best = 25f; // at least 5 m away, or it's no walk
+        otherFloor = false;
+        sameFloorEnds.Clear();
+        otherFloorEnds.Clear();
+        void AddEnd(Vector3 p)
+        {
+            if (!float.IsNaN(c.lastEnd.x) && (p - c.lastEnd).sqrMagnitude < 25f) return; // just been there
+            bool same = Mathf.Abs(p.y - c.pos.y) <= 3f;
+            if (same && FlatSqr(p - c.pos) < 15f * 15f) return; // no walk at all
+            (same ? sameFloorEnds : otherFloorEnds).Add(p);
+        }
+        bool markers = false;
         foreach (var m in MallEnd.All)
         {
-            if (m == null || Mathf.Abs(m.transform.position.y - from.y) > 3f) continue;
-            float d = (m.transform.position - from).sqrMagnitude;
-            if (d <= best || !NavMesh.SamplePosition(m.transform.position, out var hit, 3f, CustomerNavMesh.PreferMask)) continue;
-            best = d;
-            end = hit.position;
+            if (m == null || !NavMesh.SamplePosition(m.transform.position, out var hit, 3f, CustomerNavMesh.PreferMask)) continue;
+            markers = true;
+            AddEnd(hit.position);
         }
-        if (best > 25f) return true;
+        if (!markers)
+            foreach (float y in FloorHeights(c.pos.y))
+                foreach (var w in WalkwayEnds(y)) AddEnd(w);
 
-        var nav = CustomerNavMesh.Instance;
-        if (nav == null) return false;
-        Bounds b = nav.BuiltBounds;
+        bool goUp = otherFloorEnds.Count > 0 && (sameFloorEnds.Count == 0 || Random.value < otherFloorEndChance);
+        var from = goUp ? otherFloorEnds : sameFloorEnds;
+        if (from.Count == 0) return false;
+        end = from[Random.Range(0, from.Count)];
+        otherFloor = goUp;
+        return true;
+    }
+
+    private static float FlatSqr(Vector3 v) => v.x * v.x + v.z * v.z;
+
+    // A walkable spot within End Spread of an end, in the hallway (not in a store), on its floor and at
+    // least Min Step from where they are (the end itself if there's none).
+    private Vector3 AroundEnd(Vector3 center, Vector3 fallback, Vector3 from, float minStep)
+    {
+        for (int tries = 0; tries < 6; tries++)
+        {
+            Vector2 r = Random.insideUnitCircle * endSpread;
+            if (!NavMesh.SamplePosition(center + new Vector3(r.x, 0f, r.y), out var hit, 1.5f, CustomerNavMesh.PreferMask)) continue;
+            if (Mathf.Abs(hit.position.y - center.y) > 1.5f || FlatSqr(hit.position - from) < minStep * minStep) continue;
+            if (InAnyStore(hit.position)) continue;
+            return hit.position;
+        }
+        return fallback;
+    }
+
+    private static bool InAnyStore(Vector3 p)
+    {
+        if (MallManager.Instance == null) return false;
+        foreach (var plot in MallManager.Instance.Plots)
+            if (plot != null && plot.Contains(p + Vector3.up * 0.1f)) return true;
+        return false;
+    }
+
+    // At (or on the way to) a mall end: once there, a few short steps around it for End Wander Seconds,
+    // then on to whatever's next. Stores they pass or spot on the way still pull them in (checked first).
+    private bool HallEndWander(Customer c)
+    {
+        if (!c.hallEnd || c.goalStore != null) return false;
+        if (!c.arrived) return true;
+        if (c.endUntil <= 0f)
+        {
+            c.endUntil = Time.time + endWanderSeconds;
+            c.until = Time.time + Random.Range(0.6f, 1.5f);
+            c.lastEnd = c.endCenter;
+            Log(c, "reached an end of the mall: milling about");
+        }
+        if (Time.time >= c.endUntil)
+        {
+            c.hallEnd = false;
+            c.endUntil = 0f;
+            PickGoal(c);
+            return true;
+        }
+        if (Time.time >= c.until)
+        {
+            c.until = Time.time + Random.Range(1.2f, 2.5f);
+            var step = AroundEnd(c.endCenter, c.pos, c.pos, 1.5f);
+            if ((step - c.pos).sqrMagnitude > 0.5f) PathTo(c, step);
+        }
+        return true;
+    }
+
+    // The heights of the mall's floors: where the stores' plots start (a few meters apart), and this one.
+    private readonly List<float> floorHeights = new();
+
+    private List<float> FloorHeights(float here)
+    {
+        floorHeights.Clear();
+        floorHeights.Add(here);
+        if (MallManager.Instance != null)
+            foreach (var plot in MallManager.Instance.Plots)
+            {
+                if (plot == null) continue;
+                float y = plot.GetWorldBounds().min.y;
+                bool known = false;
+                foreach (float f in floorHeights) if (Mathf.Abs(f - y) < 2.5f) { known = true; break; }
+                if (!known) floorHeights.Add(y);
+            }
+        return floorHeights;
+    }
+
+    // The two far ends of the walkway (its longest side) at this height, clear of the stores; worked out
+    // over the stores' plots and the mall's entrances (not the whole walkable area, which takes in docks).
+    private readonly List<Vector3> walkwayEnds = new();
+
+    private List<Vector3> WalkwayEnds(float y)
+    {
+        walkwayEnds.Clear();
+        bool any = false;
+        Bounds b = default;
+        if (MallManager.Instance != null)
+            foreach (var plot in MallManager.Instance.Plots)
+            {
+                if (plot == null) continue;
+                if (!any) { b = plot.GetWorldBounds(); any = true; } else b.Encapsulate(plot.GetWorldBounds());
+            }
+        foreach (var sp in CustomerSpawnPoint.All)
+        {
+            if (sp == null) continue;
+            if (!any) { b = new Bounds(sp.transform.position, Vector3.one); any = true; } else b.Encapsulate(sp.transform.position);
+        }
+        if (!any) return walkwayEnds;
         bool alongX = b.size.x >= b.size.z;
         float inset = 3f;
         for (int side = 0; side < 2; side++)
@@ -1615,21 +1744,17 @@ public partial class CustomerManager : NetworkBehaviour
             for (int k = 0; k < 7; k++)
             {
                 float across = (alongX ? b.center.z : b.center.x) + (k % 2 == 0 ? 1 : -1) * ((k + 1) / 2) * (alongX ? b.size.z : b.size.x) / 8f;
-                var p = alongX ? new Vector3(along, from.y, across) : new Vector3(across, from.y, along);
-                if (!NavMesh.SamplePosition(p, out var hit, 6f, CustomerNavMesh.PreferMask) || Mathf.Abs(hit.position.y - from.y) > 3f) continue;
-                bool inStore = false;
-                if (MallManager.Instance != null)
-                    foreach (var plot in MallManager.Instance.Plots)
-                        if (plot != null && plot.Contains(hit.position + Vector3.up * 0.1f)) { inStore = true; break; }
-                if (inStore) continue;
-                float d = (hit.position - from).sqrMagnitude;
-                if (d > best) { best = d; end = hit.position; }
+                var p = alongX ? new Vector3(along, y, across) : new Vector3(across, y, along);
+                if (!NavMesh.SamplePosition(p, out var hit, 6f, CustomerNavMesh.PreferMask) || Mathf.Abs(hit.position.y - y) > 3f) continue;
+                if (InAnyStore(hit.position)) continue;
+                walkwayEnds.Add(hit.position);
                 break;
             }
         }
-        return best > 25f;
+        return walkwayEnds;
     }
 
+    // A random walkable spot in the hallways (not in any store), at least 8 m away.
     private static bool TryHallwaySpot(Vector3 from, out Vector3 spot)
     {
         spot = default;
@@ -1671,6 +1796,7 @@ public partial class CustomerManager : NetworkBehaviour
             }
         }
         if (Notice(c)) return;
+        if (HallEndWander(c)) return;
         if (!c.arrived) return;
         // At the store they were heading for (if passing it didn't already decide).
         if (c.goalStore != null && !c.passed.Contains(c.goalStore) && c.goalStore.IsOpen && c.goalStore.Appeal != null &&
@@ -1681,6 +1807,7 @@ public partial class CustomerManager : NetworkBehaviour
     // A bystander: no stores, just a stroll to a spot, a while standing there, then on to the next.
     private void ThinkStroll(Customer c)
     {
+        if (HallEndWander(c)) return;
         if (!c.arrived) return;
         if (!c.lingering)
         {
