@@ -87,8 +87,7 @@ public static class PhoneUI
             ort.localScale = Vector3.one;
             UnityEngine.Object.Destroy(row.gameObject);
             FitInside(ort);
-            var label2 = own.GetComponentInChildren<TMP_Text>(true);
-            if (label2 != null) PhoneTheme.ApplyOutline(label2);
+            PhoneScreen.ThemeNow(ort); // theme colors and outline now, not at the next pass (that flashed)
             return own;
         }
         var rt = Row("Button", parent, y, height, s, left, right);

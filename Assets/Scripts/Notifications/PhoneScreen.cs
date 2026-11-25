@@ -80,11 +80,24 @@ public class PhoneScreen : MonoBehaviour
         ThemeDesigned();
     }
 
-    private void ThemeDesigned()
+    /// <summary>
+    /// Theme something just made on the phone right away (a button from your prefab, a rebuilt page), so
+    /// it doesn't show in its prefab's colors until the next pass and then flash over to the theme's.
+    /// </summary>
+    public static void ThemeNow(Transform made)
     {
-        if (!themeDesignedApps || canvas == null) return;
+        if (made == null) return;
+        var screen = made.GetComponentInParent<PhoneScreen>(true);
+        if (screen != null) screen.ThemeDesigned(made);
+    }
+
+    private void ThemeDesigned() => ThemeDesigned(canvas != null ? canvas.transform : null, false); // (what's showing)
+
+    private void ThemeDesigned(Transform root, bool includeHidden = true)
+    {
+        if (!themeDesignedApps || root == null) return;
         var theme = PhoneTheme.Current;
-        foreach (var g in canvas.GetComponentsInChildren<Graphic>(false))
+        foreach (var g in root.GetComponentsInChildren<Graphic>(includeHidden))
         {
             if (g == wallpaperImage) continue;
             var role = g.TryGetComponent<PhoneThemeRole>(out var r) ? r.role : PhoneThemeRole.Role.Auto;
@@ -93,8 +106,12 @@ public class PhoneScreen : MonoBehaviour
                 if (g is TMPro.TMP_Text) role = PhoneThemeRole.Role.Text;
                 else if (g.GetComponentInParent<Selectable>() is Selectable sel && sel.targetGraphic == g) role = PhoneThemeRole.Role.Button;
             }
-            if (g is TMPro.TMP_Text text) PhoneTheme.ApplyOutline(text);
-            if (role == PhoneThemeRole.Role.Auto || role == PhoneThemeRole.Role.Keep) continue;
+            var text = g as TMPro.TMP_Text;
+            if (role == PhoneThemeRole.Role.Auto || role == PhoneThemeRole.Role.Keep)
+            {
+                if (text != null) PhoneTheme.ApplyOutline(text);
+                continue;
+            }
             if (!designed.ContainsKey(g)) designed[g] = g.color;
             Color c = theme == null ? designed[g] : role switch
             {
@@ -108,6 +125,7 @@ public class PhoneScreen : MonoBehaviour
             };
             c.a = theme == null ? c.a : designed[g].a * c.a; // keep see-through parts see-through
             if (g.color != c) g.color = c;
+            if (text != null) PhoneTheme.ApplyOutline(text); // (after the color: the outline's worked out from it)
         }
     }
 
@@ -137,7 +155,7 @@ public class PhoneScreen : MonoBehaviour
         }
         var paper = PhoneTheme.Wallpaper;
         wallpaperImage.sprite = paper != null ? paper : wallpaperStartSprite;
-        wallpaperImage.color = paper != null ? Color.white
+        wallpaperImage.color = paper != null ? PhoneTheme.WallpaperTint
                              : PhoneTheme.Current != null ? PhoneTheme.Current.background : wallpaperStartColor;
         wallpaperImage.preserveAspect = false;
         ApplyTitle();
@@ -209,7 +227,7 @@ public class PhoneScreen : MonoBehaviour
     {
         int was = current;
         CloseCurrent(animated: true);
-        if (home != null) home.SetActive(true);
+        if (home != null) { home.SetActive(true); ThemeDesigned(home.transform); }
         if (was >= 0) Animate(home, from: 1.08f, to: 1f, fadeIn: true, appCloseSeconds, null, null);
         if (titleText != null) titleText.text = homeTitle;
         if (backButton != null) backButton.gameObject.SetActive(false);
@@ -243,6 +261,7 @@ public class PhoneScreen : MonoBehaviour
         Animate(apps[index].gameObject, from: 0.25f, to: 1f, fadeIn: true, appOpenSeconds, IconOf(index), null);
         var app = (IPhoneApp)apps[index];
         app.OnAppOpened();
+        ThemeDesigned(apps[index].transform); // its page in the theme's colors from the first frame (no flash)
         if (titleText != null) titleText.text = app.AppName;
         if (backButton != null) backButton.gameObject.SetActive(true);
     }
