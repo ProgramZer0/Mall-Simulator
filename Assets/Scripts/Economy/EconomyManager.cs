@@ -832,8 +832,9 @@ public class EconomyManager : NetworkBehaviour
     }
 
     // A truck's cargo space (meters), and how much of it a load may fill (Truck Max Fill).
+    // Across, up, along the truck (whichever way its model and Cargo Area are turned).
     private static Vector3 CargoSize(DeliveryTruck t) =>
-        t == null || t.cargoArea == null ? Vector3.zero : Vector3.Scale(t.cargoArea.size, t.cargoArea.transform.lossyScale);
+        t != null && t.CargoFrame(out _, out _, out var size) ? size : Vector3.zero;
 
     private float Capacity(DeliveryTruck t) { var c = CargoSize(t); return c.x * c.y * c.z * truckMaxFill; }
 
@@ -942,9 +943,11 @@ public class EconomyManager : NetworkBehaviour
                 }
                 var prefab = truckPrefabs[Mathf.Clamp(o.truckSize, 0, truckPrefabs.Length - 1)];
                 if (prefab == null) { ServerRemoveOrderAt(index); return; }
-                var made = Instantiate(prefab, free.transform.position, free.transform.rotation);
+                // Facing the bay's way, with the prefab root's own turn on top (a Blender model's -90° X).
+                Quaternion prefabTurn = prefab.transform.rotation;
+                var made = Instantiate(prefab, free.transform.position, free.transform.rotation * prefabTurn);
                 made.NetworkObject.Spawn(true);
-                made.ServerSetup(o.orderId, o.teamId, free.Index);
+                made.ServerSetup(o.orderId, o.teamId, free.Index, free.transform.rotation, prefabTurn);
                 o.stage = OrderInfo.AtDock;
                 o.deadline = now + truckDoorWaitSeconds + 10f; // (+ driving in)
                 orders[index] = o;
@@ -1028,9 +1031,9 @@ public class EconomyManager : NetworkBehaviour
             // Packed in with nothing in the way (it fit by floor area when ordered).
             Debug.LogWarning($"[EconomyManager] Order {o.orderId} didn't pack neatly into its truck: stacking it in the middle.");
             plan.Clear();
-            Vector3 mid = truck.cargoArea.transform.TransformPoint(truck.cargoArea.center);
+            truck.CargoFrame(out var mid, out var facing, out _);
             for (int i = 0; i < planItems.Count; i++)
-                plan.Add(new Pose(mid + Vector3.up * (0.4f * i), truck.transform.rotation));
+                plan.Add(new Pose(mid + Vector3.up * (0.4f * i), facing));
         }
         float t = Time.time;
         for (int i = 0; i < plan.Count; i++)
@@ -1046,15 +1049,12 @@ public class EconomyManager : NetworkBehaviour
     private static bool PackTruck(DeliveryTruck truck, List<ShipmentPacker.Box> boxes, List<Pose> poses)
     {
         poses.Clear();
-        var area = truck.cargoArea;
-        if (area == null) return false;
-        Vector3 c = CargoSize(truck);
+        if (!truck.CargoFrame(out var center, out var rot, out var c)) return false;
         var order = new List<int>();
         for (int i = 0; i < boxes.Count; i++) { order.Add(i); poses.Add(default); }
         order.Sort((a, b) => Volume(boxes[b]).CompareTo(Volume(boxes[a])));
         const float gap = 0.02f;
         float x = 0f, z = 0f, y = 0f, rowDepth = 0f, layerHeight = 0f;
-        Quaternion rot = area.transform.rotation;
         foreach (int i in order)
         {
             Vector3 s = boxes[i].half * 2f;
@@ -1065,8 +1065,7 @@ public class EconomyManager : NetworkBehaviour
             if (y + s.y > c.y + 0.001f || x + w > c.x + 0.001f || z + d > c.z + 0.001f) return false;
             // From the cargo space's corner (its local -x, floor, -z) to this box's middle.
             Vector3 local = new Vector3(-c.x * 0.5f + x + w * 0.5f, -c.y * 0.5f + y + s.y * 0.5f, -c.z * 0.5f + z + d * 0.5f);
-            Vector3 lossy = area.transform.lossyScale;
-            Vector3 middle = area.transform.TransformPoint(area.center + new Vector3(local.x / Mathf.Max(lossy.x, 1e-4f), local.y / Mathf.Max(lossy.y, 1e-4f), local.z / Mathf.Max(lossy.z, 1e-4f)));
+            Vector3 middle = center + rot * local;
             Quaternion r = turn ? rot * Quaternion.Euler(0f, 90f, 0f) : rot;
             poses[i] = new Pose(middle - r * boxes[i].pivotOffset, r); // (the prefab's pivot, not its middle)
             x += w + gap;
