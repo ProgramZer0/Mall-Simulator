@@ -30,6 +30,16 @@ public class FindDockApp : MonoBehaviour, IPhoneApp
     [Tooltip("And after this many seconds anyway (0: only when you get there).")]
     [SerializeField, Min(0f)] private float showSeconds = 120f;
 
+    [Header("Debug")]
+    [Tooltip("Write what it's doing to the Console ([FindMyDock]): the docks it found, the walkable area, " +
+             "where you and the dock are on it, each path tried and why it was turned down.")]
+    [SerializeField] private bool debugLog = true;
+    [Tooltip("Seconds between repeats of the same message.")]
+    [SerializeField, Min(0.5f)] private float debugEvery = 3f;
+    [Tooltip("When there's no whole way, draw how far the path got anyway, in red (where it stops is where " +
+             "the walkable area doesn't join up).")]
+    [SerializeField] private bool debugDrawPartial = true;
+
     public string AppName => appName;
     public Sprite Icon => icon;
     public int Badge => 0;
@@ -43,8 +53,13 @@ public class FindDockApp : MonoBehaviour, IPhoneApp
 
     public void OnAppOpened()
     {
+        DockGuide.DebugLog = debugLog;
+        DockGuide.DebugEvery = debugEvery;
+        DockGuide.DebugDrawPartial = debugDrawPartial;
         if (content == null) content = PhoneUI.ScrollPage((RectTransform)transform);
         Build();
+        loggedDocks = null;
+        LogDocks();
     }
 
     public void OnAppClosed() { }
@@ -59,7 +74,7 @@ public class FindDockApp : MonoBehaviour, IPhoneApp
         if (content == null || Time.unscaledTime < nextRefresh) return;
         nextRefresh = Time.unscaledTime + 0.5f;
         FindDocks();
-        if (Shape() != shape) { Build(); return; }
+        if (Shape() != shape) { LogDocks(); Build(); return; }
         var me = Me();
         foreach (var (label, point) in distances)
             if (label != null) label.text = me != null ? $"{Vector3.Distance(me.position, point):0} m" : "";
@@ -105,6 +120,7 @@ public class FindDockApp : MonoBehaviour, IPhoneApp
             Vector3 p = point;
             PhoneUI.Button(content, showing ? "Stop showing the way" : "Show the way", y, style.rowHeight, style, () =>
             {
+                if (debugLog) Debug.Log($"[FindMyDock] {(showing ? "Stop" : "Show the way")} pressed for '{name}' at {p}.", this);
                 if (showing) StopGuide(); else StartGuide(p);
                 Build();
             });
@@ -149,6 +165,42 @@ public class FindDockApp : MonoBehaviour, IPhoneApp
         }
     }
 
+    private string loggedDocks;
+
+    private void LogDocks()
+    {
+        if (!debugLog) return;
+        var nm = NetworkManager.Singleton;
+        var mall = MallManager.Instance;
+        var sb = new System.Text.StringBuilder();
+        if (nm == null) sb.Append("no NetworkManager; ");
+        if (mall == null) sb.Append("no MallManager; ");
+        if (nm != null && mall != null)
+        {
+            ulong team = MallManager.GetTeamOf(nm.LocalClientId);
+            sb.Append($"you are client {nm.LocalClientId}, team {team}. ");
+            int owned = 0;
+            foreach (var plot in mall.Plots)
+            {
+                if (plot == null || !plot.HasOwner || plot.OwnerTeamId != team) continue;
+                owned++;
+                int zones = 0;
+                if (plot.ShipmentZones != null) foreach (var z in plot.ShipmentZones) if (z != null) zones++;
+                sb.Append($"Store '{plot.DisplayName}': {zones} Shipment Zone(s)" + (zones == 0 ? " - give it one (StorePlot → Shipment Zones) or it has no dock to show" : "") + ". ");
+            }
+            if (owned == 0) sb.Append("Your team owns no stores. ");
+        }
+        foreach (var (name, point) in docks)
+        {
+            var dock = LoadingDockZone.GetDockAt(point);
+            sb.Append($"Dock '{name}' at {point}{(dock == null ? " (not inside any LoadingDockZone)" : "")}. ");
+        }
+        string text = sb.ToString();
+        if (text == loggedDocks) return;
+        loggedDocks = text;
+        Debug.Log("[FindMyDock] Docks: " + text, this);
+    }
+
     private static Transform Me()
     {
         var nm = NetworkManager.Singleton;
@@ -158,6 +210,9 @@ public class FindDockApp : MonoBehaviour, IPhoneApp
 
     private void StartGuide(Vector3 point)
     {
+        DockGuide.DebugLog = debugLog;
+        DockGuide.DebugEvery = debugEvery;
+        DockGuide.DebugDrawPartial = debugDrawPartial;
         if (guide == null)
         {
             var go = new GameObject("Dock Guide (line)");

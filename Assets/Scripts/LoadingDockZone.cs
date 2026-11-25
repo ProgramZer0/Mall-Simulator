@@ -21,6 +21,30 @@ public class LoadingDockZone : MonoBehaviour
 
     public string DisplayName => displayName;
 
+    /// <summary>Every dock that's switched on.</summary>
+    public static IReadOnlyList<LoadingDockZone> All => active;
+
+    /// <summary>The space its boxes cover (their colliders are off at runtime, so worked out from them).</summary>
+    public bool TryGetBounds(out Bounds bounds)
+    {
+        bounds = default;
+        bool any = false;
+        if (areas == null) return false;
+        foreach (var box in areas)
+        {
+            if (box == null) continue;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 c = box.center + Vector3.Scale(box.size * 0.5f,
+                    new Vector3(i % 2 == 0 ? -1f : 1f, (i / 2) % 2 == 0 ? -1f : 1f, i < 4 ? -1f : 1f));
+                Vector3 w = box.transform.TransformPoint(c);
+                if (!any) { bounds = new Bounds(w, Vector3.zero); any = true; }
+                else bounds.Encapsulate(w);
+            }
+        }
+        return any;
+    }
+
     private void Awake()
     {
         foreach (var box in areas)
