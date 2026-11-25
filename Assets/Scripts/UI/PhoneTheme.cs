@@ -54,13 +54,17 @@ public static class PhoneTheme
     /// <summary>The picked background picture (null: none).</summary>
     public static Sprite Wallpaper { get; private set; }
 
+    /// <summary>What the picture is shown multiplied by (Auto dims a busy one behind light text).</summary>
+    public static Color WallpaperTint { get; private set; } = Color.white;
+
     /// <summary>The look changed (PhoneScreen refreshes its background; apps use it next time they're built).</summary>
     public static event Action Changed;
 
-    public static void Set(Colors colors, Sprite wallpaper)
+    public static void Set(Colors colors, Sprite wallpaper, Color? wallpaperTint = null)
     {
         Current = colors;
         Wallpaper = wallpaper;
+        WallpaperTint = wallpaperTint ?? Color.white;
         Changed?.Invoke();
     }
 

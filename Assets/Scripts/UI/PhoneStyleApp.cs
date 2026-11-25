@@ -54,6 +54,7 @@ public class PhoneStyleApp : MonoBehaviour, IPhoneApp
     [SerializeField] private List<Wallpaper> wallpapers = new();
 
     private const string ThemeKey = "Phone.Theme", WallpaperKey = "Phone.Wallpaper";
+    private const int AutoTheme = -2; // Colors → Auto (made from the background picture)
 
     public string AppName => appName;
     public Sprite Icon => icon;
@@ -67,6 +68,13 @@ public class PhoneStyleApp : MonoBehaviour, IPhoneApp
         int t = PlayerPrefs.GetInt(ThemeKey, 0), w = PlayerPrefs.GetInt(WallpaperKey, -1);
         var theme = t >= 0 && t < themes.Count ? themes[t] : null;
         var paper = w >= 0 && w < wallpapers.Count ? wallpapers[w].sprite : null;
+        if (t == AutoTheme)
+        {
+            // Made from the picture (no picture: each app's own colours).
+            var auto = WallpaperTheme.For(paper, out var tint);
+            PhoneTheme.Set(auto, paper, tint);
+            return;
+        }
         PhoneTheme.Set(theme == null || theme.useAppColors ? null : theme.colors, paper);
     }
 
@@ -85,6 +93,15 @@ public class PhoneStyleApp : MonoBehaviour, IPhoneApp
         int theme = PlayerPrefs.GetInt(ThemeKey, 0), paper = PlayerPrefs.GetInt(WallpaperKey, -1);
 
         y = Header("Colors", y);
+        {
+            // Auto: colours picked to read on the background picture.
+            var sprite = paper >= 0 && paper < wallpapers.Count ? wallpapers[paper].sprite : null;
+            var b = PhoneUI.Button(content, (theme == AutoTheme ? "> " : "") + "Auto (matches the background)", y, style.rowHeight,
+                                   style, () => Pick(ThemeKey, AutoTheme));
+            var auto = WallpaperTheme.For(sprite, out _);
+            if (auto != null) Swatches(b, auto);
+            y += style.rowHeight + style.spacing;
+        }
         for (int i = 0; i < themes.Count; i++)
         {
             int index = i;

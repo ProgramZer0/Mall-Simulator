@@ -155,7 +155,7 @@ public class PhoneScreen : MonoBehaviour
         }
         var paper = PhoneTheme.Wallpaper;
         wallpaperImage.sprite = paper != null ? paper : wallpaperStartSprite;
-        wallpaperImage.color = paper != null ? Color.white
+        wallpaperImage.color = paper != null ? PhoneTheme.WallpaperTint
                              : PhoneTheme.Current != null ? PhoneTheme.Current.background : wallpaperStartColor;
         wallpaperImage.preserveAspect = false;
         ApplyTitle();
