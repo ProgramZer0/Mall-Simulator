@@ -46,8 +46,8 @@ public class CheckoutCounter : NetworkBehaviour
     /// <summary>
     /// What kind of counter this prefab is (each is its own catalog item, bought separately):
     /// - Standard: as described above.
-    /// - Cheap: the amount always goes in on the keypad: card, type the total and Enter before swiping;
-    ///   cash, type what they gave and Enter before Confirm. (Give its prefab a lower Belt Speed.)
+    /// - Cheap: card payments need the total typed on the keypad and Enter before swiping; cash is as on
+    ///   any counter. (Give its prefab a lower Belt Speed.)
     /// - Self Checkout: no player work. Customers scan their own things (Self Scan Seconds each) and pay by
     ///   card; cash payers don't use it. Some things don't get scanned (Self Skip Chance): walked out with,
     ///   unpaid. Put a Breakable on it (its screen) and it can break: broken, nobody can use it until it's
@@ -491,12 +491,9 @@ public class CheckoutCounter : NetworkBehaviour
                  : FirstCustomer() != 0 || s.customer != 0 ? "Self-checkout: the customer is scanning their things"
                  : items.Count > 0 ? "A customer left things behind: take them back to the shelves" : "Self-checkout: no customers";
         bool cheap = kind == Kind.Cheap;
-        if (cheap && s.phase == Phase.AwaitingPayment)
-            return s.method == PayMethod.Card
-                ? (s.moneyTaken == 0 ? "Paying by card: take the card" : s.keypadEntered == 0 || s.keypadCents != s.totalCents
-                    ? $"Paying by card: type the total ({FormatAmount(s.totalCents)}) on the keypad and press Enter" : "Paying by card: swipe it in the card reader")
-                : (s.moneyTaken == 0 ? "Paying cash: take the cash" : s.keypadEntered == 0
-                    ? "Paying cash: type what they gave on the keypad and press Enter" : "Paying cash: count out the change from the drawer, then Confirm");
+        if (cheap && s.phase == Phase.AwaitingPayment && s.method == PayMethod.Card) // (cash works as on any counter)
+            return s.moneyTaken == 0 ? "Paying by card: take the card" : s.keypadEntered == 0 || s.keypadCents != s.totalCents
+                ? $"Paying by card: type the total ({FormatAmount(s.totalCents)}) on the keypad and press Enter" : "Paying by card: swipe it in the card reader";
         if (s.phase == Phase.AwaitingPayment)
             return s.method == PayMethod.Card
                 ? (s.moneyTaken == 0 ? "Paying by card: take the card" : "Paying by card: swipe it in the card reader")
@@ -514,10 +511,10 @@ public class CheckoutCounter : NetworkBehaviour
         bool paying = s.phase == Phase.AwaitingPayment;
         bool cash = paying && s.method == PayMethod.Cash;
         if (kind == Kind.SelfCheckout && part.action != CheckoutClickable.Action.ScanItem) return null; // nothing for players to do
-        bool needKeypad = kind == Kind.Cheap && paying && s.moneyTaken != 0 &&
-                          (s.keypadEntered == 0 || (!cash && s.keypadCents != s.totalCents));
-        if (needKeypad && (part.action == CheckoutClickable.Action.CardReader || part.action == CheckoutClickable.Action.Confirm))
-            return cash ? "Type what they gave on the keypad and press Enter first" : $"Type the total ({FormatAmount(s.totalCents)}) and press Enter first";
+        bool needKeypad = kind == Kind.Cheap && paying && !cash && s.moneyTaken != 0 &&
+                          (s.keypadEntered == 0 || s.keypadCents != s.totalCents); // cheap, card: the total typed in first
+        if (needKeypad && part.action == CheckoutClickable.Action.CardReader)
+            return $"Type the total ({FormatAmount(s.totalCents)}) and press Enter first";
 
         switch (part.action)
         {
@@ -589,11 +586,11 @@ public class CheckoutCounter : NetworkBehaviour
         clicker = rpcParams.Receive.SenderClientId;
         // Self-checkout: players only take back things left behind.
         if (kind == Kind.SelfCheckout && !(action == CheckoutClickable.Action.ScanItem && IsLeftBehind(value))) return;
-        // Cheap: the keypad first (card: the total; cash: what they gave).
-        bool needKeypad = kind == Kind.Cheap && paying && (s.keypadEntered == 0 || (!cash && s.keypadCents != s.totalCents));
-        if (needKeypad && (action == CheckoutClickable.Action.CardReader || action == CheckoutClickable.Action.Confirm))
+        // Cheap, card: the total typed on the keypad first (cash works as on any counter).
+        bool needKeypad = kind == Kind.Cheap && paying && !cash && (s.keypadEntered == 0 || s.keypadCents != s.totalCents);
+        if (needKeypad && action == CheckoutClickable.Action.CardReader)
         {
-            MessageRpc(cash ? "Type what they gave and press Enter first" : $"Type the total ({FormatAmount(s.totalCents)}) and press Enter first");
+            MessageRpc($"Type the total ({FormatAmount(s.totalCents)}) and press Enter first");
             return;
         }
 
