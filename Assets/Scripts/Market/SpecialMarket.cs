@@ -223,7 +223,7 @@ public class SpecialMarket : NetworkBehaviour
             var eco = EconomyManager.Instance;
             if (eco == null) break;
             result = eco.ServerTryOrder(sender, plotId, new[] { d.itemId }, new[] { quantity }, -1f, new[] { d.paint }, new[] { d.price },
-                                        anyoneMayBuy: true); // no level, license or franchise needed here
+                                        anyoneMayBuy: true, byCourier: true); // no level, license or franchise needed; brought by hand
             if (result == EconomyManager.OrderResult.Ordered)
             {
                 d.left -= quantity;
