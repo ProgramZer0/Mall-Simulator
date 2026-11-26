@@ -1040,6 +1040,25 @@ public partial class CustomerManager : NetworkBehaviour
         if (c.arrived) return;
         if (c.corner >= c.corners.Count) { Arrive(c); return; }
 
+        // On an escalator (this stretch of the path is its one-way link): stand and ride it.
+        if (c.corner > 0 && Escalator.TryRide(c.corners[c.corner - 1], c.corners[c.corner], out var escalator))
+        {
+            Vector3 end = c.corners[c.corner];
+            c.pos = Vector3.MoveTowards(c.pos, end, escalator.Speed * dt);
+            Vector3 flat = end - c.pos;
+            flat.y = 0f;
+            if (flat.sqrMagnitude > 1e-4f) c.yaw = Mathf.LerpAngle(c.yaw, Quaternion.LookRotation(flat).eulerAngles.y, 1f - Mathf.Exp(-dt * 8f));
+            c.dirty = true;
+            c.stuckSince = Time.time; // riding isn't being stuck
+            if ((c.pos - end).sqrMagnitude < 0.01f)
+            {
+                c.corner++;
+                c.bestLeft = float.MaxValue;
+                if (c.corner >= c.corners.Count) Arrive(c);
+            }
+            return;
+        }
+
         Vector3 to = LaneTarget(c);
         float left = FlatDistance(c.pos, to);
         // Looking past the next corner costs a few raycasts: a few times a second is plenty.

@@ -180,6 +180,9 @@ public class CustomerNavMesh : MonoBehaviour
         AddDoorBlockers(bounds);
         foreach (var zone in CustomerNoWalkZone.All)
             if (zone != null && bounds.Intersects(zone.WorldBounds)) sources.Add(zone.ToSource(avoidArea, StaffArea, agentRadius));
+        // Escalators: their steps kept out of customers' area (they cross by the one-way link).
+        foreach (var esc in Escalator.All)
+            if (esc != null && esc.TryGetSource(StaffArea, out var escSource)) sources.Add(escSource);
 
         if (data == null)
         {
