@@ -280,6 +280,10 @@ public partial class CustomerManager : NetworkBehaviour
         LostMyFamily,   // the child: can't see their family
         Reunited,       // the family's together again
         BrokenNearby,   // a broken light or screen near them in a store
+        ExcuseMe,       // off to ask a player the way
+        NeverMind,      // nobody helped (or didn't know)
+        ThanksForDirections, // pointed the right way
+        WrongDirections,     // pointed the wrong way
     }
 
     [Serializable]
@@ -313,6 +317,10 @@ public partial class CustomerManager : NetworkBehaviour
         { Reaction.LostMyFamily, ("Mom? Dad?", new Color(0.55f, 0.8f, 1f)) },
         { Reaction.Reunited, ("Thank you!", new Color(0.45f, 0.95f, 0.45f)) },
         { Reaction.BrokenNearby, ("Ugh, that's broken", new Color(1f, 0.6f, 0.3f)) },
+        { Reaction.ExcuseMe, ("Excuse me!", new Color(0.55f, 0.85f, 1f)) },
+        { Reaction.NeverMind, ("Never mind...", new Color(0.8f, 0.8f, 0.8f)) },
+        { Reaction.ThanksForDirections, ("Thanks!", new Color(0.45f, 0.95f, 0.45f)) },
+        { Reaction.WrongDirections, ("That's not it!", new Color(1f, 0.35f, 0.3f)) },
     };
 
     // Host: how often each reaction happened in each store (for tuning; see StoreReport).
@@ -348,7 +356,7 @@ public partial class CustomerManager : NetworkBehaviour
             if (look != null && look.kind == r) { text = look.text; color = look.color; icon = look.icon; sound = look.sound; break; }
         if (text == null && icon == null && DefaultLooks.TryGetValue(r, out var d)) { text = d.text; color = d.color; }
         v.ShowReaction(text, color, icon, reactionSeconds);
-        bool good = r is Reaction.Interested or Reaction.Bought or Reaction.Paid or Reaction.Reunited;
+        bool good = r is Reaction.Interested or Reaction.Bought or Reaction.Paid or Reaction.Reunited or Reaction.ThanksForDirections or Reaction.ExcuseMe;
         if (sound != null) ProgramZer0.SoundSystem.WorldAudio.PlayOneShot(sound, v.transform.position);
         else Sfx.Play(good ? Cue.CustomerHappy : Cue.CustomerUnhappy, v.transform.position);
         AnimCues.Fire(v.gameObject, good ? AnimCue.ReactHappy : AnimCue.ReactUnhappy);
@@ -405,6 +413,7 @@ public partial class CustomerManager : NetworkBehaviour
         WithHelper,  // a lost child following the player who found them
         Searching,   // a family looking for their lost child
         Courier,     // the delivery guy, bringing a special market package (see CustomerCourier.cs)
+        Asking,      // going up to a player to ask the way, then waiting for the answer (CustomerDirections.cs)
     }
 
     private struct Taken
@@ -465,6 +474,7 @@ public partial class CustomerManager : NetworkBehaviour
         public StorePlot goalStore;    // the store they're walking toward (null: the exit)
         public readonly HashSet<StorePlot> noticed = new(); // storefronts they've seen from a distance
         public StorePlot mustEnter;    // a test customer: goes into this store whatever its appeal
+        public float nextRepath;       // asking the way: when to path after the player again
         public Vector3 cameFrom;       // where they came into the mall (they leave by another way if there is one)
         public Entrance goalEntrance;
 
@@ -989,6 +999,9 @@ public partial class CustomerManager : NetworkBehaviour
     private void Despawn(Customer c)
     {
         CourierGone(c); // a delivery guy with the package still on him: it's left at the store
+        if (questions.TryGetValue(c.id, out var q) && q.askedBy != ulong.MaxValue)
+            QuestionDoneRpc(c.id, RpcTarget.Single(q.askedBy, RpcTargetUse.Temp)); // gone mid-question
+        ForgetQuestion(c);
         if (c.group != null)
         {
             if (c.group.Leader == c && c.mode == Mode.Exiting) GroupLeftMall(c);
@@ -1524,6 +1537,7 @@ public partial class CustomerManager : NetworkBehaviour
             case Mode.WithHelper: ThinkWithHelper(c); break;
             case Mode.Searching: ThinkSearching(c); break;
             case Mode.Courier: ThinkCourier(c); break;
+            case Mode.Asking: ThinkAsking(c); break;
         }
     }
 
@@ -1841,6 +1855,7 @@ public partial class CustomerManager : NetworkBehaviour
         // At the store they were heading for (if passing it didn't already decide).
         if (c.goalStore != null && !c.passed.Contains(c.goalStore) && c.goalStore.IsOpen && c.goalStore.Appeal != null &&
             Consider(c, c.goalStore, c.goalEntrance)) return;
+        if (TryAskDirections(c)) return; // now and then: off to ask a player the way
         PickGoal(c);
     }
 
@@ -2681,6 +2696,7 @@ public partial class CustomerManager : NetworkBehaviour
         var player = NetworkManager.ConnectedClients.TryGetValue(sender, out var client) ? client.PlayerObject : null;
         if (player == null || (player.transform.position - c.pos).sqrMagnitude > (stopRange + 1f) * (stopRange + 1f)) return;
         if (CourierHandOver(c, sender)) return; // the delivery guy: the package, into their hands
+        if (HearQuestion(c, sender)) return;    // someone asking the way: they ask
         if (HelpLostChild(c, sender)) return; // a lost child: they follow the player now
         if (c.mark == (byte)LostMark.Searching) return; // looking for their child: not stopped
         if (Time.time - c.stoppedAt < 5f) return;

@@ -141,6 +141,14 @@ public class PlayerInteractInput : NetworkBehaviour
             return;
         }
 
+        // Answering a customer's "where's ...?": pointing out a store takes the clicks.
+        if (DirectionsAnswer.Active)
+        {
+            lookedAtCustomer = 0;
+            DirectionsAnswer.Tick(cam);
+            return;
+        }
+
         using (LookMarker.Auto()) UpdateLookedAtSign();
         using (StockMarker.Auto()) UpdateStockTarget();
         using (CustomerMarker.Auto()) UpdateLookedAtCustomer();
@@ -694,6 +702,7 @@ public class PlayerInteractInput : NetworkBehaviour
     /// <summary>The F prompt right now (null: nothing to show).</summary>
     private string CurrentPrompt()
     {
+        if (IsOwner && DirectionsAnswer.Active) return DirectionsAnswer.Prompt;
         if (!IsOwner || (lookedAtSign == null && lookedAtMonitor == null && stockTarget == null &&
                          lookedAtCart == null && pushedCart == null && lookedAtDoor == null &&
                          lookedAtCounter == null && lookedAtPickup == null && lookedAtBuy == null && lookedAtVote == null && lookedAtStoreButton == null && lookedAtUsable == null &&
@@ -729,6 +738,7 @@ public class PlayerInteractInput : NetworkBehaviour
             CustomerManager.LostMark.Following => "Following you: take them to their parents",
             CustomerManager.LostMark.Searching => "They lost their child: find them (Lost & Found on your phone)",
             CustomerManager.LostMark.Courier => "F: Take the package",
+            CustomerManager.LostMark.Asking => "F: \"Excuse me!\" (they want directions)",
             _ => "F: Stop them and check their bag",
         };
     }

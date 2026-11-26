@@ -26,6 +26,7 @@ public class HelpPoints : NetworkBehaviour
         DeliveredForOthers,   // brought another team's delivery to their store
         ReportedBroken,       // reported a broken light or screen (BreakManager)
         ReportedCart,         // reported another store's cart left in the way, and it was towed (CartNet)
+        GaveDirections,       // pointed a customer the right way (customer AI)
     }
 
     [Serializable]
@@ -59,6 +60,7 @@ public class HelpPoints : NetworkBehaviour
         new Rule { action = HelpAction.DeliveredForOthers, points = 1, maxPerPeriod = 2, description = "delivered another store's order" },
         new Rule { action = HelpAction.ReportedBroken, points = 1, maxPerPeriod = 3, description = "reported something broken" },
         new Rule { action = HelpAction.ReportedCart, points = 1, maxPerPeriod = 2, description = "reported a cart left in the way" },
+        new Rule { action = HelpAction.GaveDirections, points = 1, maxPerPeriod = 3, description = "gave a customer directions" },
     };
 
     [Header("Votes")]
@@ -129,6 +131,8 @@ public class HelpPoints : NetworkBehaviour
     private bool TryGetRule(HelpAction action, out Rule rule)
     {
         foreach (var r in rules) if (r.action == action) { rule = r; return true; }
+        // Not in the list (added after the list was set up in the scene): its default.
+        foreach (var r in DefaultRules()) if (r.action == action) { rule = r; return true; }
         rule = default;
         return false;
     }
