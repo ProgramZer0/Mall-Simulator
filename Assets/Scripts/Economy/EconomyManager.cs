@@ -71,6 +71,9 @@ public class EconomyManager : NetworkBehaviour
     [SerializeField] private DeliveryTruck[] truckPrefabs = new DeliveryTruck[0];
     [Tooltip("How much of a truck's cargo floor a shipment may take (0.75 = 75%) before it needs the next size.")]
     [SerializeField, Range(0.2f, 1f)] private float truckMaxFill = 0.75f;
+    [Tooltip("No delivery comes sooner than this (seconds), whatever the truck size, items or Logistics perks. " +
+             "Dev orders aren't held to it.")]
+    [SerializeField, Min(0f)] private float minDeliverySeconds = 60f;
     [Tooltip("Seconds added to (or taken off) the delivery time for each truck size: small, medium, large.")]
     [SerializeField] private float[] truckSizeSeconds = { -30f, 0f, 45f };
     [Tooltip("Delivery time = the slowest item's time + this much of all the items' times added up (0.05 = 5%) " +
@@ -550,7 +553,8 @@ public class EconomyManager : NetworkBehaviour
                 teamId = team,
                 plotId = plotId,
                 boxCount = count,
-                remaining = Mathf.Max(0f, TruckTime(baseTime, loadAll, truckSize) * sooner),
+                remaining = deliverySeconds >= 0f ? Mathf.Max(0f, deliverySeconds * sooner) // (dev: as asked)
+                          : Mathf.Max(minDeliverySeconds, TruckTime(baseTime, loadAll, truckSize) * sooner),
                 stampTime = NetworkManager.ServerTime.Time,
                 blocked = false,
                 inLine = oneDeliveryAtATime && HasOrderFor(plotId, waitingOnly: truckSize >= 0),
