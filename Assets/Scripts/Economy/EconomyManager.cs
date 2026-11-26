@@ -41,6 +41,7 @@ public class EconomyManager : NetworkBehaviour
         LevelTooLow,     // an item needs a higher team level (ItemDef Min Level)
         NeedsLicense,    // an item is in a licensed category the team doesn't hold (LicenseManager)
         NeedsFranchise,  // a franchise's item, and the team doesn't hold the franchise (FranchiseManager)
+        CantAddOn,       // Add To Delivery: no perk, nothing on its way to add to, or it wouldn't fit in that truck
     }
 
     [Header("Deliveries")]
@@ -89,6 +90,11 @@ public class EconomyManager : NetworkBehaviour
     [Tooltip("Bigger trucks get longer: Truck Door Wait Seconds and Truck Unload Seconds are multiplied by this, one " +
              "per truck size (in Truck Prefabs' order, smallest first; past the end: the last one). 1 = as set.")]
     [SerializeField] private float[] truckTimeBySize = { 1f, 1.5f, 2f };
+    [Tooltip("Add To Delivery (the AddOnShipments perk): items checked out onto a delivery already on its way add " +
+             "this many seconds to its time, plus Add On Time Share of the new items' own slowest delivery time " +
+             "(then Logistics perks).")]
+    [SerializeField, Min(0f)] private float addOnSeconds = 30f;
+    [SerializeField, Range(0f, 1f)] private float addOnTimeShare = 0.25f;
     [Tooltip("Emptied: it leaves this many seconds later.")]
     [SerializeField, Min(0f)] private float truckLeaveWhenEmptySeconds = 4f;
     [Tooltip("Someone's in the truck as its door comes down: it goes back up, their team pays this fine, and they " +
@@ -407,25 +413,43 @@ public class EconomyManager : NetworkBehaviour
     /// arrives through OrderResultReceived.
     /// </summary>
     public void Order(int plotId, int[] itemIds, int[] quantities, float deliverySeconds = -1f) =>
-        RequestOrderRpc(plotId, itemIds, quantities, new byte[0], deliverySeconds);
+        RequestOrderRpc(plotId, itemIds, quantities, new byte[0], deliverySeconds, false);
 
     /// <summary>
     /// Same, with a paint color for each line (PaintPalette id; 0 = the item's own colors). Painting at
     /// purchase is free; items that can't be painted ignore it.
     /// </summary>
-    public void Order(int plotId, int[] itemIds, int[] quantities, byte[] paints, float deliverySeconds = -1f) =>
-        RequestOrderRpc(plotId, itemIds, quantities, paints ?? new byte[0], deliverySeconds);
+    public void Order(int plotId, int[] itemIds, int[] quantities, byte[] paints, float deliverySeconds = -1f, bool addOn = false) =>
+        RequestOrderRpc(plotId, itemIds, quantities, paints ?? new byte[0], deliverySeconds, addOn);
+
+    /// <summary>
+    /// Is there a delivery on its way to this store that more could be added to (still counting down or in
+    /// line, not at the dock yet)? -1: none. Server or client.
+    /// </summary>
+    public int AddOnTarget(int plotId)
+    {
+        int best = -1, bestId = -1;
+        for (int i = 0; i < orders.Count; i++)
+        {
+            var o = orders[i];
+            if (o.plotId != plotId || o.blocked) continue;
+            if (o.truckSize >= 0 && o.stage != OrderInfo.OnItsWay) continue; // a truck that's here already
+            if (o.truckSize < 0 && !o.inLine && o.RemainingAt(IsSpawned ? NetworkManager.ServerTime.Time : 0d) <= 0f) continue; // arriving now
+            if (o.orderId > bestId) { best = i; bestId = o.orderId; } // the latest
+        }
+        return best;
+    }
 
     /// <summary>Buy one kind of item (any quantity) in one delivery.</summary>
     public void Order(int plotId, int itemId, int quantity, float deliverySeconds = -1f) =>
-        RequestOrderRpc(plotId, new[] { itemId }, new[] { quantity }, new byte[0], deliverySeconds);
+        RequestOrderRpc(plotId, new[] { itemId }, new[] { quantity }, new byte[0], deliverySeconds, false);
 
     [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void RequestOrderRpc(int plotId, int[] itemIds, int[] quantities, byte[] paints, float deliverySeconds,
-                                 RpcParams rpcParams = default)
+                                 bool addOn, RpcParams rpcParams = default)
     {
         ulong sender = rpcParams.Receive.SenderClientId;
-        var result = ServerTryOrder(sender, plotId, itemIds, quantities, deliverySeconds, paints);
+        var result = ServerTryOrder(sender, plotId, itemIds, quantities, deliverySeconds, paints, addOn: addOn);
         OrderResultRpc(result, RpcTarget.Single(sender, RpcTargetUse.Temp));
     }
 
@@ -439,7 +463,8 @@ public class EconomyManager : NetworkBehaviour
 
     /// <summary>Server: check, charge and start a delivery.</summary>
     public OrderResult ServerTryOrder(ulong clientId, int plotId, int[] itemIds, int[] quantities, float deliverySeconds,
-                                      byte[] paints = null, int[] unitPrices = null, bool anyoneMayBuy = false)
+                                      byte[] paints = null, int[] unitPrices = null, bool anyoneMayBuy = false,
+                                      bool addOn = false)
     {
         // Anyone May Buy: no level, license or franchise needed (the special market: first come, first served).
         // Unit Prices (optional, dollars per item, delivery included): a set price instead of the
@@ -490,6 +515,31 @@ public class EconomyManager : NetworkBehaviour
         else if (!ShipmentPacker.CouldEverFit(plot.ShipmentZones, planBoxes))
             return OrderResult.TooBig;
 
+        // Add To Delivery: onto the latest delivery on its way (the perk, and room in its truck checked first).
+        int addTo = -1;
+        sbyte addOnTruck = -1;
+        if (addOn)
+        {
+            if (ProgressionManager.StoreStat(plot, PerkStat.AddOnShipments) <= 0f) return OrderResult.CantAddOn;
+            addTo = AddOnTarget(plotId);
+            if (addTo < 0 || orders[addTo].teamId != team) return OrderResult.CantAddOn;
+            var target = orders[addTo];
+            // Everything together: still one truck (the smallest it now fits), or still fits the shipment spots.
+            var lines = GetOrderLines(target.orderId);
+            var allIds = new int[lines.Count + itemIds.Length];
+            var allQty = new int[allIds.Length];
+            for (int k = 0; k < lines.Count; k++) { allIds[k] = lines[k].itemId; allQty[k] = lines[k].quantity; }
+            for (int k = 0; k < itemIds.Length; k++) { allIds[lines.Count + k] = itemIds[k]; allQty[lines.Count + k] = quantities[k]; }
+            BuildBoxes(allIds, allQty, null);
+            if (target.truckSize >= 0)
+            {
+                int size = PickTruckSize(planBoxes);
+                if (size < 0) return OrderResult.CantAddOn; // wouldn't fit even the biggest truck: order it on its own
+                addOnTruck = (sbyte)Mathf.Max(target.truckSize, size);
+            }
+            else if (!ShipmentPacker.CouldEverFit(plot.ShipmentZones, planBoxes)) return OrderResult.CantAddOn;
+        }
+
         if (cost > int.MaxValue || !ServerTrySpend(team, (int)cost))
             return OrderResult.NotEnoughMoney;
 
@@ -519,6 +569,35 @@ public class EconomyManager : NetworkBehaviour
             else if (!anyoneMayBuy && !ColorRules.Allows(d, paint, team, out _))
                 paint = 0;
             lineColors[i] = paint;
+        }
+
+        if (addTo >= 0)
+        {
+            // Onto the delivery on its way: its lines, count, cost and truck grow; it takes a little longer.
+            var o = orders[addTo];
+            double nowT = NetworkManager.ServerTime.Time;
+            float extra = (addOnSeconds + addOnTimeShare * slowest) * sooner;
+            if (o.inLine) o.remaining += extra;
+            else { o.remaining = o.RemainingAt(nowT) + extra; o.stampTime = nowT; }
+            o.boxCount += boxes;
+            o.cost = (int)Mathf.Min(int.MaxValue, o.cost + cost);
+            if (o.truckSize >= 0) o.truckSize = addOnTruck;
+            orders[addTo] = o;
+            for (int i = 0; i < itemIds.Length; i++)
+            {
+                bool merged = false;
+                for (int k = 0; k < orderLines.Count; k++)
+                {
+                    var l = orderLines[k];
+                    if (l.orderId != o.orderId || l.itemId != itemIds[i] || l.paint != lineColors[i]) continue;
+                    l.quantity += quantities[i];
+                    orderLines[k] = l;
+                    merged = true;
+                    break;
+                }
+                if (!merged) orderLines.Add(new OrderLine { orderId = o.orderId, itemId = itemIds[i], quantity = quantities[i], paint = lineColors[i] });
+            }
+            return OrderResult.Ordered;
         }
 
         // By truck: as many truckloads as it takes (by volume), each its own delivery in the smallest truck
