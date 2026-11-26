@@ -61,13 +61,27 @@ public class ConfirmPopup : MonoBehaviour
     private Action onYes;
     private bool showing; // Show turned it on (so Awake, running just then, mustn't hide it)
 
-    public bool IsOpen => Root.activeSelf;
+    public bool IsOpen => Root.activeInHierarchy;
+
+    private static int closedFrame = -1;
+    /// <summary>A pop-up closed this frame (so the click that closed it isn't also taken by what's behind).</summary>
+    public static bool JustClosed => Time.frameCount <= closedFrame + 1;
+
+    private bool hooked;
+
+    // Its buttons, once (Awake may not have run: its object left unticked under an active Root, say).
+    private void Hook()
+    {
+        if (hooked) return;
+        hooked = true;
+        if (yesButton != null) yesButton.onClick.AddListener(Yes);
+        if (noButton != null) noButton.onClick.AddListener(Close);
+    }
     private GameObject Root => root != null ? root : gameObject;
 
     private void Awake()
     {
-        if (yesButton != null) yesButton.onClick.AddListener(Yes);
-        if (noButton != null) noButton.onClick.AddListener(Close);
+        Hook();
         // Hidden at start (but not when it's waking up because Show just turned it on).
         if (!showing) Root.SetActive(false);
     }
@@ -76,7 +90,9 @@ public class ConfirmPopup : MonoBehaviour
     {
         onYes = yes;
         showing = true;
+        Hook();
         if (messageText != null) messageText.text = message;
+        if (!gameObject.activeSelf) gameObject.SetActive(true); // left unticked in the scene: on (Awake keeps Root showing)
         Root.SetActive(true);
         transform.SetAsLastSibling(); // on top of the rest of the screen
         if (Root != gameObject) Root.transform.SetAsLastSibling();
@@ -86,6 +102,7 @@ public class ConfirmPopup : MonoBehaviour
     {
         onYes = null;
         showing = false;
+        closedFrame = Time.frameCount;
         Root.SetActive(false);
     }
 
