@@ -26,6 +26,8 @@ public class SizePicker : MonoBehaviour
     [SerializeField] private TMP_Text addButtonText;
     [SerializeField] private Button cancelButton;
     [SerializeField, Min(1)] private int maxPerSize = 99;
+    [Tooltip("Shift held on + or -: this many at a time.")]
+    [SerializeField, Min(1)] private int shiftStep = 5;
 
     private readonly List<SizeOption> options = new();
     private readonly List<ItemDef> sizes = new();
@@ -105,6 +107,7 @@ public class SizePicker : MonoBehaviour
     private void Change(int index, int by)
     {
         if (index < 0 || index >= counts.Count) return;
+        if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) by *= shiftStep; // Shift: 5 at a time
         counts[index] = Mathf.Clamp(counts[index] + by, 0, maxPerSize);
         Refresh();
     }

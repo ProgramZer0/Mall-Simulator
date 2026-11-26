@@ -81,6 +81,11 @@ public class BuyMenu : MonoBehaviour, IShopScreen
              "picture for Hover Label and shows the tooltip, which has the name. Off: names and \"Buy\" as set up.")]
     [SerializeField] private bool compactTiles = true;
     [SerializeField] private string hoverLabel = "Click to buy";
+    [Tooltip("Hold Shift while clicking buy to add this many at once (sizes: Shift on + or - in the size pop-up).")]
+    [SerializeField, Min(1)] private int shiftAmount = 5;
+
+    /// <summary>Shift held: Shift Amount, else 1.</summary>
+    public int ClickAmount => Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift) ? shiftAmount : 1;
 
     [Header("Tooltip (optional)")]
     [Tooltip("Hover an item: this panel (hidden at start, Raycast Target off on its graphics) shows its name and " +
@@ -658,10 +663,10 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         if (sizes != null && sizes.Count > 0)
         {
             if (sizePicker != null) { HideTileTooltip(); sizePicker.Open(def, sizes, picked => Buy(picked, paint)); }
-            else Buy(new[] { (sizes[Sizes.Middle(def.sizes)], 1) }, paint);
+            else Buy(new[] { (sizes[Sizes.Middle(def.sizes)], ClickAmount) }, paint);
             return;
         }
-        Buy(new[] { (def, 1) }, paint);
+        Buy(new[] { (def, ClickAmount) }, paint); // Shift: Shift Amount at once
     }
 
     // Order these now, or add them to the cart.
