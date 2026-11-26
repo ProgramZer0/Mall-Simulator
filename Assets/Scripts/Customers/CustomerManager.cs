@@ -508,6 +508,7 @@ public partial class CustomerManager : NetworkBehaviour
         public float partyMood;
         public bool lingering;         // a bystander standing around at a spot they strolled to
         public bool bystanderSlot;     // counts toward Max Bystanders (not Max Customers)
+        public bool paysCash;          // decided on the way to the checkout (cash payers skip self-checkouts)
 
         // Lost children (see CustomerLostChild.cs)
         public Customer lostFrom;      // (a lost child) the parent they wandered off from
@@ -2216,12 +2217,15 @@ public partial class CustomerManager : NetworkBehaviour
 
     private void GoToCheckout(Customer c)
     {
+        // Cash or card, decided now (cash payers don't go to a self-checkout).
+        c.paysCash = Random.value < (c.personality != null ? c.personality.cashChance : 0.5f);
         // The line that looks quickest: everyone's things ahead of them, at that counter's pace.
         CheckoutCounter best = null;
         float bestWait = float.MaxValue;
         foreach (var counter in CheckoutCounter.All)
         {
             if (counter == null || !counter.IsSpawned || counter.IsForSale || counter.Plot != c.store) continue;
+            if (!counter.Takes(c.paysCash)) continue; // a self-checkout: card payers only (and not broken)
             float wait = ExpectedWait(counter);
             if (wait < bestWait) { bestWait = wait; best = counter; }
         }
@@ -2404,7 +2408,7 @@ public partial class CustomerManager : NetworkBehaviour
                 else purchases.Add(new CheckoutCounter.Purchase { itemId = t.itemId, priceCents = t.priceCents, units = 1, paint = t.paint });
             }
             if (purchases.Count == 0) { LeaveStore(c, c.satisfaction); return; }
-            c.ticket = counter.ServerAddCustomer(purchases, c.personality != null ? c.personality.cashChance : 0.5f);
+            c.ticket = counter.ServerAddCustomer(purchases, c.paysCash ? 1f : 0f);
             if (c.ticket == 0) { LeaveStore(c, -0.4f); return; }
             c.itemsAtCounter = purchases.Count;
             c.frontSince = Time.time;

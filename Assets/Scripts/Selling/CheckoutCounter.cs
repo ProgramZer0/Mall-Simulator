@@ -43,6 +43,18 @@ public class CheckoutCounter : NetworkBehaviour
 {
     public enum Phase : byte { Scanning, AwaitingPayment }
 
+    /// <summary>
+    /// What kind of counter this prefab is (each is its own catalog item, bought separately):
+    /// - Standard: as described above.
+    /// - Cheap: the amount always goes in on the keypad: card, type the total and Enter before swiping;
+    ///   cash, type what they gave and Enter before Confirm. (Give its prefab a lower Belt Speed.)
+    /// - Self Checkout: no player work. Customers scan their own things (Self Scan Seconds each) and pay by
+    ///   card; cash payers don't use it. Some things don't get scanned (Self Skip Chance): walked out with,
+    ///   unpaid. Put a Breakable on it (its screen) and it can break: broken, nobody can use it until it's
+    ///   fixed.
+    /// </summary>
+    public enum Kind : byte { Standard, Cheap, SelfCheckout }
+
     /// <summary>The customer number on things a customer left on the counter (take them back to the shelves).</summary>
     public const int LeftBehind = -1;
     public enum PayMethod : byte { Cash, Card }
@@ -115,6 +127,33 @@ public class CheckoutCounter : NetworkBehaviour
     /// <summary>Host: a customer (the number ServerAddCustomer gave) has paid.</summary>
     public event Action<CheckoutCounter, int> ServerCustomerPaid;
     private static readonly int[] Denominations = { 10000, 5000, 2000, 1000, 500, 100, 25, 10, 5, 1 };
+
+    [Header("Kind")]
+    [SerializeField] private Kind kind = Kind.Standard;
+    [Tooltip("Self Checkout: seconds for a customer to scan each thing.")]
+    [SerializeField, Min(0.1f)] private float selfScanSeconds = 1.6f;
+    [Tooltip("Self Checkout: seconds to pay by card once everything's scanned.")]
+    [SerializeField, Min(0.1f)] private float selfPaySeconds = 3f;
+    [Tooltip("Self Checkout: the chance each thing isn't scanned (walked out with, unpaid: theft).")]
+    [SerializeField, Range(0f, 1f)] private float selfSkipChance = 0.12f;
+
+    public Kind CounterKind => kind;
+    private Breakable[] breakables;
+    public bool IsSelfCheckout => kind == Kind.SelfCheckout;
+
+    /// <summary>A Breakable on it is broken (a self-checkout then can't be used).</summary>
+    public bool IsBroken
+    {
+        get
+        {
+            breakables ??= GetComponentsInChildren<Breakable>(true);
+            foreach (var b in breakables) if (b != null && b.IsBroken) return true;
+            return false;
+        }
+    }
+
+    /// <summary>Can this customer use it? (A self-checkout: card payers only, and not while broken.)</summary>
+    public bool Takes(bool paysCash) => kind != Kind.SelfCheckout || (!paysCash && !IsBroken);
 
     [Header("Belt")]
     [Tooltip("BoxCollider sitting on the belt: its BOTTOM face is the surface things ride on. Blue arrow (+Z) toward the scanner.")]
@@ -365,7 +404,7 @@ public class CheckoutCounter : NetworkBehaviour
         if (!IsServer || purchases == null || purchases.Count == 0) return 0;
         if (IsForSale) return 0; // a counter up for sale isn't open to customers
         int customer = nextCustomer++;
-        paysCash[customer] = UnityEngine.Random.value < cashChance;
+        paysCash[customer] = kind != Kind.SelfCheckout && UnityEngine.Random.value < cashChance; // (self-checkout: card)
         AddToBelt(purchases, customer);
         return customer;
     }
@@ -434,6 +473,7 @@ public class CheckoutCounter : NetworkBehaviour
             nextFill = Time.time + 0.25f;
             ServerFill();
         }
+        if (kind == Kind.SelfCheckout) ServerSelfCheckout();
         if (testKey != KeyCode.None && Input.GetKeyDown(testKey) && !UIState.IsMenuOpen && IsNearestToHost())
             ServerAddTestCustomer();
     }
@@ -446,6 +486,17 @@ public class CheckoutCounter : NetworkBehaviour
         if (!IsSpawned || !CanUse(clientId)) return null;
         if (IsForSale && !IsBusy) return "For sale: customers can't use this counter";
         var s = state.Value;
+        if (kind == Kind.SelfCheckout)
+            return IsBroken ? "Self-checkout: broken (report it to get it fixed)"
+                 : FirstCustomer() != 0 || s.customer != 0 ? "Self-checkout: the customer is scanning their things"
+                 : items.Count > 0 ? "A customer left things behind: take them back to the shelves" : "Self-checkout: no customers";
+        bool cheap = kind == Kind.Cheap;
+        if (cheap && s.phase == Phase.AwaitingPayment)
+            return s.method == PayMethod.Card
+                ? (s.moneyTaken == 0 ? "Paying by card: take the card" : s.keypadEntered == 0 || s.keypadCents != s.totalCents
+                    ? $"Paying by card: type the total ({FormatAmount(s.totalCents)}) on the keypad and press Enter" : "Paying by card: swipe it in the card reader")
+                : (s.moneyTaken == 0 ? "Paying cash: take the cash" : s.keypadEntered == 0
+                    ? "Paying cash: type what they gave on the keypad and press Enter" : "Paying cash: count out the change from the drawer, then Confirm");
         if (s.phase == Phase.AwaitingPayment)
             return s.method == PayMethod.Card
                 ? (s.moneyTaken == 0 ? "Paying by card: take the card" : "Paying by card: swipe it in the card reader")
@@ -462,10 +513,21 @@ public class CheckoutCounter : NetworkBehaviour
         var s = state.Value;
         bool paying = s.phase == Phase.AwaitingPayment;
         bool cash = paying && s.method == PayMethod.Cash;
+        if (kind == Kind.SelfCheckout && part.action != CheckoutClickable.Action.ScanItem) return null; // nothing for players to do
+        bool needKeypad = kind == Kind.Cheap && paying && s.moneyTaken != 0 &&
+                          (s.keypadEntered == 0 || (!cash && s.keypadCents != s.totalCents));
+        if (needKeypad && (part.action == CheckoutClickable.Action.CardReader || part.action == CheckoutClickable.Action.Confirm))
+            return cash ? "Type what they gave on the keypad and press Enter first" : $"Type the total ({FormatAmount(s.totalCents)}) and press Enter first";
 
         switch (part.action)
         {
             case CheckoutClickable.Action.ScanItem:
+                if (kind == Kind.SelfCheckout)
+                {
+                    foreach (var it in items.Each())
+                        if (it.key == part.value && it.customer == LeftBehind) return $"Left behind: {NameOf(it.itemId)}   Click: take it";
+                    return null;
+                }
                 foreach (var it in items.Each())
                     if (it.key == part.value)
                         return it.customer == LeftBehind ? $"Left behind: {NameOf(it.itemId)}   Click: take it"
@@ -525,6 +587,15 @@ public class CheckoutCounter : NetworkBehaviour
         bool paying = s.phase == Phase.AwaitingPayment;
         bool cash = paying && s.method == PayMethod.Cash;
         clicker = rpcParams.Receive.SenderClientId;
+        // Self-checkout: players only take back things left behind.
+        if (kind == Kind.SelfCheckout && !(action == CheckoutClickable.Action.ScanItem && IsLeftBehind(value))) return;
+        // Cheap: the keypad first (card: the total; cash: what they gave).
+        bool needKeypad = kind == Kind.Cheap && paying && (s.keypadEntered == 0 || (!cash && s.keypadCents != s.totalCents));
+        if (needKeypad && (action == CheckoutClickable.Action.CardReader || action == CheckoutClickable.Action.Confirm))
+        {
+            MessageRpc(cash ? "Type what they gave and press Enter first" : $"Type the total ({FormatAmount(s.totalCents)}) and press Enter first");
+            return;
+        }
 
         switch (action)
         {
@@ -618,6 +689,55 @@ public class CheckoutCounter : NetworkBehaviour
                     state.Value = s;
                 }
                 return;
+        }
+    }
+
+    /* ========================= SELF CHECKOUT (host) ========================= */
+
+    private float nextSelfStep;
+
+    // The customer scans their own things, one at a time, then pays by card. Some don't get scanned.
+    private void ServerSelfCheckout()
+    {
+        if (Time.time < nextSelfStep || IsBroken) return;
+        var s = state.Value;
+        if (s.phase == Phase.AwaitingPayment)
+        {
+            nextSelfStep = Time.time + 1f;
+            Fx(Cue.CardApproved);
+            Complete(s.totalCents, "Paid at the self-checkout");
+            return;
+        }
+        int customer = s.customer != 0 ? s.customer : FirstCustomer();
+        if (customer == 0) return;
+        for (int i = 0; i < items.Count; i++)
+        {
+            var it = items[i];
+            if (it.customer != customer) continue;
+            nextSelfStep = Time.time + selfScanSeconds;
+            if (UnityEngine.Random.value < selfSkipChance)
+            {
+                // Not scanned: it goes in their bag unpaid.
+                items.RemoveAt(i);
+                ItemDebug.Log($"Self-checkout: {NameOf(it.itemId)} wasn't scanned (taken unpaid).", this);
+                s = state.Value;
+                if (s.customer == 0) s.customer = customer;
+                if (!HasMoreFor(customer))
+                {
+                    if (lines.Count == 0) { state.Value = s; Complete(0, "Left without paying"); return; } // nothing scanned at all
+                    s.phase = Phase.AwaitingPayment;
+                    s.method = PayMethod.Card;
+                    paysCash.Remove(customer);
+                    nextSelfStep = Time.time + selfPaySeconds;
+                }
+                state.Value = s;
+                ServerFill();
+                return;
+            }
+            ServerScan(it.key);
+            Fx(Cue.ScanBeep);
+            if (state.Value.phase == Phase.AwaitingPayment) nextSelfStep = Time.time + selfPaySeconds;
+            return;
         }
     }
 

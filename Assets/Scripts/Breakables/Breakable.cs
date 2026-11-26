@@ -76,6 +76,9 @@ public class Breakable : MonoBehaviour
     }
 
     /// <summary>Show it broken or working (BreakManager, every machine).</summary>
+    /// <summary>Broken right now (every machine)?</summary>
+    public bool IsBroken => broken;
+
     public void SetBroken(bool on)
     {
         if (broken == on || intensity == null) return;
