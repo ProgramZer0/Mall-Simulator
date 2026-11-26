@@ -51,20 +51,56 @@ public class Escalator : MonoBehaviour
         CustomerNavMesh.Instance?.MarkDirty();
     }
 
+    // Its link's ends: Start and End, moved onto the nearest floor customers may walk on (within 2 m), so
+    // a Bottom or Top a little off (or inside the steps' kept-out floor) still joins up.
+    private Vector3 linkStart, linkEnd;
+    private bool startOnFloor, endOnFloor;
+
     private void AddLink()
     {
         if (bottom == null || top == null) return;
         if (NavMesh.IsLinkValid(link)) NavMesh.RemoveLink(link);
+        startOnFloor = NavMesh.SamplePosition(Start, out var s, 2f, CustomerNavMesh.CustomerMask);
+        endOnFloor = NavMesh.SamplePosition(End, out var e, 2f, CustomerNavMesh.CustomerMask);
+        linkStart = startOnFloor ? s.position : Start;
+        linkEnd = endOnFloor ? e.position : End;
         link = NavMesh.AddLink(new NavMeshLinkData
         {
-            startPosition = Start,
-            endPosition = End,
+            startPosition = linkStart,
+            endPosition = linkEnd,
             width = width,
             bidirectional = false, // one way only
             costModifier = -1f,
             area = 0,
             agentTypeID = NavMesh.GetSettingsByID(0).agentTypeID,
         });
+    }
+
+    /// <summary>The walkable area was (re)built: links redone onto it, and each escalator checked (logged once).</summary>
+    public static void AfterBuild()
+    {
+        foreach (var e in All) if (e != null) { e.AddLink(); e.Check(); }
+    }
+
+    private string lastCheck;
+    private static readonly NavMeshPath testPath = new();
+
+    // Can a customer get from its start to its end? Says what's wrong if not.
+    private void Check()
+    {
+        string problem = null;
+        if (bottom == null || top == null) problem = "Bottom and Top need setting";
+        else if (steps == null) problem = "Steps (its BoxCollider) needs setting: without it customers walk it both ways";
+        else if (!startOnFloor) problem = $"no customer floor within 2 m of its start {Start} (put {(way == Way.Up ? "Bottom" : "Top")} on the landing, off the steps)";
+        else if (!endOnFloor) problem = $"no customer floor within 2 m of its end {End} (put {(way == Way.Up ? "Top" : "Bottom")} on the landing, off the steps)";
+        else if (!NavMesh.IsLinkValid(link)) problem = "its link didn't take (agent type?)";
+        else if (!NavMesh.CalculatePath(linkStart, linkEnd, CustomerNavMesh.CustomerMask, testPath) || testPath.status != NavMeshPathStatus.PathComplete)
+            problem = $"a customer can't get from its start to its end ({testPath.status})";
+        string text = problem == null ? "ok" : problem;
+        if (text == lastCheck) return;
+        lastCheck = text;
+        if (problem != null) Debug.LogWarning($"[Escalator] '{name}' ({way}): {problem}.", this);
+        else Debug.Log($"[Escalator] '{name}' ({way}): customers can ride it ({linkStart} → {linkEnd}).", this);
     }
 
     /// <summary>For the walkable-area build: the steps' floor, kept out of customers' area.</summary>
@@ -91,7 +127,7 @@ public class Escalator : MonoBehaviour
     public static bool TryRide(Vector3 from, Vector3 to, out Escalator escalator)
     {
         foreach (var e in All)
-            if (e != null && (from - e.Start).sqrMagnitude < 1.5f * 1.5f && (to - e.End).sqrMagnitude < 1.5f * 1.5f)
+            if (e != null && (from - e.linkStart).sqrMagnitude < 1.5f * 1.5f && (to - e.linkEnd).sqrMagnitude < 1.5f * 1.5f)
             { escalator = e; return true; }
         escalator = null;
         return false;

@@ -499,6 +499,7 @@ public class PlayerInventoryNet : NetworkBehaviour
         if (!dropOff && MallManager.IsOthersShipmentArea(sender, position)) { ItemDebug.Log("Place refused: another store's shipment area."); return; }
         if (!backInBox && MallManager.IsNoPlaceZone(position)) { ItemDebug.Log("Place refused: no-place zone (docks)."); return; }
         if (MallManager.IsInTruck(position)) { ItemDebug.Log("Place refused: in a delivery truck (things only come out)."); return; }
+        if (!onWall && !onCart && PlacementCheck.StacksOnSame(def, position, rotation)) { ItemDebug.Log("Place refused: No Stacking (on top of another one)."); return; }
         // A store being cleared for edit mode: nothing goes down in it until everyone's out.
         if (MallManager.Instance != null && MallManager.Instance.IsClearingAt(position)) { ItemDebug.Log("Place refused: the store is being cleared for edit mode."); return; }
 

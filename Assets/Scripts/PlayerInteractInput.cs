@@ -1573,6 +1573,8 @@ public class PlayerInteractInput : NetworkBehaviour
         if (!dropOff && !MallManager.CanPickupOrPlace(OwnerClientId, transform.position, at)) return "store rules (not your store)";
         if (!dropOff && MallManager.IsOthersShipmentArea(OwnerClientId, at)) return "another store's shipment area";
         if (MallManager.IsInTruck(at)) return "in a delivery truck (things only come out)";
+        if (!placingOnWall && !placingOnCart && ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(inventory.HeldItemId.Value, out var noStack) &&
+            PlacementCheck.StacksOnSame(noStack, at, ghost.transform.rotation)) return "No Stacking: not on top of another one";
         if (!PuttingBoxBack && MallManager.IsNoPlaceZone(at)) return "no-place zone (docks)";
         if ((placingOnCart || placingBoxed) && cartBoxPrefab != null)
             return FitsBoxAt(cartBoxPrefab, at, ghost.transform.rotation) ? "ok" : $"its box '{cartBoxPrefab.name}' doesn't fit";
@@ -1616,6 +1618,10 @@ public class PlayerInteractInput : NetworkBehaviour
         if (!placingOnWall && !placingOnCart && ItemCatalog.Instance != null &&
             ItemCatalog.Instance.TryGet(inventory.HeldItemId.Value, out var def) &&
             PlacementCheck.GetMounting(def) == ItemPickupNet.Mounting.Wall)
+            return false;
+        // No Stacking: not on top of one of itself.
+        if (!placingOnWall && !placingOnCart && ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(inventory.HeldItemId.Value, out var held2) &&
+            PlacementCheck.StacksOnSame(held2, ghost.transform.position, ghost.transform.rotation))
             return false;
 
         return FitsAt(inventory.HeldItemId.Value, ghost.transform.position, ghost.transform.rotation, placingOnWall);
