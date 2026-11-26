@@ -124,6 +124,27 @@ public class CustomerView : MonoBehaviour
     public bool IsChild { get; set; }
 
     private readonly System.Collections.Generic.List<GameObject> bags = new();
+    private GameObject carried;
+
+    /// <summary>
+    /// Something held in front of them in both hands (the delivery guy's package): at a child called
+    /// "CarryAnchor" if the look has one, else at chest height in front. Null: nothing.
+    /// </summary>
+    public void SetCarry(GameObject model)
+    {
+        if (carried != null) Destroy(carried);
+        carried = model;
+        if (model == null) return;
+        SetLayer(model);
+        foreach (var c in model.GetComponentsInChildren<Collider>(true)) Destroy(c);
+        var t = model.transform;
+        Transform anchor = FindChild(transform, "CarryAnchor");
+        if (anchor != null) { t.SetParent(anchor, false); t.localPosition = Vector3.zero; return; }
+        var me = transform;
+        Vector3 feet = me.position - Vector3.up * lift;
+        t.SetPositionAndRotation(feet + Vector3.up * 1.0f + me.forward * 0.4f, me.rotation * t.rotation);
+        t.SetParent(me, true);
+    }
 
     /// <summary>
     /// Show this many shopping bags: at a child called "BagAnchor" if the look has one, else at their

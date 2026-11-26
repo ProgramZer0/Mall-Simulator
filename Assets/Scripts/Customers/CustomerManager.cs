@@ -404,6 +404,7 @@ public partial class CustomerManager : NetworkBehaviour
         Lost,        // a child who wandered off from their family (see CustomerLostChild.cs)
         WithHelper,  // a lost child following the player who found them
         Searching,   // a family looking for their lost child
+        Courier,     // the delivery guy, bringing a special market package (see CustomerCourier.cs)
     }
 
     private struct Taken
@@ -508,6 +509,7 @@ public partial class CustomerManager : NetworkBehaviour
         public float partyMood;
         public bool lingering;         // a bystander standing around at a spot they strolled to
         public bool bystanderSlot;     // counts toward Max Bystanders (not Max Customers)
+        public bool courier;           // the delivery guy (counts toward neither)
 
         // Lost children (see CustomerLostChild.cs)
         public Customer lostFrom;      // (a lost child) the parent they wandered off from
@@ -802,7 +804,7 @@ public partial class CustomerManager : NetworkBehaviour
     {
         if (eventsDirty) RefreshEventEffects();
         int shoppers = 0, bystanders = 0;
-        foreach (var c in customers) { if (c.bystanderSlot) bystanders++; else shoppers++; }
+        foreach (var c in customers) { if (c.courier) continue; if (c.bystanderSlot) bystanders++; else shoppers++; }
         bystanders = UpdateBystanderArrivals(bystanders, shoppers);
 
         int max = MaxCustomersNow;
@@ -911,7 +913,8 @@ public partial class CustomerManager : NetworkBehaviour
 
     // A new customer near a point (null and why if not). Visit: a store they head straight for and go into.
     private Customer Spawn(Vector3 near, out string why, StorePlot visit = null,
-                           CustomerPersonality personality = null, bool pickGoal = true, bool child = false)
+                           CustomerPersonality personality = null, bool pickGoal = true, bool child = false,
+                           byte? lookOverride = null)
     {
         why = null;
         var settings = StoreAppealSettings.Instance;
@@ -935,7 +938,7 @@ public partial class CustomerManager : NetworkBehaviour
         {
             id = nextId++,
             personality = personality,
-            look = (byte)(looks.Count > 0 ? Random.Range(0, looks.Count) : 0),
+            look = lookOverride ?? (byte)(looks.Count > 0 ? Random.Range(0, Mathf.Min(looks.Count, 64)) : 0), // (0x40 up: the delivery guy's)
             pos = hit.position,
             yaw = Random.Range(0f, 360f),
             speed = Random.Range(walkSpeed.x, walkSpeed.y),
@@ -984,6 +987,7 @@ public partial class CustomerManager : NetworkBehaviour
 
     private void Despawn(Customer c)
     {
+        CourierGone(c); // a delivery guy with the package still on him: it's left at the store
         if (c.group != null)
         {
             if (c.group.Leader == c && c.mode == Mode.Exiting) GroupLeftMall(c);
@@ -1518,6 +1522,7 @@ public partial class CustomerManager : NetworkBehaviour
             case Mode.Lost: ThinkLost(c); break;
             case Mode.WithHelper: ThinkWithHelper(c); break;
             case Mode.Searching: ThinkSearching(c); break;
+            case Mode.Courier: ThinkCourier(c); break;
         }
     }
 
@@ -2671,6 +2676,7 @@ public partial class CustomerManager : NetworkBehaviour
         if (!byId.TryGetValue(id, out var c)) return;
         var player = NetworkManager.ConnectedClients.TryGetValue(sender, out var client) ? client.PlayerObject : null;
         if (player == null || (player.transform.position - c.pos).sqrMagnitude > (stopRange + 1f) * (stopRange + 1f)) return;
+        if (CourierHandOver(c, sender)) return; // the delivery guy: the package, into their hands
         if (HelpLostChild(c, sender)) return; // a lost child: they follow the player now
         if (c.mark == (byte)LostMark.Searching) return; // looking for their child: not stopped
         if (Time.time - c.stoppedAt < 5f) return;
@@ -3058,7 +3064,7 @@ public partial class CustomerManager : NetworkBehaviour
         bool childModel = child && (look & ChildModel) != 0; // one of the Child Looks (already child-sized)
         int index = look & (childModel ? 0x3F : 0x7F);
         var list = childModel ? childLooks : looks;
-        var prefab = index < list.Count ? list[index] : null;
+        var prefab = IsCourierLook(look) ? CourierLookPrefab(look) : index < list.Count ? list[index] : null;
         // At the scene root, not under one parent: Unity updates separate root hierarchies in parallel,
         // and moving hundreds of children of one parent is slower.
         views[id] = CustomerView.Create(id, prefab, pos, yaw, null, child && !childModel ? childScale : 1f);
