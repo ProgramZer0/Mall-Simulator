@@ -335,6 +335,7 @@ public static class PlacementCheck
     public static void WallPose(ItemDef def, Vector3 hitPoint, Vector3 wallNormal, bool flip,
                                 out Vector3 position, out Quaternion rotation)
     {
+        if (def != null && def.wallFacesOtherWay) flip = !flip; // its front's the other way round
         if (def != null && def.worldNetworkPrefab != null && def.LocalBounds.size != Vector3.zero)
             WallPose(def.LocalBounds, def.worldNetworkPrefab.transform.localScale, ModelFix(def), hitPoint, wallNormal,
                      flip, out position, out rotation);

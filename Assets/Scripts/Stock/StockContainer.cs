@@ -1036,10 +1036,18 @@ public class StockContainer : NetworkBehaviour
         else
         {
             var product = ShipmentPacker.GetBox(prefab);
+            // Standing the way its prefab stands (its root rotation, e.g. Blender's -90 on X, and any Model
+            // Rotation), then turned/tipped: placing copies with a fresh rotation would otherwise leave that
+            // out and lay Blender models on their side.
+            Quaternion fix = ProductFix(prefab);
+            o = o * fix;
             Vector3 h = RotatedExtents(o, product.half);
             Vector3 cell = h * 2f + Vector3.one * spacing;
             int nx = Mathf.Max(0, Mathf.FloorToInt((size.x + spacing) / cell.x));
             int ny = Mathf.Max(0, Mathf.FloorToInt((size.y + spacing) / cell.y));
+            // Not stacked on itself (No Stacking on the item): one layer.
+            if (ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(itemId, out var stackDef) && stackDef.noStacking)
+                ny = Mathf.Min(ny, 1);
             int nz = Mathf.Max(0, Mathf.FloorToInt((size.z + spacing) / cell.z));
             layout = new Layout { nx = nx, ny = ny, nz = nz, capacity = Mathf.Min(nx * ny * nz, max),
                                   slots = Mathf.Min(nx * ny * nz, max), cell = cell,
@@ -1059,6 +1067,14 @@ public class StockContainer : NetworkBehaviour
     }
 
     private static readonly Dictionary<GameObject, HangShape> HangShapes = new();
+
+    // How a shelf product's prefab stands: its root rotation and any Model Rotation.
+    private static Quaternion ProductFix(GameObject prefab)
+    {
+        Transform root = prefab.transform;
+        Vector3 extra = root.TryGetComponent<ItemPickupNet>(out var pickup) ? pickup.ModelRotation : Vector3.zero;
+        return root.localRotation * Quaternion.Euler(extra);
+    }
 
     // The hang point is a child named "HangPoint" if there is one, otherwise the top middle of the meshes.
     private static HangShape GetHangShape(GameObject prefab)
