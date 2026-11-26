@@ -63,8 +63,8 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     [Tooltip("Shown at the end of each cart line, to say it can be clicked off.")]
     [SerializeField] private string removeMark = "  <color=#ff8080>[-]</color>";
     [SerializeField] private Button checkoutButton;
-    [Tooltip("Optional: \"Add to the delivery on its way\" tick box. Shown only when this store has the Add On " +
-             "Shipments perk and a delivery is on its way; ticked, Checkout adds the cart to that delivery (it takes a " +
+    [Tooltip("Optional: \"Add to the delivery on its way\" tick box. Shown only once the team reaches EconomyManager's " +
+             "Add On Min Level (25) and a delivery is on its way; ticked, Checkout adds the cart to that delivery (it takes a " +
              "little longer) instead of starting a new one.")]
     [SerializeField] private Toggle addToDeliveryToggle;
     [SerializeField] private Button clearCartButton;
@@ -841,13 +841,13 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         RefreshAddOn();
     }
 
-    // Add To Delivery: only with the perk and something on its way to add to.
+    // Add To Delivery: only from the unlock level, with something on its way to add to.
     private void RefreshAddOn()
     {
         if (addToDeliveryToggle == null) return;
         var eco = EconomyManager.Instance;
         bool show = plot != null && eco != null && eco.IsSpawned &&
-                    ProgressionManager.StoreStat(plot, PerkStat.AddOnShipments) > 0f && eco.AddOnTarget(plot.PlotId) >= 0;
+                    eco.CanAddOn(LocalTeam) && eco.AddOnTarget(plot.PlotId) >= 0;
         if (addToDeliveryToggle.gameObject.activeSelf != show) addToDeliveryToggle.gameObject.SetActive(show);
         if (!show && addToDeliveryToggle.isOn) addToDeliveryToggle.SetIsOnWithoutNotify(false);
     }
