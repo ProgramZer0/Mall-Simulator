@@ -91,6 +91,11 @@ public class DeliveryTruck : NetworkBehaviour, IPlayerUsable
     public ulong TeamId => teamId.Value;
     public Phase CurrentPhase => (Phase)phase.Value;
     public bool DoorOpen => doorOpen.Value;
+
+    private readonly NetworkVariable<bool> closing = new(false);
+    /// <summary>Its time's up: the door's coming down (or will) and it's leaving. Can't be opened now.</summary>
+    public bool Closing => closing.Value;
+    public void ServerSetClosing(bool on) => closing.Value = on;
     public int BayIndex => bay.Value;
     /// <summary>Done driving in (the shipment can go in).</summary>
     public bool Arrived => CurrentPhase == Phase.Parked || (CurrentPhase == Phase.Arriving && Progress >= 1f);
@@ -159,6 +164,7 @@ public class DeliveryTruck : NetworkBehaviour, IPlayerUsable
     public void ServerLeave()
     {
         doorOpen.Value = false;
+        closing.Value = true;
         phase.Value = (byte)Phase.Leaving;
         phaseStart.Value = NetworkManager.ServerTime.Time;
     }
@@ -245,7 +251,7 @@ public class DeliveryTruck : NetworkBehaviour, IPlayerUsable
 
     public string Prompt(ulong clientId)
     {
-        if (!IsSpawned || doorOpen.Value || CurrentPhase != Phase.Parked) return null;
+        if (!IsSpawned || doorOpen.Value || closing.Value || CurrentPhase != Phase.Parked) return null;
         return MallManager.GetTeamOf(clientId) == teamId.Value ? "F: Open the dock door" : null;
     }
 
@@ -254,7 +260,7 @@ public class DeliveryTruck : NetworkBehaviour, IPlayerUsable
     [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     private void RequestOpenRpc(RpcParams rpcParams = default)
     {
-        if (CurrentPhase != Phase.Parked || doorOpen.Value) return;
+        if (CurrentPhase != Phase.Parked || doorOpen.Value || closing.Value) return;
         if (MallManager.GetTeamOf(rpcParams.Receive.SenderClientId) != teamId.Value) return;
         doorOpen.Value = true;
         Sfx.ForAll(Cue.DeliveryArrived, transform.position);

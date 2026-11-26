@@ -394,6 +394,14 @@ public class MallManager : NetworkBehaviour
     /// Nobody may set things down here: the loading docks (deliveries are only picked up there),
     /// unless it's onto a cart standing at the dock.
     /// </summary>
+    /// <summary>In a delivery truck's cargo space: things only come out of a truck, never go back in.</summary>
+    public static bool IsInTruck(Vector3 targetPosition)
+    {
+        foreach (var truck in DeliveryTruck.All)
+            if (truck != null && truck.IsSpawned && truck.CargoContains(targetPosition)) return true;
+        return false;
+    }
+
     public static bool IsNoPlaceZone(Vector3 targetPosition) =>
         LoadingDockZone.GetDockAt(targetPosition) != null && CartNet.FindCartAt(targetPosition) == null;
 

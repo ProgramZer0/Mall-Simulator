@@ -56,7 +56,7 @@ public class ShipmentsApp : MonoBehaviour, IPhoneApp
         if (content == null || Time.unscaledTime < nextRefresh) return;
         nextRefresh = Time.unscaledTime + 1f;
         var list = Orders();
-        if (Shape(list) != shape) { Build(); return; }
+        if (Shape(list) + confirming != shape) { Build(); return; }
         foreach (var (label, id) in statuses)
             foreach (var o in list)
                 if (o.orderId == id && label != null) label.text = Status(o);
@@ -77,13 +77,15 @@ public class ShipmentsApp : MonoBehaviour, IPhoneApp
         return sb.ToString();
     }
 
+    private int confirming = -1; // the delivery being asked about (Send it off now)
+
     private void Build()
     {
         nextRefresh = Time.unscaledTime + 1f;
         PhoneUI.Clear(content);
         statuses.Clear();
         var list = Orders();
-        shape = Shape(list);
+        shape = Shape(list) + confirming;
         float y = style.padding;
         if (list.Count == 0)
         {
@@ -104,6 +106,32 @@ public class ShipmentsApp : MonoBehaviour, IPhoneApp
             var status = PhoneUI.Text(content, Status(o), y, style.rowHeight, style, false, TextAlignmentOptions.Left);
             statuses.Add((status, o.orderId));
             y += style.rowHeight;
+
+            // At the dock: send it off now (asks first).
+            if (o.truckSize >= 0 && (o.stage == EconomyManager.OrderInfo.AtDock || o.stage == EconomyManager.OrderInfo.Unloading))
+            {
+                int id = o.orderId;
+                if (confirming == id)
+                {
+                    var ask = PhoneUI.Text(content, "<color=#ffb060>Send this truck off now?</color> Everything still on it goes " +
+                                           "with it, and there's no refund.", y, style.rowHeight * 1.6f, style, true);
+                    y += style.rowHeight * 1.6f;
+                    PhoneUI.Button(content, "Yes, send it off", y, style.rowHeight, style, () =>
+                    {
+                        confirming = -1;
+                        if (EconomyManager.Instance != null) EconomyManager.Instance.RequestSendOff(id);
+                        Build();
+                    });
+                    y += style.rowHeight + style.spacing;
+                    PhoneUI.Button(content, "Cancel", y, style.rowHeight, style, () => { confirming = -1; Build(); });
+                    y += style.rowHeight + style.spacing;
+                }
+                else
+                {
+                    PhoneUI.Button(content, "Send it off now", y, style.rowHeight, style, () => { confirming = id; Build(); });
+                    y += style.rowHeight + style.spacing;
+                }
+            }
 
             // What's in it.
             var sb = new StringBuilder();
