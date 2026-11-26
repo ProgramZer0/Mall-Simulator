@@ -22,6 +22,9 @@ public class LicenseCard : MonoBehaviour, IPointerEnterHandler, IPointerExitHand
     public GameObject franchiseMark;
     [Tooltip("Optional: tinted with the screen's Franchise Tint on franchise cards (e.g. the card's background).")]
     public Graphic tintTarget;
+    [Tooltip("Optional: shown while it's locked (your team's level is too low). Without it, the screen's Locked " +
+             "Icon is laid over the picture.")]
+    public GameObject lockedMark;
 
     public event Action<LicenseCard, bool> Hovered;
 

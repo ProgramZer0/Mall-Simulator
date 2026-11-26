@@ -44,6 +44,9 @@ public class PhoneScreen : MonoBehaviour
     [SerializeField, Min(1)] private int columns = 3;
     [SerializeField] private Vector2 cellSize = new(90f, 100f);
     [SerializeField] private Vector2 spacing = new(10f, 10f);
+    [Tooltip("The icon grid sits in the middle of App Grid, left to right (off: from its left edge). A short last row " +
+             "keeps to the columns above it.")]
+    [SerializeField] private bool centerGrid = true;
     [SerializeField] private TMP_Text titleText;
     [SerializeField] private string homeTitle = "";
     [SerializeField] private Button backButton;
@@ -209,10 +212,14 @@ public class PhoneScreen : MonoBehaviour
             {
                 var b = Instantiate(appButtonPrefab, appGrid);
                 var rt = (RectTransform)b.transform;
-                rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
-                rt.pivot = new Vector2(0f, 1f);
+                float ax = centerGrid ? 0.5f : 0f;
+                rt.anchorMin = rt.anchorMax = new Vector2(ax, 1f);
+                rt.pivot = new Vector2(ax, 1f);
                 rt.sizeDelta = cellSize;
-                rt.anchoredPosition = new Vector2((i % columns) * (cellSize.x + spacing.x), -(i / columns) * (cellSize.y + spacing.y));
+                int cols = Mathf.Max(1, Mathf.Min(columns, apps.Count)); // (fewer apps than columns: those centred)
+                float col = i % columns;
+                float x = centerGrid ? (col - (cols - 1) * 0.5f) * (cellSize.x + spacing.x) : col * (cellSize.x + spacing.x);
+                rt.anchoredPosition = new Vector2(x, -(i / columns) * (cellSize.y + spacing.y));
                 var app = (IPhoneApp)apps[i];
                 if (b.label != null) b.label.text = app.AppName;
                 if (b.icon != null && app.Icon != null) b.icon.sprite = app.Icon;

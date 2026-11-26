@@ -17,6 +17,9 @@ public class PerkRow : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     public TMP_Text rankText;
     [Tooltip("Optional: shown once it's maxed (a check mark).")]
     public GameObject maxedMark;
+    [Tooltip("Optional: shown while it's locked (the perk it needs isn't bought yet). Without it, the screen's " +
+             "Locked Icon is laid over the picture.")]
+    public GameObject lockedMark;
 
     /// <summary>The pointer went over (true) or off (false) this perk.</summary>
     public event Action<PerkRow, bool> Hovered;

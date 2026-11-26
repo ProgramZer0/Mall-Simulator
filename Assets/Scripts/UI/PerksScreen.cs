@@ -49,6 +49,10 @@ public class PerksScreen : MonoBehaviour, IShopScreen
     [SerializeField] private TMP_Text tooltipDescriptionText;
     [SerializeField] private Vector2 tooltipOffset = new(8f, 0f);
 
+    [Tooltip("A padlock laid over a perk's picture while the perk it needs isn't bought yet (or use each row's " +
+             "Locked Mark). Empty: no padlock.")]
+    [SerializeField] private Sprite lockedIcon;
+
     [Header("Other")]
     [SerializeField] private TMP_Text summaryText;
     [SerializeField] private Button resetButton;
@@ -263,6 +267,8 @@ public class PerksScreen : MonoBehaviour, IShopScreen
             if (row.buyButton != null) row.buyButton.interactable = pm.CanBuyPerk(id, perk, out _);
             if (row.rankText != null) row.rankText.text = perk.maxRank > 1 ? $"{rank}/{perk.maxRank}" : "";
             if (row.maxedMark != null) row.maxedMark.SetActive(rank >= perk.maxRank);
+            bool locked = perk.requires != null && pm.GetRank(id, perk.requires.id) < perk.requiresRank;
+            LockOverlay.Show(row.icon, ref row.lockedMark, lockedIcon, locked);
         }
         if (hovered != null) ShowTooltip(hovered);
 

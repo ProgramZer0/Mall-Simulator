@@ -17,6 +17,9 @@ using UnityEngine;
 /// </summary>
 public class LicensesScreen : MonoBehaviour, IShopScreen
 {
+    [Tooltip("A padlock laid over a license's picture while your team's level is too low for it (or use each " +
+             "card's Locked Mark). Empty: no padlock.")]
+    [SerializeField] private Sprite lockedIcon;
     [SerializeField] private LicenseCard cardPrefab;
     [SerializeField] private RectTransform cardParent;
     [Tooltip("Optional: a second Scroll View's Content for your team's licenses. They move there from Card Parent; " +
@@ -196,6 +199,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
             bool mine = lm.Holds(team, l.id);
             if (cards[i].button != null) cards[i].button.interactable = mine || lm.CanBuy(team, l, out _);
             if (cards[i].ownedMark != null) cards[i].ownedMark.SetActive(mine);
+            LockOverlay.Show(cards[i].icon, ref cards[i].lockedMark, lockedIcon, !mine && l.minLevel > ProgressionManager.LevelOf(team));
             if (cards[i].countText != null)
                 cards[i].countText.text = l.perMall > 0 ? $"{Mathf.Max(0, l.perMall - lm.HolderCount(l.id))} left" : "";
         }
