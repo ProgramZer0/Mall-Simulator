@@ -148,6 +148,7 @@ public class CustomerNavMesh : MonoBehaviour
             if (!building.isDone) return;
             building = null;
             Ready = true;
+            Escalator.AfterBuild(); // their links onto the new floor, and checked
             if (logBuilds)
                 Debug.Log($"[CustomerNavMesh] Updated in {buildTimer.ElapsedMilliseconds} ms ({prepMs:0.0} ms of it on the main thread, {sources.Count} colliders, over {BuiltBounds.min} to {BuiltBounds.max}).", this);
         }

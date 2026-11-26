@@ -644,7 +644,9 @@ public class EconomyManager : NetworkBehaviour
                           : Mathf.Max(minDeliverySeconds, TruckTime(baseTime, loadAll, truckSize) * sooner),
                 stampTime = NetworkManager.ServerTime.Time,
                 blocked = false,
-                inLine = oneDeliveryAtATime && HasOrderFor(plotId, waitingOnly: truckSize >= 0),
+                // Trucks don't wait in line to set off: they all come, and only one per store parks and
+                // unloads at a time (the rest wait for a bay). Shipment-spot deliveries keep the line.
+                inLine = truckSize < 0 && oneDeliveryAtATime && HasOrderFor(plotId),
                 cost = (int)Mathf.Min(int.MaxValue, loadCost),
                 truckSize = truckSize,
                 stage = OrderInfo.OnItsWay,
