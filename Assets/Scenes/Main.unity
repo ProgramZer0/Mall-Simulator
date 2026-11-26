@@ -3845,7 +3845,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.ScrollRect
   m_Content: {fileID: 1450809710}
-  m_Horizontal: 1
+  m_Horizontal: 0
   m_Vertical: 1
   m_MovementType: 1
   m_Elasticity: 0.1
@@ -15082,7 +15082,7 @@ MonoBehaviour:
   maxTemptation: 10
   alarmChance: 0.15
   watchedRange: 6
-  fleeSpeed: 2.1
+  fleeSpeed: 6
   fleeRunDistance: 8
   closedStoreHurry: 1.8
   storeDoorwayRadius: 1.6
