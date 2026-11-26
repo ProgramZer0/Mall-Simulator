@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1001 &5842079801789959583
+--- !u!1001 &5151828394245669985
 PrefabInstance:
   m_ObjectHideFlags: 0
   serializedVersion: 2
@@ -10,7 +10,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: itemId
-      value: 772
+      value: 844
       objectReference: {fileID: 0}
     - target: {fileID: -2491506767347114586, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: unitsPerCrate
@@ -26,7 +26,7 @@ PrefabInstance:
       objectReference: {fileID: 1345669002355921250, guid: 7dc7f82cf192bb047bf5ff61b807d344, type: 3}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.id
-      value: 772
+      value: 844
       objectReference: {fileID: 0}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: autoName
@@ -35,7 +35,7 @@ PrefabInstance:
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.icon
       value: 
-      objectReference: {fileID: 21300000, guid: 1b5a0006633ba4a40a18a2ee516fbb75, type: 3}
+      objectReference: {fileID: 21300000, guid: ddf4a71417c82b24c97be57db9e0ff50, type: 3}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.price
       value: 240
@@ -130,7 +130,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8513666520626042969, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: GlobalObjectIdHash
-      value: 3976362417
+      value: 1686302937
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

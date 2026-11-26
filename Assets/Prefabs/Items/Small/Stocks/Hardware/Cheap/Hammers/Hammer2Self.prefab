@@ -113,6 +113,8 @@ MonoBehaviour:
     handVisualPrefab: {fileID: 0}
     worldNetworkPrefab: {fileID: 0}
     sizeClass: 1
+    wallFacesOtherWay: 0
+    noStacking: 1
     showInShop: 0
     icon: {fileID: 21300000, guid: 4c90d2a8471c59048a97151df19682c4, type: 3}
     categories:
