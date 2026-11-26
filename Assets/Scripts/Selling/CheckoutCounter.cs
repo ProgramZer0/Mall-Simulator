@@ -953,6 +953,12 @@ public class CheckoutCounter : NetworkBehaviour
             int start = Mathf.Max(0, lines.Count - Mathf.Max(1, screenLines));
             for (int i = start; i < lines.Count; i++)
                 sb.Append(NameOf(lines[i].itemId)).Append("  ").Append(FormatAmount(lines[i].priceCents)).Append('\n');
+            // Paying by card: what's being typed on the keypad, as it's typed.
+            if (s.phase == Phase.AwaitingPayment && s.method == PayMethod.Card && (s.keypadCents > 0 || s.keypadEntered != 0))
+            {
+                string state2 = s.keypadEntered == 0 ? "" : s.keypadCents == s.totalCents ? "   (entered)" : "   (doesn't match the total)";
+                sb.Append('\n').Append("Card amount: ").Append(FormatAmount(s.keypadCents)).Append(state2);
+            }
             screenItems.text = sb.ToString().TrimEnd();
         }
         if (screenTotal != null) screenTotal.text = $"Total {FormatAmount(s.totalCents)}";
@@ -962,7 +968,10 @@ public class CheckoutCounter : NetworkBehaviour
             string info;
             if (!string.IsNullOrEmpty(message)) info = message;
             else if (s.phase == Phase.Scanning) info = items.Count > 0 ? "Scan items" : "Next customer, please";
-            else if (s.method == PayMethod.Card) info = s.moneyTaken != 0 ? "Swipe the card" : "Card";
+            else if (s.method == PayMethod.Card)
+                info = s.moneyTaken == 0 ? "Card"
+                     : kind == Kind.Cheap && (s.keypadEntered == 0 || s.keypadCents != s.totalCents) ? "Type the total, then Enter"
+                     : "Swipe the card";
             else if (s.keypadEntered != 0)
                 info = s.keypadCents >= s.totalCents
                     ? $"Paid {FormatAmount(s.keypadCents)}   Change {FormatAmount(s.keypadCents - s.totalCents)}"

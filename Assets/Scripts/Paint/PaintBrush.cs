@@ -318,6 +318,7 @@ public class PaintBrush : NetworkBehaviour
         {
             if (!PaintParts.IsPaintable(item.gameObject)) { prompt = "This can't be painted"; return; }
             if (IsStock(item)) { prompt = "Stock stays the color it was bought in"; return; }
+            if (!CanRepaint(item)) { prompt = "This keeps the color it was bought in"; return; }
             var plot = PlotOf(item);
             if (plot == null || !plot.IsAuthorized(OwnerClientId)) { prompt = "Not in your store"; return; }
             // Items can have several paint zones (a door's frame and its doors): the one pointed at.
@@ -444,11 +445,16 @@ public class PaintBrush : NetworkBehaviour
     // is part of buying it.
     private static bool IsStock(ItemPickupNet item) => item != null && (item.IsStockCrate || Sellable.IsSellable(item.ItemId));
 
+    // Its item's Can Repaint (ticked unless set otherwise).
+    private static bool CanRepaint(ItemPickupNet item) =>
+        item == null || ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(item.ItemId, out var def) || def.canRepaint;
+
     [Rpc(SendTo.Server)]
     private void RequestPaintItemRpc(NetworkObjectReference itemRef, int zone, byte paint, RpcParams rpcParams = default)
     {
         if (!itemRef.TryGet(out NetworkObject no) || !no.TryGetComponent<ItemPickupNet>(out var item)) { DLog("Host: item not found."); return; }
         if (IsStock(item)) { DLog($"Host: {Describe(item)} is stock: it keeps the color it was bought in."); return; }
+        if (!CanRepaint(item)) { DLog($"Host: {Describe(item)} can't be repainted (Can Repaint off)."); return; }
         int zones = PaintParts.ZonesOf(item.gameObject).Count;
         if (zone < 0 || zone >= zones) { DLog($"Host: {Describe(item)} has {zones} zone(s), not zone {zone}."); return; }
         if (PaintSet.Get(item.Paint, zone) == paint) { DLog($"Host: {Describe(item)} zone {zone} is already {PaintPalette.NameOf(paint)}."); return; }

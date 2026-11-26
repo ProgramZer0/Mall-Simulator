@@ -198,6 +198,9 @@ public class ItemDef
     public bool wallFacesOtherWay;
     [Tooltip("On shelves, only one layer: its products are never stacked on top of each other (perfume, bottles).")]
     public bool noStacking;
+    [Tooltip("Can be painted with the paint brush once it's bought and placed. Off: it keeps the color it was " +
+             "ordered in. (Stock never can.)")]
+    public bool canRepaint = true;
 
     /// <summary>What's held in the hand: its own, else its size's default.</summary>
     public GameObject HandVisualPrefab
