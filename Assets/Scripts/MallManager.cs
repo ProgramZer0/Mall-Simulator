@@ -326,6 +326,11 @@ public class MallManager : NetworkBehaviour
     /// </summary>
     public bool IsWorkZoneFor(ulong clientId, Vector3 worldPoint)
     {
+        // In a parked delivery truck with its door open: unloading it, like the dock it's backed into
+        // (the truck usually stands outside the dock's own boxes). Shut, or driving: no.
+        foreach (var truck in DeliveryTruck.All)
+            if (truck != null && truck.IsSpawned && truck.CargoContains(worldPoint))
+                return truck.DoorOpen && truck.CurrentPhase == DeliveryTruck.Phase.Parked;
         var plot = GetPlotAt(worldPoint);
         if (plot != null) return plot.IsAuthorized(clientId);
         return LoadingDockZone.GetDockAt(worldPoint) != null;
