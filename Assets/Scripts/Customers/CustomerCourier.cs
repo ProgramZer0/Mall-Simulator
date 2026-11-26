@@ -23,7 +23,7 @@ public partial class CustomerManager
 
     private const byte CourierLook = 0x40; // the look byte without the child bit: a Courier Looks number
 
-    private struct Package { public int itemId; public byte paint; public ulong team; public StorePlot plot; }
+    private struct Package { public int itemId; public byte paint; public ulong team; public StorePlot plot; public int orderId; }
     private readonly Dictionary<ushort, Package> packages = new();      // host: who carries what
     private readonly Dictionary<ushort, int> carrying = new();          // every machine: the item each carries (for its look)
 
@@ -31,7 +31,7 @@ public partial class CustomerManager
     /// Host: send a delivery guy to this store with one package (one item). False if he can't come (no
     /// way in, no entrance to the store): then the caller sets it down itself.
     /// </summary>
-    public bool ServerSendCourier(StorePlot plot, ulong team, int itemId, byte paint)
+    public bool ServerSendCourier(StorePlot plot, ulong team, int itemId, byte paint, int orderId = -1)
     {
         if (!IsServer || plot == null || !entrances.TryGetValue(plot, out var ways) || ways.Count == 0) return false;
         var sp = PickSpawnPoint(null);
@@ -50,7 +50,7 @@ public partial class CustomerManager
         c.goalEntrance = ways[0];
         c.mode = Mode.Courier;
         c.endUntil = 0f; // (milling-about timer, reused: when he gives up waiting)
-        packages[c.id] = new Package { itemId = itemId, paint = paint, team = team, plot = plot };
+        packages[c.id] = new Package { itemId = itemId, paint = paint, team = team, plot = plot, orderId = orderId };
         SetMark(c, LostMark.Courier);
         ShowCarry(c.id, itemId);
         CarryRpc(c.id, itemId);
@@ -73,6 +73,7 @@ public partial class CustomerManager
             if (NotificationManager.Instance != null)
                 NotificationManager.Instance.ServerNotifyTeamText(p.team, "Delivery's here",
                     $"A delivery guy is waiting outside {p.plot.DisplayName} with your {ItemName(p.itemId)}: take it from him (F).");
+            if (p.orderId >= 0 && EconomyManager.Instance != null) EconomyManager.Instance.ServerCourierWaiting(p.orderId, courierWaitSeconds);
             Log(c, "waiting outside the store with the package");
             return;
         }
@@ -93,6 +94,7 @@ public partial class CustomerManager
             return true;
         }
         packages.Remove(c.id);
+        if (p.orderId >= 0 && EconomyManager.Instance != null) EconomyManager.Instance.ServerCourierDone(p.orderId);
         Log(c, $"handed the package to client {clientId}");
         CourierLeave(c);
         return true;
@@ -104,6 +106,7 @@ public partial class CustomerManager
         if (packages.TryGetValue(c.id, out var p))
         {
             packages.Remove(c.id);
+            if (p.orderId >= 0 && EconomyManager.Instance != null) EconomyManager.Instance.ServerCourierDone(p.orderId);
             Vector3 at = c.goalEntrance.outside;
             if (c.arrived) at = c.pos + Quaternion.Euler(0f, c.yaw, 0f) * Vector3.forward * 0.6f;
             float yaw = c.yaw;

@@ -19,6 +19,8 @@ public class ShipmentsApp : MonoBehaviour, IPhoneApp
     [SerializeField] private Sprite icon;
     [SerializeField] private PhoneUI.Style style = new();
     [SerializeField] private string[] truckNames = { "Small truck", "Truck", "Big truck" };
+    [Tooltip("What a special market delivery (brought by the delivery guy) is called in the list.")]
+    [SerializeField] private string byHandName = "Delivery guy";
 
     public string AppName => appName;
     public Sprite Icon => icon;
@@ -32,7 +34,8 @@ public class ShipmentsApp : MonoBehaviour, IPhoneApp
             if (em == null || !em.IsSpawned || nm == null) return 0;
             int n = 0;
             foreach (var o in em.GetOrdersForTeam(MallManager.GetTeamOf(nm.LocalClientId)))
-                if (o.truckSize >= 0 && o.stage >= EconomyManager.OrderInfo.AtDock) n++;
+                if ((o.truckSize >= 0 && o.stage >= EconomyManager.OrderInfo.AtDock) ||
+                    (o.truckSize == EconomyManager.OrderInfo.ByHand && o.stage == EconomyManager.OrderInfo.CourierWaiting)) n++; // a delivery guy waiting too
             return n;
         }
     }
@@ -98,7 +101,8 @@ public class ShipmentsApp : MonoBehaviour, IPhoneApp
         foreach (var o in list)
         {
             string store = mall != null && mall.TryGetPlot(o.plotId, out var plot) ? plot.DisplayName : "your store";
-            string truck = o.truckSize >= 0 && o.truckSize < truckNames.Length ? $"{truckNames[o.truckSize]} · " : "";
+            string truck = o.truckSize == EconomyManager.OrderInfo.ByHand ? $"{byHandName} · "
+                         : o.truckSize >= 0 && o.truckSize < truckNames.Length ? $"{truckNames[o.truckSize]} · " : "";
             var head = PhoneUI.Text(content, $"<b>{store}</b>  <size=80%>{truck}{o.boxCount} thing{(o.boxCount == 1 ? "" : "s")}</size>",
                                     y, style.rowHeight, style, false, TextAlignmentOptions.Left);
             head.color = PhoneTheme.AccentOf(style);
@@ -160,6 +164,14 @@ public class ShipmentsApp : MonoBehaviour, IPhoneApp
         {
             int s = Mathf.Max(0, Mathf.CeilToInt((float)seconds));
             return $"{s / 60}:{s % 60:00}";
+        }
+        if (o.truckSize == EconomyManager.OrderInfo.ByHand)
+        {
+            if (o.stage == EconomyManager.OrderInfo.CourierWaiting)
+                return $"<color=#7fd0ff>Waiting outside the store: take it from him (F)!</color> Leaves it on the floor in {Clock(o.deadline - now)}";
+            if (o.stage == EconomyManager.OrderInfo.CourierComing) return "On his way in to the store";
+            float handLeft = em != null ? em.SecondsUntil(o) : o.remaining;
+            return handLeft > 0f ? $"Coming by hand: arrives in {Clock(handLeft)}" : "Setting off";
         }
         if (o.inLine) return "In line behind another delivery";
         if (o.truckSize < 0)

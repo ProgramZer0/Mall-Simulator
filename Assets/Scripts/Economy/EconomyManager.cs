@@ -151,6 +151,10 @@ public class EconomyManager : NetworkBehaviour
         public double deadline;  // trucks: server time the truck leaves (stages 2 and 3)
 
         public const byte OnItsWay = 0, WaitingForBay = 1, AtDock = 2, Unloading = 3, Closing = 4;
+        /// <summary>Truck Size for a delivery brought by hand (the delivery guy): one item.</summary>
+        public const sbyte ByHand = -2;
+        /// <summary>By hand: he's walking in (Courier Coming), or waiting outside the store until Deadline (Courier Waiting).</summary>
+        public const byte CourierComing = 5, CourierWaiting = 6;
 
         public void NetworkSerialize<T>(BufferSerializer<T> s) where T : IReaderWriter
         {
@@ -443,7 +447,7 @@ public class EconomyManager : NetworkBehaviour
         for (int i = 0; i < orders.Count; i++)
         {
             var o = orders[i];
-            if (o.plotId != plotId || o.blocked) continue;
+            if (o.plotId != plotId || o.blocked || o.truckSize == OrderInfo.ByHand) continue;
             if (o.truckSize >= 0 && o.stage != OrderInfo.OnItsWay) continue; // a truck that's here already
             if (o.truckSize < 0 && !o.inLine && o.RemainingAt(IsSpawned ? NetworkManager.ServerTime.Time : 0d) <= 0f) continue; // arriving now
             if (o.orderId > bestId) { best = i; bestId = o.orderId; } // the latest
@@ -585,10 +589,22 @@ public class EconomyManager : NetworkBehaviour
         // By hand (special market): one delivery guy per item, once its delivery time is up.
         if (byCourier && CustomerManager.Instance != null)
         {
-            double due = NetworkManager.ServerTime.Time + Mathf.Max(minDeliverySeconds, slowest) * sooner;
+            // Each its own delivery (Truck Size By Hand), so the Shipments app shows every guy.
+            float wait = Mathf.Max(minDeliverySeconds, slowest) * sooner;
+            int n = 0;
             for (int i = 0; i < itemIds.Length; i++)
-                for (int q = 0; q < quantities[i]; q++)
-                    couriers.Add(new CourierJob { plotId = plotId, team = team, itemId = itemIds[i], paint = lineColors[i], due = due + q * courierGapSeconds });
+                if (ItemCatalog.Instance.TryGet(itemIds[i], out var handDef))
+                    for (int q = 0; q < quantities[i]; q++)
+                    {
+                        int id = nextOrderId++;
+                        orders.Add(new OrderInfo
+                        {
+                            orderId = id, teamId = team, plotId = plotId, boxCount = 1,
+                            remaining = wait + n++ * courierGapSeconds, stampTime = NetworkManager.ServerTime.Time,
+                            cost = UnitCost(i, handDef), truckSize = OrderInfo.ByHand, stage = OrderInfo.OnItsWay,
+                        });
+                        orderLines.Add(new OrderLine { orderId = id, itemId = itemIds[i], quantity = 1, paint = lineColors[i] });
+                    }
             if (NotificationManager.Instance != null)
                 NotificationManager.Instance.ServerNotifyTeamText(team, "Market order on its way",
                     $"{boxes} delivery guy{(boxes == 1 ? "" : "s")} will bring it to {plot.DisplayName} by hand.");
@@ -682,7 +698,7 @@ public class EconomyManager : NetworkBehaviour
     private void Update()
     {
         ImGuiHost.Set(this, showDebugHud && Debug.isDebugBuild && IsSpawned ? drawHud ??= DrawHud : null);
-        if (IsServer && IsSpawned) { ServerSpawnQueued(); ServerUpdateOrders(); ServerDespawnGoneTrucks(); if (couriers.Count > 0) ServerSendCouriers(NetworkManager.ServerTime.Time); }
+        if (IsServer && IsSpawned) { ServerSpawnQueued(); ServerUpdateOrders(); ServerDespawnGoneTrucks(); }
         if (devHotkeys && IsSpawned && !UIState.IsMenuOpen) DevKeys();
     }
 
@@ -694,7 +710,8 @@ public class EconomyManager : NetworkBehaviour
     private bool HasOrderFor(int plotId, bool waitingOnly = false)
     {
         // (Trucks: one at the dock doesn't hold up the next one's clock; only one on its way does.)
-        foreach (var o in orders.Each()) if (o.plotId == plotId && (!waitingOnly || o.truckSize < 0 || o.stage < OrderInfo.AtDock)) return true;
+        foreach (var o in orders.Each())
+            if (o.plotId == plotId && o.truckSize != OrderInfo.ByHand && (!waitingOnly || o.truckSize < 0 || o.stage < OrderInfo.AtDock)) return true;
         return false;
     }
 
@@ -711,7 +728,7 @@ public class EconomyManager : NetworkBehaviour
                 for (int j = 0; j < orders.Count && !ahead; j++)
                 {
                     var other = orders[j];
-                    if (j != i && other.plotId == o.plotId && (!other.inLine || other.orderId < o.orderId) &&
+                    if (j != i && other.plotId == o.plotId && other.truckSize != OrderInfo.ByHand && (!other.inLine || other.orderId < o.orderId) &&
                         !(o.truckSize >= 0 && other.truckSize >= 0 && other.stage >= OrderInfo.AtDock)) ahead = true; // a truck at the dock doesn't hold it up
                 }
             if (ahead) continue;
@@ -750,6 +767,11 @@ public class EconomyManager : NetworkBehaviour
             {
                 if (left <= 0f || o.stage > OrderInfo.OnItsWay) ServerTruckStep(i, o, plot, now);
                 continue;
+            }
+            if (o.truckSize == OrderInfo.ByHand)
+            {
+                if (left <= 0f && o.stage == OrderInfo.OnItsWay) ServerCourierSetOff(i, o, plot);
+                continue; // (the delivery guy says when he's done)
             }
             if (left > 0f) continue;
 
@@ -902,24 +924,41 @@ public class EconomyManager : NetworkBehaviour
     private static int BaseIdOf(int itemId) =>
         ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(itemId, out var def) ? def.BaseId : itemId;
 
-    // Delivery guys due to set off (host only; not saved, not shown in the Shipments app).
-    private struct CourierJob { public int plotId, itemId; public ulong team; public byte paint; public double due; }
-    private readonly List<CourierJob> couriers = new();
-
-    private void ServerSendCouriers(double now)
+    // By hand: time's up, the delivery guy sets off (or, if he can't come, the package is set down at the store).
+    private void ServerCourierSetOff(int index, OrderInfo o, StorePlot plot)
     {
-        for (int i = couriers.Count - 1; i >= 0; i--)
+        var lines = GetOrderLines(o.orderId);
+        if (lines.Count == 0) { ServerRemoveOrderAt(index); return; }
+        var line = lines[0];
+        if (CustomerManager.Instance != null && CustomerManager.Instance.ServerSendCourier(plot, o.teamId, line.itemId, line.paint, o.orderId))
         {
-            var job = couriers[i];
-            if (now < job.due) continue;
-            couriers.RemoveAt(i);
-            var mall = MallManager.Instance;
-            if (mall == null || !mall.TryGetPlot(job.plotId, out var plot)) continue;
-            if (CustomerManager.Instance != null && CustomerManager.Instance.ServerSendCourier(plot, job.team, job.itemId, job.paint)) continue;
-            // He can't come (no way in): the package is set down in front of the store.
-            Vector3 at = plot.transform.position;
-            ServerDropPackage(job.itemId, job.paint, at, 0f);
+            o.stage = OrderInfo.CourierComing;
+            orders[index] = o;
+            return;
         }
+        ServerDropPackage(line.itemId, line.paint, plot.transform.position, 0f);
+        ServerRemoveOrderAt(index);
+    }
+
+    /// <summary>Host: the delivery guy for this order is waiting outside the store, for this many seconds.</summary>
+    public void ServerCourierWaiting(int orderId, float seconds)
+    {
+        for (int i = 0; i < orders.Count; i++)
+        {
+            var o = orders[i];
+            if (o.orderId != orderId) continue;
+            o.stage = OrderInfo.CourierWaiting;
+            o.deadline = NetworkManager.ServerTime.Time + seconds;
+            orders[i] = o;
+            return;
+        }
+    }
+
+    /// <summary>Host: the delivery guy's package was taken, or left on the floor: the delivery's done.</summary>
+    public void ServerCourierDone(int orderId)
+    {
+        for (int i = 0; i < orders.Count; i++)
+            if (orders[i].orderId == orderId) { ServerRemoveOrderAt(i); return; }
     }
 
     /// <summary>
