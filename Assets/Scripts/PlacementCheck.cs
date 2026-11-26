@@ -598,6 +598,28 @@ public static class PlacementCheck
     /// The world-space box the fit test uses (already shrunk by the skin).
     /// Returns false if the item has no measurable size.
     /// </summary>
+    private static readonly Collider[] UnderHits = new Collider[16];
+
+    /// <summary>
+    /// No Stacking: is this item being set down right on top of one of the same item (perfume on perfume)?
+    /// Looks just under its base.
+    /// </summary>
+    public static bool StacksOnSame(ItemDef def, Vector3 position, Quaternion rotation)
+    {
+        if (def == null || !def.noStacking || !GetTestBox(def, position, rotation, out Vector3 center, out Vector3 half)) return false;
+        float bottom = Mathf.Abs((rotation * new Vector3(half.x, 0f, 0f)).y) + Mathf.Abs((rotation * new Vector3(0f, half.y, 0f)).y) +
+                       Mathf.Abs((rotation * new Vector3(0f, 0f, half.z)).y); // how far down its base is, as it's turned
+        Vector3 probe = center + Vector3.down * (bottom + 0.04f);
+        int n = Physics.OverlapBoxNonAlloc(probe, new Vector3(Mathf.Max(0.02f, half.x * 0.7f), 0.05f, Mathf.Max(0.02f, half.z * 0.7f)),
+                                           UnderHits, Quaternion.Euler(0f, rotation.eulerAngles.y, 0f), ~0, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < n; i++)
+        {
+            var under = UnderHits[i].GetComponentInParent<ItemPickupNet>();
+            if (under != null && under.ItemId == def.id) return true;
+        }
+        return false;
+    }
+
     public static bool GetTestBox(ItemDef def, Vector3 position, Quaternion rotation,
                                   out Vector3 center, out Vector3 halfExtents)
     {

@@ -63,7 +63,7 @@ public static class TooltipPrefabTool
         t.fontSize = size;
         t.fontStyle = style;
         t.color = color;
-        t.enableWordWrapping = true;
+        t.textWrappingMode = TextWrappingModes.Normal;
         t.raycastTarget = false;
         return t;
     }
