@@ -25,6 +25,9 @@ public class TruckBay : MonoBehaviour, IPlayerUsable
     [SerializeField] private AudioClip doorMovingLoop;
     [SerializeField, Range(0f, 1f)] private float doorVolume = 0.8f;
 
+    /// <summary>How long its door takes to open or shut.</summary>
+    public float DoorSeconds => door != null ? doorSeconds : 0f;
+
     private Vector3 doorClosedPos;
     private float doorT;
     private bool doorWasOpen;
