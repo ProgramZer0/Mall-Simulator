@@ -638,6 +638,10 @@ public class PlayerInventoryNet : NetworkBehaviour
         var spot = cart == null && box != null ? DockStorageSpot.At(position) : null;
         if (spot != null && spot.Owner == sender && EconomyManager.Instance != null)
             box.ServerReserve(MallManager.GetTeamOf(sender), EconomyManager.Instance.ReservationSeconds);
+        // Unloaded off a truck onto one of the placer's own store's shipment spots: held for their team,
+        // the full hold counted from now (when it was set down).
+        else if (cart == null && box != null && MallManager.IsOwnShipmentArea(sender, position) && EconomyManager.Instance != null)
+            box.ServerReserve(MallManager.GetTeamOf(sender), EconomyManager.Instance.ReservationSeconds);
         else if (leftAtDock) box.ServerReserve(ulong.MaxValue, 0f);
         // Otherwise still the delivery of the team that ordered it (not held for them any more, just marked theirs).
         else if (box != null && heldOrderedBy != ulong.MaxValue) box.ServerReserve(heldOrderedBy, 0f);
