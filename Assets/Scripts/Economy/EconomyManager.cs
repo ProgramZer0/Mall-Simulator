@@ -83,6 +83,9 @@ public class EconomyManager : NetworkBehaviour
     [Tooltip("Seconds to unload once the door's open; then the door shuts and the truck leaves with whatever's " +
              "still on it (no refund).")]
     [SerializeField, Min(10f)] private float truckUnloadSeconds = 120f;
+    [Tooltip("Bigger trucks get longer: Truck Door Wait Seconds and Truck Unload Seconds are multiplied by this, one " +
+             "per truck size (in Truck Prefabs' order, smallest first; past the end: the last one). 1 = as set.")]
+    [SerializeField] private float[] truckTimeBySize = { 1f, 1.5f, 2f };
     [Tooltip("Emptied: it leaves this many seconds later.")]
     [SerializeField, Min(0f)] private float truckLeaveWhenEmptySeconds = 4f;
     [Tooltip("Someone's in the truck as its door comes down: it goes back up, their team pays this fine, and they " +
@@ -953,7 +956,7 @@ public class EconomyManager : NetworkBehaviour
                 made.NetworkObject.Spawn(true);
                 made.ServerSetup(o.orderId, o.teamId, free.Index, free.transform.rotation, prefabTurn);
                 o.stage = OrderInfo.AtDock;
-                o.deadline = now + truckDoorWaitSeconds + 10f; // (+ driving in)
+                o.deadline = now + truckDoorWaitSeconds * TimeScale(o.truckSize) + 10f; // (+ driving in)
                 orders[index] = o;
                 return;
             }
@@ -965,7 +968,7 @@ public class EconomyManager : NetworkBehaviour
                     if (!truck.Arrived) return;
                     ServerLoadTruck(o, truck);
                     truck.ServerParked();
-                    o.deadline = now + truckDoorWaitSeconds;
+                    o.deadline = now + truckDoorWaitSeconds * TimeScale(o.truckSize);
                     orders[index] = o;
                     if (NotificationManager.Instance != null)
                         NotificationManager.Instance.ServerNotifyTeam(o.teamId, NotificationManager.Kind.Delivered, o.plotId, o.boxCount);
@@ -975,7 +978,7 @@ public class EconomyManager : NetworkBehaviour
                 {
                     // Opening it adds Truck Unload Seconds to the time it had left.
                     o.stage = OrderInfo.Unloading;
-                    o.deadline = System.Math.Max(o.deadline, now) + truckUnloadSeconds;
+                    o.deadline = System.Math.Max(o.deadline, now) + truckUnloadSeconds * TimeScale(o.truckSize);
                     orders[index] = o;
                     return;
                 }
@@ -1043,6 +1046,13 @@ public class EconomyManager : NetworkBehaviour
                 return;
             }
         }
+    }
+
+    // Truck Time By Size for this truck size.
+    private float TimeScale(int truckSize)
+    {
+        if (truckTimeBySize == null || truckTimeBySize.Length == 0 || truckSize < 0) return 1f;
+        return Mathf.Max(0.1f, truckTimeBySize[Mathf.Min(truckSize, truckTimeBySize.Length - 1)]);
     }
 
     // How long its bay's door takes to come down (a second if it has none).
