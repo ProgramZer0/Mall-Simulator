@@ -733,12 +733,14 @@ public class CheckoutCounter : NetworkBehaviour
 
         if (state.Value.customer == customer)
         {
-            foreach (var it in scanned)
+            // The scanned ones go straight back on the belt, at the front where they were (not into the
+            // line behind everything else, where they'd only show once the belt had room).
+            for (int k = 0; k < scanned.Count; k++)
             {
-                var back = it;
+                var back = scanned[k];
                 back.customer = LeftBehind;
                 back.key = nextKey++;
-                waiting.Insert(0, back);
+                items.Insert(k, back);
             }
             scanned.Clear();
             sale.Clear();
@@ -862,6 +864,8 @@ public class CheckoutCounter : NetworkBehaviour
     private readonly Dictionary<int, Shown> shown = new();
     private readonly HashSet<int> present = new();
 
+    private readonly List<int> gone = new();
+
     private void UpdateModels()
     {
         GetBelt(out Vector3 front, out Vector3 forward, out Vector3 up, out float length, out _);
@@ -883,7 +887,11 @@ public class CheckoutCounter : NetworkBehaviour
                     for (int j = i + 1; j < items.Count; j++) present.Add(items[j].key);
                     break;
                 }
-                s = new Shown { go = MakeItemModel(it), offset = length - len };
+                // Put back ahead of things already showing (a customer walked off after being scanned):
+                // appears where it goes, not at the back sliding through the rest.
+                bool ahead = false;
+                for (int j = i + 1; j < items.Count && !ahead; j++) ahead = shown.ContainsKey(items[j].key);
+                s = new Shown { go = MakeItemModel(it), offset = ahead ? target : length - len };
                 shown[it.key] = s;
             }
             s.offset = Mathf.Max(target, Mathf.MoveTowards(s.offset, target, step));
@@ -891,9 +899,11 @@ public class CheckoutCounter : NetworkBehaviour
             target = s.offset + len + itemGap;
         }
 
-        if (shown.Count == present.Count) return;
-        var gone = new List<int>();
+        // Gone from the belt (scanned, taken): its model goes now. (Not just when the counts differ: one
+        // taken while a new one joined kept the counts equal, so the taken one's model hung on.)
+        gone.Clear();
         foreach (var kv in shown) if (!present.Contains(kv.Key)) gone.Add(kv.Key);
+        if (gone.Count == 0) return;
         foreach (int key in gone)
         {
             if (shown[key].go != null) Destroy(shown[key].go);

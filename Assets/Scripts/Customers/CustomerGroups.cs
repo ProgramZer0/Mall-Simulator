@@ -65,22 +65,23 @@ public partial class CustomerManager
     }
 
     // Bystanders come on their own count (Max Bystanders), alone or as a bystander group.
-    private void UpdateBystanderArrivals(int bystanders)
+    private int UpdateBystanderArrivals(int bystanders, int shoppers)
     {
-        if (bystanders >= maxBystanders) { bystanderCredit = 0f; return; }
+        if (bystanders >= maxBystanders || !RoomForPeople(shoppers, bystanders)) { bystanderCredit = 0f; return bystanders; }
         bystanderCredit += bystanderArrivalsPerMinute / 60f * Time.deltaTime;
-        while (bystanderCredit >= 1f && bystanders < maxBystanders)
+        while (bystanderCredit >= 1f && bystanders < maxBystanders && RoomForPeople(shoppers, bystanders))
         {
             bystanderCredit -= 1f;
             var sp = PickSpawnPoint(null);
-            if (sp == null) return;
+            if (sp == null) return bystanders;
             var def = Random.value < groupChance ? PickGroupDef(true) : null;
             if (def != null) { int n = SpawnGroup(def, sp.transform.position); bystanders += Mathf.Max(1, n); bystanderCredit -= Mathf.Max(0, n - 1); continue; }
             var p = PickPersonality(true);
-            if (p == null) { bystanderCredit = 0f; return; } // no bystander personalities
+            if (p == null) { bystanderCredit = 0f; return bystanders; } // no bystander personalities
             Spawn(sp.transform.position, out _, null, p);
             bystanders++;
         }
+        return bystanders;
     }
 
     private CustomerPersonality PickMemberPersonality(CustomerGroupDef def)

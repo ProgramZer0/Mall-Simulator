@@ -28,6 +28,11 @@ public partial class CustomerManager : NetworkBehaviour
     [Header("Who comes")]
     [Tooltip("Most customers in the mall at once.")]
     [SerializeField] private int maxCustomers = 40;
+    [Tooltip("Hard limits, after events, seasons and reputation have done their sums: never more shoppers than " +
+             "this, and never more people in all (shoppers + bystanders) than Max People. Keeps the host from being " +
+             "swamped whatever an event multiplies Max Customers by. 0 = no limit.")]
+    [SerializeField, Min(0)] private int maxShoppersEver = 400;
+    [SerializeField, Min(0)] private int maxPeople = 600;
     [Tooltip("New customers per minute while there's room (only while at least one store is open).")]
     [SerializeField] private float arrivalsPerMinute = 30f;
     [Tooltip("Bystanders (Bystander personalities, and groups led by one) come on top of Max Customers, up to " +
@@ -738,7 +743,17 @@ public partial class CustomerManager : NetworkBehaviour
     private static float Factor(float percent) => Mathf.Max(0f, 1f + percent / 100f);
 
     /// <summary>Most customers at once right now (events, seasons and the mall's reputation included).</summary>
-    public int MaxCustomersNow => Mathf.Max(0, Mathf.RoundToInt(maxCustomers * eventMax * Reputation));
+    public int MaxCustomersNow
+    {
+        get
+        {
+            int n = Mathf.Max(0, Mathf.RoundToInt(maxCustomers * eventMax * Reputation));
+            return maxShoppersEver > 0 ? Mathf.Min(n, maxShoppersEver) : n; // the hard limit, after everything
+        }
+    }
+
+    /// <summary>Room for one more person (shopper or bystander) under Max People?</summary>
+    private bool RoomForPeople(int shoppers, int bystanders) => maxPeople <= 0 || shoppers + bystanders < maxPeople;
 
     /// <summary>New customers per minute right now (events, seasons and the mall's reputation included).</summary>
     public float ArrivalsPerMinuteNow => arrivalsPerMinute * eventArrivals * Reputation;
@@ -788,12 +803,12 @@ public partial class CustomerManager : NetworkBehaviour
         if (eventsDirty) RefreshEventEffects();
         int shoppers = 0, bystanders = 0;
         foreach (var c in customers) { if (c.bystanderSlot) bystanders++; else shoppers++; }
-        UpdateBystanderArrivals(bystanders);
+        bystanders = UpdateBystanderArrivals(bystanders, shoppers);
 
         int max = MaxCustomersNow;
-        if (shoppers >= max || !AnyStoreOpen()) { spawnCredit = 0f; return; }
+        if (shoppers >= max || !AnyStoreOpen() || !RoomForPeople(shoppers, bystanders)) { spawnCredit = 0f; return; }
         spawnCredit += ArrivalsPerMinuteNow / 60f * Time.deltaTime;
-        while (spawnCredit >= 1f && shoppers < max)
+        while (spawnCredit >= 1f && shoppers < max && RoomForPeople(shoppers, bystanders))
         {
             spawnCredit -= 1f;
             var sp = PickSpawnPoint(null);
