@@ -704,7 +704,7 @@ MonoBehaviour:
   canvas: {fileID: 8544258598755942248}
   wallpaperImage: {fileID: 8331957576352380609}
   themeDesignedApps: 1
-  buttonPrefab: {fileID: 290798372888040304, guid: 9b72d634d3adca147b7a6fcf34e469b7, type: 3}
+  buttonPrefab: {fileID: 290798372888040304, guid: 20169d09851f76c4687d437cbd21f9b4, type: 3}
   animateApps: 1
   appOpenSeconds: 0.2
   appCloseSeconds: 0.16
@@ -1915,6 +1915,9 @@ MonoBehaviour:
   lineHeight: 0.12
   arriveDistance: 2.5
   showSeconds: 120
+  debugLog: 1
+  debugEvery: 3
+  debugDrawPartial: 1
 --- !u!1 &5383457620296598097
 GameObject:
   m_ObjectHideFlags: 0

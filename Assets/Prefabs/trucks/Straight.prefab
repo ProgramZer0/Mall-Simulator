@@ -29,7 +29,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4387481985238747019}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.7071068, y: 0, z: -0, w: 0.7071067}
+  m_LocalRotation: {x: 0, y: 0.7072302, z: 0.7069834, w: 0}
   m_LocalPosition: {x: -67.41, y: 4.92, z: 46.43}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -37,7 +37,7 @@ Transform:
   - {fileID: 347293075008011118}
   - {fileID: 7177546164878740660}
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: -89.98, y: 180, z: 0}
 --- !u!33 &3785536926667430978
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -139,6 +139,11 @@ MonoBehaviour:
   doorSeconds: 0.8
   driveDistance: 12
   driveSeconds: 3
+  engineLoop: {fileID: 0}
+  reversingLoop: {fileID: 0}
+  parkSound: {fileID: 0}
+  departSound: {fileID: 0}
+  volume: 0.8
 --- !u!64 &2564722293741627054
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -228,7 +233,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4202184575352363138, guid: ff73fcf2111a8b04096466e6d483332c, type: 3}
       propertyPath: GlobalObjectIdHash
-      value: 2332589003
+      value: 3649232167
       objectReference: {fileID: 0}
     - target: {fileID: 4202184575352363138, guid: ff73fcf2111a8b04096466e6d483332c, type: 3}
       propertyPath: InScenePlacedSourceGlobalObjectIdHash

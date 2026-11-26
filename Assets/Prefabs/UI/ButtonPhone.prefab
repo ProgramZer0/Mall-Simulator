@@ -12,9 +12,8 @@ GameObject:
   - component: {fileID: 8125999185687043249}
   - component: {fileID: 8960230677247160706}
   - component: {fileID: 290798372888040304}
-  - component: {fileID: -3706748838955633284}
   m_Layer: 5
-  m_Name: PhoneButton
+  m_Name: ButtonPhone
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -99,12 +98,12 @@ MonoBehaviour:
     m_SelectOnRight: {fileID: 0}
   m_Transition: 1
   m_Colors:
-    m_NormalColor: {r: 1, g: 1, b: 1, a: 0.33333334}
-    m_HighlightedColor: {r: 1, g: 0.9411765, b: 0.003921569, a: 0.7372549}
+    m_NormalColor: {r: 1, g: 1, b: 1, a: 0.32941177}
+    m_HighlightedColor: {r: 1, g: 1, b: 1, a: 0.83137256}
     m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0}
-    m_SelectedColor: {r: 1, g: 0.9411765, b: 0.003921569, a: 0.7372549}
+    m_SelectedColor: {r: 1, g: 1, b: 1, a: 0.8509804}
     m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0}
-    m_ColorMultiplier: 1
+    m_ColorMultiplier: 1.97
     m_FadeDuration: 0.05
   m_SpriteState:
     m_HighlightedSprite: {fileID: 0}
@@ -122,19 +121,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &-3706748838955633284
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5149660942869774581}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 10ee446ca2cf48289d25d0a2a2150225, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PhoneThemeRole
-  role: 4
 --- !u!1 &6935024668211189333
 GameObject:
   m_ObjectHideFlags: 0
@@ -146,7 +132,6 @@ GameObject:
   - component: {fileID: 1005943563499691466}
   - component: {fileID: 5734078023251546125}
   - component: {fileID: 5313251952478118287}
-  - component: {fileID: 5582082182420170555}
   m_Layer: 5
   m_Name: Text (TMP)
   m_TagString: Untagged
@@ -273,16 +258,3 @@ MonoBehaviour:
   m_hasFontAssetChanged: 0
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
---- !u!114 &5582082182420170555
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6935024668211189333}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 10ee446ca2cf48289d25d0a2a2150225, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PhoneThemeRole
-  role: 0
