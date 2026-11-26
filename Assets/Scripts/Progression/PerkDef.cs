@@ -25,6 +25,8 @@ public enum PerkStat
     PriceTolerance,
     /// <summary>Customer AI: more customers in the store at once (0.1 = 10% more).</summary>
     Capacity,
+    /// <summary>Unlock: check out onto a delivery already on its way (Add To Delivery in the shop). Any amount above 0.</summary>
+    AddOnShipments,
 }
 
 /// <summary>

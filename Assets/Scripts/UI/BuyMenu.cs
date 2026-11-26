@@ -63,6 +63,10 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     [Tooltip("Shown at the end of each cart line, to say it can be clicked off.")]
     [SerializeField] private string removeMark = "  <color=#ff8080>[-]</color>";
     [SerializeField] private Button checkoutButton;
+    [Tooltip("Optional: \"Add to the delivery on its way\" tick box. Shown only when this store has the Add On " +
+             "Shipments perk and a delivery is on its way; ticked, Checkout adds the cart to that delivery (it takes a " +
+             "little longer) instead of starting a new one.")]
+    [SerializeField] private Toggle addToDeliveryToggle;
     [SerializeField] private Button clearCartButton;
     [Tooltip("Clear Cart asks first: the first press changes its label to this, a second press within Confirm " +
              "Seconds clears. Empty: clears at once.")]
@@ -717,7 +721,8 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         waitingForResult = true;
         if (checkoutButton != null) checkoutButton.interactable = false;
         ShowStatus("Ordering...");
-        eco.Order(plot.PlotId, itemIds, quantities, paints, GetDeliverySeconds(itemIds, quantities));
+        bool addOn = addToDeliveryToggle != null && addToDeliveryToggle.gameObject.activeInHierarchy && addToDeliveryToggle.isOn;
+        eco.Order(plot.PlotId, itemIds, quantities, paints, GetDeliverySeconds(itemIds, quantities), addOn);
     }
 
     /// <summary>
@@ -796,6 +801,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         EconomyManager.OrderResult.LevelTooLow => "Your team's level is too low for one of those items.",
         EconomyManager.OrderResult.NeedsLicense => "One of those items needs a license (Licenses tab).",
         EconomyManager.OrderResult.NeedsFranchise => "One of those items belongs to a franchise your team doesn't hold.",
+        EconomyManager.OrderResult.CantAddOn => "Couldn't add to the delivery on its way (it's here already, or it wouldn't fit): order it on its own.",
         _ => r.ToString(),
     };
 
@@ -832,6 +838,27 @@ public class BuyMenu : MonoBehaviour, IShopScreen
 
         if (checkoutButton != null) checkoutButton.interactable = cart.Count > 0 && !waitingForResult;
         if (clearCartButton != null) clearCartButton.interactable = cart.Count > 0;
+        RefreshAddOn();
+    }
+
+    // Add To Delivery: only with the perk and something on its way to add to.
+    private void RefreshAddOn()
+    {
+        if (addToDeliveryToggle == null) return;
+        var eco = EconomyManager.Instance;
+        bool show = plot != null && eco != null && eco.IsSpawned &&
+                    ProgressionManager.StoreStat(plot, PerkStat.AddOnShipments) > 0f && eco.AddOnTarget(plot.PlotId) >= 0;
+        if (addToDeliveryToggle.gameObject.activeSelf != show) addToDeliveryToggle.gameObject.SetActive(show);
+        if (!show && addToDeliveryToggle.isOn) addToDeliveryToggle.SetIsOnWithoutNotify(false);
+    }
+
+    private float nextAddOnCheck;
+
+    private void LateUpdate()
+    {
+        if (addToDeliveryToggle == null || Time.unscaledTime < nextAddOnCheck) return;
+        nextAddOnCheck = Time.unscaledTime + 1f; // deliveries arrive while the shop's open
+        RefreshAddOn();
     }
 
     // Money itself is shown by MoneyDisplay; here it only matters for the cart's "not enough money" note.
