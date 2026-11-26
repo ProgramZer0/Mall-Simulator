@@ -41,7 +41,7 @@ public class EconomyManager : NetworkBehaviour
         LevelTooLow,     // an item needs a higher team level (ItemDef Min Level)
         NeedsLicense,    // an item is in a licensed category the team doesn't hold (LicenseManager)
         NeedsFranchise,  // a franchise's item, and the team doesn't hold the franchise (FranchiseManager)
-        CantAddOn,       // Add To Delivery: no perk, nothing on its way to add to, or it wouldn't fit in that truck
+        CantAddOn,       // Add To Delivery: level too low, nothing on its way to add to, or it wouldn't fit in that truck
     }
 
     [Header("Deliveries")]
@@ -90,7 +90,9 @@ public class EconomyManager : NetworkBehaviour
     [Tooltip("Bigger trucks get longer: Truck Door Wait Seconds and Truck Unload Seconds are multiplied by this, one " +
              "per truck size (in Truck Prefabs' order, smallest first; past the end: the last one). 1 = as set.")]
     [SerializeField] private float[] truckTimeBySize = { 1f, 1.5f, 2f };
-    [Tooltip("Add To Delivery (the AddOnShipments perk): items checked out onto a delivery already on its way add " +
+    [Tooltip("Team level that unlocks Add To Delivery (checking out onto a delivery already on its way).")]
+    [SerializeField, Min(0)] private int addOnMinLevel = 25;
+    [Tooltip("Add To Delivery: items checked out onto a delivery already on its way add " +
              "this many seconds to its time, plus Add On Time Share of the new items' own slowest delivery time " +
              "(then Logistics perks).")]
     [SerializeField, Min(0f)] private float addOnSeconds = 30f;
@@ -422,6 +424,12 @@ public class EconomyManager : NetworkBehaviour
     public void Order(int plotId, int[] itemIds, int[] quantities, byte[] paints, float deliverySeconds = -1f, bool addOn = false) =>
         RequestOrderRpc(plotId, itemIds, quantities, paints ?? new byte[0], deliverySeconds, addOn);
 
+    /// <summary>Has this team reached the level for Add To Delivery (Add On Min Level)?</summary>
+    public bool CanAddOn(ulong team) => ProgressionManager.LevelOf(team) >= addOnMinLevel;
+
+    /// <summary>Team level that unlocks Add To Delivery.</summary>
+    public int AddOnMinLevel => addOnMinLevel;
+
     /// <summary>
     /// Is there a delivery on its way to this store that more could be added to (still counting down or in
     /// line, not at the dock yet)? -1: none. Server or client.
@@ -520,7 +528,7 @@ public class EconomyManager : NetworkBehaviour
         sbyte addOnTruck = -1;
         if (addOn)
         {
-            if (ProgressionManager.StoreStat(plot, PerkStat.AddOnShipments) <= 0f) return OrderResult.CantAddOn;
+            if (!CanAddOn(team)) return OrderResult.CantAddOn;
             addTo = AddOnTarget(plotId);
             if (addTo < 0 || orders[addTo].teamId != team) return OrderResult.CantAddOn;
             var target = orders[addTo];
