@@ -77,13 +77,25 @@ public class CustomerNoWalkZone : MonoBehaviour
     /// (Find My Dock) still can. Avoid: the avoid area (walkable, but costly to path through). Reaches a
     /// little below the box, so a box sat on the floor still marks it.
     /// </summary>
-    public NavMeshBuildSource ToSource(int avoidArea, int noWalkArea) => new()
+    public NavMeshBuildSource ToSource(int avoidArea, int noWalkArea, float agentRadius)
     {
-        shape = NavMeshBuildSourceShape.ModifierBox,
-        transform = transform.localToWorldMatrix * Matrix4x4.Translate(box.center + Vector3.down * 0.15f),
-        size = box.size + Vector3.up * 0.3f,
-        area = kind == Kind.Avoid ? avoidArea : noWalkArea,
-    };
+        // In world units (any scale). It only marks the floor inside it, so it reaches down to the floor
+        // under a box that floats a little (1.5 m), and No Walk is grown by the customers' radius all
+        // round: the clearance they kept when it was a solid block.
+        Vector3 scale = transform.lossyScale;
+        Vector3 size = Vector3.Scale(box.size, new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z)));
+        float pad = kind == Kind.Avoid ? 0f : agentRadius;
+        const float reachDown = 1.5f;
+        size += new Vector3(pad * 2f, reachDown, pad * 2f);
+        Vector3 center = transform.TransformPoint(box.center) + Vector3.down * (reachDown * 0.5f);
+        return new NavMeshBuildSource
+        {
+            shape = NavMeshBuildSourceShape.ModifierBox,
+            transform = Matrix4x4.TRS(center, transform.rotation, Vector3.one),
+            size = size,
+            area = kind == Kind.Avoid ? avoidArea : noWalkArea,
+        };
+    }
 
     public Bounds WorldBounds => box.bounds;
 

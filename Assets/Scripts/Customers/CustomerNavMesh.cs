@@ -179,7 +179,7 @@ public class CustomerNavMesh : MonoBehaviour
         AddItems(bounds);
         AddDoorBlockers(bounds);
         foreach (var zone in CustomerNoWalkZone.All)
-            if (zone != null && bounds.Intersects(zone.WorldBounds)) sources.Add(zone.ToSource(avoidArea, StaffArea));
+            if (zone != null && bounds.Intersects(zone.WorldBounds)) sources.Add(zone.ToSource(avoidArea, StaffArea, agentRadius));
 
         if (data == null)
         {

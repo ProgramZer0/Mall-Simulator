@@ -145,6 +145,7 @@ public class ShipmentsApp : MonoBehaviour, IPhoneApp
             case EconomyManager.OrderInfo.WaitingForBay: return "<color=#ffb060>Waiting for a free truck bay</color>";
             case EconomyManager.OrderInfo.AtDock: return $"<color=#7fd0ff>At the dock: open it (F)!</color> Leaves in {Clock(o.deadline - now)}";
             case EconomyManager.OrderInfo.Unloading: return $"<color=#7fff9a>Unloading:</color> leaves in {Clock(o.deadline - now)}";
+            case EconomyManager.OrderInfo.Closing: return "<color=#ffd27f>Door closing:</color> leaving now";
             default:
                 float left = em != null ? em.SecondsUntil(o) : o.remaining;
                 return left > 0f ? $"On its way: arrives in {Clock(left)}" : "Pulling in";

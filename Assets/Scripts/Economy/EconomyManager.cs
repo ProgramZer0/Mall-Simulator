@@ -85,6 +85,10 @@ public class EconomyManager : NetworkBehaviour
     [SerializeField, Min(10f)] private float truckUnloadSeconds = 120f;
     [Tooltip("Emptied: it leaves this many seconds later.")]
     [SerializeField, Min(0f)] private float truckLeaveWhenEmptySeconds = 4f;
+    [Tooltip("Someone's in the truck as its door comes down: it goes back up, their team pays this fine, and they " +
+             "get Truck Get Out Seconds more to get out.")]
+    [SerializeField, Min(0)] private int truckInsideFine = 50;
+    [SerializeField, Min(1f)] private float truckGetOutSeconds = 10f;
 
     [Header("Development")]
     [Tooltip("O = order Dev Order Item Id for the store you're standing in. M = give your team Dev Money Amount. " +
@@ -126,10 +130,10 @@ public class EconomyManager : NetworkBehaviour
         public bool inLine;      // behind another delivery to the same store: its clock hasn't started
         public int cost;         // what it cost (for a refund)
         public sbyte truckSize;  // which truck brings it (-1: none, set down on the shipment spots)
-        public byte stage;       // trucks: 0 on its way, 1 waiting for a bay, 2 at the dock (door shut), 3 unloading
+        public byte stage;       // trucks: 0 on its way, 1 waiting for a bay, 2 at the dock (door shut), 3 unloading, 4 door closing
         public double deadline;  // trucks: server time the truck leaves (stages 2 and 3)
 
-        public const byte OnItsWay = 0, WaitingForBay = 1, AtDock = 2, Unloading = 3;
+        public const byte OnItsWay = 0, WaitingForBay = 1, AtDock = 2, Unloading = 3, Closing = 4;
 
         public void NetworkSerialize<T>(BufferSerializer<T> s) where T : IReaderWriter
         {
@@ -969,8 +973,9 @@ public class EconomyManager : NetworkBehaviour
                 }
                 if (truck.DoorOpen)
                 {
+                    // Opening it adds Truck Unload Seconds to the time it had left.
                     o.stage = OrderInfo.Unloading;
-                    o.deadline = now + truckUnloadSeconds;
+                    o.deadline = System.Math.Max(o.deadline, now) + truckUnloadSeconds;
                     orders[index] = o;
                     return;
                 }
@@ -994,6 +999,43 @@ public class EconomyManager : NetworkBehaviour
                     orders[index] = o;
                 }
                 if (now < o.deadline) return;
+                // Time's up: the door comes all the way down first, then it drives off.
+                truck.ServerSetDoor(false);
+                o.stage = OrderInfo.Closing;
+                o.deadline = now + DoorSecondsAt(truck) + 0.3f;
+                orders[index] = o;
+                return;
+            }
+            case OrderInfo.Closing:
+            {
+                if (truck == null) { ServerRemoveOrderAt(index); return; }
+                // Someone's still inside: back up it goes, a fine, and a little longer to get out.
+                if (PlayerInTruck(truck, out ulong inside))
+                {
+                    truck.ServerSetDoor(true);
+                    ulong team = MallManager.GetTeamOf(inside);
+                    if (truckInsideFine > 0) ServerAddMoney(team, -truckInsideFine);
+                    o.stage = OrderInfo.Unloading;
+                    o.deadline = now + truckGetOutSeconds;
+                    orders[index] = o;
+                    if (NotificationManager.Instance != null)
+                    {
+                        string msg = $"Someone was inside the truck at {plot.DisplayName}'s dock as its door came down: " +
+                                     $"${truckInsideFine:N0} fine. {truckGetOutSeconds:0} seconds to get out.";
+                        NotificationManager.Instance.ServerNotifyTeamText(team, "Get out of the truck!", msg, alarm: true);
+                        if (o.teamId != team) NotificationManager.Instance.ServerNotifyTeamText(o.teamId, "Truck held up", msg);
+                    }
+                    return;
+                }
+                if (truck.DoorOpen) // opened again from outside (F) while it was coming down: down it comes
+                {
+                    truck.ServerSetDoor(false);
+                    o.deadline = now + DoorSecondsAt(truck) + 0.3f;
+                    orders[index] = o;
+                    return;
+                }
+                if (now < o.deadline) return;
+                int left = BoxesOnTruck(o.orderId, truck);
                 if (left > 0 && NotificationManager.Instance != null)
                     NotificationManager.Instance.ServerNotifyTeamText(o.teamId, "Truck left",
                         $"The truck at {plot.DisplayName}'s dock left with {left} thing{(left == 1 ? "" : "s")} still on it (no refund).");
@@ -1001,6 +1043,28 @@ public class EconomyManager : NetworkBehaviour
                 return;
             }
         }
+    }
+
+    // How long its bay's door takes to come down (a second if it has none).
+    private static float DoorSecondsAt(DeliveryTruck truck)
+    {
+        int i = truck.BayIndex;
+        return i >= 0 && i < TruckBay.All.Count && TruckBay.All[i] != null ? TruckBay.All[i].DoorSeconds : 1f;
+    }
+
+    // A player standing in the truck's cargo space?
+    private static bool PlayerInTruck(DeliveryTruck truck, out ulong clientId)
+    {
+        clientId = 0;
+        var nm = NetworkManager.Singleton;
+        if (nm == null) return false;
+        foreach (var client in nm.ConnectedClientsList)
+        {
+            var player = client.PlayerObject;
+            if (player == null) continue;
+            if (truck.CargoContains(player.transform.position + Vector3.up * 0.5f)) { clientId = client.ClientId; return true; }
+        }
+        return false;
     }
 
     private void SetStage(int index, OrderInfo o, byte stage)
