@@ -85,6 +85,10 @@ public class BuyMenu : MonoBehaviour, IShopScreen
              "picture for Hover Label and shows the tooltip, which has the name. Off: names and \"Buy\" as set up.")]
     [SerializeField] private bool compactTiles = true;
     [SerializeField] private string hoverLabel = "Click to buy";
+    [Tooltip("Hovered (tooltip and Click to buy showing): the item's picture fades to this, so the text reads easily. 0 = gone.")]
+    [SerializeField, Range(0f, 1f)] private float hoverIconAlpha = 0.15f;
+    [Tooltip("Seconds the picture takes to fade out and back in.")]
+    [SerializeField, Min(0f)] private float hoverIconFadeSeconds = 0.15f;
     [Tooltip("Hold Shift while clicking buy to add this many at once (sizes: Shift on + or - in the size pop-up).")]
     [SerializeField, Min(1)] private int shiftAmount = 5;
 
@@ -480,7 +484,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
     {
         if (go != null) go.SetActive(true);
         if (icon != null && def.icon != null) icon.sprite = def.icon;
-        if (icon != null) { icon.enabled = true; icon.canvasRenderer.SetAlpha(1f); }
+        if (icon != null) { icon.enabled = true; icon.canvasRenderer.SetAlpha(1f); iconFades.Remove(icon); }
         if (nameText != null)
         {
             nameText.text = def.displayName;
@@ -532,7 +536,7 @@ public class BuyMenu : MonoBehaviour, IShopScreen
         bool show = over && button != null && button.interactable;
         // Faded out, not switched off: a switched-off picture stops catching the mouse, which reads as the
         // mouse leaving the tile (the tooltip and label would flicker off and on, or not show at all).
-        if (icon != null) icon.canvasRenderer.SetAlpha(show ? 0f : 1f);
+        if (icon != null) iconFades[icon] = show ? hoverIconAlpha : 1f; // faded in LateUpdate
         if (button != null) SetButtonLabel(button, show ? hoverLabel : "");
     }
 
@@ -854,8 +858,30 @@ public class BuyMenu : MonoBehaviour, IShopScreen
 
     private float nextAddOnCheck;
 
+    // Hovered tiles' pictures, fading toward where they're going (set every frame, after the button's own
+    // hover tint, which would otherwise put its alpha back).
+    private readonly Dictionary<Image, float> iconFades = new();
+    private readonly List<Image> iconsDone = new();
+
+    private void FadeIcons()
+    {
+        if (iconFades.Count == 0) return;
+        float step = hoverIconFadeSeconds > 0f ? Time.unscaledDeltaTime / hoverIconFadeSeconds : 1f;
+        iconsDone.Clear();
+        foreach (var kv in iconFades)
+        {
+            var img = kv.Key;
+            if (img == null) { iconsDone.Add(img); continue; }
+            float a = Mathf.MoveTowards(img.canvasRenderer.GetAlpha(), kv.Value, step);
+            img.canvasRenderer.SetAlpha(a);
+            if (Mathf.Approximately(a, 1f) && Mathf.Approximately(kv.Value, 1f)) iconsDone.Add(img); // back to normal
+        }
+        foreach (var img in iconsDone) iconFades.Remove(img);
+    }
+
     private void LateUpdate()
     {
+        FadeIcons();
         if (addToDeliveryToggle == null || Time.unscaledTime < nextAddOnCheck) return;
         nextAddOnCheck = Time.unscaledTime + 1f; // deliveries arrive while the shop's open
         RefreshAddOn();
