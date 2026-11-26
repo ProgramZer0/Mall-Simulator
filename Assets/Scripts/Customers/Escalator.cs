@@ -83,7 +83,7 @@ public class Escalator : MonoBehaviour
     }
 
     private string lastCheck;
-    private static readonly NavMeshPath testPath = new();
+    private static NavMeshPath testPath; // made on first use (Unity won't make one while loading the class)
 
     // Can a customer get from its start to its end? Says what's wrong if not.
     private void Check()
@@ -94,7 +94,7 @@ public class Escalator : MonoBehaviour
         else if (!startOnFloor) problem = $"no customer floor within 2 m of its start {Start} (put {(way == Way.Up ? "Bottom" : "Top")} on the landing, off the steps)";
         else if (!endOnFloor) problem = $"no customer floor within 2 m of its end {End} (put {(way == Way.Up ? "Top" : "Bottom")} on the landing, off the steps)";
         else if (!NavMesh.IsLinkValid(link)) problem = "its link didn't take (agent type?)";
-        else if (!NavMesh.CalculatePath(linkStart, linkEnd, CustomerNavMesh.CustomerMask, testPath) || testPath.status != NavMeshPathStatus.PathComplete)
+        else if (!NavMesh.CalculatePath(linkStart, linkEnd, CustomerNavMesh.CustomerMask, testPath ??= new NavMeshPath()) || testPath.status != NavMeshPathStatus.PathComplete)
             problem = $"a customer can't get from its start to its end ({testPath.status})";
         string text = problem == null ? "ok" : problem;
         if (text == lastCheck) return;
