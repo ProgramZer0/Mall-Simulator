@@ -238,7 +238,7 @@ public class PlayerInteractInput : NetworkBehaviour
                 // Something you could pick up, but with things on it: they come off first.
                 var under = hit.collider.GetComponentInParent<ItemPickupNet>();
                 var onTop = under != null && under.IsSpawned && !under.EditModeOnly &&
-                    MallManager.CanPickupOrPlace(OwnerClientId, transform.position, under.transform.position, hallwayPickup: under.IsStockCrate)
+                    MallManager.CanPickupOrPlace(OwnerClientId, transform.position, under.transform.position, hallwayPickup: under.IsStockCrate || under.GetComponent<ShipmentPackage>() != null)
                     ? under.ItemOnTop() : null;
                 lookedAtBuriedCartItem = onTop != null;
                 if (onTop != null)
@@ -650,7 +650,7 @@ public class PlayerInteractInput : NetworkBehaviour
         if (!Physics.Raycast(cam.transform.position, cam.transform.forward, out RaycastHit hit, interactRange, pickupMask)) return;
         var pickup = hit.collider.GetComponentInParent<ItemPickupNet>();
         if (pickup == null || !pickup.IsSpawned || pickup.EditModeOnly) return;
-        if (!MallManager.CanPickupOrPlace(OwnerClientId, transform.position, pickup.transform.position, hallwayPickup: pickup.IsStockCrate)) return;
+        if (!MallManager.CanPickupOrPlace(OwnerClientId, transform.position, pickup.transform.position, hallwayPickup: pickup.IsStockCrate || pickup.GetComponent<ShipmentPackage>() != null)) return;
         if (pickup.HasItemOnTop()) return; // "take the things on top off first" says that
         if (pickup.TryGetComponent<StockContainer>(out var shelf) && shelf.HasStock) return;
         if (pickup.TryGetComponent<CheckoutCounter>(out var counter) && counter.IsBusy) return;
@@ -728,6 +728,7 @@ public class PlayerInteractInput : NetworkBehaviour
             CustomerManager.LostMark.LostChild => "F: Help them find their family",
             CustomerManager.LostMark.Following => "Following you: take them to their parents",
             CustomerManager.LostMark.Searching => "They lost their child: find them (Lost & Found on your phone)",
+            CustomerManager.LostMark.Courier => "F: Take the package",
             _ => "F: Stop them and check their bag",
         };
     }

@@ -49,7 +49,7 @@ public partial class CustomerManager
     [SerializeField, Min(0f)] private float reunionXp = 30f;
 
     /// <summary>Who's lost, following a player, or searching (sent to everyone: the interact prompt).</summary>
-    public enum LostMark : byte { None, LostChild, Following, Searching }
+    public enum LostMark : byte { None, LostChild, Following, Searching, Courier }
 
     // Host: the clock the chance grows on (game start, then the last lost child), when it last rolled, and a
     // roll that came up (the next child walking the halls gets lost).

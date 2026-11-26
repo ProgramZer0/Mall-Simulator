@@ -97,6 +97,9 @@ public class EconomyManager : NetworkBehaviour
              "(then Logistics perks).")]
     [SerializeField, Min(0f)] private float addOnSeconds = 30f;
     [SerializeField, Range(0f, 1f)] private float addOnTimeShare = 0.25f;
+    [Tooltip("Special market orders come by hand (a delivery guy per item, see CustomerManager): seconds between " +
+             "one guy and the next for the same order.")]
+    [SerializeField, Min(0f)] private float courierGapSeconds = 3f;
     [Tooltip("Emptied: it leaves this many seconds later.")]
     [SerializeField, Min(0f)] private float truckLeaveWhenEmptySeconds = 4f;
     [Tooltip("Someone's in the truck as its door comes down: it goes back up, their team pays this fine, and they " +
@@ -472,7 +475,7 @@ public class EconomyManager : NetworkBehaviour
     /// <summary>Server: check, charge and start a delivery.</summary>
     public OrderResult ServerTryOrder(ulong clientId, int plotId, int[] itemIds, int[] quantities, float deliverySeconds,
                                       byte[] paints = null, int[] unitPrices = null, bool anyoneMayBuy = false,
-                                      bool addOn = false)
+                                      bool addOn = false, bool byCourier = false)
     {
         // Anyone May Buy: no level, license or franchise needed (the special market: first come, first served).
         // Unit Prices (optional, dollars per item, delivery included): a set price instead of the
@@ -579,6 +582,19 @@ public class EconomyManager : NetworkBehaviour
             lineColors[i] = paint;
         }
 
+        // By hand (special market): one delivery guy per item, once its delivery time is up.
+        if (byCourier && CustomerManager.Instance != null)
+        {
+            double due = NetworkManager.ServerTime.Time + Mathf.Max(minDeliverySeconds, slowest) * sooner;
+            for (int i = 0; i < itemIds.Length; i++)
+                for (int q = 0; q < quantities[i]; q++)
+                    couriers.Add(new CourierJob { plotId = plotId, team = team, itemId = itemIds[i], paint = lineColors[i], due = due + q * courierGapSeconds });
+            if (NotificationManager.Instance != null)
+                NotificationManager.Instance.ServerNotifyTeamText(team, "Market order on its way",
+                    $"{boxes} delivery guy{(boxes == 1 ? "" : "s")} will bring it to {plot.DisplayName} by hand.");
+            return OrderResult.Ordered;
+        }
+
         if (addTo >= 0)
         {
             // Onto the delivery on its way: its lines, count, cost and truck grow; it takes a little longer.
@@ -666,7 +682,7 @@ public class EconomyManager : NetworkBehaviour
     private void Update()
     {
         ImGuiHost.Set(this, showDebugHud && Debug.isDebugBuild && IsSpawned ? drawHud ??= DrawHud : null);
-        if (IsServer && IsSpawned) { ServerSpawnQueued(); ServerUpdateOrders(); ServerDespawnGoneTrucks(); }
+        if (IsServer && IsSpawned) { ServerSpawnQueued(); ServerUpdateOrders(); ServerDespawnGoneTrucks(); if (couriers.Count > 0) ServerSendCouriers(NetworkManager.ServerTime.Time); }
         if (devHotkeys && IsSpawned && !UIState.IsMenuOpen) DevKeys();
     }
 
@@ -885,6 +901,44 @@ public class EconomyManager : NetworkBehaviour
 
     private static int BaseIdOf(int itemId) =>
         ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(itemId, out var def) ? def.BaseId : itemId;
+
+    // Delivery guys due to set off (host only; not saved, not shown in the Shipments app).
+    private struct CourierJob { public int plotId, itemId; public ulong team; public byte paint; public double due; }
+    private readonly List<CourierJob> couriers = new();
+
+    private void ServerSendCouriers(double now)
+    {
+        for (int i = couriers.Count - 1; i >= 0; i--)
+        {
+            var job = couriers[i];
+            if (now < job.due) continue;
+            couriers.RemoveAt(i);
+            var mall = MallManager.Instance;
+            if (mall == null || !mall.TryGetPlot(job.plotId, out var plot)) continue;
+            if (CustomerManager.Instance != null && CustomerManager.Instance.ServerSendCourier(plot, job.team, job.itemId, job.paint)) continue;
+            // He can't come (no way in): the package is set down in front of the store.
+            Vector3 at = plot.transform.position;
+            ServerDropPackage(job.itemId, job.paint, at, 0f);
+        }
+    }
+
+    /// <summary>
+    /// Host: a package (the item's shipment box) set down on the floor here, held for nobody: anyone may
+    /// take it (the delivery guy's, left when nobody came).
+    /// </summary>
+    public void ServerDropPackage(int itemId, byte paint, Vector3 at, float yaw)
+    {
+        if (!IsServer || ItemCatalog.Instance == null || !ItemCatalog.Instance.TryGet(itemId, out var def)) return;
+        var prefab = def.GetShipmentPrefab();
+        if (prefab == null) return;
+        // On the floor: whatever's under the spot.
+        Vector3 floor = at;
+        if (Physics.Raycast(at + Vector3.up * 1.5f, Vector3.down, out var hit, 4f, ~0, QueryTriggerInteraction.Ignore)) floor = hit.point;
+        Quaternion rot = Quaternion.Euler(0f, yaw, 0f) * prefab.transform.rotation;
+        Vector3 pos = floor + Vector3.up * (PlacementCheck.PivotHeightAboveBase(prefab.gameObject));
+        var spawned = SpawnBox(prefab, itemId, paint, new Pose(pos, rot), ulong.MaxValue);
+        if (spawned != null && spawned.TryGetComponent<ShipmentPackage>(out var pkg)) pkg.ServerReserve(ulong.MaxValue, 0f); // anyone's
+    }
 
     private void ServerRemoveOrderAt(int index)
     {

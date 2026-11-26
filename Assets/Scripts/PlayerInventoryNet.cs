@@ -159,7 +159,8 @@ public class PlayerInventoryNet : NetworkBehaviour
 
         // Store rules: only items in your own store or a dock (or a stock crate lying in a hallway).
         if (!MallManager.CanPickupOrPlace(rpcParams.Receive.SenderClientId,
-                actor.transform.position, pickup.transform.position, hallwayPickup: pickup.IsStockCrate)) return;
+                actor.transform.position, pickup.transform.position,
+                hallwayPickup: pickup.IsStockCrate || pickupNO.GetComponent<ShipmentPackage>() != null)) return; // (a package left in a hallway too)
 
         // Deliveries are held for the team that ordered them for a while.
         // Something stacked on it (on a cart or anywhere): the things on top come off first (nothing is left floating).
@@ -202,6 +203,25 @@ public class PlayerInventoryNet : NetworkBehaviour
         pickupNO.Despawn(true);
 
         PlayItemSoundClientRpc(itemId, soundPos, false);
+    }
+
+    /// <summary>
+    /// Server: a delivery handed straight to this player (the delivery guy): as if they'd picked up its box.
+    /// Ordered By: the team it's for. False if their hands aren't empty.
+    /// </summary>
+    public bool ServerGiveDelivered(int itemId, uint paint, ulong orderedBy)
+    {
+        if (!IsServer || HeldItemId.Value != 0 || itemId == 0) return false;
+        HeldItemId.Value = itemId;
+        HeldPaint.Value = paint;
+        ulong mine = MallManager.GetTeamOf(OwnerClientId);
+        HeldFromTeam.Value = orderedBy != mine ? orderedBy : ulong.MaxValue; // someone else's: taking it to them helps
+        HeldBoxed.Value = true;
+        heldOrderedBy = orderedBy;
+        int perCrate = StockContainer.GetUnitsPerCrate(itemId);
+        HeldUnits.Value = perCrate;
+        PlayItemSoundClientRpc(itemId, transform.position, false);
+        return true;
     }
 
     /// <summary>Holding a stock crate that isn't full (and isn't someone else's delivery)?</summary>
@@ -637,6 +657,10 @@ public class PlayerInventoryNet : NetworkBehaviour
         // In the placer's own storage spot at the dock: held for their team (the usual delivery hold).
         var spot = cart == null && box != null ? DockStorageSpot.At(position) : null;
         if (spot != null && spot.Owner == sender && EconomyManager.Instance != null)
+            box.ServerReserve(MallManager.GetTeamOf(sender), EconomyManager.Instance.ReservationSeconds);
+        // Unloaded off a truck onto one of the placer's own store's shipment spots: held for their team,
+        // the full hold counted from now (when it was set down).
+        else if (cart == null && box != null && MallManager.IsOwnShipmentArea(sender, position) && EconomyManager.Instance != null)
             box.ServerReserve(MallManager.GetTeamOf(sender), EconomyManager.Instance.ReservationSeconds);
         else if (leftAtDock) box.ServerReserve(ulong.MaxValue, 0f);
         // Otherwise still the delivery of the team that ordered it (not held for them any more, just marked theirs).
