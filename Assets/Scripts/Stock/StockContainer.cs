@@ -1046,8 +1046,7 @@ public class StockContainer : NetworkBehaviour
             int nx = Mathf.Max(0, Mathf.FloorToInt((size.x + spacing) / cell.x));
             int ny = Mathf.Max(0, Mathf.FloorToInt((size.y + spacing) / cell.y));
             // Not stacked on itself (No Stacking on the item): one layer.
-            if (ItemCatalog.Instance != null && ItemCatalog.Instance.TryGet(itemId, out var stackDef) && stackDef.noStacking)
-                ny = Mathf.Min(ny, 1);
+            if (NoStacking(itemId, prefab)) ny = Mathf.Min(ny, 1);
             int nz = Mathf.Max(0, Mathf.FloorToInt((size.z + spacing) / cell.z));
             layout = new Layout { nx = nx, ny = ny, nz = nz, capacity = Mathf.Min(nx * ny * nz, max),
                                   slots = Mathf.Min(nx * ny * nz, max), cell = cell,
@@ -1067,6 +1066,24 @@ public class StockContainer : NetworkBehaviour
     }
 
     private static readonly Dictionary<GameObject, HangShape> HangShapes = new();
+
+    // No Stacking, ticked on the stock crate's item or on the product's own item (the one whose world
+    // prefab is the shelf model, if it's an item too).
+    private static bool NoStacking(int crateItemId, GameObject shelfPrefab)
+    {
+        var catalog = ItemCatalog.Instance;
+        if (catalog == null) return false;
+        if (catalog.TryGet(crateItemId, out var crate) && crate.noStacking) return true;
+        if (shelfPrefab == null) return false;
+        if (NoStackByModel.TryGetValue(shelfPrefab, out bool known)) return known;
+        bool found = false;
+        foreach (var d in catalog.Items)
+            if (d != null && d.noStacking && d.worldNetworkPrefab != null && d.worldNetworkPrefab.gameObject == shelfPrefab) { found = true; break; }
+        if (Application.isPlaying) NoStackByModel[shelfPrefab] = found;
+        return found;
+    }
+
+    private static readonly Dictionary<GameObject, bool> NoStackByModel = new();
 
     // How a shelf product's prefab stands: its root rotation and any Model Rotation.
     private static Quaternion ProductFix(GameObject prefab)
