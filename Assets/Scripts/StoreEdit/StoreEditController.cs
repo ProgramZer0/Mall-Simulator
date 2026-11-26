@@ -834,6 +834,8 @@ public class StoreEditController : NetworkBehaviour
         kitInfo = null;
     }
 
+    private bool warnedIdClash;
+
     private void StopApplyingKit(string message = null)
     {
         kitBox = null;
@@ -862,7 +864,20 @@ public class StoreEditController : NetworkBehaviour
 
         string why = null;
         int hung = CountHungOnFrontSlot(slot);
-        if (editPlot.GetFrontModuleId(slot) == module.ModuleId) why = $"This section is already {module.DisplayName}";
+        if (editPlot.GetFrontModuleId(slot) == module.ModuleId)
+        {
+            // The same id but not the same wall: two module types were given one Module Id.
+            string here = editPlot.GetFrontModuleName(slot);
+            why = here != module.DisplayName
+                ? $"Can't swap: this section ({here}) and {module.DisplayName} both have Module Id {module.ModuleId}. Give each WallModule its own Module Id"
+                : $"This section is already {module.DisplayName}";
+            if (here != module.DisplayName && !warnedIdClash)
+            {
+                warnedIdClash = true;
+                Debug.LogWarning($"[StoreEdit] Front wall types share Module Id {module.ModuleId}: '{here}' (in the scene) and " +
+                                 $"'{module.DisplayName}' (kit '{def.displayName}'). Every WallModule needs its own Module Id (1-255).", module);
+            }
+        }
         else if (editPlot.WouldRemoveLastEntrance(slot, module.ModuleId)) why = "Your store needs at least one doorway";
         else if (hung > 0) why = $"Take the {hung} thing{(hung == 1 ? "" : "s")} hung on this section off first";
         kitInfo = why ?? $"Click: put up {module.DisplayName} here (now {editPlot.GetFrontModuleName(slot)})";
