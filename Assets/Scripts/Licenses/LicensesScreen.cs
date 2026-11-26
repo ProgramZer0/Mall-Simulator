@@ -199,7 +199,10 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
             bool mine = lm.Holds(team, l.id);
             if (cards[i].button != null) cards[i].button.interactable = mine || lm.CanBuy(team, l, out _);
             if (cards[i].ownedMark != null) cards[i].ownedMark.SetActive(mine);
-            LockOverlay.Show(cards[i].icon, ref cards[i].lockedMark, lockedIcon, !mine && l.minLevel > ProgressionManager.LevelOf(team));
+            // Locked: not yours and can't be had right now (level too low, your team's at its most, or none left).
+            bool locked = !mine && (l.minLevel > ProgressionManager.LevelOf(team) || lm.HeldBy(team) >= lm.AllowedFor(team) ||
+                                    (l.perMall > 0 && lm.HolderCount(l.id) >= l.perMall));
+            LockOverlay.Show(cards[i].icon, ref cards[i].lockedMark, lockedIcon, locked);
             if (cards[i].countText != null)
                 cards[i].countText.text = l.perMall > 0 ? $"{Mathf.Max(0, l.perMall - lm.HolderCount(l.id))} left" : "";
         }
@@ -215,7 +218,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
     private void OnClick(int index)
     {
         var lm = LicenseManager.Instance;
-        if (lm == null || index >= shown.Count) return;
+        if (lm == null || index >= shown.Count || PopupOpen || ConfirmPopup.JustClosed) return; // (a click on the pop-up isn't a card's)
         var l = shown[index];
         ulong team = LocalTeam;
 
@@ -304,7 +307,7 @@ public class LicensesScreen : MonoBehaviour, IShopScreen
 
     private void OnFranchiseClick(int index)
     {
-        if (index >= franchisesShown.Count) return;
+        if (index >= franchisesShown.Count || PopupOpen || ConfirmPopup.JustClosed) return;
         var f = franchisesShown[index];
         if (Popup != null)
         {
