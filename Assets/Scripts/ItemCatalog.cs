@@ -193,6 +193,12 @@ public class ItemDef
              "prefab's folder (Small / Med / Lrg / Misc) by Update Item Catalog.")]
     public SizeClass sizeClass = SizeClass.Auto;
 
+    [Tooltip("Hung on a wall, it faces into the wall (its model's front is the other way round): tick to turn it " +
+             "round. R still flips it when placing.")]
+    public bool wallFacesOtherWay;
+    [Tooltip("On shelves, only one layer: its products are never stacked on top of each other (perfume, bottles).")]
+    public bool noStacking;
+
     /// <summary>What's held in the hand: its own, else its size's default.</summary>
     public GameObject HandVisualPrefab
     {
