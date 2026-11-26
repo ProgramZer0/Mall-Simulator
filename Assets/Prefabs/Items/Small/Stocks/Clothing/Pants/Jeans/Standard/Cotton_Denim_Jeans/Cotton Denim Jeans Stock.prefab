@@ -39,7 +39,7 @@ PrefabInstance:
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.icon
       value: 
-      objectReference: {fileID: 21300000, guid: ae33de33459528f47b1d47845cd0a8d9, type: 3}
+      objectReference: {fileID: 21300000, guid: 852c8b7a0673bcc4a8c512a64d694f41, type: 3}
     - target: {fileID: 1932967595074668903, guid: 5d3eadab2de5bbe48950b14a4834813f, type: 3}
       propertyPath: item.price
       value: 200
