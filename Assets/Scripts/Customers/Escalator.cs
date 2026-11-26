@@ -47,14 +47,14 @@ public class Escalator : MonoBehaviour
     private void OnDisable()
     {
         All.Remove(this);
-        if (link.valid) link.Remove();
+        if (NavMesh.IsLinkValid(link)) NavMesh.RemoveLink(link);
         CustomerNavMesh.Instance?.MarkDirty();
     }
 
     private void AddLink()
     {
         if (bottom == null || top == null) return;
-        if (link.valid) link.Remove();
+        if (NavMesh.IsLinkValid(link)) NavMesh.RemoveLink(link);
         link = NavMesh.AddLink(new NavMeshLinkData
         {
             startPosition = Start,
