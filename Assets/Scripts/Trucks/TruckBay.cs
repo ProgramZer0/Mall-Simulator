@@ -33,10 +33,35 @@ public class TruckBay : MonoBehaviour, IPlayerUsable
     private bool doorWasOpen;
     private AudioSource doorAudio, doorLoop;
 
+    [Tooltip("Someone this close (meters) to the shut door's space counts as standing in the doorway: the door " +
+             "won't come down on them (it goes back up, as if they were in the truck).")]
+    [SerializeField, Min(0f)] private float doorwayMargin = 0.8f;
+
+    private Bounds doorwayBounds;
+    private bool hasDoorway;
+
+    /// <summary>Is this point in the doorway, where the dock door comes down (with Doorway Margin)?</summary>
+    public bool DoorwayContains(Vector3 p) => hasDoorway && doorwayBounds.Contains(p);
+
     private void Awake()
     {
         if (door == null) return;
         doorClosedPos = door.localPosition;
+        // The shut door's space, from floor to its top, grown by Doorway Margin across and through it.
+        bool any = false;
+        foreach (var r in door.GetComponentsInChildren<Renderer>())
+        {
+            if (!any) { doorwayBounds = r.bounds; any = true; } else doorwayBounds.Encapsulate(r.bounds);
+        }
+        if (!any) foreach (var c in door.GetComponentsInChildren<Collider>())
+        {
+            if (!any) { doorwayBounds = c.bounds; any = true; } else doorwayBounds.Encapsulate(c.bounds);
+        }
+        if (any)
+        {
+            doorwayBounds.Expand(new Vector3(doorwayMargin * 2f, 0.4f, doorwayMargin * 2f));
+            hasDoorway = true;
+        }
         // F on the door itself (it may not be under the bay).
         if (!door.IsChildOf(transform) && !door.TryGetComponent<TruckBayDoor>(out _)) door.gameObject.AddComponent<TruckBayDoor>().bay = this;
     }

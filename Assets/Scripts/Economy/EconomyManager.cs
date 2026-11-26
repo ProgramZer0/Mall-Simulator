@@ -883,10 +883,12 @@ public class EconomyManager : NetworkBehaviour
                 Vector3 s = b.half * 2f;
                 if (!(s.y <= c.y + 0.01f && ((s.x <= c.x + 0.01f && s.z <= c.z + 0.01f) || (s.z <= c.x + 0.01f && s.x <= c.z + 0.01f)))) { all = false; break; }
             }
-            if (all) return i;
+            if (all && PackTruck(t, boxes, packScratch)) return i; // and it really packs (not just by volume)
         }
         return -1;
     }
+
+    private readonly List<Pose> packScratch = new();
 
     // An order split into truckloads (how many of each line in each), each no more than the biggest truck
     // holds (by volume): biggest things first, a new truck when the current one's full.
@@ -913,6 +915,41 @@ public class EconomyManager : NetworkBehaviour
             l2.used += v;
             loads[k] = l2;
         }
+        // By volume isn't enough (boxes don't pack perfectly): any load that doesn't really pack into the
+        // biggest truck hands its smallest things on to the next truckload until it does.
+        var biggest = Biggest();
+        var lineBox = new ShipmentPacker.Box[itemIds.Length];
+        var lineVol = new float[itemIds.Length];
+        for (int i = 0; i < itemIds.Length; i++)
+            if (ItemCatalog.Instance.TryGet(itemIds[i], out var def) && def.GetShipmentPrefab() is var pf && pf != null)
+            { lineBox[i] = ShipmentPacker.GetBox(pf.gameObject); lineVol[i] = Volume(lineBox[i]); }
+        var boxes = new List<ShipmentPacker.Box>();
+        for (int k = 0; k < loads.Count && biggest != null; k++)
+        {
+            for (int guard = 0; guard < 200; guard++)
+            {
+                var qty = loads[k].qty;
+                boxes.Clear();
+                int total = 0;
+                for (int i = 0; i < qty.Length; i++) for (int q = 0; q < qty[i]; q++) { boxes.Add(lineBox[i]); total++; }
+                if (total == 0 || PackTruck(biggest, boxes, packScratch)) break;
+                if (total == 1) break; // too big for any truck on its own: as it is
+                if (k + 1 >= loads.Count) loads.Add((new int[itemIds.Length], 0f));
+                int move = Mathf.Max(1, total / 10);
+                while (move > 0)
+                {
+                    int smallest = -1;
+                    for (int i = 0; i < qty.Length; i++)
+                        if (qty[i] > 0 && (smallest < 0 || lineVol[i] < lineVol[smallest])) smallest = i;
+                    if (smallest < 0) break;
+                    int n = Mathf.Min(move, qty[smallest]);
+                    qty[smallest] -= n;
+                    loads[k + 1].qty[smallest] += n;
+                    move -= n;
+                }
+            }
+        }
+        loads.RemoveAll(l => System.Array.TrueForAll(l.qty, q => q == 0));
         return loads.ConvertAll(l => l.qty);
     }
 
@@ -1008,6 +1045,7 @@ public class EconomyManager : NetworkBehaviour
                 if (now < o.deadline) return;
                 // Time's up: the door comes all the way down first, then it drives off.
                 truck.ServerSetDoor(false);
+                truck.ServerSetClosing(true);
                 o.stage = OrderInfo.Closing;
                 o.deadline = now + DoorSecondsAt(truck) + 0.3f;
                 orders[index] = o;
@@ -1020,6 +1058,7 @@ public class EconomyManager : NetworkBehaviour
                 if (PlayerInTruck(truck, out ulong inside))
                 {
                     truck.ServerSetDoor(true);
+                    truck.ServerSetClosing(false);
                     ulong team = MallManager.GetTeamOf(inside);
                     if (truckInsideFine > 0) ServerAddMoney(team, -truckInsideFine);
                     o.stage = OrderInfo.Unloading;
@@ -1034,13 +1073,6 @@ public class EconomyManager : NetworkBehaviour
                     }
                     return;
                 }
-                if (truck.DoorOpen) // opened again from outside (F) while it was coming down: down it comes
-                {
-                    truck.ServerSetDoor(false);
-                    o.deadline = now + DoorSecondsAt(truck) + 0.3f;
-                    orders[index] = o;
-                    return;
-                }
                 if (now < o.deadline) return;
                 int left = BoxesOnTruck(o.orderId, truck);
                 if (left > 0 && NotificationManager.Instance != null)
@@ -1049,6 +1081,32 @@ public class EconomyManager : NetworkBehaviour
                 SendOff(index, o, truck);
                 return;
             }
+        }
+    }
+
+    /// <summary>
+    /// Send a truck at the dock off now (Shipments app): what's still on it goes with it, no refund. Only
+    /// the team it's for; only once it's parked (shut or unloading).
+    /// </summary>
+    public void RequestSendOff(int orderId) => SendOffEarlyRpc(orderId);
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    private void SendOffEarlyRpc(int orderId, RpcParams rpcParams = default)
+    {
+        ulong team = MallManager.GetTeamOf(rpcParams.Receive.SenderClientId);
+        for (int i = 0; i < orders.Count; i++)
+        {
+            var o = orders[i];
+            if (o.orderId != orderId) continue;
+            if (o.teamId != team || (o.stage != OrderInfo.AtDock && o.stage != OrderInfo.Unloading)) return;
+            var truck = TruckFor(o.orderId);
+            if (truck == null || !loadedTrucks.Contains(o.orderId)) return;
+            truck.ServerSetDoor(false);
+            truck.ServerSetClosing(true);
+            o.stage = OrderInfo.Closing;
+            o.deadline = NetworkManager.ServerTime.Time + DoorSecondsAt(truck) + 0.3f;
+            orders[i] = o;
+            return;
         }
     }
 
@@ -1076,7 +1134,11 @@ public class EconomyManager : NetworkBehaviour
         {
             var player = client.PlayerObject;
             if (player == null) continue;
-            if (truck.CargoContains(player.transform.position + Vector3.up * 0.5f)) { clientId = client.ClientId; return true; }
+            Vector3 p = player.transform.position + Vector3.up * 0.5f;
+            // In the cargo space, or under the dock door where it comes down (a bit wider than the door).
+            int b = truck.BayIndex;
+            bool doorway = b >= 0 && b < TruckBay.All.Count && TruckBay.All[b] != null && TruckBay.All[b].DoorwayContains(p);
+            if (doorway || truck.CargoContains(p)) { clientId = client.ClientId; return true; }
         }
         return false;
     }

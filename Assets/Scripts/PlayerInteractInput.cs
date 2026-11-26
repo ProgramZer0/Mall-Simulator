@@ -1572,6 +1572,7 @@ public class PlayerInteractInput : NetworkBehaviour
         bool dropOff = MallManager.IsDeliveringTo(OwnerClientId, inventory.HeldFromTeam.Value, transform.position, at);
         if (!dropOff && !MallManager.CanPickupOrPlace(OwnerClientId, transform.position, at)) return "store rules (not your store)";
         if (!dropOff && MallManager.IsOthersShipmentArea(OwnerClientId, at)) return "another store's shipment area";
+        if (MallManager.IsInTruck(at)) return "in a delivery truck (things only come out)";
         if (!PuttingBoxBack && MallManager.IsNoPlaceZone(at)) return "no-place zone (docks)";
         if ((placingOnCart || placingBoxed) && cartBoxPrefab != null)
             return FitsBoxAt(cartBoxPrefab, at, ghost.transform.rotation) ? "ok" : $"its box '{cartBoxPrefab.name}' doesn't fit";
@@ -1605,6 +1606,7 @@ public class PlayerInteractInput : NetworkBehaviour
             return false;
         if (!PuttingBoxBack && MallManager.IsNoPlaceZone(ghost.transform.position)) // the docks: pick up only (or a box put back)
             return false;
+        if (MallManager.IsInTruck(ghost.transform.position)) return false; // trucks: things only come out
 
         // Packed into its box on your cart, or a wall piece in its box.
         if ((placingOnCart || placingBoxed) && cartBoxPrefab != null)
