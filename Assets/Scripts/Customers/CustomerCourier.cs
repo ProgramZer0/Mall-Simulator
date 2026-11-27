@@ -55,6 +55,7 @@ public partial class CustomerManager
         ShowCarry(c.id, itemId);
         CarryRpc(c.id, itemId);
         Act(c, AnimCue.Running);
+        Act(c, AnimCue.CarryingPackage);
         if (!PathTo(c, ways[0].outside)) { CourierDrop(c, "no way to the store", true); return true; }
         Log(c, $"delivery guy for '{plot.DisplayName}' with item {itemId}");
         return true;
@@ -95,6 +96,8 @@ public partial class CustomerManager
         }
         packages.Remove(c.id);
         if (p.orderId >= 0 && EconomyManager.Instance != null) EconomyManager.Instance.ServerCourierDone(p.orderId);
+        Act(c, AnimCue.HandOver);
+        Sfx.ForAll(Cue.PackageHandedOver, c.pos);
         Log(c, $"handed the package to client {clientId}");
         CourierLeave(c);
         return true;
@@ -121,6 +124,7 @@ public partial class CustomerManager
 
     private void CourierLeave(Customer c)
     {
+        Act(c, AnimCue.CarryingPackage, false);
         ShowCarry(c.id, 0);
         CarryRpc(c.id, 0);
         SetMark(c, LostMark.None);
