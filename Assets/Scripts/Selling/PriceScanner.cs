@@ -155,6 +155,7 @@ public class PriceScanner : NetworkBehaviour
     private void SetActive(bool on)
     {
         if (on && TryGetComponent<PaintBrush>(out var brush)) brush.PutAway(); // one hand tool at a time
+        if (IsOwner && IsSpawned && active != on) Sfx.ForAll(Cue.None, transform.position, AnimCue.HoldingTool, OwnerClientId, on); // the pose, seen by all
         active = on;
         if (IsOwner) LocalActive = on;
         Transform holdAt = hand != null ? hand : inventory != null ? inventory.HandAnchor : null;

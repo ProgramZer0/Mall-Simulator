@@ -226,6 +226,7 @@ public class PaintBrush : NetworkBehaviour
     private void SetActive(bool on)
     {
         if (on && scanner != null) scanner.PutAway();
+        if (IsOwner && IsSpawned && active != on) Sfx.ForAll(Cue.None, transform.position, AnimCue.HoldingTool, OwnerClientId, on); // the pose, seen by all
         active = on;
         if (IsOwner) LocalActive = on;
         if (!on)

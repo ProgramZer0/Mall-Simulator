@@ -21,6 +21,7 @@ public enum AnimCue
     HandOver,        // customer (Trigger): the delivery guy handing the package over
     Riding,          // customer (Bool): standing on an escalator
     Point,           // player (Trigger): pointing a customer the way
+    HoldingTool,     // player (Bool): the paint brush or price scanner out
 }
 
 /// <summary>
