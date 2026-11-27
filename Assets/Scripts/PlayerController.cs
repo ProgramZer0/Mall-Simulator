@@ -28,6 +28,9 @@ public class PlayerController3D : NetworkBehaviour
     // Synced so other players see you crouch (and bump into a shorter you).
     private readonly NetworkVariable<bool> crouching =
         new(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    /// <summary>Crouched right now (synced: true on every machine).</summary>
+    public bool IsCrouching => crouching.Value;
+
     private float standHeight;
     private Vector3 standCenter;
     private Vector3 cameraStandPos;

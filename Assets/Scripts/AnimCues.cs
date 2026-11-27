@@ -22,6 +22,7 @@ public enum AnimCue
     Riding,          // customer (Bool): standing on an escalator
     Point,           // player (Trigger): pointing a customer the way
     HoldingTool,     // player (Bool): the paint brush or price scanner out
+    Crouching,       // player (Bool): crouched (kept up to date on every machine)
 }
 
 /// <summary>
@@ -58,12 +59,14 @@ public class AnimCues : MonoBehaviour
     private Vector3 lastPos;
     private float speed;
     private PlayerInventoryNet inventory; // a player: its synced states
+    private PlayerController3D controller; // ...and its crouch
     private bool[] states;
 
     private void Awake()
     {
         if (animator == null) animator = GetComponentInChildren<Animator>();
         inventory = GetComponentInParent<PlayerInventoryNet>();
+        controller = GetComponentInParent<PlayerController3D>();
         states = new bool[Enum.GetValues(typeof(AnimCue)).Length];
         Map();
         lastPos = transform.position;
@@ -147,6 +150,7 @@ public class AnimCues : MonoBehaviour
         {
             int held = inventory.HeldItemId.Value;
             SetState(AnimCue.Holding, held != 0);
+            if (controller != null) SetState(AnimCue.Crouching, controller.IsCrouching);
             SetState(AnimCue.CarryingCrate, held != 0 && StockContainer.IsStockCrate(held));
             SetState(AnimCue.PushingCart, CartNet.GetPushedBy(inventory.OwnerClientId) != null);
         }
