@@ -36,8 +36,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.117395036, y: 0.094000004}
   m_AnchorMax: {x: 0.39060497, y: 0.40600002}
-  m_AnchoredPosition: {x: -69.63489, y: -4.0496683}
-  m_SizeDelta: {x: 69.59273, y: -2.5442066}
+  m_AnchoredPosition: {x: -0.00016784668, y: -1.2720947}
+  m_SizeDelta: {x: 0.00038147, y: -2.5442}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &7993536833698827107
 CanvasRenderer:
@@ -255,7 +255,7 @@ MonoBehaviour:
   m_margin: {x: 0, y: 0, z: 0, w: 0}
   m_isUsingLegacyAnimationComponent: 0
   m_isVolumetricText: 0
-  m_hasFontAssetChanged: 1
+  m_hasFontAssetChanged: 0
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
 --- !u!1 &3640705235832656095
@@ -392,7 +392,7 @@ MonoBehaviour:
   m_margin: {x: 0, y: 0, z: 0, w: 0}
   m_isUsingLegacyAnimationComponent: 0
   m_isVolumetricText: 0
-  m_hasFontAssetChanged: 1
+  m_hasFontAssetChanged: 0
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
 --- !u!1 &4079955755064812419
@@ -427,10 +427,10 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 9203485650337019491}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0.44869903}
-  m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0.04046631, y: 4.5985785}
-  m_SizeDelta: {x: 284.0818, y: 6.999629}
+  m_AnchorMin: {x: 0.041263867, y: 0.44422507}
+  m_AnchorMax: {x: 0.94639593, y: 0.9384503}
+  m_AnchoredPosition: {x: 1.8981018, y: 0.3839035}
+  m_SizeDelta: {x: -0.18439865, y: -1.2322998}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &6852933637825137742
 CanvasRenderer:
@@ -469,8 +469,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4278190080
-  m_fontColor: {r: 0, g: 0, b: 0, a: 1}
+    rgba: 4294967295
+  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -487,7 +487,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 30
+  m_fontSize: 38.45
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -529,7 +529,7 @@ MonoBehaviour:
   m_margin: {x: 0, y: 0, z: 0, w: 0}
   m_isUsingLegacyAnimationComponent: 0
   m_isVolumetricText: 0
-  m_hasFontAssetChanged: 1
+  m_hasFontAssetChanged: 0
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
 --- !u!1 &4450643401743264203
@@ -542,7 +542,6 @@ GameObject:
   m_Component:
   - component: {fileID: 5617498216724130983}
   - component: {fileID: 2683933807773418318}
-  - component: {fileID: 1984886463066055226}
   - component: {fileID: 1880216421476490144}
   m_Layer: 5
   m_Name: confirm
@@ -579,36 +578,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4450643401743264203}
   m_CullTransparentMesh: 1
---- !u!114 &1984886463066055226
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4450643401743264203}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
 --- !u!114 &1880216421476490144
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -634,6 +603,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 9203485650337019491}
+  - component: {fileID: 4173747127753516948}
+  - component: {fileID: 589523163682564507}
   m_Layer: 5
   m_Name: root
   m_TagString: Untagged
@@ -658,11 +629,49 @@ RectTransform:
   - {fileID: 5524480762926532183}
   m_Father: {fileID: 5617498216724130983}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 100, y: 100}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: -0.00021362305, y: 0.00048828125}
+  m_SizeDelta: {x: 0.42001343, y: -0.039993286}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!222 &4173747127753516948
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6369890589067740665}
+  m_CullTransparentMesh: 1
+--- !u!114 &589523163682564507
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6369890589067740665}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 0.7607843}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 21300000, guid: 16a407a3293f4284bbb36043aa9165aa, type: 3}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
 --- !u!1 &8757877077298834539
 GameObject:
   m_ObjectHideFlags: 0
@@ -699,8 +708,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.6118149, y: 0.094000004}
   m_AnchorMax: {x: 0.885605, y: 0.40600002}
-  m_AnchoredPosition: {x: 71.10425, y: -4.2746744}
-  m_SizeDelta: {x: 69.62821, y: -2.0793076}
+  m_AnchoredPosition: {x: -0.000045776367, y: 0}
+  m_SizeDelta: {x: 0.000091553, y: 0.000068665}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &5387181015469603856
 CanvasRenderer:

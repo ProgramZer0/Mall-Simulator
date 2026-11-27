@@ -115,6 +115,7 @@ MonoBehaviour:
     sizeClass: 1
     wallFacesOtherWay: 0
     noStacking: 1
+    canRepaint: 0
     showInShop: 0
     icon: {fileID: 21300000, guid: 1ada3f1e54a575349a0a3e7fcb9b0e4f, type: 3}
     categories:
