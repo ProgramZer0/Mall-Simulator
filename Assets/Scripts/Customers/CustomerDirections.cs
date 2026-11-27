@@ -72,6 +72,7 @@ public partial class CustomerManager
         c.goalStore = null;
         SetMark(c, LostMark.Asking);
         React(c, Reaction.ExcuseMe);
+        Act(c, AnimCue.Asking);
         Log(c, $"going to ask client {best}: {question.text}");
         c.nextRepath = 0f;
         return true;
@@ -189,6 +190,7 @@ public partial class CustomerManager
             if (HelpPoints.Instance != null) HelpPoints.Instance.ServerAward(sender, HelpPoints.HelpAction.GaveDirections);
             questions.Remove(id);
             SetMark(c, LostMark.None);
+            Act(c, AnimCue.Asking, false);
             React(c, Reaction.ThanksForDirections);
             // Off there.
             c.mode = Mode.Wander;
@@ -221,6 +223,7 @@ public partial class CustomerManager
             QuestionDoneRpc(c.id, RpcTarget.Single(q.askedBy, RpcTargetUse.Temp));
         questions.Remove(c.id);
         SetMark(c, LostMark.None);
+        Act(c, AnimCue.Asking, false);
         if (reaction.HasValue) React(c, reaction.Value);
         c.mode = Mode.Wander;
         PickGoal(c);

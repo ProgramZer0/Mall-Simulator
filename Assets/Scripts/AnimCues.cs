@@ -15,6 +15,13 @@ public enum AnimCue
     Browse, TakeItem, Pay, ReactHappy, ReactUnhappy,
     // Customers: states (Bools)
     Running, Lost,
+    // Added later (kept at the end so filled-in slots keep their place)
+    Asking,          // customer (Bool): waiting by a player to ask the way (a wave, a hand up)
+    CarryingPackage, // customer (Bool): the delivery guy holding the package in both hands
+    HandOver,        // customer (Trigger): the delivery guy handing the package over
+    Riding,          // customer (Bool): standing on an escalator
+    Point,           // player (Trigger): pointing a customer the way
+    HoldingTool,     // player (Bool): the paint brush or price scanner out
 }
 
 /// <summary>

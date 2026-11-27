@@ -29,6 +29,9 @@ public class Escalator : MonoBehaviour
     [SerializeField, Min(0.05f)] private float speed = 0.6f;
     [Tooltip("How wide the way across is for customers (meters).")]
     [SerializeField, Min(0.3f)] private float width = 1f;
+    [Tooltip("Optional: a looping hum/rumble, played from the middle of the steps (3D).")]
+    [SerializeField] private AudioClip humLoop;
+    [SerializeField, Range(0f, 1f)] private float humVolume = 0.4f;
 
     public Way Direction => way;
     public float Speed => speed;
@@ -36,6 +39,22 @@ public class Escalator : MonoBehaviour
     public Vector3 End => (way == Way.Up ? top : bottom) != null ? (way == Way.Up ? top : bottom).position : transform.position;
 
     private NavMeshLinkInstance link;
+
+    private AudioSource hum;
+
+    private void Awake()
+    {
+        if (humLoop == null) return;
+        var go = new GameObject("Escalator Hum");
+        go.transform.SetParent(transform, false);
+        go.transform.position = steps != null ? steps.bounds.center : (Start + End) * 0.5f;
+        hum = go.AddComponent<AudioSource>();
+        ProgramZer0.SoundSystem.WorldAudio.ConfigureSource(hum);
+        hum.clip = humLoop;
+        hum.loop = true;
+        hum.volume = humVolume;
+        hum.Play();
+    }
 
     private void OnEnable()
     {

@@ -475,6 +475,7 @@ public partial class CustomerManager : NetworkBehaviour
         public readonly HashSet<StorePlot> noticed = new(); // storefronts they've seen from a distance
         public StorePlot mustEnter;    // a test customer: goes into this store whatever its appeal
         public float nextRepath;       // asking the way: when to path after the player again
+        public bool riding;            // standing on an escalator (its Riding animation on)
         public Vector3 cameFrom;       // where they came into the mall (they leave by another way if there is one)
         public Entrance goalEntrance;
 
@@ -1076,6 +1077,7 @@ public partial class CustomerManager : NetworkBehaviour
         // On an escalator (this stretch of the path is its one-way link): stand and ride it.
         if (c.corner > 0 && Escalator.TryRide(c.corners[c.corner - 1], c.corners[c.corner], out var escalator))
         {
+            if (!c.riding) { c.riding = true; Act(c, AnimCue.Riding); }
             Vector3 end = c.corners[c.corner];
             c.pos = Vector3.MoveTowards(c.pos, end, escalator.Speed * dt);
             Vector3 flat = end - c.pos;
@@ -1092,6 +1094,7 @@ public partial class CustomerManager : NetworkBehaviour
             return;
         }
 
+        if (c.riding) { c.riding = false; Act(c, AnimCue.Riding, false); } // off the escalator
         Vector3 to = LaneTarget(c);
         float left = FlatDistance(c.pos, to);
         // Looking past the next corner costs a few raycasts: a few times a second is plenty.

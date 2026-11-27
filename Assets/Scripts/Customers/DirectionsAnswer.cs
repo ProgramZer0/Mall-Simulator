@@ -69,7 +69,14 @@ public static class DirectionsAnswer
         if (!Active) { customer = 0; return; }
         aimed = cam != null ? StoreInDirection(cam.transform.position, cam.transform.forward) : null;
         if (UIState.IsMenuOpen || CustomerManager.Instance == null) return;
-        if (Input.GetMouseButtonDown(0) && aimed != null) { CustomerManager.Instance.Answer(customer, aimed.PlotId); customer = 0; }
+        if (Input.GetMouseButtonDown(0) && aimed != null)
+        {
+            CustomerManager.Instance.Answer(customer, aimed.PlotId);
+            customer = 0;
+            var nm = Unity.Netcode.NetworkManager.Singleton;
+            var me = nm != null ? nm.LocalClient?.PlayerObject : null;
+            if (me != null) Sfx.ForAll(Cue.PointTheWay, me.transform.position, AnimCue.Point, nm.LocalClientId); // the point, seen by all
+        }
         else if (Input.GetMouseButtonDown(1)) { CustomerManager.Instance.Answer(customer, -1); customer = 0; }
     }
 }

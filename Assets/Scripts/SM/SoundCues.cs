@@ -20,6 +20,9 @@ public enum Cue
     PhoneUp, PhoneDown, Notification, HelpTip, LostChildAlert, LevelUp, MoneyIn, MoneyOut,
     // The mall
     Broke, BrokenFlicker, Reported, ShoplifterAlarm, CustomerHappy, CustomerUnhappy,
+    // Added later (kept at the end so filled-in slots keep their place)
+    PackageHandedOver, // the delivery guy hands a package over
+    PointTheWay,       // a player points a customer the way (answering "where's...?")
 }
 
 /// <summary>
