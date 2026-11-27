@@ -31,6 +31,35 @@ public class PlayerController3D : NetworkBehaviour
     /// <summary>Crouched right now (synced: true on every machine).</summary>
     public bool IsCrouching => crouching.Value;
 
+    // Where they're looking (pitch, and the head's own turn while free-looking), for others' head turn.
+    // Degrees x10 as shorts; the owner sends it ~10 times a second when it changes.
+    private readonly NetworkVariable<short> lookPitch =
+        new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    private readonly NetworkVariable<short> lookYaw =
+        new(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    private float nextLookSend, shownPitch, shownYaw;
+
+    /// <summary>Up/down look angle (degrees, down is positive) on every machine (others' smoothed).</summary>
+    public float LookPitch => IsOwner || !IsSpawned ? pitch : shownPitch;
+    /// <summary>The head's turn left/right of the body (degrees; free look while pushing a cart).</summary>
+    public float LookYaw => IsOwner || !IsSpawned ? freeLookYaw : shownYaw;
+
+    private void SyncLook()
+    {
+        if (IsOwner)
+        {
+            if (Time.unscaledTime < nextLookSend) return;
+            nextLookSend = Time.unscaledTime + 0.1f;
+            short p = (short)Mathf.RoundToInt(pitch * 10f), y = (short)Mathf.RoundToInt(freeLookYaw * 10f);
+            if (Mathf.Abs(p - lookPitch.Value) > 10) lookPitch.Value = p; // (a degree or more)
+            if (Mathf.Abs(y - lookYaw.Value) > 10) lookYaw.Value = y;
+            return;
+        }
+        float k = 1f - Mathf.Exp(-Time.deltaTime * 12f);
+        shownPitch = Mathf.Lerp(shownPitch, lookPitch.Value * 0.1f, k);
+        shownYaw = Mathf.Lerp(shownYaw, lookYaw.Value * 0.1f, k);
+    }
+
     private float standHeight;
     private Vector3 standCenter;
     private Vector3 cameraStandPos;
@@ -324,6 +353,7 @@ public class PlayerController3D : NetworkBehaviour
     // the owner decides, the rest follow the synced flag.
     private void LateUpdate()
     {
+        if (IsSpawned) SyncLook(); // where they're looking, for others' head turn
         if (controller == null || !IsSpawned) return;
 
         if (IsOwner)

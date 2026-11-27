@@ -52,10 +52,29 @@ public class AnimCues : MonoBehaviour
     [SerializeField] private Slot[] slots = Array.Empty<Slot>();
     [Tooltip("Set a float \"Speed\" (m/s) from how it moves, when the Animator has one (customers already do this).")]
     [SerializeField] private bool setSpeed = true;
+    [Tooltip("Also set, when the Animator has them: \"MoveX\" (m/s sideways, right +), \"MoveZ\" (m/s forward, back -) " +
+             "for a 2D strafe blend, and \"Turn\" (degrees/s turning, right +) for turn-in-place clips.")]
+    [SerializeField] private bool setDirection = true;
+
+    [Header("Head look (players, Humanoid)")]
+    [Tooltip("The head (and a little of the chest) turns to where the player's looking: up, down, and side to side " +
+             "when free-looking. Needs a Humanoid avatar and IK Pass ticked on the base layer in the Animator.")]
+    [SerializeField] private bool headLook = true;
+    [SerializeField, Range(0f, 1f)] private float headWeight = 1f;
+    [SerializeField, Range(0f, 1f)] private float bodyWeight = 0.25f;
+    [Tooltip("How far it can turn (0 = not at all, 1 = as far as the look goes).")]
+    [SerializeField, Range(0f, 1f)] private float clamp = 0.6f;
+
+    public float HeadWeight => headWeight;
+    public float BodyWeight => bodyWeight;
+    public float Clamp => clamp;
 
     private readonly Dictionary<AnimCue, (int hash, AnimatorControllerParameterType type)> map = new();
     private bool hasSpeed;
     private static readonly int SpeedId = Animator.StringToHash("Speed");
+    private static readonly int MoveXId = Animator.StringToHash("MoveX"), MoveZId = Animator.StringToHash("MoveZ"), TurnId = Animator.StringToHash("Turn");
+    private bool hasMoveX, hasMoveZ, hasTurn;
+    private float moveX, moveZ, turn, lastYaw;
     private Vector3 lastPos;
     private float speed;
     private PlayerInventoryNet inventory; // a player: its synced states
@@ -67,6 +86,10 @@ public class AnimCues : MonoBehaviour
         if (animator == null) animator = GetComponentInChildren<Animator>();
         inventory = GetComponentInParent<PlayerInventoryNet>();
         controller = GetComponentInParent<PlayerController3D>();
+        lastYaw = transform.eulerAngles.y;
+        // Head look runs in the Animator's IK pass, on the Animator's own object.
+        if (headLook && controller != null && animator != null && animator.isHuman && !animator.TryGetComponent<HeadLookIK>(out _))
+            animator.gameObject.AddComponent<HeadLookIK>().Set(this);
         states = new bool[Enum.GetValues(typeof(AnimCue)).Length];
         Map();
         lastPos = transform.position;
@@ -76,12 +99,19 @@ public class AnimCues : MonoBehaviour
     {
         map.Clear();
         hasSpeed = false;
+        hasMoveX = hasMoveZ = hasTurn = false;
         if (animator == null || animator.runtimeAnimatorController == null) return;
         var types = new Dictionary<int, AnimatorControllerParameterType>();
         foreach (var p in animator.parameters)
         {
             types[p.nameHash] = p.type;
             if (p.nameHash == SpeedId && p.type == AnimatorControllerParameterType.Float) hasSpeed = setSpeed;
+            if (p.type == AnimatorControllerParameterType.Float && setDirection)
+            {
+                if (p.nameHash == MoveXId) hasMoveX = true;
+                if (p.nameHash == MoveZId) hasMoveZ = true;
+                if (p.nameHash == TurnId) hasTurn = true;
+            }
         }
         foreach (var s in slots)
         {
@@ -143,6 +173,24 @@ public class AnimCues : MonoBehaviour
             speed = Mathf.Lerp(speed, now, 1f - Mathf.Exp(-10f * dt));
             animator.SetFloat(SpeedId, speed);
         }
+        if ((hasMoveX || hasMoveZ || hasTurn) && dt > 0f && animator != null)
+        {
+            // Movement in its own frame (right +, forward +), and how fast it's turning.
+            Vector3 d = transform.position - lastPos;
+            d.y = 0f;
+            Vector3 local = Quaternion.Inverse(Quaternion.Euler(0f, transform.eulerAngles.y, 0f)) * (d / dt);
+            if (local.magnitude > 20f) local = Vector3.zero; // a teleport
+            float k = 1f - Mathf.Exp(-10f * dt);
+            moveX = Mathf.Lerp(moveX, local.x, k);
+            moveZ = Mathf.Lerp(moveZ, local.z, k);
+            float yaw = transform.eulerAngles.y;
+            float rate = Mathf.DeltaAngle(lastYaw, yaw) / dt;
+            lastYaw = yaw;
+            turn = Mathf.Lerp(turn, Mathf.Clamp(rate, -720f, 720f), k);
+            if (hasMoveX) animator.SetFloat(MoveXId, moveX);
+            if (hasMoveZ) animator.SetFloat(MoveZId, moveZ);
+            if (hasTurn) animator.SetFloat(TurnId, turn);
+        }
         lastPos = transform.position;
 
         // A player: states from what's synced.
@@ -160,5 +208,37 @@ public class AnimCues : MonoBehaviour
     {
         if (states[(int)cue] == on) return;
         Fire(cue, on);
+    }
+}
+
+/// <summary>
+/// Added by AnimCues to a player's Animator: turns the head (and a little of the chest) to where the
+/// player's looking, from their synced look angles. Needs IK Pass on the Animator's base layer.
+/// </summary>
+public class HeadLookIK : MonoBehaviour
+{
+    private AnimCues cues;
+    private Animator animator;
+    private PlayerController3D controller;
+    private float weight;
+
+    public void Set(AnimCues owner) => cues = owner;
+
+    private void Awake()
+    {
+        animator = GetComponent<Animator>();
+        controller = GetComponentInParent<PlayerController3D>();
+    }
+
+    private void OnAnimatorIK(int layerIndex)
+    {
+        if (layerIndex != 0 || cues == null || controller == null || animator == null) return;
+        var head = animator.GetBoneTransform(HumanBodyBones.Head);
+        if (head == null) return;
+        weight = Mathf.MoveTowards(weight, 1f, Time.deltaTime * 4f); // faded in (no snap on spawn)
+        Quaternion look = Quaternion.Euler(0f, controller.transform.eulerAngles.y, 0f) *
+                          Quaternion.Euler(controller.LookPitch, controller.LookYaw, 0f);
+        animator.SetLookAtWeight(weight, cues.BodyWeight, cues.HeadWeight, 0f, cues.Clamp);
+        animator.SetLookAtPosition(head.position + look * Vector3.forward * 5f);
     }
 }
