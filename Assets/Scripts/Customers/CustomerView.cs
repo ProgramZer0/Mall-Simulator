@@ -146,6 +146,29 @@ public class CustomerView : MonoBehaviour
         t.SetParent(me, true);
     }
 
+    private GameObject pushed;
+
+    /// <summary>
+    /// Something pushed in front of them (a stroller): at a child called "PushAnchor" if the look has one,
+    /// else on the floor in front of them, facing the way they face. Null: nothing.
+    /// </summary>
+    public void SetPush(GameObject model)
+    {
+        if (pushed != null) Destroy(pushed);
+        pushed = model;
+        if (model == null) return;
+        SetLayer(model);
+        foreach (var c in model.GetComponentsInChildren<Collider>(true)) Destroy(c);
+        foreach (var b in model.GetComponentsInChildren<Rigidbody>(true)) Destroy(b);
+        var t = model.transform;
+        Transform anchor = FindChild(transform, "PushAnchor");
+        if (anchor != null) { t.SetParent(anchor, false); t.localPosition = Vector3.zero; t.localRotation = Quaternion.identity; return; }
+        var me = transform;
+        Vector3 feet = me.position - Vector3.up * lift;
+        t.SetPositionAndRotation(feet + me.forward * 0.75f, me.rotation * t.rotation);
+        t.SetParent(me, true);
+    }
+
     /// <summary>
     /// Show this many shopping bags: at a child called "BagAnchor" if the look has one, else at their
     /// right side; each extra bag hangs a little further along. No prefab: a small paper-bag box.

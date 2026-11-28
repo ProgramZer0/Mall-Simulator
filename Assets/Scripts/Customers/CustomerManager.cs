@@ -414,6 +414,8 @@ public partial class CustomerManager : NetworkBehaviour
         Searching,   // a family looking for their lost child
         Courier,     // the delivery guy, bringing a special market package (see CustomerCourier.cs)
         Asking,      // going up to a player to ask the way, then waiting for the answer (CustomerDirections.cs)
+        AtSpot,      // at a vendor cart or on a bench in the hallway (CustomerMallLife.cs)
+        Chatting,    // a group's leader: the group stopped in the hallway to chat (CustomerMallLife.cs)
     }
 
     private struct Taken
@@ -522,6 +524,10 @@ public partial class CustomerManager : NetworkBehaviour
         public bool bystanderSlot;     // counts toward Max Bystanders (not Max Customers)
         public bool paysCash;          // decided on the way to the checkout (cash payers skip self-checkouts)
         public bool courier;           // the delivery guy (counts toward neither)
+        public MallSpot spot;          // the vendor cart / bench they're at (or heading for)
+        public int spotIndex;
+        public float nextBrowse;
+        public bool chatting;          // (a group's leader) the group's Talking is on
 
         // Lost children (see CustomerLostChild.cs)
         public Customer lostFrom;      // (a lost child) the parent they wandered off from
@@ -1000,6 +1006,7 @@ public partial class CustomerManager : NetworkBehaviour
     private void Despawn(Customer c)
     {
         CourierGone(c); // a delivery guy with the package still on him: it's left at the store
+        ForgetMallLife(c);
         if (questions.TryGetValue(c.id, out var q) && q.askedBy != ulong.MaxValue)
             QuestionDoneRpc(c.id, RpcTarget.Single(q.askedBy, RpcTargetUse.Temp)); // gone mid-question
         ForgetQuestion(c);
@@ -1504,6 +1511,7 @@ public partial class CustomerManager : NetworkBehaviour
             return;
         }
 
+        CheckMallLife(c);
         switch (c.mode)
         {
             case Mode.Wander: ThinkWander(c); break;
@@ -1541,6 +1549,8 @@ public partial class CustomerManager : NetworkBehaviour
             case Mode.Searching: ThinkSearching(c); break;
             case Mode.Courier: ThinkCourier(c); break;
             case Mode.Asking: ThinkAsking(c); break;
+            case Mode.AtSpot: ThinkAtSpot(c); break;
+            case Mode.Chatting: ThinkChatting(c); break;
         }
     }
 
@@ -1859,6 +1869,7 @@ public partial class CustomerManager : NetworkBehaviour
         if (c.goalStore != null && !c.passed.Contains(c.goalStore) && c.goalStore.IsOpen && c.goalStore.Appeal != null &&
             Consider(c, c.goalStore, c.goalEntrance)) return;
         if (TryAskDirections(c)) return; // now and then: off to ask a player the way
+        if (TryMallLife(c, false)) return; // now and then: a vendor cart, or the group stops to chat
         PickGoal(c);
     }
 
@@ -1875,6 +1886,7 @@ public partial class CustomerManager : NetworkBehaviour
         }
         if (Time.time < c.until) return;
         c.lingering = false;
+        if (TryMallLife(c, true)) return; // now and then: a bench, a vendor cart
         PickGoal(c);
     }
 
@@ -3092,6 +3104,7 @@ public partial class CustomerManager : NetworkBehaviour
         // and moving hundreds of children of one parent is slower.
         views[id] = CustomerView.Create(id, prefab, pos, yaw, null, child && !childModel ? childScale : 1f);
         views[id].IsChild = child;
+        StrollerForNewView(id);
     }
 
     private void RemoveView(ushort id)

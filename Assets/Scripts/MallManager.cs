@@ -216,13 +216,29 @@ public class MallManager : NetworkBehaviour
     public string WhyCantOwnMore(ulong teamId)
     {
         int owned = CountPlotsOwnedByTeam(teamId);
-        if (owned >= maxStoresPerTeam) return $"Your team owns the most stores allowed ({maxStoresPerTeam})";
-        if (owned >= ProgressionManager.StoresAllowed(teamId))
+        int extra = ExtraStoresFor(teamId);
+        int max = MaxStoresFor(teamId);
+        if (owned >= max)
+            return $"Your team owns the most stores allowed ({max})" + (extra == 0 ? "" : $", {extra} from perks");
+        int byLevel = ProgressionManager.StoresAllowed(teamId);
+        if (byLevel != int.MaxValue && owned >= byLevel + extra)
         {
-            int need = ProgressionManager.LevelForStores(owned + 1);
+            int need = ProgressionManager.LevelForStores(owned + 1 - extra);
             return need > 0 ? $"Reach level {need} to own another store" : "Your team can't own more stores";
         }
         return null;
+    }
+
+    /// <summary>Max Stores Per Team plus what the team's Extra Stores perks add.</summary>
+    public int MaxStoresFor(ulong teamId) => maxStoresPerTeam + ExtraStoresFor(teamId);
+
+    /// <summary>More stores allowed from perks (Extra Stores, added up over the team's stores, rounded down).</summary>
+    public int ExtraStoresFor(ulong teamId)
+    {
+        float sum = 0f;
+        foreach (var plot in plots.Values)
+            if (plot.HasOwner && plot.OwnerTeamId == teamId) sum += ProgressionManager.StoreStat(plot, PerkStat.ExtraStores);
+        return Mathf.Max(0, Mathf.FloorToInt(sum + 1e-4f));
     }
 
     public int CountPlotsOwnedByTeam(ulong teamId)

@@ -23,6 +23,9 @@ public enum AnimCue
     Point,           // player (Trigger): pointing a customer the way
     HoldingTool,     // player (Bool): the paint brush or price scanner out
     Crouching,       // player (Bool): crouched (kept up to date on every machine)
+    Sitting,         // customer (Bool): sitting on a bench (a Seat MallSpot)
+    Talking,         // customer (Bool): a group stopped in the hallway chatting
+    PushingStroller, // customer (Bool): a parent pushing a stroller
 }
 
 /// <summary>

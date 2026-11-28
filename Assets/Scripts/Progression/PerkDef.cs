@@ -25,6 +25,9 @@ public enum PerkStat
     PriceTolerance,
     /// <summary>Customer AI: more customers in the store at once (0.1 = 10% more).</summary>
     Capacity,
+    /// <summary>The team can own more stores: 1 = one more store (added up over all the team's stores, rounded
+    /// down, so 0.5 per rank on two stores is one more). Raises both Max Stores Per Team and the level limit.</summary>
+    ExtraStores,
 }
 
 /// <summary>
@@ -71,7 +74,9 @@ public class PerkDef : ScriptableObject
         {
             if (sb.Length > 0) sb.Append(", ");
             float v = e.perRank * Mathf.Max(1, ranks);
-            sb.Append(e.stat == PerkStat.Quality ? $"{v * 100f:+0;-0} quality" : $"{v * 100f:+0;-0}% {StatName(e.stat)}");
+            sb.Append(e.stat == PerkStat.Quality ? $"{v * 100f:+0;-0} quality"
+                : e.stat == PerkStat.ExtraStores ? $"{v:+0.#;-0.#} store{(Mathf.Approximately(v, 1f) ? "" : "s")} allowed"
+                : $"{v * 100f:+0;-0}% {StatName(e.stat)}");
         }
         return sb.ToString();
     }
@@ -86,6 +91,7 @@ public class PerkDef : ScriptableObject
         PerkStat.Patience => "customer patience",
         PerkStat.PriceTolerance => "price tolerance",
         PerkStat.Capacity => "customer capacity",
+        PerkStat.ExtraStores => "stores allowed",
         _ => s.ToString(),
     };
 }

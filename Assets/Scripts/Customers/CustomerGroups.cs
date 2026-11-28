@@ -162,6 +162,7 @@ public partial class CustomerManager
             m.mode = Mode.Follow;
         }
         Log(leader, $"leads a group: {def.Name} of {g.members.Count}" + (nKids > 0 ? $" ({g.members.Count - adults.Count} child(ren))" : ""));
+        MaybeStroller(leader, nKids);
         PickGoal(leader);
         return g.members.Count;
     }
