@@ -6890,6 +6890,8 @@ MonoBehaviour:
   steps: {fileID: 2061022766}
   speed: 0.8
   width: 1
+  humLoop: {fileID: 0}
+  humVolume: 0.4
 --- !u!64 &196938756
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -29923,7 +29925,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0.27600002}
-  m_AnchoredPosition: {x: -0.00018310547, y: -0.87319183}
+  m_AnchoredPosition: {x: -0.00018310547, y: -0.8731909}
   m_SizeDelta: {x: -0.27600098, y: -2.2707005}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &901036962
@@ -42114,6 +42116,8 @@ MonoBehaviour:
   steps: {fileID: 512056985}
   speed: 0.8
   width: 1
+  humLoop: {fileID: 0}
+  humVolume: 0.4
 --- !u!64 &1284726775
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -63119,7 +63123,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0.53722984, y: 0.11374079}
-  m_AnchoredPosition: {x: -1.9901733, y: -1.0598755}
+  m_AnchoredPosition: {x: -1.9901733, y: -1.059906}
   m_SizeDelta: {x: -0.049987793, y: -1.8370056}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1001 &1923977883

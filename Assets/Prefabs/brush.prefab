@@ -106,6 +106,10 @@ MonoBehaviour:
   parts:
   - renderer: {fileID: 4729866323533364466}
     materialIndex: 0
+  zoneName: 
+  coverTexture: 0
+  useOriginalColor: 0
+  originalColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &7437287983896771365
 GameObject:
   m_ObjectHideFlags: 0
@@ -130,15 +134,15 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7437287983896771365}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0.7071068, z: 0, w: 0.7071068}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalRotation: {x: -0.21345928, y: -0.74115425, z: -0.635626, w: -0.033244226}
+  m_LocalPosition: {x: 0.000308, y: -0.000022, z: -0.000279}
+  m_LocalScale: {x: 0.01000001, y: 0.01000001, z: 0.01000001}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 4428347847667218947}
   - {fileID: 7101107807977132552}
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 90, z: 0}
+  m_LocalEulerAnglesHint: {x: -68.125, y: -239.384, z: 74.298}
 --- !u!1 &8624557960675898245
 GameObject:
   m_ObjectHideFlags: 0
