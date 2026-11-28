@@ -103,6 +103,11 @@ public class PlayerController3D : NetworkBehaviour
 
     [Header("References")]
     [SerializeField] private Transform cameraRoot;
+    [Tooltip("Looking straight down, the camera moves this far forward (meters), so you see your feet " +
+             "instead of the inside of your own body. 0: it stays put.")]
+    [SerializeField, Min(0f)] private float lookDownForward = 0.25f;
+    [Tooltip("...and this far forward looking straight ahead (in front of the face, so it doesn't clip it).")]
+    [SerializeField, Min(0f)] private float cameraForward = 0f;
 
     private CharacterController controller;
     private Camera playerCamera;
@@ -331,7 +336,17 @@ public class PlayerController3D : NetworkBehaviour
         if (cameraRoot != null)
         {
             cameraRoot.localRotation = Quaternion.Euler(pitch, freeLookYaw, 0f);
+            PlaceCamera();
         }
+    }
+
+    // The camera: down with the crouch, and further forward the more you look down.
+    private void PlaceCamera()
+    {
+        if (cameraRoot == null) return;
+        float drop = (standHeight - crouchHeight) * crouchAmount;
+        float down = Mathf.Clamp01(pitch / 90f); // 0 ahead (or up) .. 1 straight down
+        cameraRoot.localPosition = cameraStandPos - Vector3.up * drop + Vector3.forward * (cameraForward + lookDownForward * down);
     }
 
     /* ========================= CROUCH ========================= */
@@ -377,7 +392,7 @@ public class PlayerController3D : NetworkBehaviour
         // Shorter capsule with the feet where they were.
         controller.height = standHeight - drop;
         controller.center = standCenter - Vector3.up * (drop * 0.5f);
-        if (cameraRoot != null) cameraRoot.localPosition = cameraStandPos - Vector3.up * drop;
+        PlaceCamera();
         if (lowered != null)
             for (int i = 0; i < lowered.Length; i++)
                 if (lowered[i] != null)
